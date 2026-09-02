@@ -15,8 +15,10 @@ leads for a real estate photographer. Single-user personal tool.
    - `DATABASE_URL` — from step 2
    - `ZILLAPI_KEY` — from your Zillapi dashboard
    - `CRON_SECRET` — any string for local dev
-   - `SEARCH_BBOX` — already set to the Oregon-wide box you gave me
-     (`west,south,east,north`); narrow it if you want a smaller area
+   - `SEARCH_BBOX` — already set to your I-5 corridor box
+     (`west,south,east,north`); this area alone can return 50+ new
+     listings/day, so think twice before widening it (see credit-cost
+     notes below)
    - `SEARCH_PRICE_MIN` — already set to `300000`
    - `USE_MOCK_ZILLAPI` — leave as `true` until you've made your first real
      call (see below)
@@ -41,52 +43,67 @@ for the scheduled invocation — you don't need to do anything for
 production. To test the deployed route by hand, pass the same
 `CRON_SECRET` value you set in the Vercel env vars.
 
-## Mock mode — don't burn your free-tier credits
+## Mock mode — don't burn Zillapi credits
 
-Zillapi's free tier is 100 credits total, no top-ups, and every listing
-returned costs a credit. To avoid spending credits on repeated local
-testing:
+Every listing *returned* by Zillapi costs a credit, charged server-side
+regardless of what your code does with the response — so a diagnostic call
+against a wide bbox can cost as much as a real sync. Use mock mode for all
+local dev and testing:
 
-1. Set `USE_MOCK_ZILLAPI=false` and call the sync route **once** for real.
-2. Open the response (or check your Zillapi dashboard/logs) and compare the
-   actual field names to the ones assumed in [`src/lib/zillapi.ts`](src/lib/zillapi.ts)
-   (`normalizeListing`). Zillapi's docs don't fully specify the response
-   shape for `/v1/listings`, so this file guesses at common field names
-   (`address` vs `streetAddress`, `datePostedString` vs `listedDate`, etc.)
-   and falls back gracefully if a field is missing — but it's worth a real
-   look before relying on it.
-3. Update [`data/mock-listings.json`](data/mock-listings.json) with a
-   couple of real (or corrected) example listings if the shape differed
-   from the placeholder data that's there now.
-4. Set `USE_MOCK_ZILLAPI=true` (already the default in
-   `.env.local.example`) and leave it that way for all further local dev —
-   the sync route will read from the JSON fixture instead of calling the
-   live API.
-
-Only flip it back to `false` when you want to test against the real API
-again (e.g. before a production deploy, or when re-checking the field
-mapping).
+- `USE_MOCK_ZILLAPI=true` (the default in `.env.local.example` and already
+  set in `.env.local`) makes `fetchNewListings` read from
+  [`data/mock-listings.json`](data/mock-listings.json) instead of calling
+  the live API. Run `npm run dev` and hit the sync route locally as much as
+  you want — zero credits.
+- Only flip it to `false` when you deliberately want to test against the
+  real API (e.g. re-verifying the response shape, or a one-off manual
+  sync). Know roughly what it'll cost first — see below — and prefer a
+  narrow bbox or low `max_items` for a diagnostic call rather than reusing
+  the full production query.
+- `src/lib/zillapi.ts` and `data/mock-listings.json` reflect the **real**
+  response shape (verified 2026-09-01, not just the docs) — nested
+  `listingPrice.amount` / `listingAddress.{street,city,state,zipCode}`,
+  the array at `data.data` (not `results`/`listings` like the docs imply),
+  `listingPhotos[].url` for photos, `broker.name` for the brokerage, and
+  `listingType.isFSBO` for the FSBO filter. If Zillapi changes its response
+  shape later, re-verify with one deliberate real call and update both
+  files together.
 
 ## Credit-cost notes (for future you)
 
-- 1 credit per listing returned, minimum 1 per call. Failed calls are free.
-- `days_on_zillow=1` is what makes this cheap — it returns only listings
-  posted in roughly the last day, not the whole active inventory in the
-  bbox. Don't remove it or replace it with a full-inventory pull + diff.
+- 1 credit per listing *returned*, minimum 1 per call. Failed calls are
+  free. This is charged by Zillapi's API regardless of how your code
+  parses (or fails to parse) the response — a bug that silently drops
+  every result still spends the credits.
+- `days_on_zillow=1` is what makes this cheap in theory — it returns only
+  listings posted in roughly the last day, not the whole active inventory
+  in the bbox. Don't remove it or replace it with a full-inventory pull +
+  diff.
+- **Bbox size matters a lot.** The current bbox (I-5 corridor, Medford to
+  Portland) still returns 50+ new listings/day and hits the `max_items`
+  safety cap every time — confirmed by a real call, not a guess. At 50
+  credits/day that's ~1,500/month, more than the $5/mo (1,000 credit)
+  tier covers, and the cap means extra listings past 50 are silently
+  dropped rather than deferred. Narrow the bbox to your actual shooting
+  area if you want predictable cost and no truncation.
 - `max_items` is capped at 50 in the sync route (`MAX_ITEMS` in
-  [`src/app/api/cron/sync-listings/route.ts`](src/app/api/cron/sync-listings/route.ts))
-  as a safety net, but daily usage should normally be far under that — it's
-  bounded by how many homes actually list per day in the bbox.
-- Free tier: 100 credits, no card, no top-ups. Paid: $5/mo for 1,000
-  credits, or $54/yr for 12,000. At roughly 1 credit/listing/day this
-  should last a long time on a single bbox.
-- Zillapi doesn't document a for-sale-by-owner exclusion filter, so FSBO
-  listings are not filtered out — you'll see them in the leads list.
+  [`src/app/api/cron/sync-listings/route.ts`](src/app/api/cron/sync-listings/route.ts)).
+  Raise it only alongside a credit budget that can absorb the extra cost.
+- Free tier: 100 credits, no card, no top-ups — a single wide-bbox test
+  call can burn through most or all of it, which is exactly what happened
+  during initial setup here. Paid: $5/mo for 1,000 credits, or $54/yr for
+  12,000.
 
 ## Schema
 
 Single `listings` table, deduped by `zpid` (unique constraint; the sync
-route upserts with `ON CONFLICT DO NOTHING`). Columns `score`,
+route upserts with `ON CONFLICT DO NOTHING`). Photos (`photos`, a text
+array of image URLs) and `broker_name` come from the same `/v1/listings`
+call, no extra credits. `agent_name` and `agent_phone` are present but
+unpopulated — Zillapi only exposes individual agent contact info (as
+opposed to just the brokerage name) via a separate, undocumented
+sub-resource whose shape and cost haven't been verified yet; wire that up
+once you're ready to spend a credit checking it out. Columns `score`,
 `score_reasoning`, `status`, and `notes` are present but unused — reserved
 for Phase 2 (AI photo scoring, outreach, pipeline tracking) so that work
 won't need a migration.

@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { listings } from "@/db/schema";
 import { desc } from "drizzle-orm";
+import { PhotoCarousel } from "./PhotoCarousel";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function LeadsPage() {
     .orderBy(desc(listings.foundAt));
 
   return (
-    <main className="max-w-4xl mx-auto w-full px-6 py-10">
+    <main className="max-w-6xl mx-auto w-full px-6 py-10">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold">LeadFinder</h1>
         <p className="text-sm text-gray-500 mt-1">
@@ -34,9 +35,13 @@ export default async function LeadsPage() {
           No leads yet. Trigger the sync route to pull new listings.
         </p>
       ) : (
-        <ul className="divide-y divide-gray-200 border-t border-b border-gray-200">
+        <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {leads.map((lead) => (
-            <li key={lead.id} className="py-4 flex flex-col gap-1">
+            <li key={lead.id} className="flex flex-col gap-2">
+              <PhotoCarousel
+                photos={lead.photos ?? []}
+                alt={lead.address ?? "Listing photo"}
+              />
               <div className="flex items-baseline justify-between gap-4">
                 <a
                   href={lead.listingUrl ?? "#"}
@@ -60,6 +65,13 @@ export default async function LeadsPage() {
                 <span>{lead.livingArea ? `${lead.livingArea.toLocaleString()} sqft` : "—"}</span>
                 <span>Listed {formatDate(lead.listedAt)}</span>
               </div>
+              {(lead.brokerName || lead.agentName || lead.agentPhone) && (
+                <div className="text-sm text-gray-600 border-t border-gray-100 pt-2 mt-1">
+                  {lead.agentName && <div>{lead.agentName}</div>}
+                  {lead.brokerName && <div>{lead.brokerName}</div>}
+                  {lead.agentPhone && <div>{lead.agentPhone}</div>}
+                </div>
+              )}
             </li>
           ))}
         </ul>

@@ -1,7 +1,11 @@
 [
   {
     "zpid": "48749201",
-    "listingPrice": { "amount": 549000, "currency": "USD", "formatted": "$549,000" },
+    "listingPrice": {
+      "amount": 549000,
+      "currency": "USD",
+      "formatted": "$549,000"
+    },
     "listingAddress": {
       "street": "1842 NE Alberta St",
       "city": "Portland",
@@ -9,19 +13,53 @@
       "zipCode": "97211",
       "full": "1842 NE Alberta St, Portland, OR 97211"
     },
-    "coordinates": { "latitude": 45.5585, "longitude": -122.6432 },
+    "coordinates": {
+      "latitude": 45.5585,
+      "longitude": -122.6432
+    },
     "listingStatus": "forSale",
     "propertyUrl": "https://www.zillow.com/homedetails/1842-NE-Alberta-St-Portland-OR-97211/48749201_zpid/",
     "homeType": "SINGLE_FAMILY",
-    "listingType": { "isFSBA": true, "isFSBO": false },
+    "listingType": {
+      "isFSBA": true,
+      "isFSBO": false
+    },
     "bedrooms": 3,
     "bathrooms": 2,
     "livingArea": 1620,
-    "daysOnZillow": 0
+    "daysOnZillow": 0,
+    "listingPhotos": [
+      {
+        "url": "https://picsum.photos/seed/101-0/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/101-1/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/101-2/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/101-3/900/600",
+        "caption": null
+      }
+    ],
+    "broker": {
+      "name": "Cascade Realty Group",
+      "phoneNumber": null,
+      "buyerBrokerName": null,
+      "buyerAgentName": null
+    }
   },
   {
     "zpid": "52301188",
-    "listingPrice": { "amount": 415000, "currency": "USD", "formatted": "$415,000" },
+    "listingPrice": {
+      "amount": 415000,
+      "currency": "USD",
+      "formatted": "$415,000"
+    },
     "listingAddress": {
       "street": "930 SW 5th Ave Unit 1204",
       "city": "Portland",
@@ -29,19 +67,53 @@
       "zipCode": "97204",
       "full": "930 SW 5th Ave Unit 1204, Portland, OR 97204"
     },
-    "coordinates": { "latitude": 45.5195, "longitude": -122.6789 },
+    "coordinates": {
+      "latitude": 45.5195,
+      "longitude": -122.6789
+    },
     "listingStatus": "forSale",
     "propertyUrl": "https://www.zillow.com/homedetails/930-SW-5th-Ave-UNIT-1204-Portland-OR-97204/52301188_zpid/",
     "homeType": "CONDO",
-    "listingType": { "isFSBA": true, "isFSBO": false },
+    "listingType": {
+      "isFSBA": true,
+      "isFSBO": false
+    },
     "bedrooms": 2,
     "bathrooms": 2,
     "livingArea": 980,
-    "daysOnZillow": 0
+    "daysOnZillow": 0,
+    "listingPhotos": [
+      {
+        "url": "https://picsum.photos/seed/102-0/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/102-1/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/102-2/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/102-3/900/600",
+        "caption": null
+      }
+    ],
+    "broker": {
+      "name": "Windermere Real Estate",
+      "phoneNumber": null,
+      "buyerBrokerName": null,
+      "buyerAgentName": null
+    }
   },
   {
     "zpid": "39982744",
-    "listingPrice": { "amount": 389900, "currency": "USD", "formatted": "$389,900" },
+    "listingPrice": {
+      "amount": 389900,
+      "currency": "USD",
+      "formatted": "$389,900"
+    },
     "listingAddress": {
       "street": "2217 W 11th Ave",
       "city": "Eugene",
@@ -49,19 +121,53 @@
       "zipCode": "97402",
       "full": "2217 W 11th Ave, Eugene, OR 97402"
     },
-    "coordinates": { "latitude": 44.0499, "longitude": -123.1198 },
+    "coordinates": {
+      "latitude": 44.0499,
+      "longitude": -123.1198
+    },
     "listingStatus": "forSale",
     "propertyUrl": "https://www.zillow.com/homedetails/2217-W-11th-Ave-Eugene-OR-97402/39982744_zpid/",
     "homeType": "SINGLE_FAMILY",
-    "listingType": { "isFSBA": true, "isFSBO": false },
+    "listingType": {
+      "isFSBA": true,
+      "isFSBO": false
+    },
     "bedrooms": 3,
     "bathrooms": 1.5,
     "livingArea": 1440,
-    "daysOnZillow": 1
+    "daysOnZillow": 1,
+    "listingPhotos": [
+      {
+        "url": "https://picsum.photos/seed/103-0/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/103-1/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/103-2/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/103-3/900/600",
+        "caption": null
+      }
+    ],
+    "broker": {
+      "name": "Living Room Realty",
+      "phoneNumber": null,
+      "buyerBrokerName": null,
+      "buyerAgentName": null
+    }
   },
   {
     "zpid": "61120037",
-    "listingPrice": { "amount": 675000, "currency": "USD", "formatted": "$675,000" },
+    "listingPrice": {
+      "amount": 675000,
+      "currency": "USD",
+      "formatted": "$675,000"
+    },
     "listingAddress": {
       "street": "5501 SE Woodstock Blvd",
       "city": "Portland",
@@ -69,19 +175,53 @@
       "zipCode": "97206",
       "full": "5501 SE Woodstock Blvd, Portland, OR 97206"
     },
-    "coordinates": { "latitude": 45.4692, "longitude": -122.6091 },
+    "coordinates": {
+      "latitude": 45.4692,
+      "longitude": -122.6091
+    },
     "listingStatus": "forSale",
     "propertyUrl": "https://www.zillow.com/homedetails/5501-SE-Woodstock-Blvd-Portland-OR-97206/61120037_zpid/",
     "homeType": "SINGLE_FAMILY",
-    "listingType": { "isFSBA": true, "isFSBO": false },
+    "listingType": {
+      "isFSBA": true,
+      "isFSBO": false
+    },
     "bedrooms": 4,
     "bathrooms": 2.5,
     "livingArea": 2210,
-    "daysOnZillow": 0
+    "daysOnZillow": 0,
+    "listingPhotos": [
+      {
+        "url": "https://picsum.photos/seed/104-0/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/104-1/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/104-2/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/104-3/900/600",
+        "caption": null
+      }
+    ],
+    "broker": {
+      "name": "Keller Williams Realty Portland",
+      "phoneNumber": null,
+      "buyerBrokerName": null,
+      "buyerAgentName": null
+    }
   },
   {
     "zpid": "44718820",
-    "listingPrice": { "amount": 335000, "currency": "USD", "formatted": "$335,000" },
+    "listingPrice": {
+      "amount": 335000,
+      "currency": "USD",
+      "formatted": "$335,000"
+    },
     "listingAddress": {
       "street": "812 Liberty St SE",
       "city": "Salem",
@@ -89,19 +229,53 @@
       "zipCode": "97302",
       "full": "812 Liberty St SE, Salem, OR 97302"
     },
-    "coordinates": { "latitude": 44.9308, "longitude": -123.0326 },
+    "coordinates": {
+      "latitude": 44.9308,
+      "longitude": -123.0326
+    },
     "listingStatus": "forSale",
     "propertyUrl": "https://www.zillow.com/homedetails/812-Liberty-St-SE-Salem-OR-97302/44718820_zpid/",
     "homeType": "TOWNHOUSE",
-    "listingType": { "isFSBA": true, "isFSBO": false },
+    "listingType": {
+      "isFSBA": true,
+      "isFSBO": false
+    },
     "bedrooms": 3,
     "bathrooms": 2,
     "livingArea": 1350,
-    "daysOnZillow": 1
+    "daysOnZillow": 1,
+    "listingPhotos": [
+      {
+        "url": "https://picsum.photos/seed/105-0/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/105-1/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/105-2/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/105-3/900/600",
+        "caption": null
+      }
+    ],
+    "broker": {
+      "name": "RE/MAX Equity Group",
+      "phoneNumber": null,
+      "buyerBrokerName": null,
+      "buyerAgentName": null
+    }
   },
   {
     "zpid": "70045512",
-    "listingPrice": { "amount": 460000, "currency": "USD", "formatted": "$460,000" },
+    "listingPrice": {
+      "amount": 460000,
+      "currency": "USD",
+      "formatted": "$460,000"
+    },
     "listingAddress": {
       "street": "118 Cedar Ln",
       "city": "Bend",
@@ -109,14 +283,44 @@
       "zipCode": "97701",
       "full": "118 Cedar Ln, Bend, OR 97701"
     },
-    "coordinates": { "latitude": 44.0582, "longitude": -121.3153 },
+    "coordinates": {
+      "latitude": 44.0582,
+      "longitude": -121.3153
+    },
     "listingStatus": "forSale",
     "propertyUrl": "https://www.zillow.com/homedetails/118-Cedar-Ln-Bend-OR-97701/70045512_zpid/",
     "homeType": "SINGLE_FAMILY",
-    "listingType": { "isFSBA": false, "isFSBO": true },
+    "listingType": {
+      "isFSBA": false,
+      "isFSBO": true
+    },
     "bedrooms": 3,
     "bathrooms": 2,
     "livingArea": 1580,
-    "daysOnZillow": 0
+    "daysOnZillow": 0,
+    "listingPhotos": [
+      {
+        "url": "https://picsum.photos/seed/106-0/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/106-1/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/106-2/900/600",
+        "caption": null
+      },
+      {
+        "url": "https://picsum.photos/seed/106-3/900/600",
+        "caption": null
+      }
+    ],
+    "broker": {
+      "name": null,
+      "phoneNumber": null,
+      "buyerBrokerName": null,
+      "buyerAgentName": null
+    }
   }
 ]

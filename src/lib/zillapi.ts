@@ -25,6 +25,8 @@ interface RawZillapiListing {
   propertyUrl?: string;
   daysOnZillow?: number;
   listingType?: { isFSBO?: boolean };
+  listingPhotos?: { url?: string }[];
+  broker?: { name?: string };
   [key: string]: unknown;
 }
 
@@ -61,6 +63,8 @@ export function normalizeListing(raw: RawZillapiListing): NewListing | null {
     listingUrl: raw.propertyUrl ?? zillowLinkFromZpid(zpid),
     // Approximate — Zillapi returns a daysOnZillow count, not an exact date.
     listedAt,
+    photos: raw.listingPhotos?.map((p) => p.url).filter((u): u is string => !!u) ?? null,
+    brokerName: raw.broker?.name ?? null,
   };
 }
 

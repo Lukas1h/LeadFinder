@@ -22,6 +22,14 @@ export const listings = pgTable("listings", {
   listingUrl: text("listing_url"),
   listedAt: timestamp("listed_at", { withTimezone: true }),
   foundAt: timestamp("found_at", { withTimezone: true }).notNull().defaultNow(),
+  photos: text("photos").array(),
+  brokerName: text("broker_name"),
+
+  // Individual agent name/phone need Zillapi's separate (unverified, cost
+  // unknown) agent sub-resource — not wired up, reserved so no migration is
+  // needed once that's checked out.
+  agentName: text("agent_name"),
+  agentPhone: text("agent_phone"),
 
   // Phase 2 fields — unused for now, kept nullable so no future migration is needed.
   score: text("score"),
