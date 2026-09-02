@@ -1,10 +1,11 @@
 import { db } from "@/db";
-import { listings, agents } from "@/db/schema";
+import { listings, agents, type Listing } from "@/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
 import { LeadActions } from "./LeadActions";
 import { LeadCard } from "./LeadCard";
 import { NewBadge, DuplicateAgentBadge } from "./badges";
 import { findDuplicateAgentContact } from "@/lib/pipeline";
+import { daysSince } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,42 @@ export default async function LeadsPage() {
       : [];
   const addressById = new Map(referencedListings.map((l) => [l.id, l.address]));
 
+  // Cron runs once/day, so anything found in the last 24h is "today's
+  // batch" — everything else is backlog from a day (or several) you
+  // haven't gotten to yet.
+  const newToday = leads.filter((l) => daysSince(l.foundAt) < 1);
+  const earlier = leads.filter((l) => daysSince(l.foundAt) >= 1);
+
+  function card(lead: Listing) {
+    const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentByPhone);
+
+    return (
+      <LeadCard
+        key={lead.id}
+        lead={lead}
+        badges={
+          <>
+            <NewBadge />
+            {duplicateAgent && (
+              <DuplicateAgentBadge
+                duplicateAgent={duplicateAgent}
+                duplicateAddress={addressById.get(duplicateAgent.lastContactedListingId!)}
+              />
+            )}
+          </>
+        }
+        actions={
+          <LeadActions
+            listingId={lead.id}
+            address={lead.address}
+            agentName={lead.agentName}
+            agentPhone={lead.agentPhone}
+          />
+        }
+      />
+    );
+  }
+
   return (
     <main className="max-w-3xl mx-auto w-full px-6 py-10">
       <header className="mb-6">
@@ -47,37 +84,25 @@ export default async function LeadsPage() {
       {leads.length === 0 ? (
         <p className="text-gray-500">You&rsquo;re all caught up — no new leads right now.</p>
       ) : (
-        <ul className="flex flex-col gap-4">
-          {leads.map((lead) => {
-            const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentByPhone);
+        <div className="flex flex-col gap-8">
+          {newToday.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                New today ({newToday.length})
+              </h2>
+              <ul className="flex flex-col gap-4">{newToday.map(card)}</ul>
+            </section>
+          )}
 
-            return (
-              <LeadCard
-                key={lead.id}
-                lead={lead}
-                badges={
-                  <>
-                    <NewBadge />
-                    {duplicateAgent && (
-                      <DuplicateAgentBadge
-                        duplicateAgent={duplicateAgent}
-                        duplicateAddress={addressById.get(duplicateAgent.lastContactedListingId!)}
-                      />
-                    )}
-                  </>
-                }
-                actions={
-                  <LeadActions
-                    listingId={lead.id}
-                    address={lead.address}
-                    agentName={lead.agentName}
-                    agentPhone={lead.agentPhone}
-                  />
-                }
-              />
-            );
-          })}
-        </ul>
+          {earlier.length > 0 && (
+            <section className={newToday.length > 0 ? "border-t border-gray-200 pt-8" : undefined}>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                Earlier ({earlier.length})
+              </h2>
+              <ul className="flex flex-col gap-4">{earlier.map(card)}</ul>
+            </section>
+          )}
+        </div>
       )}
     </main>
   );
