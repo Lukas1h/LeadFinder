@@ -25,11 +25,12 @@ export const listings = pgTable("listings", {
   photos: text("photos").array(),
   brokerName: text("broker_name"),
 
-  // Individual agent name/phone need Zillapi's separate (unverified, cost
-  // unknown) agent sub-resource — not wired up, reserved so no migration is
-  // needed once that's checked out.
+  // From Zillapi's /v1/properties/{zpid}/agent (1 credit/call, fetched once
+  // per newly-inserted lead). Verified against real listings: this MLS
+  // (RMLS/OR) never returns a phone or email despite the docs claiming
+  // otherwise — only name + brokerage are ever populated, so there's no
+  // phone/email column here.
   agentName: text("agent_name"),
-  agentPhone: text("agent_phone"),
 
   // Phase 2 fields — unused for now, kept nullable so no future migration is needed.
   score: text("score"),

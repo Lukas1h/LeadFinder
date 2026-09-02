@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { listings } from "@/db/schema";
-import { fetchNewListings } from "@/lib/zillapi";
+import { fetchNewListings, fetchAgentInfo } from "@/lib/zillapi";
+import { eq } from "drizzle-orm";
 
 export const maxDuration = 30;
 
 const MAX_ITEMS = 50;
+const AGENT_LOOKUP_CONCURRENCY = 5;
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -15,15 +17,34 @@ export async function GET(request: NextRequest) {
 
   const fetched = await fetchNewListings({ maxItems: MAX_ITEMS });
 
-  let inserted = 0;
+  let insertedRows: { id: string; zpid: string }[] = [];
   if (fetched.length > 0) {
-    const result = await db
+    insertedRows = await db
       .insert(listings)
       .values(fetched)
       .onConflictDoNothing({ target: listings.zpid })
-      .returning({ id: listings.id });
-    inserted = result.length;
+      .returning({ id: listings.id, zpid: listings.zpid });
   }
 
-  return NextResponse.json({ fetched: fetched.length, inserted });
+  // One /agent credit per newly-inserted lead only — never re-fetched for
+  // leads we already had.
+  for (let i = 0; i < insertedRows.length; i += AGENT_LOOKUP_CONCURRENCY) {
+    const batch = insertedRows.slice(i, i + AGENT_LOOKUP_CONCURRENCY);
+    await Promise.all(
+      batch.map(async (row) => {
+        const agent = await fetchAgentInfo(row.zpid);
+        if (agent.agentName || agent.brokerName) {
+          await db
+            .update(listings)
+            .set({
+              agentName: agent.agentName,
+              ...(agent.brokerName ? { brokerName: agent.brokerName } : {}),
+            })
+            .where(eq(listings.id, row.id));
+        }
+      })
+    );
+  }
+
+  return NextResponse.json({ fetched: fetched.length, inserted: insertedRows.length });
 }

@@ -65,11 +65,10 @@ export default async function LeadsPage() {
                 <span>{lead.livingArea ? `${lead.livingArea.toLocaleString()} sqft` : "—"}</span>
                 <span>Listed {formatDate(lead.listedAt)}</span>
               </div>
-              {(lead.brokerName || lead.agentName || lead.agentPhone) && (
+              {(lead.brokerName || lead.agentName) && (
                 <div className="text-sm text-gray-600 border-t border-gray-100 pt-2 mt-1">
                   {lead.agentName && <div>{lead.agentName}</div>}
                   {lead.brokerName && <div>{lead.brokerName}</div>}
-                  {lead.agentPhone && <div>{lead.agentPhone}</div>}
                 </div>
               )}
             </li>

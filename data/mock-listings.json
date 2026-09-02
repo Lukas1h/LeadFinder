@@ -51,7 +51,8 @@
       "phoneNumber": null,
       "buyerBrokerName": null,
       "buyerAgentName": null
-    }
+    },
+    "mockAgentName": "Christina Spry"
   },
   {
     "zpid": "52301188",
@@ -105,7 +106,8 @@
       "phoneNumber": null,
       "buyerBrokerName": null,
       "buyerAgentName": null
-    }
+    },
+    "mockAgentName": "Karie Jett"
   },
   {
     "zpid": "39982744",
@@ -159,7 +161,8 @@
       "phoneNumber": null,
       "buyerBrokerName": null,
       "buyerAgentName": null
-    }
+    },
+    "mockAgentName": "Clint Currin"
   },
   {
     "zpid": "61120037",
@@ -213,7 +216,8 @@
       "phoneNumber": null,
       "buyerBrokerName": null,
       "buyerAgentName": null
-    }
+    },
+    "mockAgentName": "Samantha Chan"
   },
   {
     "zpid": "44718820",
@@ -267,7 +271,8 @@
       "phoneNumber": null,
       "buyerBrokerName": null,
       "buyerAgentName": null
-    }
+    },
+    "mockAgentName": "Jordan Reyes"
   },
   {
     "zpid": "70045512",
@@ -321,6 +326,7 @@
       "phoneNumber": null,
       "buyerBrokerName": null,
       "buyerAgentName": null
-    }
+    },
+    "mockAgentName": "Pat Delgado"
   }
 ]

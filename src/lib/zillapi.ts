@@ -1,7 +1,8 @@
 import type { NewListing } from "@/db/schema";
 import mockListings from "../../data/mock-listings.json";
 
-const ZILLAPI_BASE_URL = "https://api.zillapi.com/v1/listings";
+const ZILLAPI_LISTINGS_URL = "https://api.zillapi.com/v1/listings";
+const ZILLAPI_PROPERTIES_URL = "https://api.zillapi.com/v1/properties";
 
 /**
  * Verified against a real GET /v1/listings response on 2026-09-01 — Zillapi's
@@ -117,7 +118,7 @@ export async function fetchNewListings(
       params.set("home_types", process.env.SEARCH_HOME_TYPES);
     }
 
-    const res = await fetch(`${ZILLAPI_BASE_URL}?${params.toString()}`, {
+    const res = await fetch(`${ZILLAPI_LISTINGS_URL}?${params.toString()}`, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
@@ -136,4 +137,45 @@ export async function fetchNewListings(
     .filter((item) => item.listingType?.isFSBO !== true)
     .map(normalizeListing)
     .filter((l): l is NewListing => l !== null);
+}
+
+interface AgentInfo {
+  agentName: string | null;
+  brokerName: string | null;
+}
+
+/**
+ * GET /v1/properties/{zpid}/agent — 1 credit per call. Verified against 5
+ * real RMLS (OR) listings: only agentName/brokerName are ever populated,
+ * despite the docs also claiming phone/email/license number.
+ */
+export async function fetchAgentInfo(zpid: string): Promise<AgentInfo> {
+  if (process.env.USE_MOCK_ZILLAPI === "true") {
+    const mock = (mockListings as { zpid: string; mockAgentName?: string }[]).find(
+      (m) => m.zpid === zpid
+    );
+    return { agentName: mock?.mockAgentName ?? null, brokerName: null };
+  }
+
+  const apiKey = process.env.ZILLAPI_KEY;
+  if (!apiKey) {
+    throw new Error("ZILLAPI_KEY is not set");
+  }
+
+  const res = await fetch(`${ZILLAPI_PROPERTIES_URL}/${zpid}/agent`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+
+  if (!res.ok) {
+    return { agentName: null, brokerName: null };
+  }
+
+  const parsed = (await res.json()) as {
+    data?: { agentName?: string; brokerName?: string };
+  };
+
+  return {
+    agentName: parsed.data?.agentName ?? null,
+    brokerName: parsed.data?.brokerName ?? null,
+  };
 }
