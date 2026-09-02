@@ -25,12 +25,15 @@ export const listings = pgTable("listings", {
   photos: text("photos").array(),
   brokerName: text("broker_name"),
 
-  // From Zillapi's /v1/properties/{zpid}/agent (1 credit/call, fetched once
-  // per newly-inserted lead). Verified against real listings: this MLS
-  // (RMLS/OR) never returns a phone or email despite the docs claiming
-  // otherwise — only name + brokerage are ever populated, so there's no
-  // phone/email column here.
+  // From Zillapi's GET /v1/properties/{zpid} full details — 1 credit per
+  // call (verified via the x-credits-charged response header, even on a
+  // repeat call for the same zpid minutes later — the docs' "0 credits on
+  // a cache hit" claim didn't hold up). NOT the dedicated /agent
+  // sub-resource, which also costs 1 credit and, verified against real
+  // listings, never actually returns a phone number despite its docs
+  // claiming it does. Fetched once per newly-inserted lead.
   agentName: text("agent_name"),
+  agentPhone: text("agent_phone"),
 
   // Phase 2 fields — unused for now, kept nullable so no future migration is needed.
   score: text("score"),

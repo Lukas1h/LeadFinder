@@ -141,20 +141,30 @@ export async function fetchNewListings(
 
 interface AgentInfo {
   agentName: string | null;
+  agentPhone: string | null;
   brokerName: string | null;
 }
 
 /**
- * GET /v1/properties/{zpid}/agent — 1 credit per call. Verified against 5
- * real RMLS (OR) listings: only agentName/brokerName are ever populated,
- * despite the docs also claiming phone/email/license number.
+ * GET /v1/properties/{zpid} — the full property details endpoint, NOT the
+ * dedicated /v1/properties/{zpid}/agent sub-resource. Always 1 credit per
+ * call — confirmed via the x-credits-charged response header, even on a
+ * repeat call for a zpid already fetched minutes earlier, so the docs'
+ * "0 credits on a cache hit ≤24h" claim doesn't hold in practice. Verified
+ * against 2 real RMLS (OR) listings: the dedicated /agent endpoint never
+ * returns a phone number despite its docs claiming it does, but this one
+ * reliably does, under data.agent.phoneNumber / data.broker.phoneNumber.
  */
 export async function fetchAgentInfo(zpid: string): Promise<AgentInfo> {
   if (process.env.USE_MOCK_ZILLAPI === "true") {
-    const mock = (mockListings as { zpid: string; mockAgentName?: string }[]).find(
-      (m) => m.zpid === zpid
-    );
-    return { agentName: mock?.mockAgentName ?? null, brokerName: null };
+    const mock = (
+      mockListings as { zpid: string; mockAgentName?: string; mockAgentPhone?: string }[]
+    ).find((m) => m.zpid === zpid);
+    return {
+      agentName: mock?.mockAgentName ?? null,
+      agentPhone: mock?.mockAgentPhone ?? null,
+      brokerName: null,
+    };
   }
 
   const apiKey = process.env.ZILLAPI_KEY;
@@ -162,20 +172,24 @@ export async function fetchAgentInfo(zpid: string): Promise<AgentInfo> {
     throw new Error("ZILLAPI_KEY is not set");
   }
 
-  const res = await fetch(`${ZILLAPI_PROPERTIES_URL}/${zpid}/agent`, {
+  const res = await fetch(`${ZILLAPI_PROPERTIES_URL}/${zpid}`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
 
   if (!res.ok) {
-    return { agentName: null, brokerName: null };
+    return { agentName: null, agentPhone: null, brokerName: null };
   }
 
   const parsed = (await res.json()) as {
-    data?: { agentName?: string; brokerName?: string };
+    data?: {
+      agent?: { name?: string; phoneNumber?: string };
+      broker?: { name?: string };
+    };
   };
 
   return {
-    agentName: parsed.data?.agentName ?? null,
-    brokerName: parsed.data?.brokerName ?? null,
+    agentName: parsed.data?.agent?.name ?? null,
+    agentPhone: parsed.data?.agent?.phoneNumber ?? null,
+    brokerName: parsed.data?.broker?.name ?? null,
   };
 }

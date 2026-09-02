@@ -26,18 +26,20 @@ export async function GET(request: NextRequest) {
       .returning({ id: listings.id, zpid: listings.zpid });
   }
 
-  // One /agent credit per newly-inserted lead only — never re-fetched for
-  // leads we already had.
+  // One property-details lookup per newly-inserted lead only (1 credit
+  // each — confirmed the docs' "0 credits on cache hit" claim is false)
+  // — never re-fetched for leads we already had.
   for (let i = 0; i < insertedRows.length; i += AGENT_LOOKUP_CONCURRENCY) {
     const batch = insertedRows.slice(i, i + AGENT_LOOKUP_CONCURRENCY);
     await Promise.all(
       batch.map(async (row) => {
         const agent = await fetchAgentInfo(row.zpid);
-        if (agent.agentName || agent.brokerName) {
+        if (agent.agentName || agent.agentPhone || agent.brokerName) {
           await db
             .update(listings)
             .set({
               agentName: agent.agentName,
+              agentPhone: agent.agentPhone,
               ...(agent.brokerName ? { brokerName: agent.brokerName } : {}),
             })
             .where(eq(listings.id, row.id));

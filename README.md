@@ -91,12 +91,13 @@ local dev and testing:
   widen the bbox or drop a filter later, expect the daily count (and cost)
   to jump back up — check with a deliberate low-`max_items` test call
   first rather than assuming.
-- **The `/agent` lookup roughly doubles the daily spend.** It's 1 more
+- **The agent/phone lookup roughly doubles the daily spend.** It's 1 more
   credit per *newly-inserted* lead (not re-charged for leads you already
-  have), so on a 50-new-leads day that's another ~50 credits — meaning the
-  listings pull and agent lookups together could run ~3,000/month at the
-  current bbox, well past the 1,000-credit plan. This compounds the bbox
-  sizing issue above; narrowing the bbox lowers both costs at once.
+  have) via `GET /v1/properties/{zpid}` (see Schema below — not the
+  dedicated `/agent` sub-resource, which is also 1 credit but never
+  actually returns a phone number). With the narrowed Eugene bbox this
+  should be a small number/day, but it's still double whatever the
+  listings pull costs.
 - `max_items` is capped at 50 in the sync route (`MAX_ITEMS` in
   [`src/app/api/cron/sync-listings/route.ts`](src/app/api/cron/sync-listings/route.ts)).
   Raise it only alongside a credit budget that can absorb the extra cost.
@@ -104,6 +105,12 @@ local dev and testing:
   call can burn through most or all of it, which is exactly what happened
   during initial setup here. Paid: $5/mo for 1,000 credits, or $54/yr for
   12,000.
+- **Zillapi has no dedicated balance-check endpoint**, but every response
+  carries `x-credits-charged` and `x-credits-remaining` headers — that's
+  the real way to check your balance (`curl -sD - ... | grep x-credits`).
+  Don't trust the docs' claims about what's cached/free without checking
+  this header — it's how we found `/v1/properties/{zpid}` charges 1 credit
+  every time, not "0 on a cache hit" as documented.
 
 ## Schema
 
@@ -112,18 +119,28 @@ route upserts with `ON CONFLICT DO NOTHING`). Photos (`photos`, a text
 array of image URLs) and an initial `broker_name` come from the same
 `/v1/listings` call, no extra credits.
 
-`agent_name` is populated from `GET /v1/properties/{zpid}/agent`
-(1 credit/call, [`fetchAgentInfo`](src/lib/zillapi.ts)) — called once per
-**newly-inserted** lead only, never re-fetched for leads already in the DB,
-so it adds roughly 1 credit per new lead per day on top of the listings
-pull. Verified against 5 real RMLS (Oregon) listings: despite Zillapi's
-docs claiming phone/email/license number are also returned, none of the 5
-had them — only `agentName` and `brokerName` were ever populated. There's
-no `agent_phone` column because of this: RMLS's data-sharing rules
-apparently withhold direct agent contact info from third-party feeds like
-this one, routing contact through the brokerage instead. If you ever see a
-listing with a real phone number in the raw `/agent` response, that's
-worth revisiting — but plan around brokerage-only contact for now.
+`agent_name` and `agent_phone` are populated from `GET /v1/properties/{zpid}`
+— the **full property details endpoint**, not the dedicated
+`/v1/properties/{zpid}/agent` sub-resource
+([`fetchAgentInfo`](src/lib/zillapi.ts)). Called once per
+**newly-inserted** lead only, never re-fetched for leads already in the
+DB, so it adds 1 credit per new lead per day on top of the listings pull.
+
+This took two rounds to get right:
+- The dedicated `/agent` sub-resource's docs claim it returns phone/email/
+  license number, but 5 real RMLS (Oregon) listings never had them —
+  only `agentName`/`brokerName` ever came back.
+- The full `/v1/properties/{zpid}` details endpoint, tested against 2 real
+  listings (including one cross-checked against the actual "Listed by:"
+  text on the Zillow page itself), reliably returns a real phone number
+  under `data.agent.phoneNumber` — same 1-credit cost, actually useful
+  data. That's what's wired up now. `data.agent.email` was `null` on both,
+  so there's no `agent_email` column — revisit if you ever see one
+  populated.
+
+The dashboard shows an agent name + phone "Text {number}" link
+(`sms:+1XXXXXXXXXX`, US-only) next to the brokerage name when a phone is
+present.
 
 Columns `score`, `score_reasoning`, `status`, and `notes` are present but
 unused — reserved for Phase 2 (AI photo scoring, outreach, pipeline

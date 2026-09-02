@@ -15,6 +15,13 @@ function formatDate(date: Date | null) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function smsHref(phone: string): string | null {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return `sms:+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `sms:+${digits}`;
+  return null;
+}
+
 export default async function LeadsPage() {
   const leads = await db
     .select()
@@ -66,9 +73,19 @@ export default async function LeadsPage() {
                 <span>Listed {formatDate(lead.listedAt)}</span>
               </div>
               {(lead.brokerName || lead.agentName) && (
-                <div className="text-sm text-gray-600 border-t border-gray-100 pt-2 mt-1">
-                  {lead.agentName && <div>{lead.agentName}</div>}
-                  {lead.brokerName && <div>{lead.brokerName}</div>}
+                <div className="text-sm text-gray-600 border-t border-gray-100 pt-2 mt-1 flex items-center justify-between gap-2">
+                  <div>
+                    {lead.agentName && <div>{lead.agentName}</div>}
+                    {lead.brokerName && <div>{lead.brokerName}</div>}
+                  </div>
+                  {lead.agentPhone && smsHref(lead.agentPhone) && (
+                    <a
+                      href={smsHref(lead.agentPhone)!}
+                      className="shrink-0 text-sm font-medium border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50"
+                    >
+                      Text {lead.agentPhone}
+                    </a>
+                  )}
                 </div>
               )}
             </li>
