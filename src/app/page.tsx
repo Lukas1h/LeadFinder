@@ -23,7 +23,7 @@ export default async function LeadsPage() {
   return (
     <main className="max-w-4xl mx-auto w-full px-6 py-10">
       <header className="mb-8">
-        <h1 className="text-2xl font-semibold">Proof Sheet</h1>
+        <h1 className="text-2xl font-semibold">LeadFinder</h1>
         <p className="text-sm text-gray-500 mt-1">
           {leads.length} lead{leads.length === 1 ? "" : "s"}
         </p>

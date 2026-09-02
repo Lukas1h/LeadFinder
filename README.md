@@ -1,4 +1,4 @@
-# Proof Sheet
+# LeadFinder
 
 Daily job that pulls newly-listed properties in a configured area from
 Zillapi, saves ones we haven't seen before, and shows them on a dashboard —
