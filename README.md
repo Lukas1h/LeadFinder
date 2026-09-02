@@ -150,24 +150,59 @@ present.
 newly-inserted lead by [`scorePhotos`](src/lib/photoScore.ts), which sends
 all of a listing's photos to `gpt-4o-mini` (OpenAI, not Claude — picked
 for cost: at `detail: "low"` per image, one call per listing with ~15
-photos runs well under a tenth of a cent) in a single request, asking it
-to judge professional vs. amateur photography. The rubric is built around
-three signals: aerial/drone shots and twilight/dusk exterior shots push
-the score up (strong professional tells), crooked/dark/blurry
-cellphone-quality photos push it down.
+photos runs well under a tenth of a cent, `temperature: 0` for consistent
+repeat scoring) in a single request, asking it to judge professional vs.
+amateur/cellphone photography. Rubric signals, in order of how reliable
+they've tested:
+- Converging/leaning vertical lines (door frames, window frames, wall
+  corners not truly vertical) — happens when the camera's tilted up/down
+  instead of held level, extremely common in cellphone photos and, per
+  testing against a real listing's actual photos, the most reliable
+  amateur tell of the bunch. The prompt explicitly tells the model this
+  alone is decisive if it shows up across most of a listing's photos.
+- Aerial/drone shots and twilight/dusk exterior shots push the score up
+  (strong professional tells); dark/blurry/low-res photos push it down.
+- Staging, decor, and landscaping are explicitly excluded — the prompt
+  tells the model to judge photography technique only, not how nice the
+  property itself looks.
+
+⚠️ **`detail: "high"` costs far more than expected** — tested at
+~411,000 tokens for one 16-photo listing (Zillow's photos are large
+enough that OpenAI tiles them into many sub-images at high res), vs.
+~1,500 tokens at `detail: "low"` for the identical result. Stick with
+`"low"` — verified against real photos to give the same score and
+reasoning quality at a fraction of the cost and without blowing through
+OpenAI's per-minute rate limit.
 
 **The relationship is inverted from what "score" might suggest**: a LOW
 score is the good lead — it means the listing likely doesn't have
 professional photos yet, so a real estate photographer has an opening. A
 HIGH score means they probably already have a pro. The dashboard badge
-reflects this (`PhotoScoreBadge` in [`src/app/badges.tsx`](src/app/badges.tsx)):
-"Needs photos" (amber, ≤4) is the badge you actually want to see, "Decent
-photos" (5-7) and "Pro photos" (8+, muted/deprioritized) are progressively
-less interesting.
+(`PhotoScoreBadge` in [`src/app/badges.tsx`](src/app/badges.tsx)) has four
+tiers: **Poor** (1-3, red) and **Amateur** (4-5, amber) are the leads you
+want; **Good** (6-7) and **Pro** (8-10, muted/deprioritized) are
+progressively less interesting.
 
 Set `USE_MOCK_OPENAI=true` locally (default in `.env.local.example`) to
 skip the real call — same reasoning as `USE_MOCK_ZILLAPI`, no cost either
 way at this scale, but no reason to spend anything during dev.
+
+### Photo count and Coming Soon
+
+`photo_count` and `is_coming_soon` come free from the same `/v1/listings`
+sync call (no extra credits) — `listingType.isComingSoon` and
+`photoCount` were both already present in the raw response, just never
+captured until now. They drive the Leads page priority order (see
+`leadPriorityTier`/`byLeadPriority` in
+[`src/lib/pipeline.ts`](src/lib/pipeline.ts)): **Coming soon** listings
+first (freshest opportunity — the agent likely hasn't hired anyone yet),
+then **fewer than `FEW_PHOTOS_THRESHOLD` (5) photos** (as strong a signal
+as a bad AI score — usually means no photographer at all yet), then a bad
+photo score, then everything else — each tier sorted by score ascending
+within itself. The Pipeline page shows the same `ComingSoonBadge`/
+`FewPhotosBadge` badges for context but keeps its own time-based sort
+(oldest-in-current-state first), since mixing photo-need priority into
+"who's waited longest for a follow-up" would muddy that page's purpose.
 
 ## Two pages
 

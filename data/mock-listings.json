@@ -22,7 +22,8 @@
     "homeType": "SINGLE_FAMILY",
     "listingType": {
       "isFSBA": true,
-      "isFSBO": false
+      "isFSBO": false,
+      "isComingSoon": false
     },
     "bedrooms": 3,
     "bathrooms": 2,
@@ -53,7 +54,8 @@
       "buyerAgentName": null
     },
     "mockAgentName": "Christina Spry",
-    "mockAgentPhone": "541-349-2620"
+    "mockAgentPhone": "541-349-2620",
+    "photoCount": 12
   },
   {
     "zpid": "52301188",
@@ -78,7 +80,8 @@
     "homeType": "CONDO",
     "listingType": {
       "isFSBA": true,
-      "isFSBO": false
+      "isFSBO": false,
+      "isComingSoon": false
     },
     "bedrooms": 2,
     "bathrooms": 2,
@@ -109,7 +112,8 @@
       "buyerAgentName": null
     },
     "mockAgentName": "Karie Jett",
-    "mockAgentPhone": "503-709-7509"
+    "mockAgentPhone": "503-709-7509",
+    "photoCount": 4
   },
   {
     "zpid": "39982744",
@@ -134,7 +138,8 @@
     "homeType": "SINGLE_FAMILY",
     "listingType": {
       "isFSBA": true,
-      "isFSBO": false
+      "isFSBO": false,
+      "isComingSoon": false
     },
     "bedrooms": 3,
     "bathrooms": 1.5,
@@ -165,7 +170,8 @@
       "buyerAgentName": null
     },
     "mockAgentName": "Clint Currin",
-    "mockAgentPhone": "541-555-0142"
+    "mockAgentPhone": "541-555-0142",
+    "photoCount": 8
   },
   {
     "zpid": "61120037",
@@ -190,7 +196,8 @@
     "homeType": "SINGLE_FAMILY",
     "listingType": {
       "isFSBA": true,
-      "isFSBO": false
+      "isFSBO": false,
+      "isComingSoon": false
     },
     "bedrooms": 4,
     "bathrooms": 2.5,
@@ -221,7 +228,8 @@
       "buyerAgentName": null
     },
     "mockAgentName": "Samantha Chan",
-    "mockAgentPhone": "458-555-0187"
+    "mockAgentPhone": "458-555-0187",
+    "photoCount": 22
   },
   {
     "zpid": "44718820",
@@ -246,7 +254,8 @@
     "homeType": "TOWNHOUSE",
     "listingType": {
       "isFSBA": true,
-      "isFSBO": false
+      "isFSBO": false,
+      "isComingSoon": true
     },
     "bedrooms": 3,
     "bathrooms": 2,
@@ -277,7 +286,8 @@
       "buyerAgentName": null
     },
     "mockAgentName": "Jordan Reyes",
-    "mockAgentPhone": "541-555-0193"
+    "mockAgentPhone": "541-555-0193",
+    "photoCount": 3
   },
   {
     "zpid": "70045512",
@@ -302,7 +312,8 @@
     "homeType": "SINGLE_FAMILY",
     "listingType": {
       "isFSBA": false,
-      "isFSBO": true
+      "isFSBO": true,
+      "isComingSoon": false
     },
     "bedrooms": 3,
     "bathrooms": 2,
@@ -333,6 +344,7 @@
       "buyerAgentName": null
     },
     "mockAgentName": "Pat Delgado",
-    "mockAgentPhone": "541-555-0176"
+    "mockAgentPhone": "541-555-0176",
+    "photoCount": 6
   }
 ]

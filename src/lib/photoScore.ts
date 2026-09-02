@@ -1,19 +1,32 @@
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 
-const RUBRIC = `You are evaluating a real estate listing's photos to judge whether they were taken by a professional real estate photographer or an amateur (e.g. the agent with a cellphone).
-
-Score from 1 (clearly amateur) to 10 (clearly professional).
+const RUBRIC = `Your goal: determine whether these real estate listing photos were taken
+by a professional real estate photographer, or on a cellphone by the agent/
+homeowner. Score from 1 (clearly cellphone/amateur) to 10 (clearly professional).
 
 Strong signals of PROFESSIONAL work (push the score up):
 - An aerial/drone shot of the property or neighborhood
 - A twilight/dusk exterior shot (warm interior lights glowing against a darkening blue sky)
-- Bright, level, well-composed wide-angle interior shots
+- Perfectly straight vertical lines — door frames, window frames, and wall corners
+  running truly vertical, not leaning inward/outward. Pros keep the camera level
+  (tripod) or correct perspective in post; this is one of the most reliable tells.
+- Bright, well-exposed, wide-angle interior shots
 
-Strong signals of AMATEUR work (push the score down):
-- Crooked or tilted horizons/doorframes
+Strong signals of CELLPHONE/AMATEUR work (push the score down):
+- Converging/leaning vertical lines — door frames, window frames, or wall corners
+  that lean inward at the top or outward at the bottom. This happens when the
+  camera is tilted up or down instead of held level, and is extremely common in
+  cellphone real estate photos. If most of the interior shots show this, it's a
+  reliable, decisive signal on its own — score 4 or below even if the photos are
+  otherwise bright and clear.
+- Crooked or tilted horizons
 - Dark, poorly lit, or blown-out photos
 - Blurry or low-resolution, cellphone-snapshot quality
-- Cluttered, unstaged rooms shot straight-on
+
+Judge PHOTOGRAPHY TECHNIQUE ONLY. Do not factor in staging, furniture,
+decor, landscaping, or how clean/cluttered the property itself is — a
+messy room shot with perfect technique is still a professional photo, and
+a pristine, well-staged room shot on a tilted cellphone is still amateur.
 
 Respond with ONLY a JSON object: {"score": <integer 1-10>, "reasoning": "<one short sentence>"}`;
 
@@ -50,6 +63,7 @@ export async function scorePhotos(photos: string[] | null): Promise<PhotoScoreRe
     body: JSON.stringify({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
+      temperature: 0,
       messages: [
         {
           role: "user",

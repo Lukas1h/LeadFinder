@@ -25,8 +25,9 @@ interface RawZillapiListing {
   homeType?: string;
   propertyUrl?: string;
   daysOnZillow?: number;
-  listingType?: { isFSBO?: boolean };
+  listingType?: { isFSBO?: boolean; isComingSoon?: boolean };
   listingPhotos?: { url?: string }[];
+  photoCount?: number;
   broker?: { name?: string };
   [key: string]: unknown;
 }
@@ -65,6 +66,8 @@ export function normalizeListing(raw: RawZillapiListing): NewListing | null {
     // Approximate — Zillapi returns a daysOnZillow count, not an exact date.
     listedAt,
     photos: raw.listingPhotos?.map((p) => p.url).filter((u): u is string => !!u) ?? null,
+    photoCount: raw.photoCount ?? null,
+    isComingSoon: raw.listingType?.isComingSoon ?? false,
     brokerName: raw.broker?.name ?? null,
   };
 }

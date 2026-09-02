@@ -37,11 +37,13 @@ export function StatusBadge({ status }: { status: LeadStatus }) {
 
 export function PhotoScoreBadge({ score, reasoning }: { score: number; reasoning: string | null }) {
   const tier =
-    score <= 4
-      ? { label: "Needs photos", style: "bg-amber-100 text-amber-800" }
-      : score <= 7
-        ? { label: "Decent photos", style: "bg-gray-100 text-gray-600" }
-        : { label: "Pro photos", style: "bg-gray-100 text-gray-400" };
+    score <= 3
+      ? { label: "Poor photos", style: "bg-red-100 text-red-700" }
+      : score <= 5
+        ? { label: "Amateur photos", style: "bg-amber-100 text-amber-800" }
+        : score <= 7
+          ? { label: "Good photos", style: "bg-gray-100 text-gray-600" }
+          : { label: "Pro photos", style: "bg-gray-100 text-gray-400" };
 
   return (
     <span
@@ -49,6 +51,25 @@ export function PhotoScoreBadge({ score, reasoning }: { score: number; reasoning
       className={`text-xs font-medium rounded-full px-2 py-0.5 ${tier.style}`}
     >
       📷 {tier.label} ({score}/10)
+    </span>
+  );
+}
+
+export function ComingSoonBadge() {
+  return (
+    <span className="text-xs font-medium bg-violet-100 text-violet-700 rounded-full px-2 py-0.5">
+      🔜 Coming soon
+    </span>
+  );
+}
+
+export function FewPhotosBadge({ count }: { count: number }) {
+  return (
+    <span
+      title="Fewer than 5 photos on the listing — the agent likely hasn't hired a photographer yet"
+      className="text-xs font-medium bg-red-100 text-red-700 rounded-full px-2 py-0.5"
+    >
+      📷 Only {count} photo{count === 1 ? "" : "s"}
     </span>
   );
 }

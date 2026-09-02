@@ -3,8 +3,8 @@ import { listings, agents, type Listing } from "@/db/schema";
 import { ne, inArray } from "drizzle-orm";
 import { LeadCard } from "../LeadCard";
 import { PipelineActions } from "../PipelineActions";
-import { StatusBadge, DuplicateAgentBadge, PhotoScoreBadge } from "../badges";
-import { findDuplicateAgentContact, FOLLOW_UP_AFTER_DAYS } from "@/lib/pipeline";
+import { StatusBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge } from "../badges";
+import { findDuplicateAgentContact, FOLLOW_UP_AFTER_DAYS, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +59,10 @@ export default async function PipelinePage() {
         badges={
           <>
             <StatusBadge status={lead.status} />
+            {lead.isComingSoon && <ComingSoonBadge />}
+            {lead.photoCount != null && lead.photoCount < FEW_PHOTOS_THRESHOLD && (
+              <FewPhotosBadge count={lead.photoCount} />
+            )}
             {lead.score != null && (
               <PhotoScoreBadge score={lead.score} reasoning={lead.scoreReasoning} />
             )}

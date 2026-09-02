@@ -6,6 +6,7 @@ import {
   integer,
   numeric,
   timestamp,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 export const LEAD_STATUSES = [
@@ -36,6 +37,8 @@ export const listings = pgTable("listings", {
   listedAt: timestamp("listed_at", { withTimezone: true }),
   foundAt: timestamp("found_at", { withTimezone: true }).notNull().defaultNow(),
   photos: text("photos").array(),
+  photoCount: integer("photo_count"),
+  isComingSoon: boolean("is_coming_soon").notNull().default(false),
   brokerName: text("broker_name"),
 
   // From Zillapi's GET /v1/properties/{zpid} full details — 1 credit per
