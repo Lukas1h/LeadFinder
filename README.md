@@ -15,11 +15,14 @@ leads for a real estate photographer. Single-user personal tool.
    - `DATABASE_URL` — from step 2
    - `ZILLAPI_KEY` — from your Zillapi dashboard
    - `CRON_SECRET` — any string for local dev
-   - `SEARCH_BBOX` — already set to your I-5 corridor box
-     (`west,south,east,north`); this area alone can return 50+ new
-     listings/day, so think twice before widening it (see credit-cost
-     notes below)
-   - `SEARCH_PRICE_MIN` — already set to `300000`
+   - `SEARCH_BBOX` — already set to the Eugene/Springfield metro box
+     (`west,south,east,north`); the wider I-5 corridor box tried earlier
+     returned 50+ new listings/day and blew through credits fast, so think
+     twice before widening this (see credit-cost notes below)
+   - `SEARCH_PRICE_MIN` — already set to `440000`
+   - `SEARCH_HOME_TYPES` — already set to `house,condo,townhouse` (drops
+     vacant land, multi-family, manufactured homes, and apartments —
+     narrows results to what's actually worth shooting)
    - `USE_MOCK_ZILLAPI` — leave as `true` until you've made your first real
      call (see below)
 4. Push the schema to your database: `npm run db:push`
@@ -79,13 +82,15 @@ local dev and testing:
   listings posted in roughly the last day, not the whole active inventory
   in the bbox. Don't remove it or replace it with a full-inventory pull +
   diff.
-- **Bbox size matters a lot.** The current bbox (I-5 corridor, Medford to
-  Portland) still returns 50+ new listings/day and hits the `max_items`
-  safety cap every time — confirmed by a real call, not a guess. At 50
-  credits/day that's ~1,500/month, more than the $5/mo (1,000 credit)
-  tier covers, and the cap means extra listings past 50 are silently
-  dropped rather than deferred. Narrow the bbox to your actual shooting
-  area if you want predictable cost and no truncation.
+- **Bbox size matters a lot.** Two earlier, wider boxes (statewide, then
+  the I-5 corridor) both hit the 50-item `max_items` safety cap daily —
+  confirmed by real calls, not a guess. That's why the bbox is now scoped
+  to just Eugene/Springfield with a `$440k` price floor and a
+  `house,condo,townhouse` type filter — narrower criteria means fewer
+  results, fewer credits, and no silent truncation from the cap. If you
+  widen the bbox or drop a filter later, expect the daily count (and cost)
+  to jump back up — check with a deliberate low-`max_items` test call
+  first rather than assuming.
 - **The `/agent` lookup roughly doubles the daily spend.** It's 1 more
   credit per *newly-inserted* lead (not re-charged for leads you already
   have), so on a 50-new-leads day that's another ~50 credits — meaning the
