@@ -1,8 +1,10 @@
+import { Fragment } from "react";
 import { db } from "@/db";
 import { listings, agents, type Listing } from "@/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
 import { LeadActions } from "./LeadActions";
 import { LeadCard } from "./LeadCard";
+import { RefreshButton } from "./RefreshButton";
 import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge } from "./badges";
 import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
@@ -52,7 +54,7 @@ export default async function LeadsPage() {
         key={lead.id}
         lead={lead}
         badges={
-          <>
+          <Fragment key={lead.id}>
             <NewBadge />
             {lead.isComingSoon && <ComingSoonBadge />}
             {lead.photoCount != null && lead.photoCount < FEW_PHOTOS_THRESHOLD && (
@@ -67,10 +69,11 @@ export default async function LeadsPage() {
                 duplicateAddress={addressById.get(duplicateAgent.lastContactedListingId!)}
               />
             )}
-          </>
+          </Fragment>
         }
         actions={
           <LeadActions
+            key={lead.id}
             listingId={lead.id}
             address={lead.address}
             agentName={lead.agentName}
@@ -83,11 +86,14 @@ export default async function LeadsPage() {
 
   return (
     <main className="max-w-3xl mx-auto w-full px-6 py-10">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Leads</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {leads.length} new listing{leads.length === 1 ? "" : "s"}
-        </p>
+      <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Leads</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {leads.length} new listing{leads.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <RefreshButton />
       </header>
 
       {leads.length === 0 ? (

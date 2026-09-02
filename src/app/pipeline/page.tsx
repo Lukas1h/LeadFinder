@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { db } from "@/db";
 import { listings, agents, type Listing } from "@/db/schema";
 import { ne, inArray } from "drizzle-orm";
@@ -57,7 +58,7 @@ export default async function PipelinePage() {
         key={lead.id}
         lead={lead}
         badges={
-          <>
+          <Fragment key={lead.id}>
             <StatusBadge status={lead.status} />
             {lead.isComingSoon && <ComingSoonBadge />}
             {lead.photoCount != null && lead.photoCount < FEW_PHOTOS_THRESHOLD && (
@@ -72,10 +73,11 @@ export default async function PipelinePage() {
                 duplicateAddress={addressById.get(duplicateAgent.lastContactedListingId!)}
               />
             )}
-          </>
+          </Fragment>
         }
         actions={
           <PipelineActions
+            key={lead.id}
             listingId={lead.id}
             status={lead.status}
             address={lead.address}

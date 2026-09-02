@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { listings, agents, type LeadStatus } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { runSync, type SyncResult } from "@/lib/sync";
 
 async function touchAgentContact(
   listingId: string,
@@ -47,6 +48,20 @@ export async function updateListingStatus(listingId: string, status: LeadStatus)
 
   revalidatePath("/");
   revalidatePath("/pipeline");
+}
+
+/**
+ * Manual "Refresh" button on the Leads page — same Zillapi/OpenAI cost as
+ * a cron run (1 credit per listing *returned*, even ones we already have
+ * and skip inserting), just triggered on demand instead of waiting for
+ * tomorrow's scheduled sync. The client shows its own confirmation before
+ * calling this.
+ */
+export async function triggerManualSync(): Promise<SyncResult> {
+  const result = await runSync();
+  revalidatePath("/");
+  revalidatePath("/pipeline");
+  return result;
 }
 
 /** Re-texting an already-"contacted" lead: resets the follow-up clock without changing status. */

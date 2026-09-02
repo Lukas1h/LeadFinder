@@ -1,6 +1,9 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 import type { Listing } from "@/db/schema";
 import { formatPrice, formatDate } from "@/lib/format";
+import { ListingModal } from "./ListingModal";
 
 export function LeadCard({
   lead,
@@ -11,9 +14,15 @@ export function LeadCard({
   badges?: ReactNode;
   actions: ReactNode;
 }) {
+  const [modalOpen, setModalOpen] = useState(false);
+
   return (
     <li className="flex flex-col sm:flex-row gap-4 bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-      <div className="shrink-0 w-full sm:w-40 h-40 sm:h-32 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+      <button
+        type="button"
+        onClick={() => setModalOpen(true)}
+        className="shrink-0 w-full sm:w-40 h-40 sm:h-32 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center"
+      >
         {lead.photos && lead.photos.length > 0 ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -24,19 +33,18 @@ export function LeadCard({
         ) : (
           <span className="text-gray-400 text-sm">No photo</span>
         )}
-      </div>
+      </button>
 
       <div className="flex-1 min-w-0 flex flex-col justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <a
-              href={lead.listingUrl ?? "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-gray-900 hover:underline"
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="font-semibold text-gray-900 hover:underline text-left"
             >
               {lead.address ?? "Unknown address"}
-            </a>
+            </button>
             {badges}
           </div>
 
@@ -61,6 +69,8 @@ export function LeadCard({
 
         {actions}
       </div>
+
+      <ListingModal lead={lead} open={modalOpen} onClose={() => setModalOpen(false)} />
     </li>
   );
 }
