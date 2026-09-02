@@ -142,9 +142,30 @@ The dashboard shows an agent name + phone "Text {number}" link
 (`sms:+1XXXXXXXXXX`, US-only) next to the brokerage name when a phone is
 present.
 
-Columns `score`, `score_reasoning`, `status`, and `notes` are present but
-unused — reserved for Phase 2 (AI photo scoring, outreach, pipeline
-tracking) so that work won't need a migration.
+Columns `score` and `score_reasoning` are present but unused — reserved
+for Phase 2 (AI photo scoring) so that work won't need a migration.
+
+## Lead pipeline
+
+`status` (a Postgres enum, `lead_status`) tracks each listing through
+`new → saved → contacted → replied → booked`, with `declined` reachable
+from any state. Changing it (dropdown on each card, backed by the
+`updateListingStatus` server action in [`src/app/actions.ts`](src/app/actions.ts))
+sets `contacted_at` when moving to `contacted` — the dashboard uses that to
+flag "contacted N days ago, no reply" once `FOLLOW_UP_AFTER_DAYS` (3, in
+[`src/app/page.tsx`](src/app/page.tsx)) has passed.
+
+A separate `agents` table, keyed by phone number (the only reliably-unique
+agent identifier available — see the Schema section above), is
+created/updated lazily whenever a listing is marked `contacted`. The
+dashboard cross-references it to warn when you're about to (or already
+have) messaged an agent about a different listing than one you already
+contacted them about — agent identity here is phone-based, not
+name-based, since the same person's name can vary slightly across
+listings.
+
+Filter tabs at the top of the dashboard (`/?status=contacted` etc.) show
+per-status counts.
 
 ## Deploying
 
