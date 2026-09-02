@@ -2,23 +2,7 @@
 
 import { useTransition } from "react";
 import { updateListingStatus } from "./actions";
-
-function firstName(fullName: string | null): string | null {
-  if (!fullName) return null;
-  return fullName.trim().split(/\s+/)[0] || null;
-}
-
-function smsUrl(phone: string, message: string): string | null {
-  const digits = phone.replace(/\D/g, "");
-  let target: string;
-  if (digits.length === 10) target = `+1${digits}`;
-  else if (digits.length === 11 && digits.startsWith("1")) target = `+${digits}`;
-  else return null;
-
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const separator = isIOS ? "&" : "?";
-  return `sms:${target}${separator}body=${encodeURIComponent(message)}`;
-}
+import { firstName, smsUrl, initialOutreachMessage } from "@/lib/sms";
 
 export function LeadActions({
   listingId,
@@ -35,11 +19,7 @@ export function LeadActions({
 
   const handleText = () => {
     if (!agentPhone) return;
-    const name = firstName(agentName);
-    const message = `Hi${name ? ` ${name}` : ""}, I'm a local real estate photographer and saw you just listed ${
-      address ?? "your property"
-    }. Let me know if you're looking for photos!`;
-    const url = smsUrl(agentPhone, message);
+    const url = smsUrl(agentPhone, initialOutreachMessage(agentName, address));
     if (url) window.location.href = url;
     startTransition(() => {
       updateListingStatus(listingId, "contacted");

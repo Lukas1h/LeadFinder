@@ -145,27 +145,51 @@ present.
 Columns `score` and `score_reasoning` are present but unused — reserved
 for Phase 2 (AI photo scoring) so that work won't need a migration.
 
-## Lead pipeline
+## Two pages
 
-`status` (a Postgres enum, `lead_status`) tracks each listing through
+- **`/` — Leads.** Only `status = "new"` listings, one per card (photo
+  left, details right). Three actions per lead, no dropdown:
+  **Text {agent}** (primary — opens `sms:` with a prewritten outreach
+  message pre-filled and moves the listing to `contacted`), **Save**
+  (→ `saved`), **Not interested** (→ `declined`). Whichever you click, the
+  card disappears from this view since it's no longer `new`.
+- **`/pipeline` — everything else.** Grouped into three tiers, in the
+  order you actually need to work through them:
+  1. **Needs your attention** — `replied` (respond — someone's waiting on
+     you), then `saved` (ready to message), then `contacted` leads that
+     have gone `FOLLOW_UP_AFTER_DAYS` (3, in
+     [`src/lib/pipeline.ts`](src/lib/pipeline.ts)) without a reply. Each
+     subgroup is sorted oldest-first — the longest-overdue item leads.
+  2. **Waiting on a reply** — `contacted` leads still inside the
+     follow-up window. Nothing to do yet.
+  3. **Closed** (`booked`/`declined`) — collapsed by default (`<details>`,
+     no JS needed) so history isn't lost but doesn't clutter the view. Has
+     a "Reopen" action back to `new` in case a status change was a
+     mistake.
+
+  Status-appropriate actions per lead (`saved` → Text/Not interested;
+  `contacted` → Mark replied/Follow up (re-texts with a different message,
+  resets the follow-up clock)/Not interested; `replied` → Mark
+  booked/Not interested) all funnel through the same two server actions in
+  [`src/app/actions.ts`](src/app/actions.ts): `updateListingStatus` (any
+  transition) and `recordFollowUp` (re-contacting without changing
+  status).
+
+`status` is a Postgres enum (`lead_status`):
 `new → saved → contacted → replied → booked`, with `declined` reachable
-from any state. Changing it (dropdown on each card, backed by the
-`updateListingStatus` server action in [`src/app/actions.ts`](src/app/actions.ts))
-sets `contacted_at` when moving to `contacted` — the dashboard uses that to
-flag "contacted N days ago, no reply" once `FOLLOW_UP_AFTER_DAYS` (3, in
-[`src/app/page.tsx`](src/app/page.tsx)) has passed.
+from any state. `contacted_at` (set whenever a listing moves *into*
+`contacted`, including on a follow-up re-text) drives the follow-up flag;
+`status_changed_at` (set on every transition) drives the sort order within
+each Needs-Attention subgroup and the Closed list.
 
 A separate `agents` table, keyed by phone number (the only reliably-unique
 agent identifier available — see the Schema section above), is
-created/updated lazily whenever a listing is marked `contacted`. The
-dashboard cross-references it to warn when you're about to (or already
-have) messaged an agent about a different listing than one you already
-contacted them about — agent identity here is phone-based, not
-name-based, since the same person's name can vary slightly across
+created/updated lazily whenever a listing is marked `contacted` (initial
+or follow-up). Both pages cross-reference it to warn (an amber badge) when
+you're about to — or already have — messaged an agent about a different
+listing than the one you contacted them about; matching is phone-based,
+not name-based, since the same person's name can vary slightly across
 listings.
-
-Filter tabs at the top of the dashboard (`/?status=contacted` etc.) show
-per-status counts.
 
 ## Deploying
 

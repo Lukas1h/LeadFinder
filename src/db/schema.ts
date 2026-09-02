@@ -50,9 +50,13 @@ export const listings = pgTable("listings", {
 
   // Lead pipeline: new -> saved -> contacted -> replied -> booked, with
   // declined reachable from anywhere. contactedAt drives follow-up
-  // flagging (see FOLLOW_UP_AFTER_DAYS in src/app/page.tsx).
+  // flagging (see FOLLOW_UP_AFTER_DAYS in src/app/pipeline/page.tsx).
+  // statusChangedAt updates on every transition (contactedAt only on ones
+  // into "contacted") — used to sort the pipeline page by how long a
+  // listing has sat in its current state.
   status: leadStatusEnum("status").notNull().default("new"),
   contactedAt: timestamp("contacted_at", { withTimezone: true }),
+  statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
 
   // Phase 2 fields — unused for now, kept nullable so no future migration is needed.
   score: text("score"),
