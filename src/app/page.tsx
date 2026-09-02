@@ -3,7 +3,7 @@ import { listings, agents, type Listing } from "@/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
 import { LeadActions } from "./LeadActions";
 import { LeadCard } from "./LeadCard";
-import { NewBadge, DuplicateAgentBadge } from "./badges";
+import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge } from "./badges";
 import { findDuplicateAgentContact } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
 
@@ -52,6 +52,9 @@ export default async function LeadsPage() {
         badges={
           <>
             <NewBadge />
+            {lead.score != null && (
+              <PhotoScoreBadge score={lead.score} reasoning={lead.scoreReasoning} />
+            )}
             {duplicateAgent && (
               <DuplicateAgentBadge
                 duplicateAgent={duplicateAgent}

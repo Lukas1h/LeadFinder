@@ -3,7 +3,7 @@ import { listings, agents, type Listing } from "@/db/schema";
 import { ne, inArray } from "drizzle-orm";
 import { LeadCard } from "../LeadCard";
 import { PipelineActions } from "../PipelineActions";
-import { StatusBadge, DuplicateAgentBadge } from "../badges";
+import { StatusBadge, DuplicateAgentBadge, PhotoScoreBadge } from "../badges";
 import { findDuplicateAgentContact, FOLLOW_UP_AFTER_DAYS } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
 
@@ -59,6 +59,9 @@ export default async function PipelinePage() {
         badges={
           <>
             <StatusBadge status={lead.status} />
+            {lead.score != null && (
+              <PhotoScoreBadge score={lead.score} reasoning={lead.scoreReasoning} />
+            )}
             {duplicateAgent && (
               <DuplicateAgentBadge
                 duplicateAgent={duplicateAgent}

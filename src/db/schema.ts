@@ -58,9 +58,15 @@ export const listings = pgTable("listings", {
   contactedAt: timestamp("contacted_at", { withTimezone: true }),
   statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
 
-  // Phase 2 fields — unused for now, kept nullable so no future migration is needed.
-  score: text("score"),
+  // AI photo-quality score (1-10, higher = more clearly professional
+  // photography) from gpt-4o-mini vision, scored once per newly-inserted
+  // lead in the sync route. See src/lib/photoScore.ts for the rubric. A
+  // LOW score is the valuable lead here — it means the listing likely
+  // doesn't have a pro photographer yet.
+  score: integer("score"),
   scoreReasoning: text("score_reasoning"),
+
+  // Phase 2 field — unused for now, kept nullable so no future migration is needed.
   notes: text("notes"),
 });
 

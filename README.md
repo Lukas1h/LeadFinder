@@ -14,6 +14,8 @@ leads for a real estate photographer. Single-user personal tool.
 3. Copy `.env.local.example` to `.env.local` and fill in:
    - `DATABASE_URL` — from step 2
    - `ZILLAPI_KEY` — from your Zillapi dashboard
+   - `OPENAI_API_KEY` — from platform.openai.com, for AI photo scoring
+     (see below)
    - `CRON_SECRET` — any string for local dev
    - `SEARCH_BBOX` — already set to the Eugene/Springfield metro box
      (`west,south,east,north`); the wider I-5 corridor box tried earlier
@@ -142,8 +144,30 @@ The dashboard shows an agent name + phone "Text {number}" link
 (`sms:+1XXXXXXXXXX`, US-only) next to the brokerage name when a phone is
 present.
 
-Columns `score` and `score_reasoning` are present but unused — reserved
-for Phase 2 (AI photo scoring) so that work won't need a migration.
+## AI photo scoring
+
+`score` (integer, 1-10) and `score_reasoning` are set once per
+newly-inserted lead by [`scorePhotos`](src/lib/photoScore.ts), which sends
+all of a listing's photos to `gpt-4o-mini` (OpenAI, not Claude — picked
+for cost: at `detail: "low"` per image, one call per listing with ~15
+photos runs well under a tenth of a cent) in a single request, asking it
+to judge professional vs. amateur photography. The rubric is built around
+three signals: aerial/drone shots and twilight/dusk exterior shots push
+the score up (strong professional tells), crooked/dark/blurry
+cellphone-quality photos push it down.
+
+**The relationship is inverted from what "score" might suggest**: a LOW
+score is the good lead — it means the listing likely doesn't have
+professional photos yet, so a real estate photographer has an opening. A
+HIGH score means they probably already have a pro. The dashboard badge
+reflects this (`PhotoScoreBadge` in [`src/app/badges.tsx`](src/app/badges.tsx)):
+"Needs photos" (amber, ≤4) is the badge you actually want to see, "Decent
+photos" (5-7) and "Pro photos" (8+, muted/deprioritized) are progressively
+less interesting.
+
+Set `USE_MOCK_OPENAI=true` locally (default in `.env.local.example`) to
+skip the real call — same reasoning as `USE_MOCK_ZILLAPI`, no cost either
+way at this scale, but no reason to spend anything during dev.
 
 ## Two pages
 

@@ -35,6 +35,24 @@ export function StatusBadge({ status }: { status: LeadStatus }) {
   );
 }
 
+export function PhotoScoreBadge({ score, reasoning }: { score: number; reasoning: string | null }) {
+  const tier =
+    score <= 4
+      ? { label: "Needs photos", style: "bg-amber-100 text-amber-800" }
+      : score <= 7
+        ? { label: "Decent photos", style: "bg-gray-100 text-gray-600" }
+        : { label: "Pro photos", style: "bg-gray-100 text-gray-400" };
+
+  return (
+    <span
+      title={reasoning ?? undefined}
+      className={`text-xs font-medium rounded-full px-2 py-0.5 ${tier.style}`}
+    >
+      📷 {tier.label} ({score}/10)
+    </span>
+  );
+}
+
 export function DuplicateAgentBadge({
   duplicateAgent,
   duplicateAddress,
