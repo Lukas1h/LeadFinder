@@ -22,15 +22,30 @@ interface AgentMailMessageReceived {
 }
 
 // Zillow sends several alert types to the same inbox (price/status changes,
-// tour reminders, saved-search digests) — only "Newly listed" ones should
-// turn into leads.
-const NEWLY_LISTED_RE = /newly listed/i;
+// tour reminders, open house reminders) — only new-listing ones should turn
+// into leads. Verified against two real subject lines: an instant "Newly
+// listed!" alert and a saved-search digest phrased "New Listing: <address>.
+// Your '<search name>' search" — both are genuine "just hit the market"
+// notifications, just worded differently depending on the alert type.
+const NEWLY_LISTED_RE = /newly listed|new listing/i;
 
 function extractZpids(body: string): string[] {
   return Array.from(new Set(Array.from(body.matchAll(ZPID_RE), (m) => m[1])));
 }
 
 export async function POST(req: Request) {
+  try {
+    return await handle(req);
+  } catch (err) {
+    console.error("agentmail webhook error", err);
+    return Response.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
+  }
+}
+
+async function handle(req: Request): Promise<Response> {
   const secret = process.env.AGENTMAIL_WEBHOOK_SECRET;
   if (!secret) {
     console.error("AGENTMAIL_WEBHOOK_SECRET is not set");
