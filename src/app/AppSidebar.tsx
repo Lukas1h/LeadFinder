@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Inbox, KanbanSquare, Camera } from "lucide-react";
+import { Inbox, KanbanSquare, Camera, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -17,6 +17,7 @@ import {
 const LINKS = [
   { href: "/", label: "Leads", icon: Inbox },
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function AppSidebar() {

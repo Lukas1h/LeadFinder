@@ -1,10 +1,10 @@
 import { db } from "@/db";
-import { listings } from "@/db/schema";
+import { listings, searchSources } from "@/db/schema";
 import { fetchNewListings, fetchAgentInfo } from "@/lib/zillapi";
 import { scorePhotos } from "@/lib/photoScore";
 import { eq } from "drizzle-orm";
 
-const MAX_ITEMS = 50;
+const MAX_ITEMS_PER_SOURCE = 50;
 const ENRICHMENT_CONCURRENCY = 5;
 
 export interface SyncResult {
@@ -13,13 +13,29 @@ export interface SyncResult {
 }
 
 /**
- * Pulls new listings from Zillapi and enriches newly-inserted ones with
- * agent info + an AI photo score. Shared by the daily cron route and the
- * manual "Refresh" button — same cost either way (1 Zillapi credit per
- * listing *returned*, even ones we already have and skip inserting).
+ * Pulls new listings from every enabled search source and enriches
+ * newly-inserted ones with agent info + an AI photo score. Shared by the
+ * daily cron route and the manual "Refresh" button — same cost either way
+ * (1 Zillapi credit per listing *returned* per source, even ones we
+ * already have and skip inserting). Each source is its own bbox/filters
+ * and its own Zillapi call, run in parallel — see the Settings page for
+ * managing sources.
  */
 export async function runSync(): Promise<SyncResult> {
-  const fetched = await fetchNewListings({ maxItems: MAX_ITEMS });
+  const sources = await db.select().from(searchSources).where(eq(searchSources.enabled, true));
+
+  const fetchedPerSource = await Promise.all(
+    sources.map((source) =>
+      fetchNewListings({
+        bbox: source.bbox,
+        priceMin: source.priceMin,
+        priceMax: source.priceMax,
+        homeTypes: source.homeTypes,
+        maxItems: MAX_ITEMS_PER_SOURCE,
+      })
+    )
+  );
+  const fetched = fetchedPerSource.flat();
 
   let insertedRows: { id: string; zpid: string; photos: string[] | null }[] = [];
   if (fetched.length > 0) {

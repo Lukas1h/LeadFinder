@@ -89,3 +89,27 @@ export const agents = pgTable("agents", {
 });
 
 export type Agent = typeof agents.$inferSelect;
+
+// One row per search area — each is fetched independently on every
+// sync/refresh (its own Zillapi call, its own bbox/filters). Lets Lukas
+// search e.g. Eugene and Roseburg at once instead of being locked to one
+// area via env vars. Disabled sources are skipped by the sync but kept
+// around instead of deleted.
+export const searchSources = pgTable("search_sources", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  // "west,south,east,north" decimal lon/lat — same format as the old
+  // SEARCH_BBOX env var, and what fetchNewListings sends straight to
+  // Zillapi's bbox query param.
+  bbox: text("bbox").notNull(),
+  priceMin: integer("price_min"),
+  priceMax: integer("price_max"),
+  // Comma-separated Zillapi home_types values (house,condo,townhouse,
+  // multi_family,manufactured,lot,apartment), null = no filter.
+  homeTypes: text("home_types"),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type SearchSource = typeof searchSources.$inferSelect;
+export type NewSearchSource = typeof searchSources.$inferInsert;

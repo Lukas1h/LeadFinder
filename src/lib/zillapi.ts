@@ -72,21 +72,29 @@ export function normalizeListing(raw: RawZillapiListing): NewListing | null {
   };
 }
 
-interface FetchNewListingsOptions {
+export interface SearchSourceFilter {
+  bbox: string;
+  priceMin?: number | null;
+  priceMax?: number | null;
+  homeTypes?: string | null;
+}
+
+interface FetchNewListingsOptions extends SearchSourceFilter {
   maxItems?: number;
 }
 
 /**
- * Pulls listings posted in roughly the last day within SEARCH_BBOX,
- * excluding for-sale-by-owner listings.
+ * Pulls listings posted in roughly the last day within the given source's
+ * bbox/filters, excluding for-sale-by-owner listings. One call per search
+ * source (see runSync in src/lib/sync.ts) — each source is its own bbox,
+ * its own Zillapi credits.
  *
  * Set USE_MOCK_ZILLAPI=true to read from data/mock-listings.json instead of
  * calling the real API — use this for all local dev/testing once you've
- * captured one real response, so you don't burn free-tier credits.
+ * captured one real response, so you don't burn free-tier credits. Mock
+ * mode ignores the source's actual filters and just returns the fixture.
  */
-export async function fetchNewListings(
-  options: FetchNewListingsOptions = {}
-): Promise<NewListing[]> {
+export async function fetchNewListings(options: FetchNewListingsOptions): Promise<NewListing[]> {
   const maxItems = options.maxItems ?? 50;
 
   let raw: RawZillapiListing[];
@@ -99,26 +107,21 @@ export async function fetchNewListings(
       throw new Error("ZILLAPI_KEY is not set");
     }
 
-    const bbox = process.env.SEARCH_BBOX;
-    if (!bbox) {
-      throw new Error("SEARCH_BBOX is not set");
-    }
-
     const params = new URLSearchParams({
       status: "for_sale",
-      bbox,
+      bbox: options.bbox,
       days_on_zillow: "1",
       max_items: String(maxItems),
     });
 
-    if (process.env.SEARCH_PRICE_MIN) {
-      params.set("price_min", process.env.SEARCH_PRICE_MIN);
+    if (options.priceMin != null) {
+      params.set("price_min", String(options.priceMin));
     }
-    if (process.env.SEARCH_PRICE_MAX) {
-      params.set("price_max", process.env.SEARCH_PRICE_MAX);
+    if (options.priceMax != null) {
+      params.set("price_max", String(options.priceMax));
     }
-    if (process.env.SEARCH_HOME_TYPES) {
-      params.set("home_types", process.env.SEARCH_HOME_TYPES);
+    if (options.homeTypes) {
+      params.set("home_types", options.homeTypes);
     }
 
     const res = await fetch(`${ZILLAPI_LISTINGS_URL}?${params.toString()}`, {

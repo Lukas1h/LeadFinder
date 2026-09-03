@@ -17,18 +17,15 @@ leads for a real estate photographer. Single-user personal tool.
    - `OPENAI_API_KEY` — from platform.openai.com, for AI photo scoring
      (see below)
    - `CRON_SECRET` — any string for local dev
-   - `SEARCH_BBOX` — already set to the Eugene/Springfield metro box
-     (`west,south,east,north`); the wider I-5 corridor box tried earlier
-     returned 50+ new listings/day and blew through credits fast, so think
-     twice before widening this (see credit-cost notes below)
-   - `SEARCH_PRICE_MIN` — already set to `440000`
-   - `SEARCH_HOME_TYPES` — already set to `house,condo,townhouse` (drops
-     vacant land, multi-family, manufactured homes, and apartments —
-     narrows results to what's actually worth shooting)
    - `USE_MOCK_ZILLAPI` — leave as `true` until you've made your first real
      call (see below)
 4. Push the schema to your database: `npm run db:push`
-5. `npm run dev`, then open `http://localhost:3000`
+5. `npm run dev`, open `http://localhost:3000/settings`, and add at least
+   one search source (bbox + optional price/home-type filters) — the sync
+   does nothing until a source exists. Wider boxes cost more: the I-5
+   corridor tried early on returned 50+ new listings/day and blew through
+   credits fast (see credit-cost notes below), which is why search areas
+   are scoped narrow (currently just Eugene/Springfield).
 
 ## Triggering the sync manually
 
@@ -203,6 +200,22 @@ within itself. The Pipeline page shows the same `ComingSoonBadge`/
 `FewPhotosBadge` badges for context but keeps its own time-based sort
 (oldest-in-current-state first), since mixing photo-need priority into
 "who's waited longest for a follow-up" would muddy that page's purpose.
+
+## Search sources
+
+`/settings` manages the `search_sources` table — each row is an
+independent bbox + price/home-type filter, e.g. one for Eugene and
+another for a hometown. `runSync` ([`src/lib/sync.ts`](src/lib/sync.ts))
+fetches every `enabled` source in parallel on both the daily cron and the
+manual Refresh button, then inserts/enriches the combined results the
+same as before (deduped by `zpid` regardless of which source found it, so
+overlapping bboxes are harmless). This replaced the old
+`SEARCH_BBOX`/`SEARCH_PRICE_MIN`/`SEARCH_HOME_TYPES` env vars — deleting a
+source doesn't touch leads you've already found, it just stops that area
+from being searched going forward. **Cost scales with source count**:
+each source is its own Zillapi call charged the same per-listing-returned
+way as before, so two sources roughly doubles daily spend — same math as
+widening one bbox, just spread across areas instead.
 
 ## Two pages
 
