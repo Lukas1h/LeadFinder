@@ -5,20 +5,52 @@ import { messagePresets, messagePresetVariants, messageSends, type PresetType } 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
-export async function createPreset(input: { name: string; type: PresetType }) {
+export interface PresetCriteriaInput {
+  minScore: number | null;
+  maxScore: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  maxListingAgeDays: number | null;
+  minPhotoCount: number | null;
+  maxPhotoCount: number | null;
+}
+
+export async function createPreset(input: { name: string; type: PresetType } & PresetCriteriaInput) {
   const name = input.name.trim();
   if (!name) return { error: "Name is required" };
 
-  await db.insert(messagePresets).values({ name, type: input.type });
+  await db.insert(messagePresets).values({
+    name,
+    type: input.type,
+    minScore: input.minScore,
+    maxScore: input.maxScore,
+    minPrice: input.minPrice,
+    maxPrice: input.maxPrice,
+    maxListingAgeDays: input.maxListingAgeDays,
+    minPhotoCount: input.minPhotoCount,
+    maxPhotoCount: input.maxPhotoCount,
+  });
   revalidatePath("/presets");
   return { error: null };
 }
 
-export async function updatePreset(id: string, input: { name: string }) {
+export async function updatePreset(id: string, input: { name: string } & PresetCriteriaInput) {
   const name = input.name.trim();
   if (!name) return { error: "Name is required" };
 
-  await db.update(messagePresets).set({ name }).where(eq(messagePresets.id, id));
+  await db
+    .update(messagePresets)
+    .set({
+      name,
+      minScore: input.minScore,
+      maxScore: input.maxScore,
+      minPrice: input.minPrice,
+      maxPrice: input.maxPrice,
+      maxListingAgeDays: input.maxListingAgeDays,
+      minPhotoCount: input.minPhotoCount,
+      maxPhotoCount: input.maxPhotoCount,
+    })
+    .where(eq(messagePresets.id, id));
   revalidatePath("/presets");
   return { error: null };
 }

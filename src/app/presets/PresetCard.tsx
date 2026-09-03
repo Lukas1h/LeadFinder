@@ -24,6 +24,25 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+function formatCriteria(preset: MessagePreset): string | null {
+  const parts: string[] = [];
+  if (preset.minScore != null || preset.maxScore != null) {
+    parts.push(`score ${preset.minScore ?? 1}–${preset.maxScore ?? 10}`);
+  }
+  if (preset.minPrice != null || preset.maxPrice != null) {
+    const min = preset.minPrice != null ? `$${preset.minPrice.toLocaleString()}` : "$0";
+    const max = preset.maxPrice != null ? `$${preset.maxPrice.toLocaleString()}` : "+";
+    parts.push(`price ${min}–${max}`);
+  }
+  if (preset.maxListingAgeDays != null) {
+    parts.push(`≤${preset.maxListingAgeDays}d old`);
+  }
+  if (preset.minPhotoCount != null || preset.maxPhotoCount != null) {
+    parts.push(`${preset.minPhotoCount ?? 0}–${preset.maxPhotoCount ?? "∞"} photos`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 function rate(n: number, total: number): string {
   if (total === 0) return "—";
   return `${Math.round((n / total) * 100)}%`;
@@ -228,6 +247,11 @@ export function PresetCard({
           <p className="text-xs text-muted-foreground mt-1">
             {variants.length} variant{variants.length === 1 ? "" : "s"} · {totalSent} sent total
           </p>
+          {formatCriteria(preset) && (
+            <p className="text-xs text-muted-foreground/80 mt-0.5">
+              Recommended for: {formatCriteria(preset)}
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">

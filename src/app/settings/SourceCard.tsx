@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, MapPin } from "lucide-react";
 import type { SearchSource } from "@/db/schema";
 import { deleteSource, toggleSource } from "./actions";
 import { SourceForm } from "./SourceForm";
@@ -62,6 +62,7 @@ export function SourceCard({ source }: { source: SearchSource }) {
     <Card className="flex-row items-start justify-between gap-4 p-4">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
+          <MapPin className="size-4 text-muted-foreground shrink-0" />
           <h3 className="font-semibold text-foreground">{source.name}</h3>
           {!source.enabled && <span className="text-xs text-muted-foreground">(disabled)</span>}
         </div>

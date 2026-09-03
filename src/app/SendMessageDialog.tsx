@@ -5,7 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { MessageCircle } from "lucide-react";
 import type { PresetType } from "@/db/schema";
-import { getMessageOptions, sendMessage, type MessageOption } from "@/app/messageActions";
+import { getMessageOptions, sendMessage, type PresetOption } from "@/app/messageActions";
 import { smsUrl } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,30 +38,29 @@ export function SendMessageDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [options, setOptions] = useState<MessageOption[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [presets, setPresets] = useState<PresetOption[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) return;
     setLoading(true);
-    setOptions([]);
-    setSelectedId(null);
-    getMessageOptions(listingId, type).then(({ options, pickedVariantId }) => {
-      setOptions(options);
-      setSelectedId(pickedVariantId ?? options[0]?.variantId ?? null);
+    setPresets([]);
+    setSelectedPresetId(null);
+    getMessageOptions(listingId, type).then(({ presets }) => {
+      setPresets(presets);
+      const recommended = presets.find((p) => p.recommended);
+      setSelectedPresetId(recommended?.presetId ?? presets[0]?.presetId ?? null);
       setLoading(false);
     });
   };
 
-  if (!agentPhone) return null;
-
-  const selected = options.find((o) => o.variantId === selectedId) ?? null;
+  const selected = presets.find((p) => p.presetId === selectedPresetId) ?? null;
 
   const handleSend = () => {
     if (!selected) return;
-    const url = smsUrl(agentPhone, selected.text);
+    const url = smsUrl(agentPhone ?? "", selected.text);
     if (url) window.location.href = url;
     startTransition(async () => {
       await sendMessage(listingId, type, selected.presetId, selected.variantId);
@@ -77,14 +76,13 @@ export function SendMessageDialog({
         <DialogHeader>
           <DialogTitle>Send message</DialogTitle>
           <DialogDescription>
-            Auto-picked to keep your variants balanced — swap it below if you&rsquo;d rather send
-            something else.
+            Pick a preset — the variant rotates automatically to keep your A/B stats fair.
           </DialogDescription>
         </DialogHeader>
 
         {loading ? (
           <p className="text-sm text-muted-foreground py-4">Loading…</p>
-        ) : options.length === 0 ? (
+        ) : presets.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">
             No active preset for this message.{" "}
             <Link href="/presets" className="underline">
@@ -94,15 +92,16 @@ export function SendMessageDialog({
           </p>
         ) : (
           <div className="flex flex-col gap-4 py-2">
-            {options.length > 1 && (
-              <Select value={selectedId ?? undefined} onValueChange={setSelectedId}>
+            {presets.length > 1 && (
+              <Select value={selectedPresetId ?? undefined} onValueChange={setSelectedPresetId}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {options.map((o) => (
-                    <SelectItem key={o.variantId} value={o.variantId}>
-                      {o.presetName} — {o.label}
+                  {presets.map((p) => (
+                    <SelectItem key={p.presetId} value={p.presetId}>
+                      {p.presetName}
+                      {p.recommended && " (Recommended)"}
                     </SelectItem>
                   ))}
                 </SelectContent>

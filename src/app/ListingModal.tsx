@@ -67,6 +67,10 @@ export function ListingModal({
             </div>
           )}
 
+          {lead.sourceLabel && (
+            <div className="text-xs text-muted-foreground">Source: {lead.sourceLabel}</div>
+          )}
+
           <Button variant="outline" asChild className="mt-2">
             <a href={lead.listingUrl ?? "#"} target="_blank" rel="noopener noreferrer">
               View on Zillow

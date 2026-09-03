@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { listings, searchSources } from "@/db/schema";
+import { listings, searchSources, type NewListing } from "@/db/schema";
 import { fetchNewListings, fetchAgentInfo } from "@/lib/zillapi";
 import { scorePhotos } from "@/lib/photoScore";
 import { eq } from "drizzle-orm";
@@ -25,46 +25,59 @@ export async function runSync(): Promise<SyncResult> {
   const sources = await db.select().from(searchSources).where(eq(searchSources.enabled, true));
 
   const fetchedPerSource = await Promise.all(
-    sources.map((source) =>
-      fetchNewListings({
+    sources.map(async (source) => {
+      const results = await fetchNewListings({
         bbox: source.bbox,
         priceMin: source.priceMin,
         priceMax: source.priceMax,
         homeTypes: source.homeTypes,
         maxItems: MAX_ITEMS_PER_SOURCE,
-      })
-    )
+      });
+      return results.map((l) => ({ ...l, sourceLabel: source.name }));
+    })
   );
   const fetched = fetchedPerSource.flat();
 
-  let insertedRows: { id: string; zpid: string; photos: string[] | null }[] = [];
-  if (fetched.length > 0) {
-    insertedRows = await db
-      .insert(listings)
-      .values(fetched)
-      .onConflictDoNothing({ target: listings.zpid })
-      .returning({ id: listings.id, zpid: listings.zpid, photos: listings.photos });
-  }
+  const inserted = await insertAndEnrichListings(fetched);
+  return { fetched: fetched.length, inserted };
+}
 
-  // Per newly-inserted lead only (never re-fetched for leads we already
-  // had): one property-details lookup (1 credit — confirmed the docs' "0
-  // credits on cache hit" claim is false) for agent info, plus one
-  // gpt-4o-mini vision call (a fraction of a cent) to score the photos.
-  // Run together per lead rather than as two passes to keep total sync
-  // time down.
+/**
+ * Inserts new listings (deduped by zpid via onConflictDoNothing) and, for
+ * ones actually new, enriches with agent info + an AI photo score. Shared
+ * by the bbox sync above and the AgentMail email-alert webhook — same
+ * enrichment either way, only the source of the listing rows differs.
+ * Rows that already have agent info (from fetchFullListing, used by the
+ * email path) skip the extra fetchAgentInfo lookup rather than paying for
+ * a redundant Zillapi credit.
+ */
+export async function insertAndEnrichListings(candidates: NewListing[]): Promise<number> {
+  if (candidates.length === 0) return 0;
+
+  const insertedRows = await db
+    .insert(listings)
+    .values(candidates)
+    .onConflictDoNothing({ target: listings.zpid })
+    .returning({
+      id: listings.id,
+      zpid: listings.zpid,
+      photos: listings.photos,
+      agentPhone: listings.agentPhone,
+    });
+
   for (let i = 0; i < insertedRows.length; i += ENRICHMENT_CONCURRENCY) {
     const batch = insertedRows.slice(i, i + ENRICHMENT_CONCURRENCY);
     await Promise.all(
       batch.map(async (row) => {
         const [agent, photoScore] = await Promise.all([
-          fetchAgentInfo(row.zpid),
+          row.agentPhone ? null : fetchAgentInfo(row.zpid),
           scorePhotos(row.photos),
         ]);
 
         const update: Record<string, unknown> = {};
-        if (agent.agentName) update.agentName = agent.agentName;
-        if (agent.agentPhone) update.agentPhone = agent.agentPhone;
-        if (agent.brokerName) update.brokerName = agent.brokerName;
+        if (agent?.agentName) update.agentName = agent.agentName;
+        if (agent?.agentPhone) update.agentPhone = agent.agentPhone;
+        if (agent?.brokerName) update.brokerName = agent.brokerName;
         if (photoScore.score != null) update.score = photoScore.score;
         if (photoScore.reasoning) update.scoreReasoning = photoScore.reasoning;
 
@@ -75,5 +88,5 @@ export async function runSync(): Promise<SyncResult> {
     );
   }
 
-  return { fetched: fetched.length, inserted: insertedRows.length };
+  return insertedRows.length;
 }

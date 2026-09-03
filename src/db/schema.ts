@@ -77,6 +77,11 @@ export const listings = pgTable("listings", {
 
   // Phase 2 field — unused for now, kept nullable so no future migration is needed.
   notes: text("notes"),
+
+  // Which source found this listing — a search source's name (e.g.
+  // "Eugene") or "Zillow email alert". Set once at insert time, shown in
+  // the listing detail modal.
+  sourceLabel: text("source_label"),
 });
 
 export type Listing = typeof listings.$inferSelect;
@@ -136,6 +141,20 @@ export const messagePresets = pgTable("message_presets", {
   type: presetTypeEnum("type").notNull(),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+  // Targeting criteria for auto-recommending this preset in the Send
+  // message dialog — all nullable, null meaning "no constraint on this
+  // dimension". A listing must satisfy every criterion a preset actually
+  // sets to be eligible; among eligible presets the one with the most
+  // criteria set (most specific) is recommended. See scorePresetMatch in
+  // src/app/messageActions.ts.
+  minScore: integer("min_score"),
+  maxScore: integer("max_score"),
+  minPrice: integer("min_price"),
+  maxPrice: integer("max_price"),
+  maxListingAgeDays: integer("max_listing_age_days"),
+  minPhotoCount: integer("min_photo_count"),
+  maxPhotoCount: integer("max_photo_count"),
 });
 
 export type MessagePreset = typeof messagePresets.$inferSelect;
