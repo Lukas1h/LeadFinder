@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { listings, agents, messageSends, type LeadStatus } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { runSync, type SyncResult } from "@/lib/sync";
 
@@ -31,29 +31,43 @@ export async function touchAgentContact(
 }
 
 /**
- * Attributes a "replied"/"declined" status change back to whichever message
- * preset variant was most recently sent to this listing and still pending
- * an outcome — the data point the presets page's A/B stats are built from.
- * A no-op if nothing was ever logged (e.g. a listing marked declined
- * without ever being texted).
+ * Attributes a pipeline status change back to whichever message preset
+ * variant was most recently sent to this listing — the data point the
+ * presets page's stats are built from. respondedAt is only ever set once
+ * (the first reply); result is always overwritable, so a later "declined"
+ * after an earlier "replied" correctly updates the same row instead of
+ * being silently dropped. A no-op if nothing was ever logged (e.g. a
+ * listing marked declined without ever being texted).
  */
-async function resolveLatestSend(listingId: string, outcome: "responded" | "declined") {
-  const [pending] = await db
-    .select({ id: messageSends.id })
+async function resolveSendOutcome(listingId: string, status: LeadStatus) {
+  if (status !== "replied" && status !== "quoted" && status !== "booked" && status !== "declined") return;
+
+  const [latest] = await db
+    .select({ id: messageSends.id, respondedAt: messageSends.respondedAt })
     .from(messageSends)
-    .where(and(eq(messageSends.listingId, listingId), eq(messageSends.outcome, "pending")))
+    .where(eq(messageSends.listingId, listingId))
     .orderBy(desc(messageSends.sentAt))
     .limit(1);
 
-  if (!pending) return;
+  if (!latest) return;
 
-  await db
-    .update(messageSends)
-    .set({ outcome, outcomeAt: new Date() })
-    .where(eq(messageSends.id, pending.id));
+  const patch: { respondedAt?: Date; result?: "quoted" | "booked" | "declined" } = {};
+  if (status === "replied") {
+    if (!latest.respondedAt) patch.respondedAt = new Date();
+  } else {
+    patch.result = status;
+  }
+
+  if (Object.keys(patch).length > 0) {
+    await db.update(messageSends).set(patch).where(eq(messageSends.id, latest.id));
+  }
 }
 
-export async function updateListingStatus(listingId: string, status: LeadStatus) {
+export async function updateListingStatus(
+  listingId: string,
+  status: LeadStatus,
+  bookingValue?: number | null
+) {
   const now = new Date();
   const [lead] = await db
     .update(listings)
@@ -61,6 +75,7 @@ export async function updateListingStatus(listingId: string, status: LeadStatus)
       status,
       statusChangedAt: now,
       ...(status === "contacted" ? { contactedAt: now } : {}),
+      ...(status === "booked" && bookingValue != null ? { bookingValue } : {}),
     })
     .where(eq(listings.id, listingId))
     .returning({ agentPhone: listings.agentPhone, agentName: listings.agentName });
@@ -69,11 +84,7 @@ export async function updateListingStatus(listingId: string, status: LeadStatus)
     await touchAgentContact(listingId, lead.agentPhone, lead.agentName);
   }
 
-  if (status === "replied") {
-    await resolveLatestSend(listingId, "responded");
-  } else if (status === "declined") {
-    await resolveLatestSend(listingId, "declined");
-  }
+  await resolveSendOutcome(listingId, status);
 
   revalidatePath("/");
   revalidatePath("/pipeline");

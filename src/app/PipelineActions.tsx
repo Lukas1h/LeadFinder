@@ -1,9 +1,10 @@
 "use client";
 
 import { useTransition } from "react";
-import { MessageCircle, CheckCircle2, RotateCcw } from "lucide-react";
+import { MessageCircle, CheckCircle2, FileText, RotateCcw } from "lucide-react";
 import { updateListingStatus } from "./actions";
 import { SendMessageDialog } from "./SendMessageDialog";
+import { MarkBookedDialog } from "./MarkBookedDialog";
 import { firstName } from "@/lib/sms";
 import type { LeadStatus } from "@/db/schema";
 import { Button } from "@/components/ui/button";
@@ -78,10 +79,20 @@ export function PipelineActions({
   if (status === "replied") {
     return (
       <div className="flex items-center gap-2 flex-wrap">
-        <Button onClick={() => goTo("booked")} disabled={isPending}>
-          <CheckCircle2 />
-          Mark booked
+        <Button variant="outline" onClick={() => goTo("quoted")} disabled={isPending}>
+          <FileText />
+          Mark quoted
         </Button>
+        <MarkBookedDialog listingId={listingId} />
+        {notInterested}
+      </div>
+    );
+  }
+
+  if (status === "quoted") {
+    return (
+      <div className="flex items-center gap-2 flex-wrap">
+        <MarkBookedDialog listingId={listingId} />
         {notInterested}
       </div>
     );

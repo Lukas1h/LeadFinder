@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { Inbox, MessageSquareReply, Bookmark, Clock, ChevronRight } from "lucide-react";
+import { Inbox, MessageSquareReply, Bookmark, Clock, ChevronRight, FileText } from "lucide-react";
 import { db } from "@/db";
 import { listings, agents, type Listing } from "@/db/schema";
 import { ne, inArray } from "drizzle-orm";
@@ -42,6 +42,7 @@ export default async function PipelinePage() {
       (l) => l.status === "contacted" && l.contactedAt != null && daysSince(l.contactedAt) >= FOLLOW_UP_AFTER_DAYS
     )
     .sort((a, b) => byOldest(a, b, "contactedAt"));
+  const quoted = all.filter((l) => l.status === "quoted").sort((a, b) => byOldest(a, b, "statusChangedAt"));
   const waiting = all
     .filter(
       (l) => l.status === "contacted" && (l.contactedAt == null || daysSince(l.contactedAt) < FOLLOW_UP_AFTER_DAYS)
@@ -145,13 +146,26 @@ export default async function PipelinePage() {
             )}
           </section>
 
-          {waiting.length > 0 && (
+          {(quoted.length > 0 || waiting.length > 0) && (
             <section>
               <Separator className="mb-8" />
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                 Waiting on a reply
               </h2>
-              <div className="flex flex-col gap-4">{waiting.map(card)}</div>
+              <div className="flex flex-col gap-6">
+                {quoted.length > 0 && (
+                  <div>
+                    <h3 className="flex items-center gap-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-400 mb-2">
+                      <FileText className="size-3.5" />
+                      Quoted — awaiting decision
+                    </h3>
+                    <div className="flex flex-col gap-4">{quoted.map(card)}</div>
+                  </div>
+                )}
+                {waiting.length > 0 && (
+                  <div className="flex flex-col gap-4">{waiting.map(card)}</div>
+                )}
+              </div>
             </section>
           )}
 

@@ -2,8 +2,9 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus } from "lucide-react";
+import { Pencil, Trash2, Plus, Archive, ArchiveRestore } from "lucide-react";
 import type { MessagePreset, MessagePresetVariant } from "@/db/schema";
+import type { VariantStats } from "@/lib/messageStats";
 import { deletePreset, togglePreset, deleteVariant, toggleVariant } from "./actions";
 import { PresetForm } from "./PresetForm";
 import { VariantForm } from "./VariantForm";
@@ -23,15 +24,24 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export interface VariantStats {
-  sent: number;
-  responded: number;
-  declined: number;
-}
-
 function rate(n: number, total: number): string {
   if (total === 0) return "—";
   return `${Math.round((n / total) * 100)}%`;
+}
+
+function AgentBucketLine({
+  label,
+  bucket,
+}: {
+  label: string;
+  bucket: { sent: number; booked: number };
+}) {
+  if (bucket.sent === 0) return null;
+  return (
+    <p>
+      {label}: {bucket.sent} sent, {rate(bucket.booked, bucket.sent)} booked
+    </p>
+  );
 }
 
 function VariantRow({
@@ -43,8 +53,15 @@ function VariantRow({
 }) {
   const [isPending, startTransition] = useTransition();
 
-  const handleToggle = (checked: boolean) => {
-    startTransition(() => toggleVariant(variant.id, checked));
+  const handleArchive = () => {
+    startTransition(async () => {
+      await toggleVariant(variant.id, false);
+      toast.success(`Archived "${variant.label}"`);
+    });
+  };
+
+  const handleRestore = () => {
+    startTransition(() => toggleVariant(variant.id, true));
   };
 
   const handleDelete = () => {
@@ -59,29 +76,43 @@ function VariantRow({
   };
 
   return (
-    <div className="border-t border-border py-3 first:border-t-0 first:pt-0">
+    <div className="border-t border-border/70 py-3 first:border-t-0 first:pt-0">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-foreground">{variant.label}</span>
-            {!variant.enabled && <span className="text-xs text-muted-foreground">(disabled)</span>}
+            {!variant.enabled && (
+              <span className="text-xs text-muted-foreground">(archived)</span>
+            )}
           </div>
           <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap line-clamp-3">
             {variant.body}
           </p>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+
+          <div className="flex flex-wrap gap-2 mt-2">
             <Badge variant="secondary">{stats.sent} sent</Badge>
-            <Badge variant="secondary">
-              {stats.responded} responded ({rate(stats.responded, stats.sent)})
-            </Badge>
-            <Badge variant="secondary">
-              {stats.declined} declined ({rate(stats.declined, stats.sent)})
-            </Badge>
+            <Badge variant="secondary">{rate(stats.responded, stats.sent)} responded</Badge>
+            <Badge variant="secondary">{rate(stats.booked, stats.sent)} booked</Badge>
           </div>
+
+          {stats.sent > 0 && (
+            <details className="mt-2 group/stats">
+              <summary className="text-xs text-muted-foreground cursor-pointer select-none w-fit">
+                More stats
+              </summary>
+              <div className="text-xs text-muted-foreground mt-1.5 flex flex-col gap-0.5">
+                <p>
+                  {stats.quoted} quoted · {stats.declined} declined ({rate(stats.declined, stats.sent)})
+                </p>
+                {stats.revenue > 0 && <p>${stats.revenue.toLocaleString()} total booked</p>}
+                <AgentBucketLine label="New agents" bucket={stats.newAgent} />
+                <AgentBucketLine label="Repeat agents" bucket={stats.repeatAgent} />
+              </div>
+            </details>
+          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          <Switch checked={variant.enabled} onCheckedChange={handleToggle} disabled={isPending} />
           <VariantForm
             presetId={variant.presetId}
             variant={variant}
@@ -92,28 +123,56 @@ function VariantRow({
               </Button>
             }
           />
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-muted-foreground">
-                <Trash2 />
-                <span className="sr-only">Delete variant</span>
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete &ldquo;{variant.label}&rdquo;?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {stats.sent > 0
-                    ? "This variant has send history — deleting will be rejected. Disable it instead to stop using it while keeping its stats."
-                    : "This variant hasn't been sent yet — deleting it is safe."}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+
+          {!variant.enabled ? (
+            <Button variant="ghost" size="icon" onClick={handleRestore} disabled={isPending}>
+              <ArchiveRestore />
+              <span className="sr-only">Restore variant</span>
+            </Button>
+          ) : stats.sent > 0 ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="text-muted-foreground">
+                  <Archive />
+                  <span className="sr-only">Archive variant</span>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Archive &ldquo;{variant.label}&rdquo;?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    It has send history, so it can&rsquo;t be deleted. Archiving stops it from being
+                    picked for future sends but keeps its stats.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleArchive}>Archive</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="text-muted-foreground">
+                  <Trash2 />
+                  <span className="sr-only">Delete variant</span>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete &ldquo;{variant.label}&rdquo;?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    It hasn&rsquo;t been sent yet — deleting it is safe.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
     </div>
@@ -131,6 +190,16 @@ export function PresetCard({
 }) {
   const [isPending, startTransition] = useTransition();
 
+  const emptyStats: VariantStats = {
+    sent: 0,
+    responded: 0,
+    quoted: 0,
+    booked: 0,
+    declined: 0,
+    revenue: 0,
+    newAgent: { sent: 0, booked: 0 },
+    repeatAgent: { sent: 0, booked: 0 },
+  };
   const totalSent = variants.reduce((sum, v) => sum + (statsByVariant[v.id]?.sent ?? 0), 0);
 
   const handleToggle = (checked: boolean) => {
@@ -197,14 +266,14 @@ export function PresetCard({
         </div>
       </div>
 
-      <div>
-        {variants.map((variant) => (
-          <VariantRow
-            key={variant.id}
-            variant={variant}
-            stats={statsByVariant[variant.id] ?? { sent: 0, responded: 0, declined: 0 }}
-          />
-        ))}
+      <div className="bg-muted/30 rounded-lg border-l-2 border-border pl-3 pr-2 py-1">
+        {variants.length === 0 ? (
+          <p className="text-sm text-muted-foreground/70 py-2">No variants yet.</p>
+        ) : (
+          variants.map((variant) => (
+            <VariantRow key={variant.id} variant={variant} stats={statsByVariant[variant.id] ?? emptyStats} />
+          ))
+        )}
       </div>
 
       <VariantForm

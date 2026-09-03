@@ -14,6 +14,7 @@ export const LEAD_STATUSES = [
   "saved",
   "contacted",
   "replied",
+  "quoted",
   "booked",
   "declined",
 ] as const;
@@ -51,15 +52,20 @@ export const listings = pgTable("listings", {
   agentName: text("agent_name"),
   agentPhone: text("agent_phone"),
 
-  // Lead pipeline: new -> saved -> contacted -> replied -> booked, with
-  // declined reachable from anywhere. contactedAt drives follow-up
-  // flagging (see FOLLOW_UP_AFTER_DAYS in src/app/pipeline/page.tsx).
+  // Lead pipeline: new -> saved -> contacted -> replied -> quoted -> booked,
+  // with declined reachable from anywhere (quoted is optional — replied can
+  // go straight to booked for an instant close). contactedAt drives
+  // follow-up flagging (see FOLLOW_UP_AFTER_DAYS in src/app/pipeline/page.tsx).
   // statusChangedAt updates on every transition (contactedAt only on ones
   // into "contacted") — used to sort the pipeline page by how long a
   // listing has sat in its current state.
   status: leadStatusEnum("status").notNull().default("new"),
   contactedAt: timestamp("contacted_at", { withTimezone: true }),
   statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
+
+  // Job $ value, entered (optionally) when marking a listing "booked" — the
+  // seed data for revenue-per-preset/variant math on the presets page.
+  bookingValue: integer("booking_value"),
 
   // AI photo-quality score (1-10, higher = more clearly professional
   // photography) from gpt-4o-mini vision, scored once per newly-inserted
@@ -120,9 +126,9 @@ export const PRESET_TYPES = ["initial_outreach", "follow_up"] as const;
 export type PresetType = (typeof PRESET_TYPES)[number];
 export const presetTypeEnum = pgEnum("preset_type", PRESET_TYPES);
 
-export const MESSAGE_OUTCOMES = ["pending", "responded", "declined"] as const;
-export type MessageOutcome = (typeof MESSAGE_OUTCOMES)[number];
-export const messageOutcomeEnum = pgEnum("message_outcome", MESSAGE_OUTCOMES);
+export const MESSAGE_RESULTS = ["pending", "quoted", "booked", "declined"] as const;
+export type MessageResult = (typeof MESSAGE_RESULTS)[number];
+export const messageResultEnum = pgEnum("message_result", MESSAGE_RESULTS);
 
 export const messagePresets = pgTable("message_presets", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -152,9 +158,12 @@ export type MessagePresetVariant = typeof messagePresetVariants.$inferSelect;
 export type NewMessagePresetVariant = typeof messagePresetVariants.$inferInsert;
 
 // One row per actual text sent — the append-only log the A/B stats are
-// built from. outcome starts "pending" and is resolved to "responded" or
-// "declined" when the lead's status later moves to "replied"/"declined"
-// (see resolveLatestSend in src/app/actions.ts).
+// built from. respondedAt and result are independent: respondedAt is a
+// fact set once, the first time the agent replies; result reflects the
+// send's current outcome and is always overwritable (so "replied, then
+// declined" — or "replied, then booked" — is captured correctly instead of
+// getting stuck on whichever transition happened first). See
+// resolveSendOutcome in src/app/actions.ts.
 export const messageSends = pgTable("message_sends", {
   id: uuid("id").primaryKey().defaultRandom(),
   listingId: uuid("listing_id")
@@ -168,8 +177,8 @@ export const messageSends = pgTable("message_sends", {
     .references(() => messagePresetVariants.id),
   type: presetTypeEnum("type").notNull(),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
-  outcome: messageOutcomeEnum("outcome").notNull().default("pending"),
-  outcomeAt: timestamp("outcome_at", { withTimezone: true }),
+  respondedAt: timestamp("responded_at", { withTimezone: true }),
+  result: messageResultEnum("result").notNull().default("pending"),
 });
 
 export type MessageSend = typeof messageSends.$inferSelect;

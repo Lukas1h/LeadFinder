@@ -30,15 +30,24 @@ const TYPE_OPTIONS: { value: PresetType; label: string }[] = [
   { value: "follow_up", label: "Follow-up" },
 ];
 
-export function PresetForm({ preset, trigger }: { preset?: MessagePreset; trigger: React.ReactNode }) {
+export function PresetForm({
+  preset,
+  defaultType,
+  trigger,
+}: {
+  preset?: MessagePreset;
+  defaultType?: PresetType;
+  trigger: React.ReactNode;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState(preset?.name ?? "");
-  const [type, setType] = useState<PresetType>(preset?.type ?? "initial_outreach");
+  const [type, setType] = useState<PresetType>(preset?.type ?? defaultType ?? "initial_outreach");
   const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!preset;
+  const typeIsLocked = isEditing || !!defaultType;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +96,7 @@ export function PresetForm({ preset, trigger }: { preset?: MessagePreset; trigge
               />
             </div>
 
-            {!isEditing && (
+            {!typeIsLocked && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="preset-type">Used for</Label>
                 <Select value={type} onValueChange={(v) => setType(v as PresetType)}>
