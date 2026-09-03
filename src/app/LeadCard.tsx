@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import type { Listing } from "@/db/schema";
 import { formatPrice, formatDate } from "@/lib/format";
 import { ListingModal } from "./ListingModal";
+import { Card } from "@/components/ui/card";
 
 export function LeadCard({
   lead,
@@ -17,11 +18,11 @@ export function LeadCard({
   const [modalOpen, setModalOpen] = useState(false);
 
   return (
-    <li className="flex flex-col sm:flex-row gap-4 bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+    <Card className="flex-col sm:flex-row gap-4 p-4">
       <button
         type="button"
         onClick={() => setModalOpen(true)}
-        className="shrink-0 w-full sm:w-40 h-40 sm:h-32 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center"
+        className="shrink-0 w-full sm:w-40 h-40 sm:h-32 rounded-lg overflow-hidden bg-muted flex items-center justify-center"
       >
         {lead.photos && lead.photos.length > 0 ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -31,7 +32,7 @@ export function LeadCard({
             className="w-full h-full object-cover"
           />
         ) : (
-          <span className="text-gray-400 text-sm">No photo</span>
+          <span className="text-muted-foreground text-sm">No photo</span>
         )}
       </button>
 
@@ -41,16 +42,16 @@ export function LeadCard({
             <button
               type="button"
               onClick={() => setModalOpen(true)}
-              className="font-semibold text-gray-900 hover:underline text-left"
+              className="font-semibold text-foreground hover:underline text-left"
             >
               {lead.address ?? "Unknown address"}
             </button>
             {badges}
           </div>
 
-          <div className="text-xl font-semibold text-gray-900 mt-1">{formatPrice(lead.price)}</div>
+          <div className="text-xl font-semibold text-foreground mt-1">{formatPrice(lead.price)}</div>
 
-          <div className="text-sm text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
+          <div className="text-sm text-muted-foreground mt-0.5 flex flex-wrap gap-x-3">
             <span>{[lead.city, lead.state].filter(Boolean).join(", ")}</span>
             <span>
               {lead.bedrooms ?? "—"} bd / {lead.bathrooms ?? "—"} ba
@@ -61,8 +62,8 @@ export function LeadCard({
 
           {lead.agentName && (
             <div className="text-sm mt-1.5">
-              <span className="text-gray-800">{lead.agentName}</span>
-              {lead.brokerName && <span className="text-gray-400"> · {lead.brokerName}</span>}
+              <span className="text-foreground/90">{lead.agentName}</span>
+              {lead.brokerName && <span className="text-muted-foreground"> · {lead.brokerName}</span>}
             </div>
           )}
         </div>
@@ -70,7 +71,7 @@ export function LeadCard({
         {actions}
       </div>
 
-      <ListingModal lead={lead} open={modalOpen} onClose={() => setModalOpen(false)} />
-    </li>
+      <ListingModal lead={lead} open={modalOpen} onOpenChange={setModalOpen} />
+    </Card>
   );
 }

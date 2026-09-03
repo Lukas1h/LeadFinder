@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { Inbox, MessageSquareReply, Bookmark, Clock, ChevronRight } from "lucide-react";
 import { db } from "@/db";
 import { listings, agents, type Listing } from "@/db/schema";
 import { ne, inArray } from "drizzle-orm";
@@ -7,6 +8,7 @@ import { PipelineActions } from "../PipelineActions";
 import { StatusBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge } from "../badges";
 import { findDuplicateAgentContact, FOLLOW_UP_AFTER_DAYS, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
+import { Separator } from "@/components/ui/separator";
 
 export const dynamic = "force-dynamic";
 
@@ -92,44 +94,52 @@ export default async function PipelinePage() {
   return (
     <main className="max-w-3xl mx-auto w-full px-6 py-10">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Pipeline</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Pipeline</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           {all.length} lead{all.length === 1 ? "" : "s"} in progress
         </p>
       </header>
 
       {all.length === 0 ? (
-        <p className="text-gray-500">
-          Nothing here yet — save or message a lead from the Leads page to get started.
-        </p>
+        <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
+          <Inbox className="size-8" />
+          <p>Nothing here yet — save or message a lead from the Leads page to get started.</p>
+        </div>
       ) : (
         <div className="flex flex-col gap-8">
           <section>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
               Needs your attention
             </h2>
             {needsAttentionCount === 0 ? (
-              <p className="text-gray-400 text-sm">Nothing needs attention right now.</p>
+              <p className="text-muted-foreground/70 text-sm">Nothing needs attention right now.</p>
             ) : (
               <div className="flex flex-col gap-6">
                 {replied.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-medium text-purple-700 mb-2">
+                    <h3 className="flex items-center gap-1.5 text-xs font-medium text-purple-700 dark:text-purple-400 mb-2">
+                      <MessageSquareReply className="size-3.5" />
                       Replied — respond
                     </h3>
-                    <ul className="flex flex-col gap-4">{replied.map(card)}</ul>
+                    <div className="flex flex-col gap-4">{replied.map(card)}</div>
                   </div>
                 )}
                 {saved.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-medium text-blue-700 mb-2">Saved — ready to message</h3>
-                    <ul className="flex flex-col gap-4">{saved.map(card)}</ul>
+                    <h3 className="flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 mb-2">
+                      <Bookmark className="size-3.5" />
+                      Saved — ready to message
+                    </h3>
+                    <div className="flex flex-col gap-4">{saved.map(card)}</div>
                   </div>
                 )}
                 {followUpDue.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-medium text-amber-700 mb-2">Needs follow-up</h3>
-                    <ul className="flex flex-col gap-4">{followUpDue.map(card)}</ul>
+                    <h3 className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">
+                      <Clock className="size-3.5" />
+                      Needs follow-up
+                    </h3>
+                    <div className="flex flex-col gap-4">{followUpDue.map(card)}</div>
                   </div>
                 )}
               </div>
@@ -137,21 +147,26 @@ export default async function PipelinePage() {
           </section>
 
           {waiting.length > 0 && (
-            <section className="border-t border-gray-200 pt-8">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            <section>
+              <Separator className="mb-8" />
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                 Waiting on a reply
               </h2>
-              <ul className="flex flex-col gap-4">{waiting.map(card)}</ul>
+              <div className="flex flex-col gap-4">{waiting.map(card)}</div>
             </section>
           )}
 
           {closed.length > 0 && (
-            <details className="border-t border-gray-200 pt-8">
-              <summary className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 cursor-pointer select-none">
-                Closed ({closed.length})
-              </summary>
-              <ul className="flex flex-col gap-4 mt-3">{closed.map(card)}</ul>
-            </details>
+            <section>
+              <Separator className="mb-8" />
+              <details className="group/details">
+                <summary className="flex items-center gap-1 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
+                  <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
+                  Closed ({closed.length})
+                </summary>
+                <div className="flex flex-col gap-4 mt-3">{closed.map(card)}</div>
+              </details>
+            </section>
           )}
         </div>
       )}

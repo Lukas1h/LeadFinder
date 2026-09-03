@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { PartyPopper } from "lucide-react";
 import { db } from "@/db";
 import { listings, agents, type Listing } from "@/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
@@ -8,6 +9,7 @@ import { RefreshButton } from "./RefreshButton";
 import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge } from "./badges";
 import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
+import { Separator } from "@/components/ui/separator";
 
 export const dynamic = "force-dynamic";
 
@@ -88,8 +90,8 @@ export default async function LeadsPage() {
     <main className="max-w-3xl mx-auto w-full px-6 py-10">
       <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Leads</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Leads</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             {leads.length} new listing{leads.length === 1 ? "" : "s"}
           </p>
         </div>
@@ -97,24 +99,28 @@ export default async function LeadsPage() {
       </header>
 
       {leads.length === 0 ? (
-        <p className="text-gray-500">You&rsquo;re all caught up — no new leads right now.</p>
+        <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
+          <PartyPopper className="size-8" />
+          <p>You&rsquo;re all caught up — no new leads right now.</p>
+        </div>
       ) : (
         <div className="flex flex-col gap-8">
           {newToday.length > 0 && (
             <section>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                 New today ({newToday.length})
               </h2>
-              <ul className="flex flex-col gap-4">{newToday.map(card)}</ul>
+              <div className="flex flex-col gap-4">{newToday.map(card)}</div>
             </section>
           )}
 
           {earlier.length > 0 && (
-            <section className={newToday.length > 0 ? "border-t border-gray-200 pt-8" : undefined}>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            <section>
+              {newToday.length > 0 && <Separator className="mb-8" />}
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                 Earlier ({earlier.length})
               </h2>
-              <ul className="flex flex-col gap-4">{earlier.map(card)}</ul>
+              <div className="flex flex-col gap-4">{earlier.map(card)}</div>
             </section>
           )}
         </div>

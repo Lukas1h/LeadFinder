@@ -1,21 +1,25 @@
+import { Sparkles, Clock, Camera, TriangleAlert } from "lucide-react";
 import type { Agent, LeadStatus } from "@/db/schema";
 import { formatDate } from "@/lib/format";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function NewBadge() {
   return (
-    <span className="text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5">
+    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-900">
+      <Sparkles />
       New
-    </span>
+    </Badge>
   );
 }
 
 const STATUS_STYLES: Record<LeadStatus, string> = {
-  new: "bg-emerald-100 text-emerald-700",
-  saved: "bg-blue-100 text-blue-700",
-  contacted: "bg-gray-100 text-gray-600",
-  replied: "bg-purple-100 text-purple-700",
-  booked: "bg-green-100 text-green-700",
-  declined: "bg-gray-100 text-gray-500",
+  new: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-900",
+  saved: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-900",
+  contacted: "bg-muted text-muted-foreground",
+  replied: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-400 dark:border-purple-900",
+  booked: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-900",
+  declined: "bg-muted text-muted-foreground/70",
 };
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -28,49 +32,58 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
 };
 
 export function StatusBadge({ status }: { status: LeadStatus }) {
-  return (
-    <span className={`text-xs font-medium rounded-full px-2 py-0.5 ${STATUS_STYLES[status]}`}>
-      {STATUS_LABELS[status]}
-    </span>
-  );
+  return <Badge className={STATUS_STYLES[status]}>{STATUS_LABELS[status]}</Badge>;
 }
 
 export function PhotoScoreBadge({ score, reasoning }: { score: number; reasoning: string | null }) {
   const tier =
     score <= 3
-      ? { label: "Poor photos", style: "bg-red-100 text-red-700" }
+      ? { label: "Poor photos", style: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900" }
       : score <= 5
-        ? { label: "Amateur photos", style: "bg-amber-100 text-amber-800" }
+        ? { label: "Amateur photos", style: "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900" }
         : score <= 7
-          ? { label: "Good photos", style: "bg-gray-100 text-gray-600" }
-          : { label: "Pro photos", style: "bg-gray-100 text-gray-400" };
+          ? { label: "Good photos", style: "bg-muted text-muted-foreground" }
+          : { label: "Pro photos", style: "bg-muted text-muted-foreground/60" };
+
+  const badge = (
+    <Badge className={tier.style}>
+      <Camera />
+      {tier.label} ({score}/10)
+    </Badge>
+  );
+
+  if (!reasoning) return badge;
 
   return (
-    <span
-      title={reasoning ?? undefined}
-      className={`text-xs font-medium rounded-full px-2 py-0.5 ${tier.style}`}
-    >
-      📷 {tier.label} ({score}/10)
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent>{reasoning}</TooltipContent>
+    </Tooltip>
   );
 }
 
 export function ComingSoonBadge() {
   return (
-    <span className="text-xs font-medium bg-violet-100 text-violet-700 rounded-full px-2 py-0.5">
-      🔜 Coming soon
-    </span>
+    <Badge className="bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950 dark:text-violet-400 dark:border-violet-900">
+      <Clock />
+      Coming soon
+    </Badge>
   );
 }
 
 export function FewPhotosBadge({ count }: { count: number }) {
   return (
-    <span
-      title="Fewer than 5 photos on the listing — the agent likely hasn't hired a photographer yet"
-      className="text-xs font-medium bg-red-100 text-red-700 rounded-full px-2 py-0.5"
-    >
-      📷 Only {count} photo{count === 1 ? "" : "s"}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900">
+          <Camera />
+          Only {count} photo{count === 1 ? "" : "s"}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>
+        Fewer than 5 photos on the listing — the agent likely hasn&rsquo;t hired a photographer yet
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -82,13 +95,17 @@ export function DuplicateAgentBadge({
   duplicateAddress: string | null | undefined;
 }) {
   return (
-    <span
-      title={`Already contacted ${duplicateAgent.name ?? "this agent"} on ${formatDate(
-        duplicateAgent.lastContactedAt
-      )} about ${duplicateAddress ?? "another listing"}`}
-      className="text-xs font-medium bg-amber-100 text-amber-800 rounded-full px-2 py-0.5"
-    >
-      ⚠ Already contacted
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge className="bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900">
+          <TriangleAlert />
+          Already contacted
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>
+        Already contacted {duplicateAgent.name ?? "this agent"} on{" "}
+        {formatDate(duplicateAgent.lastContactedAt)} about {duplicateAddress ?? "another listing"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
