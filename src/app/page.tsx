@@ -77,7 +77,6 @@ export default async function LeadsPage() {
           <LeadActions
             key={lead.id}
             listingId={lead.id}
-            address={lead.address}
             agentName={lead.agentName}
             agentPhone={lead.agentPhone}
           />

@@ -1,12 +1,12 @@
 "use server";
 
 import { db } from "@/db";
-import { listings, agents, type LeadStatus } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { listings, agents, messageSends, type LeadStatus } from "@/db/schema";
+import { and, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { runSync, type SyncResult } from "@/lib/sync";
 
-async function touchAgentContact(
+export async function touchAgentContact(
   listingId: string,
   agentPhone: string | null,
   agentName: string | null
@@ -30,6 +30,29 @@ async function touchAgentContact(
     });
 }
 
+/**
+ * Attributes a "replied"/"declined" status change back to whichever message
+ * preset variant was most recently sent to this listing and still pending
+ * an outcome — the data point the presets page's A/B stats are built from.
+ * A no-op if nothing was ever logged (e.g. a listing marked declined
+ * without ever being texted).
+ */
+async function resolveLatestSend(listingId: string, outcome: "responded" | "declined") {
+  const [pending] = await db
+    .select({ id: messageSends.id })
+    .from(messageSends)
+    .where(and(eq(messageSends.listingId, listingId), eq(messageSends.outcome, "pending")))
+    .orderBy(desc(messageSends.sentAt))
+    .limit(1);
+
+  if (!pending) return;
+
+  await db
+    .update(messageSends)
+    .set({ outcome, outcomeAt: new Date() })
+    .where(eq(messageSends.id, pending.id));
+}
+
 export async function updateListingStatus(listingId: string, status: LeadStatus) {
   const now = new Date();
   const [lead] = await db
@@ -46,8 +69,15 @@ export async function updateListingStatus(listingId: string, status: LeadStatus)
     await touchAgentContact(listingId, lead.agentPhone, lead.agentName);
   }
 
+  if (status === "replied") {
+    await resolveLatestSend(listingId, "responded");
+  } else if (status === "declined") {
+    await resolveLatestSend(listingId, "declined");
+  }
+
   revalidatePath("/");
   revalidatePath("/pipeline");
+  revalidatePath("/presets");
 }
 
 /**
@@ -62,21 +92,4 @@ export async function triggerManualSync(): Promise<SyncResult> {
   revalidatePath("/");
   revalidatePath("/pipeline");
   return result;
-}
-
-/** Re-texting an already-"contacted" lead: resets the follow-up clock without changing status. */
-export async function recordFollowUp(listingId: string) {
-  const now = new Date();
-  const [lead] = await db
-    .update(listings)
-    .set({ contactedAt: now, statusChangedAt: now })
-    .where(eq(listings.id, listingId))
-    .returning({ agentPhone: listings.agentPhone, agentName: listings.agentName });
-
-  if (lead) {
-    await touchAgentContact(listingId, lead.agentPhone, lead.agentName);
-  }
-
-  revalidatePath("/");
-  revalidatePath("/pipeline");
 }

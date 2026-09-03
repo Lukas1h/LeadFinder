@@ -82,7 +82,6 @@ export default async function PipelinePage() {
             key={lead.id}
             listingId={lead.id}
             status={lead.status}
-            address={lead.address}
             agentName={lead.agentName}
             agentPhone={lead.agentPhone}
           />

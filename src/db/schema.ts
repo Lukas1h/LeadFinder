@@ -113,3 +113,64 @@ export const searchSources = pgTable("search_sources", {
 
 export type SearchSource = typeof searchSources.$inferSelect;
 export type NewSearchSource = typeof searchSources.$inferInsert;
+
+// Which send-moment a preset applies to — mirrors the initial-outreach vs.
+// follow-up split that already exists in the LeadActions/PipelineActions UI.
+export const PRESET_TYPES = ["initial_outreach", "follow_up"] as const;
+export type PresetType = (typeof PRESET_TYPES)[number];
+export const presetTypeEnum = pgEnum("preset_type", PRESET_TYPES);
+
+export const MESSAGE_OUTCOMES = ["pending", "responded", "declined"] as const;
+export type MessageOutcome = (typeof MESSAGE_OUTCOMES)[number];
+export const messageOutcomeEnum = pgEnum("message_outcome", MESSAGE_OUTCOMES);
+
+export const messagePresets = pgTable("message_presets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  type: presetTypeEnum("type").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type MessagePreset = typeof messagePresets.$inferSelect;
+export type NewMessagePreset = typeof messagePresets.$inferInsert;
+
+// A/B variants of a preset. body supports {{firstName}} / {{street}}
+// placeholders — see renderMessageBody in src/lib/messageTemplate.ts.
+export const messagePresetVariants = pgTable("message_preset_variants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  presetId: uuid("preset_id")
+    .notNull()
+    .references(() => messagePresets.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  body: text("body").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type MessagePresetVariant = typeof messagePresetVariants.$inferSelect;
+export type NewMessagePresetVariant = typeof messagePresetVariants.$inferInsert;
+
+// One row per actual text sent — the append-only log the A/B stats are
+// built from. outcome starts "pending" and is resolved to "responded" or
+// "declined" when the lead's status later moves to "replied"/"declined"
+// (see resolveLatestSend in src/app/actions.ts).
+export const messageSends = pgTable("message_sends", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  listingId: uuid("listing_id")
+    .notNull()
+    .references(() => listings.id, { onDelete: "cascade" }),
+  presetId: uuid("preset_id")
+    .notNull()
+    .references(() => messagePresets.id),
+  variantId: uuid("variant_id")
+    .notNull()
+    .references(() => messagePresetVariants.id),
+  type: presetTypeEnum("type").notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  outcome: messageOutcomeEnum("outcome").notNull().default("pending"),
+  outcomeAt: timestamp("outcome_at", { withTimezone: true }),
+});
+
+export type MessageSend = typeof messageSends.$inferSelect;
+export type NewMessageSend = typeof messageSends.$inferInsert;

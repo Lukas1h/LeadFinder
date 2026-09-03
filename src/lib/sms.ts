@@ -43,17 +43,3 @@ export function smsUrl(phone: string, message: string): string | null {
   const separator = isIOS ? "&" : "?";
   return `sms:${target}${separator}body=${encodeURIComponent(message)}`;
 }
-
-export function initialOutreachMessage(agentName: string | null, address: string | null): string {
-  const name = firstName(agentName);
-  const street = shortStreetName(address) ?? "your property";
-  return `Hey there${name ? ` ${name}` : ""}, I'm Lukas. I just saw your listing on ${street} go up. Do you have photos handled yet, or could I help you get some taken care of quickly?
-I'm a local real estate photographer, I'd be happy to put you down for this week.`;
-}
-
-export function followUpMessage(agentName: string | null, address: string | null): string {
-  const name = firstName(agentName);
-  return `Hi${name ? ` ${name}` : ""}, just following up on ${
-    address ?? "the property"
-  } — let me know if you're still looking for a photographer!`;
-}
