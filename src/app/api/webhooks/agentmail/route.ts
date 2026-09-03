@@ -59,12 +59,17 @@ async function handle(req: Request): Promise<Response> {
     "svix-signature": req.headers.get("svix-signature") ?? "",
   };
 
-  let event: AgentMailMessageReceived;
   try {
-    event = new Webhook(secret).verify(payload, headers) as unknown as AgentMailMessageReceived;
+    // verify() only validates the signature and returns undefined (by
+    // design, per node_modules/svix/src/webhook.ts) — it does NOT hand back
+    // the parsed payload the way e.g. Stripe's SDK does, so the body still
+    // has to be parsed separately below.
+    new Webhook(secret).verify(payload, headers);
   } catch {
     return new Response("Invalid signature", { status: 401 });
   }
+
+  const event = JSON.parse(payload) as AgentMailMessageReceived;
 
   if (event.type !== "message.received") {
     return new Response("Ignored", { status: 200 });
