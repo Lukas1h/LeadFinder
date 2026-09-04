@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Inbox, KanbanSquare, Camera, Settings, FlaskConical } from "lucide-react";
+import { Camera } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -13,13 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-
-const LINKS = [
-  { href: "/", label: "Leads", icon: Inbox },
-  { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
-  { href: "/presets", label: "Presets", icon: FlaskConical },
-  { href: "/settings", label: "Settings", icon: Settings },
-];
+import { NAV_LINKS } from "./nav-links";
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -40,7 +34,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {LINKS.map((link) => (
+              {NAV_LINKS.map((link) => (
                 <SidebarMenuItem key={link.href}>
                   <SidebarMenuButton asChild isActive={pathname === link.href} tooltip={link.label}>
                     <Link href={link.href}>

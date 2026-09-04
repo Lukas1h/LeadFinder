@@ -8,6 +8,7 @@ import type { PresetType } from "@/db/schema";
 import { getMessageOptions, sendMessage, type PresetOption } from "@/app/messageActions";
 import { smsUrl } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +41,7 @@ export function SendMessageDialog({
   const [loading, setLoading] = useState(false);
   const [presets, setPresets] = useState<PresetOption[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [editedText, setEditedText] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const handleOpenChange = (next: boolean) => {
@@ -48,19 +50,27 @@ export function SendMessageDialog({
     setLoading(true);
     setPresets([]);
     setSelectedPresetId(null);
+    setEditedText("");
     getMessageOptions(listingId, type).then(({ presets }) => {
       setPresets(presets);
       const recommended = presets.find((p) => p.recommended);
-      setSelectedPresetId(recommended?.presetId ?? presets[0]?.presetId ?? null);
+      const initial = recommended ?? presets[0] ?? null;
+      setSelectedPresetId(initial?.presetId ?? null);
+      setEditedText(initial?.text ?? "");
       setLoading(false);
     });
   };
 
   const selected = presets.find((p) => p.presetId === selectedPresetId) ?? null;
 
+  const handleSelectPreset = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    setEditedText(presets.find((p) => p.presetId === presetId)?.text ?? "");
+  };
+
   const handleSend = () => {
     if (!selected) return;
-    const url = smsUrl(agentPhone ?? "", selected.text);
+    const url = smsUrl(agentPhone ?? "", editedText);
     if (url) window.location.href = url;
     startTransition(async () => {
       await sendMessage(listingId, type, selected.presetId, selected.variantId);
@@ -93,7 +103,7 @@ export function SendMessageDialog({
         ) : (
           <div className="flex flex-col gap-4 py-2">
             {presets.length > 1 && (
-              <Select value={selectedPresetId ?? undefined} onValueChange={setSelectedPresetId}>
+              <Select value={selectedPresetId ?? undefined} onValueChange={handleSelectPreset}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -108,15 +118,18 @@ export function SendMessageDialog({
               </Select>
             )}
             {selected && (
-              <p className="text-sm rounded-lg border border-input bg-muted/40 px-2.5 py-2 whitespace-pre-wrap">
-                {selected.text}
-              </p>
+              <Textarea
+                value={editedText}
+                onChange={(e) => setEditedText(e.target.value)}
+                rows={5}
+                className="text-sm resize-none"
+              />
             )}
           </div>
         )}
 
         <DialogFooter>
-          <Button onClick={handleSend} disabled={!selected || isPending}>
+          <Button onClick={handleSend} disabled={!selected || !editedText.trim() || isPending}>
             <MessageCircle />
             Send text
           </Button>

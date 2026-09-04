@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppSidebar } from "./AppSidebar";
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegistration } from "./ServiceWorkerRegistration";
+import { MobileHeader } from "./MobileHeader";
+import { BottomTabBar } from "./BottomTabBar";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,6 +35,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#111116",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -48,12 +50,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <SidebarProvider>
             <AppSidebar />
             <SidebarInset>
-              <div className="flex items-center gap-2 border-b px-4 py-2 md:hidden">
-                <SidebarTrigger />
-                <Separator orientation="vertical" className="h-4" />
-                <span className="text-sm font-medium">LeadFinder</span>
+              <MobileHeader />
+              <div className="pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+                {children}
               </div>
-              {children}
+              <BottomTabBar />
             </SidebarInset>
           </SidebarProvider>
         </TooltipProvider>
