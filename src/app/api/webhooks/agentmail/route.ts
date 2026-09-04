@@ -4,6 +4,7 @@ import { listings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { fetchFullListing } from "@/lib/zillapi";
 import { insertAndEnrichListings } from "@/lib/sync";
+import { fetchAgentMailMessage } from "@/lib/agentmail";
 import type { NewListing } from "@/db/schema";
 
 // AgentMail sends "message.received" events for inbound mail, signed via
@@ -27,6 +28,8 @@ interface AgentMailMessageReceived {
   type?: string;
   event_type?: string;
   message?: {
+    message_id?: string;
+    inbox_id?: string;
     subject?: string;
     html?: string;
     text?: string;
@@ -102,12 +105,27 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (!NEWLY_LISTED_RE.test(event.message?.subject ?? "")) {
+    console.log("agentmail webhook: subject doesn't match newly-listed pattern:", event.message?.subject);
     return new Response("Ignored: not a newly-listed alert", { status: 200 });
   }
 
-  const body = (event.message?.html ?? "") + " " + (event.message?.text ?? "");
-  const zpid = extractMainZpid(body);
+  let body = (event.message?.html ?? "") + " " + (event.message?.text ?? "");
+  let zpid = extractMainZpid(body);
+
+  if (!zpid && event.message?.message_id && event.message?.inbox_id) {
+    // The webhook's inline body didn't contain a zpid — re-fetch the
+    // message directly rather than trusting the inline copy, since a real
+    // delivery has already been seen where the two disagreed (see
+    // fetchAgentMailMessage's doc comment).
+    const full = await fetchAgentMailMessage(event.message.inbox_id, event.message.message_id);
+    if (full) {
+      body = (full.html ?? "") + " " + (full.text ?? "");
+      zpid = extractMainZpid(body);
+    }
+  }
+
   if (!zpid) {
+    console.log("agentmail webhook: no zpid found, subject:", event.message?.subject);
     return new Response("No zpid found", { status: 200 });
   }
 
