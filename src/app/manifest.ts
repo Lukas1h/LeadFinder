@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "New listings, ranked by how badly they need a photographer.",
     start_url: "/",
     display: "standalone",
-    background_color: "#ffffff",
+    background_color: "#111116",
     theme_color: "#111116",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },

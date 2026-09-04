@@ -1,7 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#111116"/>
-  <g transform="translate(256 266)" fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M -140 -60 L -100 -60 L -80 -95 L 80 -95 L 100 -60 L 140 -60 C 154 -60 165 -49 165 -35 L 165 95 C 165 109 154 120 140 120 L -140 120 C -154 120 -165 109 -165 95 L -165 -35 C -165 -49 -154 -60 -140 -60 Z"/>
-    <circle cx="0" cy="30" r="62"/>
-  </g>
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="24%" r="75%">
+      <stop offset="0%" stop-color="#262631"/>
+      <stop offset="50%" stop-color="#131319"/>
+      <stop offset="100%" stop-color="#08080c"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect x="176" y="141.5" width="80" height="37" rx="10" fill="#f5f5f7"/>
+  <rect x="131" y="163.5" width="250" height="185" rx="27" fill="#f5f5f7"/>
+  <circle cx="256" cy="263.4" r="68.5" fill="#08080c"/>
+  <circle cx="256" cy="263.4" r="54" fill="#f5f5f7"/>
+  <circle cx="256" cy="263.4" r="39.5" fill="#08080c"/>
 </svg>
