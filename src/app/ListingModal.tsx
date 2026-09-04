@@ -1,11 +1,17 @@
 "use client";
 
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { ExternalLink, X } from "lucide-react";
 import type { Listing } from "@/db/schema";
+import { updateListingNotes } from "./actions";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { formatPrice, formatDate } from "@/lib/format";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 export function ListingModal({
   lead,
@@ -16,6 +22,19 @@ export function ListingModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const router = useRouter();
+  const [notes, setNotes] = useState(lead.notes ?? "");
+  const [isPending, startTransition] = useTransition();
+  const dirty = notes !== (lead.notes ?? "");
+
+  const handleSaveNotes = () => {
+    startTransition(async () => {
+      await updateListingNotes(lead.id, notes);
+      toast.success("Note saved");
+      router.refresh();
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false} className="p-0 sm:max-w-lg overflow-hidden">
@@ -77,6 +96,24 @@ export function ListingModal({
               <ExternalLink />
             </a>
           </Button>
+
+          <div className="flex flex-col gap-1.5 border-t pt-3">
+            <Label htmlFor="listing-notes" className="text-xs text-muted-foreground">
+              Notes
+            </Label>
+            <Textarea
+              id="listing-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Anything worth remembering about this one…"
+              rows={3}
+            />
+            {dirty && (
+              <Button size="sm" onClick={handleSaveNotes} disabled={isPending} className="self-end">
+                {isPending ? "Saving…" : "Save note"}
+              </Button>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

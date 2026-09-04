@@ -31,6 +31,26 @@ export async function touchAgentContact(
 }
 
 /**
+ * Marks the agent's Agent-tab record declined the moment a listing of
+ * theirs is — this is what starts the 30-day resurface clock on the
+ * Agents page, so it needs to fire live rather than only at backfill time.
+ * Upserts (rather than requiring touchAgentContact to have run first)
+ * since a lead can be declined straight from "new"/"saved" without ever
+ * having been texted.
+ */
+async function touchAgentDeclined(agentPhone: string | null, agentName: string | null) {
+  if (!agentPhone) return;
+  const now = new Date();
+  await db
+    .insert(agents)
+    .values({ phone: agentPhone, name: agentName, declinedAt: now })
+    .onConflictDoUpdate({
+      target: agents.phone,
+      set: { declinedAt: now }, // don't touch name here — a decline shouldn't clobber a known name
+    });
+}
+
+/**
  * Attributes a pipeline status change back to whichever message preset
  * variant was most recently sent to this listing — the data point the
  * presets page's stats are built from. respondedAt is only ever set once
@@ -83,12 +103,27 @@ export async function updateListingStatus(
   if (status === "contacted" && lead) {
     await touchAgentContact(listingId, lead.agentPhone, lead.agentName);
   }
+  if (status === "declined" && lead) {
+    await touchAgentDeclined(lead.agentPhone, lead.agentName);
+  }
 
   await resolveSendOutcome(listingId, status);
 
   revalidatePath("/");
   revalidatePath("/pipeline");
   revalidatePath("/presets");
+  revalidatePath("/agents");
+}
+
+/** Free-text note on a listing — edited from the listing detail modal. */
+export async function updateListingNotes(listingId: string, notes: string) {
+  await db
+    .update(listings)
+    .set({ notes: notes.trim() || null })
+    .where(eq(listings.id, listingId));
+
+  revalidatePath("/");
+  revalidatePath("/pipeline");
 }
 
 /**

@@ -75,7 +75,7 @@ export const listings = pgTable("listings", {
   score: integer("score"),
   scoreReasoning: text("score_reasoning"),
 
-  // Phase 2 field — unused for now, kept nullable so no future migration is needed.
+  // Free-text, edited from the listing detail modal.
   notes: text("notes"),
 
   // Which source found this listing — a search source's name (e.g.
@@ -87,19 +87,49 @@ export const listings = pgTable("listings", {
 export type Listing = typeof listings.$inferSelect;
 export type NewListing = typeof listings.$inferInsert;
 
-// Keyed by phone (the one reliably-unique agent identifier available) so
-// we can warn when about to message an agent already contacted about a
-// different listing. Rows are created/updated lazily — only when a
-// listing's status is set to "contacted", not during sync.
+// Standalone agent profiles, keyed by phone (the one reliably-unique agent
+// identifier available) — both for warning when about to message an agent
+// already contacted about a different listing, and as the Agents tab's
+// core entity so a relationship can be tracked across multiple
+// listings/interactions over time, independent of any one listing.
+// Backfilled from every unique phone number seen in listings (see
+// ensureAgentsBackfilled in src/app/agents/actions.ts); also
+// created/updated lazily whenever a listing's status changes to
+// "contacted" or "declined".
+export const AGENT_RELATIONSHIP_STATUSES = [
+  "cold",
+  "warm",
+  "interested",
+  "worked_once",
+  "regular",
+] as const;
+export type AgentRelationshipStatus = (typeof AGENT_RELATIONSHIP_STATUSES)[number];
+export const agentRelationshipStatusEnum = pgEnum(
+  "agent_relationship_status",
+  AGENT_RELATIONSHIP_STATUSES
+);
+
 export const agents = pgTable("agents", {
   id: uuid("id").primaryKey().defaultRandom(),
   phone: text("phone").notNull().unique(),
   name: text("name"),
   lastContactedAt: timestamp("last_contacted_at", { withTimezone: true }),
   lastContactedListingId: uuid("last_contacted_listing_id").references(() => listings.id),
+
+  // Manually set/edited by Lukas on the Agents tab — not auto-calculated.
+  relationshipStatus: agentRelationshipStatusEnum("relationship_status").notNull().default("cold"),
+
+  // Set when an agent responded and declined/wasn't interested (see
+  // touchAgentDeclined in src/app/actions.ts). Drives the Agents tab's
+  // separate "declined" section and its 30-day resurface logic — null
+  // means the agent isn't currently in that bucket.
+  declinedAt: timestamp("declined_at", { withTimezone: true }),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type Agent = typeof agents.$inferSelect;
+export type NewAgent = typeof agents.$inferInsert;
 
 // One row per search area — each is fetched independently on every
 // sync/refresh (its own Zillapi call, its own bbox/filters). Lets Lukas

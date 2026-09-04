@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { StickyNote } from "lucide-react";
 import type { Listing } from "@/db/schema";
 import { formatPrice, formatDate } from "@/lib/format";
 import { ListingModal } from "./ListingModal";
@@ -64,6 +65,13 @@ export function LeadCard({
             <div className="text-sm mt-1.5">
               <span className="text-foreground/90">{lead.agentName}</span>
               {lead.brokerName && <span className="text-muted-foreground"> · {lead.brokerName}</span>}
+            </div>
+          )}
+
+          {lead.notes && (
+            <div className="text-xs text-muted-foreground mt-1.5 flex items-start gap-1 line-clamp-1">
+              <StickyNote className="size-3.5 shrink-0 mt-0.5" />
+              {lead.notes}
             </div>
           )}
         </div>
