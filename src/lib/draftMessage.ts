@@ -31,6 +31,31 @@ const RELATIONSHIP_GUIDANCE: Record<AgentRelationshipStatus, string> = {
   regular: "This is a regular, established client — keep it brief and low-friction, like texting a colleague about a new listing.",
 };
 
+// Picks the one specific, real reason to reach out from what the system
+// actually detected — Rule 1 of the writing guide: "Don't write one
+// message and reuse it everywhere. Every preset should exist because your
+// system detected a specific, real reason to reach out." Ordered roughly
+// by how strong/actionable the signal is.
+function pickTrigger(input: DraftMessageInput): string {
+  const lowPhotoCount = input.photoCount != null && input.photoCount < 5;
+  if (input.isComingSoon && (input.photoCount == null || lowPhotoCount)) {
+    return "Coming soon, no photos yet — the listing is new and photography is likely still unhandled. Reference that it's fresh/upcoming.";
+  }
+  if (input.score != null && input.score <= 5) {
+    return `Amateur/weak photos (score ${input.score}/10${input.scoreReasoning ? `: ${input.scoreReasoning}` : ""}) — the current photos aren't showing the property well. Word this GENTLY, as an opportunity/refresh, never as criticism of the agent or whoever took them.`;
+  }
+  if (lowPhotoCount) {
+    return `Only ${input.photoCount} photo${input.photoCount === 1 ? "" : "s"} on the listing — reads as photography likely still unhandled.`;
+  }
+  if (input.score != null && input.score >= 7) {
+    return "Photos already look professional/handled — do NOT offer to replace their photographer. Position yourself as a backup/second option (quick turnaround, availability if their usual person is booked), which gets you on their radar without an awkward pitch.";
+  }
+  if (input.agentListingCount >= 3) {
+    return `This agent moves a good volume of listings (${input.agentListingCount} seen so far) — the reason to reach out is their overall pace, not this one property. Position yourself as a resource for whenever they need someone, not a pitch about this specific listing's photos.`;
+  }
+  return "No strong specific signal on this listing — introduce yourself as a resource/backup option for whenever they need photography, low pressure, no hard pitch.";
+}
+
 function buildPrompt(input: DraftMessageInput): string {
   const listingLines = [
     input.address && `Address: ${input.address}${[input.city, input.state].filter(Boolean).length ? ", " + [input.city, input.state].filter(Boolean).join(", ") : ""}`,
@@ -54,12 +79,27 @@ function buildPrompt(input: DraftMessageInput): string {
 
   const moment =
     input.type === "initial_outreach"
-      ? "This is the FIRST message to this agent about this specific listing."
-      : "This is a FOLLOW-UP — an initial text about this listing already went out and got no reply yet.";
+      ? `This is the FIRST message to this agent about this specific listing.
 
-  return `You are Lukas, a local real estate photographer, texting an agent to offer your services. Write ONE short SMS (2-4 sentences, casual, no corporate tone, no greeting like "Dear" or sign-off like "Best regards" — just how a real person texts).
+Follow this formula, in order:
+1. Greeting + first name ("Hey ${input.agentName ? input.agentName.split(" ")[0] : "there"},")
+2. Who you are, briefly ("I'm Lukas.")
+3. Proof you looked at THEIR specific listing (name the street, not "a listing")
+4. The specific reason below, in your own words
+5. A low-friction next step — an offer, not a hard ask ("Happy to help if..." not "Let me know if you want to schedule...")`
+      : `This is a FOLLOW-UP — an initial text about this listing already went out and got no reply yet.
+
+Rules specific to follow-ups:
+- NEVER say "just checking in," "following up," or anything that adds zero new information — that's the #1 thing to avoid in a follow-up.
+- Instead, do ONE of: add something new (new availability, a new observation), lower the stakes ("no worries if you've already got it handled"), or signal this is the last touch (gives them permission to respond or let it go — reduced pressure sometimes prompts a reply on its own).
+- Keep it even shorter than the first message.`;
+
+  return `You are Lukas, a local real estate photographer, texting an agent to offer your services. Write ONE short SMS.
 
 ${moment}
+
+The specific reason to reach out (name it in your own words, don't just restate this verbatim):
+${pickTrigger(input)}
 
 Listing details:
 ${listingLines.join("\n")}
@@ -67,11 +107,14 @@ ${listingLines.join("\n")}
 Agent profile:
 ${agentLines.join("\n")}
 
-Guidance:
-- If the photo score is low or missing, that's the opening — the listing likely needs a photographer.
-- If the photo score is already high, don't claim they need photos — lean on the relationship/future-listings angle instead.
-- Match the tone to the relationship status above.
-- Mention the street name or listing naturally if it helps it read like a real, specific text rather than a template.
+House rules — all of these matter:
+- 2-4 sentences max. If it doesn't fit in a few lines, cut it down.
+- Casual, how a real person texts — no "Dear", no "Best regards", no corporate tone.
+- Sell the outcome, not the service. Weak: "I offer real estate photography." Strong: naming the specific gap and offering to close it.
+- Never imply the agent, seller, or current photographer did a bad job — frame everything as an opportunity, never a criticism. This matters especially if they likely already have a photographer: pitch yourself as a backup/second option, never a replacement.
+- Confident, not needy — you're offering a solution, not asking a favor. Avoid "whenever works, no rush, totally up to you." Prefer "I've got availability this week and can get you taken care of."
+- Use the real street name and first name naturally (never a generic "your listing" or "hi there") — a message that could apply to any listing anywhere reads as mass-sent.
+- Match tone to the relationship status above.
 
 Respond with ONLY the message text — no quotes, no JSON, no explanation.`;
 }
