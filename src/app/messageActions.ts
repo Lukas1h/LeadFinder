@@ -164,6 +164,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       score: listings.score,
       scoreReasoning: listings.scoreReasoning,
       photoCount: listings.photoCount,
+      photos: listings.photos,
       listedAt: listings.listedAt,
       foundAt: listings.foundAt,
     })
@@ -277,6 +278,7 @@ interface ListingForDraft {
   score: number | null;
   scoreReasoning: string | null;
   photoCount: number | null;
+  photos: string[] | null;
 }
 
 /**
@@ -324,6 +326,7 @@ async function buildAiDraftOption(
     homeType: listing.homeType,
     isComingSoon: listing.isComingSoon,
     photoCount: listing.photoCount,
+    photos: listing.photos,
     score: listing.score,
     scoreReasoning: listing.scoreReasoning,
     ageDays,
