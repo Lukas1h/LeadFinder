@@ -17,13 +17,16 @@ export default async function LeadsPage() {
   // foundAt is transaction-time, so a batch insert gives every row in it
   // the exact same value — listings.id as a tiebreaker keeps order stable
   // across renders instead of reshuffling ties arbitrarily.
-  const leads = await db
-    .select()
-    .from(listings)
-    .where(eq(listings.status, "new"))
-    .orderBy(desc(listings.foundAt), listings.id);
-
-  const allAgents = await db.select().from(agents);
+  // Independent of each other, so run them concurrently instead of paying
+  // for two sequential round trips to Neon.
+  const [leads, allAgents] = await Promise.all([
+    db
+      .select()
+      .from(listings)
+      .where(eq(listings.status, "new"))
+      .orderBy(desc(listings.foundAt), listings.id),
+    db.select().from(agents),
+  ]);
   const agentByPhone = new Map(allAgents.map((a) => [a.phone, a]));
 
   // Every other listing referenced by an agent's last-contacted pointer —

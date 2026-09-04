@@ -12,9 +12,13 @@ import { Button } from "@/components/ui/button";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const sources = await db.select().from(searchSources).orderBy(desc(searchSources.createdAt));
   const inboxAddress = process.env.AGENTMAIL_INBOX_ADDRESS ?? null;
-  const usage = await fetchAccountUsage();
+  // Independent of each other, so run them concurrently instead of paying
+  // for a DB round trip followed by a separate Zillapi round trip.
+  const [sources, usage] = await Promise.all([
+    db.select().from(searchSources).orderBy(desc(searchSources.createdAt)),
+    fetchAccountUsage(),
+  ]);
 
   const totalCount = sources.length + (inboxAddress ? 1 : 0);
 

@@ -19,9 +19,12 @@ function byOldest(a: Listing, b: Listing, field: "statusChangedAt" | "contactedA
 }
 
 export default async function PipelinePage() {
-  const all = await db.select().from(listings).where(ne(listings.status, "new"));
-
-  const allAgents = await db.select().from(agents);
+  // Independent of each other, so run them concurrently instead of paying
+  // for two sequential round trips to Neon.
+  const [all, allAgents] = await Promise.all([
+    db.select().from(listings).where(ne(listings.status, "new")),
+    db.select().from(agents),
+  ]);
   const agentByPhone = new Map(allAgents.map((a) => [a.phone, a]));
   const referencedIds = allAgents
     .map((a) => a.lastContactedListingId)
