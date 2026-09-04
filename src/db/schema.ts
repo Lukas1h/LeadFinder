@@ -185,6 +185,16 @@ export const messagePresets = pgTable("message_presets", {
   maxListingAgeDays: integer("max_listing_age_days"),
   minPhotoCount: integer("min_photo_count"),
   maxPhotoCount: integer("max_photo_count"),
+
+  // Marks the one system preset per type whose "variants" aren't
+  // hand-written — each is drafted live per listing by draftMessage() (see
+  // src/lib/draftMessage.ts), using that listing's photo score, details,
+  // and the agent's profile/relationship status, then only persisted (as a
+  // real messagePresetVariants row) at the moment it's actually sent. Not
+  // user-creatable; ignored by the criteria-matching recommendation logic
+  // since it's always the recommended default when enabled. See
+  // ensureAiDraftPresets in src/app/messageActions.ts.
+  aiGenerated: boolean("ai_generated").notNull().default(false),
 });
 
 export type MessagePreset = typeof messagePresets.$inferSelect;

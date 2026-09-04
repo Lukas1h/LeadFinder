@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { Plus, FlaskConical } from "lucide-react";
 import { db } from "@/db";
 import { messagePresets, messagePresetVariants, PRESET_TYPES, type PresetType } from "@/db/schema";
-import { ensureDefaultPresets } from "@/app/messageActions";
+import { ensureDefaultPresets, ensureAiDraftPresets } from "@/app/messageActions";
 import { computeVariantStats } from "@/lib/messageStats";
 import { PresetCard } from "./PresetCard";
 import { PresetForm } from "./PresetForm";
@@ -26,6 +26,7 @@ export default function PresetsPage() {
 
 async function PresetsContent() {
   await ensureDefaultPresets();
+  await Promise.all(PRESET_TYPES.map((type) => ensureAiDraftPresets(type)));
 
   const [presets, variants, statsByVariant] = await Promise.all([
     db.select().from(messagePresets).orderBy(messagePresets.createdAt),

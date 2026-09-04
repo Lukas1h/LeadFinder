@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, Archive, ArchiveRestore } from "lucide-react";
+import { Pencil, Trash2, Plus, Archive, ArchiveRestore, Sparkles } from "lucide-react";
 import type { MessagePreset, MessagePresetVariant } from "@/db/schema";
 import type { VariantStats } from "@/lib/messageStats";
 import { deletePreset, togglePreset, deleteVariant, toggleVariant } from "./actions";
@@ -242,29 +242,46 @@ export function PresetCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-semibold text-foreground">{preset.name}</h3>
+            {preset.aiGenerated && (
+              <Badge variant="secondary" className="gap-1">
+                <Sparkles className="size-3" />
+                AI
+              </Badge>
+            )}
             {!preset.enabled && <span className="text-xs text-muted-foreground">(disabled)</span>}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            {variants.length} variant{variants.length === 1 ? "" : "s"} · {totalSent} sent total
+            {preset.aiGenerated
+              ? `${totalSent} sent total`
+              : `${variants.length} variant${variants.length === 1 ? "" : "s"} · ${totalSent} sent total`}
           </p>
-          {formatCriteria(preset) && (
+          {preset.aiGenerated ? (
             <p className="text-xs text-muted-foreground/80 mt-0.5">
-              Recommended for: {formatCriteria(preset)}
+              Drafted fresh per listing from its photo score, details, and the agent&rsquo;s
+              relationship status — recommended by default when enabled.
             </p>
+          ) : (
+            formatCriteria(preset) && (
+              <p className="text-xs text-muted-foreground/80 mt-0.5">
+                Recommended for: {formatCriteria(preset)}
+              </p>
+            )
           )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
           <Switch checked={preset.enabled} onCheckedChange={handleToggle} disabled={isPending} />
-          <PresetForm
-            preset={preset}
-            trigger={
-              <Button variant="ghost" size="icon">
-                <Pencil />
-                <span className="sr-only">Edit</span>
-              </Button>
-            }
-          />
+          {!preset.aiGenerated && (
+            <PresetForm
+              preset={preset}
+              trigger={
+                <Button variant="ghost" size="icon">
+                  <Pencil />
+                  <span className="sr-only">Edit</span>
+                </Button>
+              }
+            />
+          )}
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="ghost" size="icon" className="text-muted-foreground">
@@ -292,7 +309,11 @@ export function PresetCard({
 
       <div className="bg-muted/30 rounded-lg border-l-2 border-border pl-3 pr-2 py-1">
         {variants.length === 0 ? (
-          <p className="text-sm text-muted-foreground/70 py-2">No variants yet.</p>
+          <p className="text-sm text-muted-foreground/70 py-2">
+            {preset.aiGenerated
+              ? "Nothing sent yet — each send drafts and logs its own one-off variant here."
+              : "No variants yet."}
+          </p>
         ) : (
           variants.map((variant) => (
             <VariantRow key={variant.id} variant={variant} stats={statsByVariant[variant.id] ?? emptyStats} />
@@ -300,15 +321,17 @@ export function PresetCard({
         )}
       </div>
 
-      <VariantForm
-        presetId={preset.id}
-        trigger={
-          <Button variant="outline" size="sm" className="self-start">
-            <Plus />
-            Add variant
-          </Button>
-        }
-      />
+      {!preset.aiGenerated && (
+        <VariantForm
+          presetId={preset.id}
+          trigger={
+            <Button variant="outline" size="sm" className="self-start">
+              <Plus />
+              Add variant
+            </Button>
+          }
+        />
+      )}
     </Card>
   );
 }

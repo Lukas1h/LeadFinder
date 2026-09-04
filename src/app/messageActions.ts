@@ -3,15 +3,25 @@
 import { db } from "@/db";
 import {
   listings,
+  agents,
   messagePresets,
   messagePresetVariants,
   messageSends,
   type PresetType,
+  type AgentRelationshipStatus,
 } from "@/db/schema";
 import { and, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { renderMessageBody, DEFAULT_INITIAL_BODY, DEFAULT_FOLLOWUP_BODY } from "@/lib/messageTemplate";
+import {
+  renderMessageBody,
+  DEFAULT_INITIAL_BODY,
+  DEFAULT_FOLLOWUP_BODY,
+  AI_DRAFT_VARIANT_SENTINEL,
+} from "@/lib/messageTemplate";
+import { draftMessage } from "@/lib/draftMessage";
 import { touchAgentContact } from "@/app/actions";
+
+const AI_DRAFT_PRESET_NAME = "AI Draft";
 
 /**
  * Idempotent — inserts the two starter presets ("Initial Outreach",
@@ -43,6 +53,23 @@ export async function ensureDefaultPresets() {
     label: "A",
     body: DEFAULT_FOLLOWUP_BODY,
   });
+}
+
+/**
+ * Idempotent — inserts the "AI Draft" system preset for each type the
+ * first time it's needed. Unlike ensureDefaultPresets, these start with
+ * zero variants: a variant only gets created (see sendMessage) at the
+ * moment an AI draft is actually sent, since each one is a one-off drafted
+ * for that specific listing rather than reusable template text.
+ */
+export async function ensureAiDraftPresets(type: PresetType) {
+  const [existing] = await db
+    .select({ id: messagePresets.id })
+    .from(messagePresets)
+    .where(and(eq(messagePresets.type, type), eq(messagePresets.aiGenerated, true)));
+  if (existing) return;
+
+  await db.insert(messagePresets).values({ name: AI_DRAFT_PRESET_NAME, type, aiGenerated: true });
 }
 
 export interface PresetOption {
@@ -119,13 +146,23 @@ function criteriaCount(preset: PresetCriteria): number {
  */
 export async function getMessageOptions(listingId: string, type: PresetType): Promise<MessageOptions> {
   await ensureDefaultPresets();
+  await ensureAiDraftPresets(type);
 
   const [listing] = await db
     .select({
       agentName: listings.agentName,
+      agentPhone: listings.agentPhone,
       address: listings.address,
-      score: listings.score,
+      city: listings.city,
+      state: listings.state,
       price: listings.price,
+      bedrooms: listings.bedrooms,
+      bathrooms: listings.bathrooms,
+      livingArea: listings.livingArea,
+      homeType: listings.homeType,
+      isComingSoon: listings.isComingSoon,
+      score: listings.score,
+      scoreReasoning: listings.scoreReasoning,
       photoCount: listings.photoCount,
       listedAt: listings.listedAt,
       foundAt: listings.foundAt,
@@ -136,6 +173,9 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
 
   const ageDays = listingAgeDays(listing.listedAt, listing.foundAt);
 
+  // aiGenerated presets are excluded here — they have no reusable variants
+  // to rotate through (see ensureAiDraftPresets); the AI option is drafted
+  // fresh below instead.
   const rows = await db
     .select({
       presetId: messagePresets.id,
@@ -157,12 +197,11 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       and(
         eq(messagePresets.type, type),
         eq(messagePresets.enabled, true),
+        eq(messagePresets.aiGenerated, false),
         eq(messagePresetVariants.enabled, true)
       )
     )
     .orderBy(messagePresets.createdAt);
-
-  if (rows.length === 0) return { presets: [] };
 
   const sendCounts = await db
     .select({ variantId: messageSends.variantId, count: count() })
@@ -214,23 +253,127 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
     };
   });
 
+  const aiOption = await buildAiDraftOption(listingId, type, listing, ageDays);
+  if (aiOption) {
+    for (const p of presets) p.recommended = false;
+    presets.unshift(aiOption);
+  }
+
   return { presets };
+}
+
+interface ListingForDraft {
+  agentName: string | null;
+  agentPhone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  price: number | null;
+  bedrooms: string | null;
+  bathrooms: string | null;
+  livingArea: number | null;
+  homeType: string | null;
+  isComingSoon: boolean;
+  score: number | null;
+  scoreReasoning: string | null;
+  photoCount: number | null;
+}
+
+/**
+ * Drafts and returns the AI option, or null if there's no enabled AI-draft
+ * preset for this type or the draft call fails — either way the dialog
+ * just falls back to the regular presets.
+ */
+async function buildAiDraftOption(
+  listingId: string,
+  type: PresetType,
+  listing: ListingForDraft,
+  ageDays: number
+): Promise<PresetOption | null> {
+  const [preset] = await db
+    .select({ id: messagePresets.id, name: messagePresets.name })
+    .from(messagePresets)
+    .where(and(eq(messagePresets.type, type), eq(messagePresets.aiGenerated, true), eq(messagePresets.enabled, true)));
+  if (!preset) return null;
+
+  let agent: { relationshipStatus: AgentRelationshipStatus; lastContactedAt: Date | null } | null = null;
+  let agentListingCount = 0;
+  if (listing.agentPhone) {
+    const [agentRow] = await db
+      .select({ relationshipStatus: agents.relationshipStatus, lastContactedAt: agents.lastContactedAt })
+      .from(agents)
+      .where(eq(agents.phone, listing.agentPhone));
+    agent = agentRow ?? null;
+
+    const [{ count: listingCount }] = await db
+      .select({ count: count() })
+      .from(listings)
+      .where(eq(listings.agentPhone, listing.agentPhone));
+    agentListingCount = listingCount;
+  }
+
+  const text = await draftMessage({
+    type,
+    address: listing.address,
+    city: listing.city,
+    state: listing.state,
+    price: listing.price,
+    bedrooms: listing.bedrooms,
+    bathrooms: listing.bathrooms,
+    livingArea: listing.livingArea,
+    homeType: listing.homeType,
+    isComingSoon: listing.isComingSoon,
+    photoCount: listing.photoCount,
+    score: listing.score,
+    scoreReasoning: listing.scoreReasoning,
+    ageDays,
+    agentName: listing.agentName,
+    agentRelationshipStatus: agent?.relationshipStatus ?? null,
+    agentListingCount,
+    agentLastContactedAt: agent?.lastContactedAt ?? null,
+  });
+  if (!text) return null;
+
+  return {
+    presetId: preset.id,
+    presetName: preset.name,
+    variantId: AI_DRAFT_VARIANT_SENTINEL,
+    variantLabel: "AI",
+    text,
+    recommended: true,
+  };
 }
 
 /**
  * Logs a send against the chosen preset variant, then applies the same
  * listing mutation the old hardcoded flow did: initial outreach moves the
  * lead to "contacted"; a follow-up just resets the follow-up clock.
+ *
+ * `finalText` is the exact text actually sent (after any edits made in the
+ * dialog). It's only used when `variantId` is the AI-draft sentinel — that
+ * variant doesn't exist yet, since each AI draft is one-off, so it's
+ * materialized as a real messagePresetVariants row here, at the moment of
+ * sending, rather than speculatively for every dialog open.
  */
 export async function sendMessage(
   listingId: string,
   type: PresetType,
   presetId: string,
-  variantId: string
+  variantId: string,
+  finalText: string
 ) {
   const now = new Date();
 
-  await db.insert(messageSends).values({ listingId, presetId, variantId, type, sentAt: now });
+  let resolvedVariantId = variantId;
+  if (variantId === AI_DRAFT_VARIANT_SENTINEL) {
+    const [variant] = await db
+      .insert(messagePresetVariants)
+      .values({ presetId, label: `AI · ${now.toLocaleDateString()}`, body: finalText })
+      .returning({ id: messagePresetVariants.id });
+    resolvedVariantId = variant.id;
+  }
+
+  await db.insert(messageSends).values({ listingId, presetId, variantId: resolvedVariantId, type, sentAt: now });
 
   const [lead] = await db
     .update(listings)

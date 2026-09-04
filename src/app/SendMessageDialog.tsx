@@ -73,7 +73,7 @@ export function SendMessageDialog({
     const url = smsUrl(agentPhone ?? "", editedText);
     if (url) window.location.href = url;
     startTransition(async () => {
-      await sendMessage(listingId, type, selected.presetId, selected.variantId);
+      await sendMessage(listingId, type, selected.presetId, selected.variantId, editedText);
     });
     toast.success("Send logged");
     setOpen(false);

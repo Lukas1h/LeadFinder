@@ -1,5 +1,13 @@
 import { firstName, shortStreetName } from "@/lib/sms";
 
+// sendMessage's variantId sentinel for an AI-drafted send — that variant
+// doesn't exist yet (each AI draft is one-off), so sendMessage creates it
+// for real at send time instead of it being a pre-existing row like every
+// other variant. Lives here (a plain module) rather than in
+// messageActions.ts because a "use server" file may only export async
+// functions.
+export const AI_DRAFT_VARIANT_SENTINEL = "draft";
+
 /** Renders a preset variant body, substituting {{firstName}} and {{street}}. */
 export function renderMessageBody(
   body: string,
