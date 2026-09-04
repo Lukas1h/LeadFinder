@@ -33,19 +33,17 @@ export function PipelineActions({
   if (status === "saved") {
     return (
       <div className="flex items-center gap-2 flex-wrap">
-        {agentPhone && (
-          <SendMessageDialog
-            listingId={listingId}
-            type="initial_outreach"
-            agentPhone={agentPhone}
-            trigger={
-              <Button disabled={isPending}>
-                <MessageCircle />
-                Text {firstName(agentName) ?? "agent"}
-              </Button>
-            }
-          />
-        )}
+        <SendMessageDialog
+          listingId={listingId}
+          type="initial_outreach"
+          agentPhone={agentPhone}
+          trigger={
+            <Button disabled={isPending}>
+              <MessageCircle />
+              Text {firstName(agentName) ?? "agent"}
+            </Button>
+          }
+        />
         {notInterested}
       </div>
     );

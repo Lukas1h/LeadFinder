@@ -6,6 +6,7 @@ import { fetchAccountUsage } from "@/lib/zillapi";
 import { SourceCard } from "./SourceCard";
 import { SourceForm } from "./SourceForm";
 import { EmailSourceCard } from "./EmailSourceCard";
+import { NotificationsCard } from "./NotificationsCard";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,9 @@ export default async function SettingsPage() {
 
         </div>
       </header>
+
+      <NotificationsCard />
+
       <header className="mb-4 flex items-end justify-between gap-4 flex-wrap">
         <h2 className="text-xl font-semibold tracking-tight text-foreground -mb-2">Sources</h2>
         <div className="flex items-center gap-3">

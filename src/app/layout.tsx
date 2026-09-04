@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppSidebar } from "./AppSidebar";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { Toaster } from "@/components/ui/sonner";
+import { ServiceWorkerRegistration } from "./ServiceWorkerRegistration";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,6 +21,19 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "LeadFinder",
   description: "New listing leads",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "LeadFinder",
+  },
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#111116",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -29,6 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
       <body>
+        <ServiceWorkerRegistration />
         <TooltipProvider>
           <SidebarProvider>
             <AppSidebar />

@@ -32,7 +32,7 @@ export function shortStreetName(address: string | null): string | null {
   return rest.join(" ") || address;
 }
 
-export function smsUrl(phone: string = "", message: string): string | null {
+export function smsUrl(phone: string = "default", message: string): string | null {
   const digits = phone.replace(/\D/g, "");
   let target: string;
   if (digits.length === 10) target = `+1${digits}`;

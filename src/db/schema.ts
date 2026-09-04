@@ -202,3 +202,18 @@ export const messageSends = pgTable("message_sends", {
 
 export type MessageSend = typeof messageSends.$inferSelect;
 export type NewMessageSend = typeof messageSends.$inferInsert;
+
+// One row per subscribed device (the iOS PWA install, a desktop browser,
+// etc) — endpoint is the browser-assigned push URL and is unique per
+// device/install, so re-subscribing (e.g. after reinstalling the PWA)
+// just upserts. See src/lib/push.ts for how these get used.
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;

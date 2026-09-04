@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { listings, searchSources, type NewListing } from "@/db/schema";
 import { fetchNewListings, fetchAgentInfo } from "@/lib/zillapi";
 import { scorePhotos } from "@/lib/photoScore";
+import { notifyNewListings } from "@/lib/push";
 import { eq } from "drizzle-orm";
 
 const MAX_ITEMS_PER_SOURCE = 50;
@@ -92,6 +93,8 @@ export async function insertAndEnrichListings(candidates: NewListing[]): Promise
       })
     );
   }
+
+  await notifyNewListings(insertedRows.length);
 
   return insertedRows.length;
 }
