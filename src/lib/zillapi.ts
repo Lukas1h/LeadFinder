@@ -184,16 +184,58 @@ interface AgentInfo {
   brokerName: string | null;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const PROPERTY_LOOKUP_TIMEOUT_MS = 10000;
+const PROPERTY_LOOKUP_MAX_ATTEMPTS = 2;
+
 /**
- * GET /v1/properties/{zpid} — the full property details endpoint, NOT the
- * dedicated /v1/properties/{zpid}/agent sub-resource. Always 1 credit per
- * call — confirmed via the x-credits-charged response header, even on a
- * repeat call for a zpid already fetched minutes earlier, so the docs'
- * "0 credits on a cache hit ≤24h" claim doesn't hold in practice. Verified
- * against 2 real RMLS (OR) listings: the dedicated /agent endpoint never
- * returns a phone number despite its docs claiming it does, but this one
- * reliably does, under data.agent.phoneNumber / data.broker.phoneNumber.
+ * GET /v1/properties/{zpid} with a client-side timeout and one retry.
+ * Added after a real outage (2026-09-04) where fresh/uncached lookups hung
+ * past 120s before finally 504ing with "lookup_timeout" — well beyond
+ * Zillapi's own documented 60s sync ceiling — silently leaving every new
+ * listing without agent info (fetchAgentInfo) or, worse, dropping the
+ * listing entirely (fetchFullListing, which returned null with zero
+ * logging). Their async job endpoints (POST /v1/properties/batch and
+ * /v1/search/with-details) were tried as a workaround during that outage
+ * and failed identically — confirmed even against a zpid known to already
+ * be cached — so this is an upstream Zillow detail-scraping outage on
+ * Zillapi's end, not something a different endpoint fixes. A cache hit
+ * still returns in well under a second, so a 10s timeout only ever bites
+ * during a genuine outage, and the retry+logging at least turns a silent,
+ * unbounded hang into a fast, diagnosable failure.
  */
+async function fetchPropertyDetail(zpid: string, apiKey: string): Promise<Response | null> {
+  for (let attempt = 1; attempt <= PROPERTY_LOOKUP_MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PROPERTY_LOOKUP_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${ZILLAPI_PROPERTIES_URL}/${zpid}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+      });
+      if (res.ok) return res;
+      console.error(
+        `fetchPropertyDetail: ${res.status} for zpid ${zpid} (attempt ${attempt}/${PROPERTY_LOOKUP_MAX_ATTEMPTS})`
+      );
+    } catch (err) {
+      const reason =
+        err instanceof Error && err.name === "AbortError"
+          ? `timed out after ${PROPERTY_LOOKUP_TIMEOUT_MS}ms`
+          : String(err);
+      console.error(
+        `fetchPropertyDetail: ${reason} for zpid ${zpid} (attempt ${attempt}/${PROPERTY_LOOKUP_MAX_ATTEMPTS})`
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (attempt < PROPERTY_LOOKUP_MAX_ATTEMPTS) await sleep(3000);
+  }
+  return null;
+}
+
 export async function fetchAgentInfo(zpid: string): Promise<AgentInfo> {
   if (process.env.USE_MOCK_ZILLAPI === "true") {
     const mock = (
@@ -211,11 +253,8 @@ export async function fetchAgentInfo(zpid: string): Promise<AgentInfo> {
     throw new Error("ZILLAPI_KEY is not set");
   }
 
-  const res = await fetch(`${ZILLAPI_PROPERTIES_URL}/${zpid}`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
-
-  if (!res.ok) {
+  const res = await fetchPropertyDetail(zpid, apiKey);
+  if (!res) {
     return { agentName: null, agentPhone: null, brokerName: null };
   }
 
@@ -273,11 +312,8 @@ export async function fetchFullListing(zpid: string): Promise<NewListing | null>
     throw new Error("ZILLAPI_KEY is not set");
   }
 
-  const res = await fetch(`${ZILLAPI_PROPERTIES_URL}/${zpid}`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
-
-  if (!res.ok) return null;
+  const res = await fetchPropertyDetail(zpid, apiKey);
+  if (!res) return null;
 
   const parsed = (await res.json()) as { data?: RawZillapiProperty };
   const raw = parsed.data;

@@ -7,6 +7,8 @@ import { insertAndEnrichListings } from "@/lib/sync";
 import { fetchAgentMailMessage } from "@/lib/agentmail";
 import type { NewListing } from "@/db/schema";
 
+export const maxDuration = 60;
+
 // AgentMail sends "message.received" events for inbound mail, signed via
 // Svix (same HMAC scheme as e.g. Clerk/Resend webhooks). Zillow alert
 // emails link listings as https://www.zillow.com/homedetails/{zpid}_zpid/

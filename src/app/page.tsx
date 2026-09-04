@@ -12,6 +12,12 @@ import { daysSince } from "@/lib/format";
 import { Separator } from "@/components/ui/separator";
 import { LeadsSkeleton } from "./loading";
 
+// Server Action timeouts are controlled by the maxDuration of the page
+// they're invoked from — triggerManualSync (RefreshButton's action, in
+// ./actions.ts) needs headroom for fetchAgentInfo's retry/timeout budget
+// in src/lib/zillapi.ts, same reasoning as the cron route's maxDuration.
+export const maxDuration = 60;
+
 export default function LeadsPage() {
   return (
     <main className="max-w-3xl mx-auto w-full px-6 py-10">

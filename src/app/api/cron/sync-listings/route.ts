@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runSync } from "@/lib/sync";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
