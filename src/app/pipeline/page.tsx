@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, Suspense } from "react";
 import { Inbox, MessageSquareReply, Bookmark, Clock, ChevronRight, FileText } from "lucide-react";
 import { db } from "@/db";
 import { listings, agents, type Listing } from "@/db/schema";
@@ -9,8 +9,7 @@ import { StatusBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, Few
 import { findDuplicateAgentContact, FOLLOW_UP_AFTER_DAYS, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
 import { Separator } from "@/components/ui/separator";
-
-export const dynamic = "force-dynamic";
+import { PipelineSkeleton } from "./loading";
 
 function byOldest(a: Listing, b: Listing, field: "statusChangedAt" | "contactedAt") {
   const aTime = a[field]?.getTime() ?? 0;
@@ -18,7 +17,17 @@ function byOldest(a: Listing, b: Listing, field: "statusChangedAt" | "contactedA
   return aTime - bTime;
 }
 
-export default async function PipelinePage() {
+export default function PipelinePage() {
+  return (
+    <main className="max-w-3xl mx-auto w-full px-6 py-10">
+      <Suspense fallback={<PipelineSkeleton />}>
+        <PipelineContent />
+      </Suspense>
+    </main>
+  );
+}
+
+async function PipelineContent() {
   // Independent of each other, so run them concurrently instead of paying
   // for two sequential round trips to Neon.
   const [all, allAgents] = await Promise.all([
@@ -95,7 +104,7 @@ export default async function PipelinePage() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto w-full px-6 py-10">
+    <>
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Pipeline</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -186,6 +195,6 @@ export default async function PipelinePage() {
           )}
         </div>
       )}
-    </main>
+    </>
   );
 }

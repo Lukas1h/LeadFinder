@@ -1,9 +1,12 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { LeadCardSkeleton } from "./LeadCardSkeleton";
 
-export default function LeadsLoading() {
+// Shared with page.tsx's <Suspense> fallback so hard navigations (this
+// file) and soft client navigations (the in-page boundary) show the exact
+// same skeleton instead of a visual mismatch between the two.
+export function LeadsSkeleton() {
   return (
-    <main className="max-w-3xl mx-auto w-full px-6 py-10">
+    <>
       <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div className="flex flex-col gap-2">
           <Skeleton className="h-8 w-24" />
@@ -16,6 +19,14 @@ export default function LeadsLoading() {
         <LeadCardSkeleton />
         <LeadCardSkeleton />
       </div>
+    </>
+  );
+}
+
+export default function LeadsLoading() {
+  return (
+    <main className="max-w-3xl mx-auto w-full px-6 py-10">
+      <LeadsSkeleton />
     </main>
   );
 }

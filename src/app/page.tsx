@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, Suspense } from "react";
 import { PartyPopper } from "lucide-react";
 import { db } from "@/db";
 import { listings, agents, type Listing } from "@/db/schema";
@@ -10,10 +10,19 @@ import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPho
 import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
 import { Separator } from "@/components/ui/separator";
+import { LeadsSkeleton } from "./loading";
 
-export const dynamic = "force-dynamic";
+export default function LeadsPage() {
+  return (
+    <main className="max-w-3xl mx-auto w-full px-6 py-10">
+      <Suspense fallback={<LeadsSkeleton />}>
+        <LeadsContent />
+      </Suspense>
+    </main>
+  );
+}
 
-export default async function LeadsPage() {
+async function LeadsContent() {
   // foundAt is transaction-time, so a batch insert gives every row in it
   // the exact same value — listings.id as a tiebreaker keeps order stable
   // across renders instead of reshuffling ties arbitrarily.
@@ -89,7 +98,7 @@ export default async function LeadsPage() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto w-full px-6 py-10">
+    <>
       <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Leads</h1>
@@ -127,6 +136,6 @@ export default async function LeadsPage() {
           )}
         </div>
       )}
-    </main>
+    </>
   );
 }

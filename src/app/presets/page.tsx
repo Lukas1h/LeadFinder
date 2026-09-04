@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Plus, FlaskConical } from "lucide-react";
 import { db } from "@/db";
 import { messagePresets, messagePresetVariants, PRESET_TYPES, type PresetType } from "@/db/schema";
@@ -6,15 +7,24 @@ import { computeVariantStats } from "@/lib/messageStats";
 import { PresetCard } from "./PresetCard";
 import { PresetForm } from "./PresetForm";
 import { Button } from "@/components/ui/button";
-
-export const dynamic = "force-dynamic";
+import { PresetsSkeleton } from "./loading";
 
 const TYPE_LABELS: Record<PresetType, string> = {
   initial_outreach: "Initial Outreach",
   follow_up: "Follow-up",
 };
 
-export default async function PresetsPage() {
+export default function PresetsPage() {
+  return (
+    <main className="max-w-3xl mx-auto w-full px-6 py-10">
+      <Suspense fallback={<PresetsSkeleton />}>
+        <PresetsContent />
+      </Suspense>
+    </main>
+  );
+}
+
+async function PresetsContent() {
   await ensureDefaultPresets();
 
   const [presets, variants, statsByVariant] = await Promise.all([
@@ -29,7 +39,7 @@ export default async function PresetsPage() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto w-full px-6 py-10">
+    <>
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Message Presets</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -81,6 +91,6 @@ export default async function PresetsPage() {
           </section>
         );
       })}
-    </main>
+    </>
   );
 }

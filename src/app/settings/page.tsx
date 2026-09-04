@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Plus, MapPinned } from "lucide-react";
 import { db } from "@/db";
 import { searchSources } from "@/db/schema";
@@ -8,10 +9,19 @@ import { SourceForm } from "./SourceForm";
 import { EmailSourceCard } from "./EmailSourceCard";
 import { NotificationsCard } from "./NotificationsCard";
 import { Button } from "@/components/ui/button";
+import { SettingsSkeleton } from "./loading";
 
-export const dynamic = "force-dynamic";
+export default function SettingsPage() {
+  return (
+    <main className="max-w-3xl mx-auto w-full px-6 py-10">
+      <Suspense fallback={<SettingsSkeleton />}>
+        <SettingsContent />
+      </Suspense>
+    </main>
+  );
+}
 
-export default async function SettingsPage() {
+async function SettingsContent() {
   const inboxAddress = process.env.AGENTMAIL_INBOX_ADDRESS ?? null;
   // Independent of each other, so run them concurrently instead of paying
   // for a DB round trip followed by a separate Zillapi round trip.
@@ -23,7 +33,7 @@ export default async function SettingsPage() {
   const totalCount = sources.length + (inboxAddress ? 1 : 0);
 
   return (
-    <main className="max-w-3xl mx-auto w-full px-6 py-10">
+    <>
       <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
@@ -72,6 +82,6 @@ export default async function SettingsPage() {
           ))}
         </div>
       )}
-    </main>
+    </>
   );
 }
