@@ -1,7 +1,7 @@
 import { Webhook } from "svix";
 import { db } from "@/db";
 import { listings } from "@/db/schema";
-import { inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { fetchFullListing } from "@/lib/zillapi";
 import { insertAndEnrichListings } from "@/lib/sync";
 import type { NewListing } from "@/db/schema";
@@ -9,8 +9,11 @@ import type { NewListing } from "@/db/schema";
 // AgentMail sends "message.received" events for inbound mail, signed via
 // Svix (same HMAC scheme as e.g. Clerk/Resend webhooks). Zillow alert
 // emails link listings as https://www.zillow.com/homedetails/{zpid}_zpid/
-// — this regex pulls every zpid out of the raw HTML/text body.
-const ZPID_RE = /(\d+)_zpid/g;
+// — this regex pulls a zpid out of the raw HTML/text body. Deliberately
+// NOT global: extractMainZpid only ever wants the first match, and a
+// module-level `g`-flagged RegExp keeps `lastIndex` state across calls,
+// which would silently break every other webhook invocation.
+const ZPID_RE = /(\d+)_zpid/;
 
 interface AgentMailMessageReceived {
   // AgentMail's real envelope carries the event kind in `event_type`
@@ -38,8 +41,17 @@ interface AgentMailMessageReceived {
 // notifications, just worded differently depending on the alert type.
 const NEWLY_LISTED_RE = /newly listed|new listing/i;
 
-function extractZpids(body: string): string[] {
-  return Array.from(new Set(Array.from(body.matchAll(ZPID_RE), (m) => m[1])));
+/**
+ * Zillow's alert emails put the actual "new listing" the alert is about
+ * first, then a "Based on your recent activity / Our recommendations for
+ * you" section linking several unrelated listings. Verified against two
+ * real emails: the first zpid mentioned always matches the address in the
+ * subject line, and every zpid after it belongs to a recommended listing
+ * we did NOT ask about — so only the first one should turn into a lead.
+ */
+function extractMainZpid(body: string): string | null {
+  const match = ZPID_RE.exec(body);
+  return match?.[1] ?? null;
 }
 
 export async function POST(req: Request) {
@@ -94,24 +106,20 @@ async function handle(req: Request): Promise<Response> {
   }
 
   const body = (event.message?.html ?? "") + " " + (event.message?.text ?? "");
-  const zpids = extractZpids(body);
-  if (zpids.length === 0) {
-    return new Response("No zpids found", { status: 200 });
+  const zpid = extractMainZpid(body);
+  if (!zpid) {
+    return new Response("No zpid found", { status: 200 });
   }
 
-  const existing = await db
-    .select({ zpid: listings.zpid })
-    .from(listings)
-    .where(inArray(listings.zpid, zpids));
-  const existingSet = new Set(existing.map((l) => l.zpid));
-  const newZpids = zpids.filter((z) => !existingSet.has(z));
+  const [existing] = await db.select({ zpid: listings.zpid }).from(listings).where(eq(listings.zpid, zpid));
+  if (existing) {
+    return Response.json({ zpid, inserted: 0, reason: "already exists" });
+  }
 
-  const fetched = await Promise.all(newZpids.map((zpid) => fetchFullListing(zpid)));
-  const candidates = fetched
-    .filter((l): l is NewListing => l !== null)
-    .map((l) => ({ ...l, sourceLabel: "Zillow email alert" }));
+  const fresh = await fetchFullListing(zpid);
+  const inserted = fresh
+    ? await insertAndEnrichListings([{ ...fresh, sourceLabel: "Zillow email alert" } satisfies NewListing])
+    : 0;
 
-  const inserted = await insertAndEnrichListings(candidates);
-
-  return Response.json({ zpidsFound: zpids.length, inserted });
+  return Response.json({ zpid, inserted });
 }
