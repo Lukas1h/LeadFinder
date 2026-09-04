@@ -5,7 +5,12 @@ import { scorePhotos } from "@/lib/photoScore";
 import { eq } from "drizzle-orm";
 
 const MAX_ITEMS_PER_SOURCE = 50;
-const ENRICHMENT_CONCURRENCY = 5;
+// Kept low deliberately: scorePhotos' vision calls can each run 100k+
+// tokens for a photo-heavy listing (see MAX_PHOTOS_TO_SCORE in
+// photoScore.ts), and firing too many at once burns through OpenAI's
+// per-minute token budget — a batch of 5 concurrent scores is what caused
+// several listings in one Refresh to silently come back with no score.
+const ENRICHMENT_CONCURRENCY = 2;
 
 export interface SyncResult {
   fetched: number;

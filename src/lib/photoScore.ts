@@ -40,6 +40,21 @@ const MOCK_RESULT: PhotoScoreResult = {
   reasoning: "Mock score — set USE_MOCK_OPENAI=false to call the real API.",
 };
 
+// A listing can have 60+ photos; sending all of them at "low" detail still
+// runs ~2,800 tokens/photo for this model (not the flat 85 tokens/image
+// gpt-4o gets at "low" — verified empirically, gpt-4o-mini prices images
+// differently). A handful of concurrent full-gallery scores during a sync
+// can blow well past OpenAI's per-minute token limit. Capping to the first
+// N photos — which are almost always the hero/exterior/kitchen shots, the
+// most diagnostic ones anyway — keeps each call's token cost bounded.
+const MAX_PHOTOS_TO_SCORE = 20;
+
+const MAX_ATTEMPTS = 3;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function scorePhotos(photos: string[] | null): Promise<PhotoScoreResult> {
   if (!photos || photos.length === 0) {
     return { score: null, reasoning: null };
@@ -54,47 +69,70 @@ export async function scorePhotos(photos: string[] | null): Promise<PhotoScoreRe
     throw new Error("OPENAI_API_KEY is not set");
   }
 
-  const res = await fetch(OPENAI_CHAT_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      response_format: { type: "json_object" },
-      temperature: 0,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: RUBRIC },
-            ...photos.map((url) => ({
-              type: "image_url",
-              image_url: { url, detail: "low" },
-            })),
-          ],
-        },
-      ],
-    }),
-  });
+  const scoredPhotos = photos.slice(0, MAX_PHOTOS_TO_SCORE);
 
-  if (!res.ok) {
-    return { score: null, reasoning: null };
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const res = await fetch(OPENAI_CHAT_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        temperature: 0,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: RUBRIC },
+              ...scoredPhotos.map((url) => ({
+                type: "image_url",
+                image_url: { url, detail: "low" },
+              })),
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      // 429 (rate limit) and 5xx are transient — retry with backoff. A
+      // 429's retry-after header is authoritative when present; otherwise
+      // back off hard since these requests are large enough that a short
+      // wait rarely clears the per-minute token budget.
+      const isRetryable = res.status === 429 || res.status >= 500;
+      const body = await res.text();
+      console.error(`scorePhotos: OpenAI ${res.status} (attempt ${attempt}/${MAX_ATTEMPTS})`, body);
+
+      if (isRetryable && attempt < MAX_ATTEMPTS) {
+        const retryAfterHeader = Number(res.headers.get("retry-after"));
+        const waitMs = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+          ? retryAfterHeader * 1000
+          : attempt * 15000;
+        await sleep(waitMs);
+        continue;
+      }
+
+      return { score: null, reasoning: null };
+    }
+
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return { score: null, reasoning: null };
+
+    try {
+      const parsed = JSON.parse(content) as { score?: number; reasoning?: string };
+      const score =
+        typeof parsed.score === "number" ? Math.max(1, Math.min(10, Math.round(parsed.score))) : null;
+      return { score, reasoning: parsed.reasoning ?? null };
+    } catch {
+      return { score: null, reasoning: null };
+    }
   }
 
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) return { score: null, reasoning: null };
-
-  try {
-    const parsed = JSON.parse(content) as { score?: number; reasoning?: string };
-    const score =
-      typeof parsed.score === "number" ? Math.max(1, Math.min(10, Math.round(parsed.score))) : null;
-    return { score, reasoning: parsed.reasoning ?? null };
-  } catch {
-    return { score: null, reasoning: null };
-  }
+  return { score: null, reasoning: null };
 }
