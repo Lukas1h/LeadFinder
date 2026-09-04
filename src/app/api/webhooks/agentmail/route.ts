@@ -13,7 +13,16 @@ import type { NewListing } from "@/db/schema";
 const ZPID_RE = /(\d+)_zpid/g;
 
 interface AgentMailMessageReceived {
+  // AgentMail's real envelope carries the event kind in `event_type`
+  // ("message.received", "message.received.spam", etc) — `type` is a
+  // separate, constant field (always "event"). Verified 2026-09-04 against
+  // docs.agentmail.to/api-reference/webhooks/events/message-received.md
+  // after a real forwarded email produced a 200 with zero DB/Zillapi calls:
+  // the route had been checking the wrong field (`type`) since day one, so
+  // every genuine AgentMail delivery silently no-op'd despite my own
+  // synthetic tests "passing" (they matched my own wrong assumption).
   type?: string;
+  event_type?: string;
   message?: {
     subject?: string;
     html?: string;
@@ -71,7 +80,12 @@ async function handle(req: Request): Promise<Response> {
 
   const event = JSON.parse(payload) as AgentMailMessageReceived;
 
-  if (event.type !== "message.received") {
+  if (event.event_type !== "message.received") {
+    // Logged rather than silently dropped — this exact class of bug (a
+    // field-name mismatch nobody noticed because the response was still a
+    // clean 200) is what caused two real forwarded emails to vanish with
+    // no trace before this was caught.
+    console.log("agentmail webhook: ignoring event_type", event.event_type, "raw type field:", event.type);
     return new Response("Ignored", { status: 200 });
   }
 
