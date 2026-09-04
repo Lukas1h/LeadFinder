@@ -38,13 +38,30 @@ interface AgentMailMessageReceived {
   };
 }
 
-// Zillow sends several alert types to the same inbox (price/status changes,
-// tour reminders, open house reminders) — only new-listing ones should turn
-// into leads. Verified against two real subject lines: an instant "Newly
-// listed!" alert and a saved-search digest phrased "New Listing: <address>.
-// Your '<search name>' search" — both are genuine "just hit the market"
-// notifications, just worded differently depending on the alert type.
-const NEWLY_LISTED_RE = /newly listed|new listing/i;
+// Zillow sends several alert types to the same inbox. Two are confirmed to
+// be worth turning into a lead (a property newly available to pitch), and
+// one — a price cut — was added by request 2026-09-04 on the reasoning
+// that a stale/reduced listing is as much an outreach opportunity as a
+// fresh one. Real, verified subject lines: "Newly listed!" (instant
+// alert), "New Listing: <address>. Your '<search name>' search"
+// (saved-search digest), "Just listed at $<price> in <area>" (direct
+// per-search instant update — missed for a full day before this regex
+// existed; two real emails silently never matched the original
+// new-listing-only pattern and only became leads because the daily bbox
+// sync independently found the same properties), and "Price Cut:
+// <address>...". "back on market"/"relisted" are NOT yet verified against
+// a real subject line — included as a reasonable guess for a listing that
+// was off-market and is available again, same outreach value as new/cut.
+const NEWLY_LISTED_RE = /newly listed|new listing|just listed|price cut|back on market|relisted/i;
+
+// Never turn these into a lead even if NEWLY_LISTED_RE also matches
+// somewhere in the subject — a property that's sold/pending/off-market is
+// not an outreach opportunity, and tour/open-house reminders are
+// logistics for an existing showing, not a new lead signal. None of these
+// patterns are verified against a real subject line yet (no example seen
+// so far) — written defensively from Zillow's known alert categories, to
+// be corrected against a real subject the first time one of these fires.
+const EXCLUDED_ALERT_RE = /sale pending|pending sale|\bsold\b|off.?market|tour reminder|open house reminder/i;
 
 /**
  * Zillow's alert emails put the actual "new listing" the alert is about
@@ -106,9 +123,10 @@ async function handle(req: Request): Promise<Response> {
     return new Response("Ignored", { status: 200 });
   }
 
-  if (!NEWLY_LISTED_RE.test(event.message?.subject ?? "")) {
-    console.log("agentmail webhook: subject doesn't match newly-listed pattern:", event.message?.subject);
-    return new Response("Ignored: not a newly-listed alert", { status: 200 });
+  const subject = event.message?.subject ?? "";
+  if (EXCLUDED_ALERT_RE.test(subject) || !NEWLY_LISTED_RE.test(subject)) {
+    console.log("agentmail webhook: subject doesn't match a lead-worthy alert:", subject);
+    return new Response("Ignored: not a lead-worthy alert", { status: 200 });
   }
 
   let body = (event.message?.html ?? "") + " " + (event.message?.text ?? "");
