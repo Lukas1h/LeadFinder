@@ -3,10 +3,11 @@ import { listings, searchSources, type NewListing } from "@/db/schema";
 import { fetchNewListings, fetchAgentInfo } from "@/lib/zillapi";
 import { scorePhotos } from "@/lib/photoScore";
 import { notifyNewListings } from "@/lib/push";
+import { FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { eq } from "drizzle-orm";
 
 const MAX_ITEMS_PER_SOURCE = 50;
-// Kept low deliberately: scorePhotos' vision calls can each run 100k+
+// Kept low deliberately: scorePhotos' vision calls can each run 20k+
 // tokens for a photo-heavy listing (see MAX_PHOTOS_TO_SCORE in
 // photoScore.ts), and firing too many at once burns through OpenAI's
 // per-minute token budget — a batch of 5 concurrent scores is what caused
@@ -75,9 +76,15 @@ export async function insertAndEnrichListings(candidates: NewListing[]): Promise
     const batch = insertedRows.slice(i, i + ENRICHMENT_CONCURRENCY);
     await Promise.all(
       batch.map(async (row) => {
+        // Fewer than FEW_PHOTOS_THRESHOLD photos already gets its own
+        // "only N photos" badge (see FewPhotosBadge) regardless of score —
+        // there's nothing a photo-technique judgment adds for a gallery
+        // this thin, so skip the OpenAI call entirely rather than pay for
+        // a score nobody needs.
+        const enoughPhotosToScore = (row.photos?.length ?? 0) >= FEW_PHOTOS_THRESHOLD;
         const [agent, photoScore] = await Promise.all([
           row.agentPhone ? null : fetchAgentInfo(row.zpid),
-          scorePhotos(row.photos),
+          enoughPhotosToScore ? scorePhotos(row.photos) : Promise.resolve({ score: null, reasoning: null }),
         ]);
 
         const update: Record<string, unknown> = {};

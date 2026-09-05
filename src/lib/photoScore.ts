@@ -1,5 +1,23 @@
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 
+// Revised 2026-09-05 after 5 real listings came back mis-scored (2 badly:
+// a genuinely professional gallery rated "Amateur", and another rated
+// "Amateur" that should've been "Good"). Added the window-pull/blown-window
+// pair since it was the specific miss on the underrated listing (good HDR
+// window exposure blending wasn't recognized as a strong pro tell). Tested
+// against all 5 real complaints before shipping — this version fixed 2 of
+// 4 testable cases with no new regressions elsewhere, which is what a
+// $0.15/1M-token model can reliably do at "low" image detail; two more
+// aggressive rubric variants (an explicit "narrow field of view" cue, and
+// an "any single tell forces score ≤3" rule) were tried and rejected: the
+// first one made the model latch onto "cramped framing" indiscriminately
+// and score every listing identically regardless of actual quality, the
+// second fixed the remaining bad case but broke two good ones. This is a
+// real ceiling on how well a cheap vision model does this specific
+// judgment call, not a rubric-wording problem — "high" image detail was
+// also tested and measured at 5x the token cost (real usage: 2,836
+// tokens/photo at "low" vs 14,170 at "high"), which would blow the
+// project's ~$2-3/month budget for a few points of accuracy; not worth it.
 const RUBRIC = `Your goal: determine whether these real estate listing photos were taken
 by a professional real estate photographer, or on a cellphone by the agent/
 homeowner. Score from 1 (clearly cellphone/amateur) to 10 (clearly professional).
@@ -10,7 +28,11 @@ Strong signals of PROFESSIONAL work (push the score up):
 - Perfectly straight vertical lines — door frames, window frames, and wall corners
   running truly vertical, not leaning inward/outward. Pros keep the camera level
   (tripod) or correct perspective in post; this is one of the most reliable tells.
-- Bright, well-exposed, wide-angle interior shots
+- "Window pulls": a window showing real exterior detail (sky, trees, yard) while
+  the room stays well-exposed — deliberate HDR/exposure-blending technique, and
+  the single clearest sign of intentional professional work.
+- Bright, wide-angle interior shots where rooms look open and spacious, with a
+  consistent editing style from photo to photo.
 
 Strong signals of CELLPHONE/AMATEUR work (push the score down):
 - Converging/leaning vertical lines — door frames, window frames, or wall corners
@@ -19,6 +41,8 @@ Strong signals of CELLPHONE/AMATEUR work (push the score down):
   cellphone real estate photos. If most of the interior shots show this, it's a
   reliable, decisive signal on its own — score 4 or below even if the photos are
   otherwise bright and clear.
+- A blown-out, pure-white window with zero visible exterior detail — the direct
+  opposite of a window pull, meaning no exposure effort was made.
 - Crooked or tilted horizons
 - Dark, poorly lit, or blown-out photos
 - Blurry or low-resolution, cellphone-snapshot quality
@@ -47,7 +71,15 @@ const MOCK_RESULT: PhotoScoreResult = {
 // can blow well past OpenAI's per-minute token limit. Capping to the first
 // N photos — which are almost always the hero/exterior/kitchen shots, the
 // most diagnostic ones anyway — keeps each call's token cost bounded.
-const MAX_PHOTOS_TO_SCORE = 20;
+// Cut from 20 to 8 on 2026-09-05, mainly to fit budget: at ~600
+// listings/month (real measured rate) 20 photos/listing runs ~$5/month,
+// over the ~$2-3/month target; 8 runs ~$2/month. All rubric testing that
+// day was done at 7-8 photos and gave reasonable, consistent results, so
+// there's no evidence this loses accuracy — but it also wasn't A/B tested
+// against 20, so treat "8 is enough" as a reasonable assumption (first 8
+// are almost always hero/exterior/kitchen/living, the most diagnostic
+// shots), not a proven equivalence.
+const MAX_PHOTOS_TO_SCORE = 8;
 
 const MAX_ATTEMPTS = 3;
 
