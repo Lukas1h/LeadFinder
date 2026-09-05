@@ -1,7 +1,7 @@
 import { Webhook } from "svix";
 import { db } from "@/db";
 import { listings } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { fetchFullListing } from "@/lib/zillapi";
 import { insertAndEnrichListings } from "@/lib/sync";
 import { fetchAgentMailMessage } from "@/lib/agentmail";
@@ -12,11 +12,11 @@ export const maxDuration = 60;
 // AgentMail sends "message.received" events for inbound mail, signed via
 // Svix (same HMAC scheme as e.g. Clerk/Resend webhooks). Zillow alert
 // emails link listings as https://www.zillow.com/homedetails/{zpid}_zpid/
-// — this regex pulls a zpid out of the raw HTML/text body. Deliberately
-// NOT global: extractMainZpid only ever wants the first match, and a
-// module-level `g`-flagged RegExp keeps `lastIndex` state across calls,
-// which would silently break every other webhook invocation.
-const ZPID_RE = /(\d+)_zpid/;
+// — this regex pulls zpids out of the raw HTML/text body. Global-flagged
+// on purpose now (extractLeadZpids below always builds a fresh RegExp
+// per call via matchAll's own copy, so there's no cross-call lastIndex
+// state to worry about — see extractLeadZpids' own comment).
+const ZPID_RE = /(\d+)_zpid/g;
 
 interface AgentMailMessageReceived {
   // AgentMail's real envelope carries the event kind in `event_type`
@@ -38,42 +38,46 @@ interface AgentMailMessageReceived {
   };
 }
 
-// Zillow sends several alert types to the same inbox. Two are confirmed to
-// be worth turning into a lead (a property newly available to pitch), and
-// one — a price cut — was added by request 2026-09-04 on the reasoning
-// that a stale/reduced listing is as much an outreach opportunity as a
-// fresh one. Real, verified subject lines: "Newly listed!" (instant
-// alert), "New Listing: <address>. Your '<search name>' search"
-// (saved-search digest), "Just listed at $<price> in <area>" (direct
-// per-search instant update — missed for a full day before this regex
-// existed; two real emails silently never matched the original
-// new-listing-only pattern and only became leads because the daily bbox
-// sync independently found the same properties), and "Price Cut:
-// <address>...". "back on market"/"relisted" are NOT yet verified against
-// a real subject line — included as a reasonable guess for a listing that
-// was off-market and is available again, same outreach value as new/cut.
-const NEWLY_LISTED_RE = /newly listed|new listing|just listed|price cut|back on market|relisted/i;
-
-// Never turn these into a lead even if NEWLY_LISTED_RE also matches
-// somewhere in the subject — a property that's sold/pending/off-market is
-// not an outreach opportunity, and tour/open-house reminders are
-// logistics for an existing showing, not a new lead signal. None of these
-// patterns are verified against a real subject line yet (no example seen
-// so far) — written defensively from Zillow's known alert categories, to
-// be corrected against a real subject the first time one of these fires.
+// Trying to enumerate every "this means a fresh lead" subject phrasing was
+// a losing game — three different real formats ("Newly listed!"/"New
+// Listing: <addr>", "Just listed at $<price> in <area>", "<N> Result(s)
+// for '<saved search>'") each slipped through a narrower include-list
+// before being caught, one at a time, each time after a real email had
+// already been silently dropped. Flipped 2026-09-05 to an exclude-list
+// instead: accept anything except the alert types that are clearly NOT an
+// outreach opportunity. None of these exact phrases are verified against
+// a real subject line yet (no example seen so far) — written defensively
+// from Zillow's known alert categories, to be corrected the first time
+// one of these actually fires.
 const EXCLUDED_ALERT_RE = /sale pending|pending sale|\bsold\b|off.?market|tour reminder|open house reminder/i;
 
+// Zillow's "New Listing: <addr>. Your search" digest puts the one real
+// result first, then a "Our recommendations for you / Based on your
+// recent activity" section linking several unrelated listings — verified
+// against a real email (Fwd: New Listing: 1466 SE Pine St): 7 unique
+// zpids total, only the first matched the subject's address, the other 6
+// were unrelated recommendations. Cutting the body off at this marker
+// before extracting zpids keeps that digest to just its real result,
+// while every other format tried (single "Just listed" alerts, "<N>
+// Result(s) for" digests) has no such section at all, so the cut is a
+// no-op for them and every genuine result they contain gets extracted.
+const RECOMMENDATIONS_SECTION_RE = /our recommendations for you|based on your recent activity/i;
+
 /**
- * Zillow's alert emails put the actual "new listing" the alert is about
- * first, then a "Based on your recent activity / Our recommendations for
- * you" section linking several unrelated listings. Verified against two
- * real emails: the first zpid mentioned always matches the address in the
- * subject line, and every zpid after it belongs to a recommended listing
- * we did NOT ask about — so only the first one should turn into a lead.
+ * Extracts every real (non-recommended) zpid mentioned in an alert's body.
+ * A single-listing alert repeats its one zpid 2-3x (thumbnail/address/
+ * button links to the same property) — deduping with a Set collapses
+ * that back to one. A "<N> Result(s) for" digest genuinely contains N
+ * different real results — verified against two real emails ("2 Results
+ * for 'Newest Luxury Listings in Eugene'" → 2 unique zpids, "1 Result for
+ * 'New Douglas Listings'" → 1) — so all of them are extracted, not just
+ * the first.
  */
-function extractMainZpid(body: string): string | null {
-  const match = ZPID_RE.exec(body);
-  return match?.[1] ?? null;
+function extractLeadZpids(body: string): string[] {
+  const cut = body.search(RECOMMENDATIONS_SECTION_RE);
+  const relevant = cut === -1 ? body : body.slice(0, cut);
+  const matches = [...relevant.matchAll(ZPID_RE)].map((m) => m[1]);
+  return [...new Set(matches)];
 }
 
 export async function POST(req: Request) {
@@ -124,15 +128,15 @@ async function handle(req: Request): Promise<Response> {
   }
 
   const subject = event.message?.subject ?? "";
-  if (EXCLUDED_ALERT_RE.test(subject) || !NEWLY_LISTED_RE.test(subject)) {
-    console.log("agentmail webhook: subject doesn't match a lead-worthy alert:", subject);
-    return new Response("Ignored: not a lead-worthy alert", { status: 200 });
+  if (EXCLUDED_ALERT_RE.test(subject)) {
+    console.log("agentmail webhook: excluded alert type:", subject);
+    return new Response("Ignored: not an outreach opportunity", { status: 200 });
   }
 
   let body = (event.message?.html ?? "") + " " + (event.message?.text ?? "");
-  let zpid = extractMainZpid(body);
+  let zpids = extractLeadZpids(body);
 
-  if (!zpid && event.message?.message_id && event.message?.inbox_id) {
+  if (zpids.length === 0 && event.message?.message_id && event.message?.inbox_id) {
     // The webhook's inline body didn't contain a zpid — re-fetch the
     // message directly rather than trusting the inline copy, since a real
     // delivery has already been seen where the two disagreed (see
@@ -140,24 +144,25 @@ async function handle(req: Request): Promise<Response> {
     const full = await fetchAgentMailMessage(event.message.inbox_id, event.message.message_id);
     if (full) {
       body = (full.html ?? "") + " " + (full.text ?? "");
-      zpid = extractMainZpid(body);
+      zpids = extractLeadZpids(body);
     }
   }
 
-  if (!zpid) {
-    console.log("agentmail webhook: no zpid found, subject:", event.message?.subject);
+  if (zpids.length === 0) {
+    console.log("agentmail webhook: no zpid found, subject:", subject);
     return new Response("No zpid found", { status: 200 });
   }
 
-  const [existing] = await db.select({ zpid: listings.zpid }).from(listings).where(eq(listings.zpid, zpid));
-  if (existing) {
-    return Response.json({ zpid, inserted: 0, reason: "already exists" });
-  }
+  const existingRows = await db.select({ zpid: listings.zpid }).from(listings).where(inArray(listings.zpid, zpids));
+  const existingZpids = new Set(existingRows.map((r) => r.zpid));
+  const newZpids = zpids.filter((z) => !existingZpids.has(z));
 
-  const fresh = await fetchFullListing(zpid);
-  const inserted = fresh
-    ? await insertAndEnrichListings([{ ...fresh, sourceLabel: "Zillow email alert" } satisfies NewListing])
-    : 0;
+  const fetched = await Promise.all(newZpids.map((zpid) => fetchFullListing(zpid)));
+  const candidates = fetched
+    .filter((l): l is NewListing => l !== null)
+    .map((l) => ({ ...l, sourceLabel: "Zillow email alert" }) satisfies NewListing);
 
-  return Response.json({ zpid, inserted });
+  const inserted = await insertAndEnrichListings(candidates);
+
+  return Response.json({ zpids, alreadyExisted: existingZpids.size, fetchFailed: newZpids.length - candidates.length, inserted });
 }
