@@ -55,7 +55,7 @@ export const listings = pgTable("listings", {
   // Lead pipeline: new -> saved -> contacted -> replied -> quoted -> booked,
   // with declined reachable from anywhere (quoted is optional — replied can
   // go straight to booked for an instant close). contactedAt drives
-  // follow-up flagging (see FOLLOW_UP_AFTER_DAYS in src/app/pipeline/page.tsx).
+  // follow-up flagging (see getFollowUpAfterDays in src/lib/settings.ts).
   // statusChangedAt updates on every transition (contactedAt only on ones
   // into "contacted") — used to sort the pipeline page by how long a
   // listing has sat in its current state.
@@ -154,6 +154,16 @@ export const searchSources = pgTable("search_sources", {
 
 export type SearchSource = typeof searchSources.$inferSelect;
 export type NewSearchSource = typeof searchSources.$inferInsert;
+
+// Single-row table of user-editable app settings — always read/written
+// against the fixed "singleton" id instead of tracking a row id elsewhere.
+// See src/lib/settings.ts.
+export const appSettings = pgTable("app_settings", {
+  id: text("id").primaryKey().default("singleton"),
+  followUpAfterDays: integer("follow_up_after_days").notNull().default(3),
+});
+
+export type AppSettings = typeof appSettings.$inferSelect;
 
 // Which send-moment a preset applies to — mirrors the initial-outreach vs.
 // follow-up split that already exists in the LeadActions/PipelineActions UI.

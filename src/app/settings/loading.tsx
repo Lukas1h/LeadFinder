@@ -10,6 +10,8 @@ export function SettingsSkeleton() {
         <Skeleton className="h-8 w-28" />
         <Skeleton className="h-10 w-24" />
       </header>
+      <Skeleton className="h-24 w-full rounded-lg mb-8" />
+      <Skeleton className="h-24 w-full rounded-lg mb-8" />
       <div className="flex flex-col gap-4">
         <Skeleton className="h-24 w-full rounded-lg" />
         <Skeleton className="h-24 w-full rounded-lg" />

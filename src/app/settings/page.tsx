@@ -4,10 +4,12 @@ import { db } from "@/db";
 import { searchSources } from "@/db/schema";
 import { desc } from "drizzle-orm";
 import { fetchAccountUsage } from "@/lib/zillapi";
+import { getFollowUpAfterDays } from "@/lib/settings";
 import { SourceCard } from "./SourceCard";
 import { SourceForm } from "./SourceForm";
 import { EmailSourceCard } from "./EmailSourceCard";
 import { NotificationsCard } from "./NotificationsCard";
+import { PipelineSettingsCard } from "./PipelineSettingsCard";
 import { Button } from "@/components/ui/button";
 import { SettingsSkeleton } from "./loading";
 
@@ -25,9 +27,10 @@ async function SettingsContent() {
   const inboxAddress = process.env.AGENTMAIL_INBOX_ADDRESS ?? null;
   // Independent of each other, so run them concurrently instead of paying
   // for a DB round trip followed by a separate Zillapi round trip.
-  const [sources, usage] = await Promise.all([
+  const [sources, usage, followUpAfterDays] = await Promise.all([
     db.select().from(searchSources).orderBy(desc(searchSources.createdAt)),
     fetchAccountUsage(),
+    getFollowUpAfterDays(),
   ]);
 
   const totalCount = sources.length + (inboxAddress ? 1 : 0);
@@ -53,6 +56,8 @@ async function SettingsContent() {
       </header>
 
       <NotificationsCard />
+
+      <PipelineSettingsCard followUpAfterDays={followUpAfterDays} />
 
       <header className="mb-4 flex items-end justify-between gap-4 flex-wrap">
         <h2 className="text-xl font-semibold tracking-tight text-foreground -mb-2">Sources</h2>

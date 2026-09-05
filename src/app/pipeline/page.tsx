@@ -13,7 +13,8 @@ import {
   FewPhotosBadge,
   DaysSinceContactBadge,
 } from "../badges";
-import { findDuplicateAgentContact, FOLLOW_UP_AFTER_DAYS, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { findDuplicateAgentContact, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { getFollowUpAfterDays } from "@/lib/settings";
 import { daysSince } from "@/lib/format";
 import { Separator } from "@/components/ui/separator";
 import { PipelineSkeleton } from "./loading";
@@ -36,10 +37,11 @@ export default function PipelinePage() {
 
 async function PipelineContent() {
   // Independent of each other, so run them concurrently instead of paying
-  // for two sequential round trips to Neon.
-  const [all, allAgents] = await Promise.all([
+  // for sequential round trips to Neon.
+  const [all, allAgents, followUpAfterDays] = await Promise.all([
     db.select().from(listings).where(ne(listings.status, "new")),
     db.select().from(agents),
+    getFollowUpAfterDays(),
   ]);
   const agentByPhone = new Map(allAgents.map((a) => [a.phone, a]));
   const referencedIds = allAgents
@@ -58,13 +60,13 @@ async function PipelineContent() {
   const saved = all.filter((l) => l.status === "saved").sort((a, b) => byOldest(a, b, "statusChangedAt"));
   const followUpDue = all
     .filter(
-      (l) => l.status === "contacted" && l.contactedAt != null && daysSince(l.contactedAt) >= FOLLOW_UP_AFTER_DAYS
+      (l) => l.status === "contacted" && l.contactedAt != null && daysSince(l.contactedAt) >= followUpAfterDays
     )
     .sort((a, b) => byOldest(a, b, "contactedAt"));
   const quoted = all.filter((l) => l.status === "quoted").sort((a, b) => byOldest(a, b, "statusChangedAt"));
   const waiting = all
     .filter(
-      (l) => l.status === "contacted" && (l.contactedAt == null || daysSince(l.contactedAt) < FOLLOW_UP_AFTER_DAYS)
+      (l) => l.status === "contacted" && (l.contactedAt == null || daysSince(l.contactedAt) < followUpAfterDays)
     )
     .sort((a, b) => byOldest(a, b, "contactedAt"));
   const closed = all

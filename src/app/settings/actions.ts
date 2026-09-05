@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { searchSources } from "@/db/schema";
+import { searchSources, appSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -64,4 +64,19 @@ export async function deleteSource(id: string) {
 export async function toggleSource(id: string, enabled: boolean) {
   await db.update(searchSources).set({ enabled }).where(eq(searchSources.id, id));
   revalidatePath("/settings");
+}
+
+export async function updateFollowUpAfterDays(days: number) {
+  if (!Number.isInteger(days) || days < 1) {
+    return { error: "Must be a whole number of at least 1" };
+  }
+
+  await db
+    .insert(appSettings)
+    .values({ id: "singleton", followUpAfterDays: days })
+    .onConflictDoUpdate({ target: appSettings.id, set: { followUpAfterDays: days } });
+
+  revalidatePath("/settings");
+  revalidatePath("/pipeline");
+  return { error: null };
 }

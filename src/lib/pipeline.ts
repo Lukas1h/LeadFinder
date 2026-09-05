@@ -1,7 +1,5 @@
 import type { Agent, Listing } from "@/db/schema";
 
-export const FOLLOW_UP_AFTER_DAYS = 3;
-
 // Fewer than this many photos on the listing itself is as strong a signal
 // as a bad photo-quality score — the agent likely hasn't hired anyone yet.
 export const FEW_PHOTOS_THRESHOLD = 5;
