@@ -2,8 +2,9 @@
 
 import { useTransition } from "react";
 import { RotateCcw } from "lucide-react";
-import type { Agent, AgentRelationshipStatus } from "@/db/schema";
+import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { updateAgentRelationshipStatus, reconnectAgent, markAgentDeclined } from "./actions";
+import { AgentDetailDialog } from "./AgentDetailDialog";
 import { formatDate, daysSince } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,15 @@ export const RELATIONSHIP_LABELS: Record<AgentRelationshipStatus, string> = {
 
 const RELATIONSHIP_OPTIONS = Object.entries(RELATIONSHIP_LABELS) as [AgentRelationshipStatus, string][];
 
-export function AgentCard({ agent, listingCount }: { agent: Agent; listingCount: number }) {
+export function AgentCard({
+  agent,
+  listingCount,
+  listings,
+}: {
+  agent: Agent;
+  listingCount: number;
+  listings: Listing[];
+}) {
   const [isPending, startTransition] = useTransition();
 
   const handleStatusChange = (status: AgentRelationshipStatus) => {
@@ -38,7 +47,15 @@ export function AgentCard({ agent, listingCount }: { agent: Agent; listingCount:
   return (
     <Card className="flex-row items-start justify-between gap-4 p-4 flex-wrap">
       <div className="min-w-0">
-        <h3 className="font-semibold text-foreground">{agent.name ?? "Unknown name"}</h3>
+        <AgentDetailDialog
+          agent={agent}
+          listings={listings}
+          trigger={
+            <button type="button" className="font-semibold text-foreground hover:underline text-left">
+              {agent.name ?? "Unknown name"}
+            </button>
+          }
+        />
         <p className="text-xs text-muted-foreground font-mono mt-0.5">{agent.phone}</p>
         <div className="text-sm text-muted-foreground mt-1.5 flex flex-wrap gap-x-3">
           <span>

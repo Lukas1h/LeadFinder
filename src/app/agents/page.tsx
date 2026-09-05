@@ -1,17 +1,13 @@
 import { Suspense } from "react";
-import { Plus, Users, ChevronRight, RotateCcw } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import { db } from "@/db";
-import { agents, type Agent } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { agents, listings } from "@/db/schema";
+import { desc, isNotNull } from "drizzle-orm";
 import { ensureAgentsBackfilled, listingCountsByPhone } from "./actions";
-import { AgentCard } from "./AgentCard";
+import { AgentsList } from "./AgentsList";
 import { ImportAgentForm } from "./ImportAgentForm";
-import { daysSince } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { AgentsSkeleton } from "./loading";
-
-const DECLINED_RESURFACE_AFTER_DAYS = 30;
 
 export default function AgentsPage() {
   return (
@@ -23,31 +19,26 @@ export default function AgentsPage() {
   );
 }
 
-function byRecency(a: Agent, b: Agent) {
-  const aTime = a.lastContactedAt?.getTime() ?? 0;
-  const bTime = b.lastContactedAt?.getTime() ?? 0;
-  if (aTime !== bTime) return bTime - aTime;
-  return (a.name ?? a.phone).localeCompare(b.name ?? b.phone);
-}
-
 async function AgentsContent() {
   await ensureAgentsBackfilled();
 
-  const [all, counts] = await Promise.all([
+  const [all, counts, agentListings] = await Promise.all([
     db.select().from(agents).orderBy(desc(agents.createdAt)),
     listingCountsByPhone(),
+    db.select().from(listings).where(isNotNull(listings.agentPhone)),
   ]);
 
-  const active = all.filter((a) => !a.declinedAt).sort(byRecency);
-  const readyToReconnect = all
-    .filter((a) => a.declinedAt && daysSince(a.declinedAt) >= DECLINED_RESURFACE_AFTER_DAYS)
-    .sort((a, b) => daysSince(b.declinedAt!) - daysSince(a.declinedAt!));
-  const recentlyDeclined = all
-    .filter((a) => a.declinedAt && daysSince(a.declinedAt) < DECLINED_RESURFACE_AFTER_DAYS)
-    .sort((a, b) => a.declinedAt!.getTime() - b.declinedAt!.getTime());
-
-  function card(agent: Agent) {
-    return <AgentCard key={agent.id} agent={agent} listingCount={counts[agent.phone] ?? 0} />;
+  const listingsByPhone: Record<string, typeof agentListings> = {};
+  for (const l of agentListings) {
+    if (!l.agentPhone) continue;
+    (listingsByPhone[l.agentPhone] ??= []).push(l);
+  }
+  for (const phone in listingsByPhone) {
+    listingsByPhone[phone].sort((a, b) => {
+      const aTime = (a.listedAt ?? a.foundAt).getTime();
+      const bTime = (b.listedAt ?? b.foundAt).getTime();
+      return bTime - aTime;
+    });
   }
 
   return (
@@ -76,42 +67,7 @@ async function AgentsContent() {
           <p>No agents yet — they&rsquo;ll show up here as leads come in, or import one manually.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-8">
-          <section>
-            {active.length === 0 ? (
-              <p className="text-muted-foreground/70 text-sm">No active agents right now.</p>
-            ) : (
-              <div className="flex flex-col gap-4">{active.map(card)}</div>
-            )}
-          </section>
-
-          {readyToReconnect.length > 0 && (
-            <section>
-              <Separator className="mb-8" />
-              <h2 className="flex items-center gap-1.5 text-sm font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-3">
-                <RotateCcw className="size-3.5" />
-                Ready to reconnect
-              </h2>
-              <p className="text-xs text-muted-foreground mb-3 -mt-2">
-                Declined 30+ days ago — worth a check-in.
-              </p>
-              <div className="flex flex-col gap-4">{readyToReconnect.map(card)}</div>
-            </section>
-          )}
-
-          {recentlyDeclined.length > 0 && (
-            <section>
-              <Separator className="mb-8" />
-              <details className="group/details">
-                <summary className="flex items-center gap-1 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
-                  <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
-                  Declined ({recentlyDeclined.length})
-                </summary>
-                <div className="flex flex-col gap-4 mt-3">{recentlyDeclined.map(card)}</div>
-              </details>
-            </section>
-          )}
-        </div>
+        <AgentsList agents={all} counts={counts} listingsByPhone={listingsByPhone} />
       )}
     </>
   );
