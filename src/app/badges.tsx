@@ -1,6 +1,6 @@
 import { Sparkles, Clock, Camera, TriangleAlert } from "lucide-react";
 import type { Agent, LeadStatus } from "@/db/schema";
-import { formatDate } from "@/lib/format";
+import { formatDate, daysSince } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -70,6 +70,21 @@ export function ComingSoonBadge() {
       <Clock />
       Coming soon
     </Badge>
+  );
+}
+
+export function DaysSinceContactBadge({ contactedAt }: { contactedAt: Date }) {
+  const days = daysSince(contactedAt);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge className="bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900">
+          <Clock />
+          {days}d since contact
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>Texted {formatDate(contactedAt)}</TooltipContent>
+    </Tooltip>
   );
 }
 

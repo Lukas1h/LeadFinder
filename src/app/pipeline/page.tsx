@@ -5,7 +5,14 @@ import { listings, agents, type Listing } from "@/db/schema";
 import { ne, inArray } from "drizzle-orm";
 import { LeadCard } from "../LeadCard";
 import { PipelineActions } from "../PipelineActions";
-import { StatusBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge } from "../badges";
+import {
+  StatusBadge,
+  DuplicateAgentBadge,
+  PhotoScoreBadge,
+  ComingSoonBadge,
+  FewPhotosBadge,
+  DaysSinceContactBadge,
+} from "../badges";
 import { findDuplicateAgentContact, FOLLOW_UP_AFTER_DAYS, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
 import { Separator } from "@/components/ui/separator";
@@ -66,7 +73,7 @@ async function PipelineContent() {
 
   const needsAttentionCount = replied.length + saved.length + followUpDue.length;
 
-  function card(lead: Listing) {
+  function card(lead: Listing, options?: { showDaysSinceContact?: boolean }) {
     const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentByPhone);
     return (
       <LeadCard
@@ -75,6 +82,9 @@ async function PipelineContent() {
         badges={
           <Fragment key={lead.id}>
             <StatusBadge status={lead.status} />
+            {options?.showDaysSinceContact && lead.contactedAt && (
+              <DaysSinceContactBadge contactedAt={lead.contactedAt} />
+            )}
             {lead.isComingSoon && <ComingSoonBadge />}
             {lead.photoCount != null && lead.photoCount < FEW_PHOTOS_THRESHOLD && (
               <FewPhotosBadge count={lead.photoCount} />
@@ -133,7 +143,7 @@ async function PipelineContent() {
                       <MessageSquareReply className="size-3.5" />
                       Replied — respond
                     </h3>
-                    <div className="flex flex-col gap-4">{replied.map(card)}</div>
+                    <div className="flex flex-col gap-4">{replied.map((lead) => card(lead))}</div>
                   </div>
                 )}
                 {saved.length > 0 && (
@@ -142,7 +152,7 @@ async function PipelineContent() {
                       <Bookmark className="size-3.5" />
                       Saved — ready to message
                     </h3>
-                    <div className="flex flex-col gap-4">{saved.map(card)}</div>
+                    <div className="flex flex-col gap-4">{saved.map((lead) => card(lead))}</div>
                   </div>
                 )}
                 {followUpDue.length > 0 && (
@@ -151,7 +161,9 @@ async function PipelineContent() {
                       <Clock className="size-3.5" />
                       Needs follow-up
                     </h3>
-                    <div className="flex flex-col gap-4">{followUpDue.map(card)}</div>
+                    <div className="flex flex-col gap-4">
+                      {followUpDue.map((lead) => card(lead, { showDaysSinceContact: true }))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -171,11 +183,11 @@ async function PipelineContent() {
                       <FileText className="size-3.5" />
                       Quoted — awaiting decision
                     </h3>
-                    <div className="flex flex-col gap-4">{quoted.map(card)}</div>
+                    <div className="flex flex-col gap-4">{quoted.map((lead) => card(lead))}</div>
                   </div>
                 )}
                 {waiting.length > 0 && (
-                  <div className="flex flex-col gap-4">{waiting.map(card)}</div>
+                  <div className="flex flex-col gap-4">{waiting.map((lead) => card(lead))}</div>
                 )}
               </div>
             </section>
@@ -189,7 +201,7 @@ async function PipelineContent() {
                   <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
                   Closed ({closed.length})
                 </summary>
-                <div className="flex flex-col gap-4 mt-3">{closed.map(card)}</div>
+                <div className="flex flex-col gap-4 mt-3">{closed.map((lead) => card(lead))}</div>
               </details>
             </section>
           )}
