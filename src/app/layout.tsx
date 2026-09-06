@@ -78,16 +78,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} antialiased `}
     >
-      <body>
+      <body className="bg-black">
         <ServiceWorkerRegistration />
         <TooltipProvider>
           <SidebarProvider>
             <AppSidebar />
             <SidebarInset>
               <MobileHeader />
-              <div className="pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+              <div
+                className="pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen"
+              >
                 {children}
               </div>
               <BottomTabBar />
