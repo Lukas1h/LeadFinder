@@ -87,13 +87,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <AppSidebar />
             <SidebarInset>
               <MobileHeader />
-              {/*
-                flex-1 so this fills any leftover height itself (e.g. a
-                short loading skeleton) instead of leaving BottomTabBar
-                floating mid-screen — the standard sticky-footer layout.
-                See BottomTabBar for why it's sticky rather than fixed.
-              */}
-              <div className="flex-1">{children}</div>
+              <div className="pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+                {children}
+              </div>
               <BottomTabBar />
             </SidebarInset>
           </SidebarProvider>
