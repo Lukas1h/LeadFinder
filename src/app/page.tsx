@@ -6,6 +6,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { LeadActions } from "./LeadActions";
 import { LeadCard } from "./LeadCard";
 import { RefreshButton } from "./RefreshButton";
+import { ImportListingButton } from "./ImportListingButton";
 import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge } from "./badges";
 import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
@@ -112,7 +113,10 @@ async function LeadsContent() {
             {leads.length} new listing{leads.length === 1 ? "" : "s"}
           </p>
         </div>
-        <RefreshButton />
+        <div className="flex items-center gap-1">
+          <ImportListingButton />
+          <RefreshButton />
+        </div>
       </header>
 
       {leads.length === 0 ? (

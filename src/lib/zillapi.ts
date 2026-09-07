@@ -43,6 +43,27 @@ function zillowLinkFromZpid(zpid: string): string {
   return `https://www.zillow.com/homedetails/${zpid}_zpid/`;
 }
 
+/**
+ * Pulls the zpid out of a Zillow listing URL, e.g. one copied via Zillow's
+ * own share button — https://www.zillow.com/homedetails/<addr>/<zpid>_zpid/
+ * (also matches the bare .../<zpid>_zpid/ form with no address slug). Same
+ * "_zpid" marker the agentmail webhook greps out of email bodies (see
+ * ZPID_RE in src/app/api/webhooks/agentmail/route.ts), just anchored to a
+ * single URL instead of scanning a whole message for every zpid mentioned.
+ */
+export function extractZpidFromUrl(url: string): string | null {
+  let hostname: string;
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)zillow\.com$/i.test(hostname)) return null;
+
+  const match = url.match(/(\d+)_zpid/);
+  return match ? match[1] : null;
+}
+
 export function normalizeListing(raw: RawZillapiListing): NewListing | null {
   const zpid = raw.zpid != null ? String(raw.zpid) : null;
   if (!zpid) return null;

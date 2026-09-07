@@ -4,7 +4,8 @@ import { db } from "@/db";
 import { listings, agents, messageSends, type LeadStatus } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { runSync, type SyncResult } from "@/lib/sync";
+import { runSync, insertAndEnrichListings, type SyncResult } from "@/lib/sync";
+import { extractZpidFromUrl, fetchFullListing } from "@/lib/zillapi";
 
 export async function touchAgentContact(
   listingId: string,
@@ -138,4 +139,40 @@ export async function triggerManualSync(): Promise<SyncResult> {
   revalidatePath("/");
   revalidatePath("/pipeline");
   return result;
+}
+
+export interface ImportListingResult {
+  error?: string;
+  inserted?: boolean;
+}
+
+/**
+ * Imports a single listing from a Zillow URL — the "Import" button's
+ * clipboard flow on the Leads page, and the iOS share-sheet shortcut (see
+ * src/app/api/import-listing/route.ts), both funnel into this. One Zillapi
+ * credit (fetchFullListing), same as a single email-alert import.
+ */
+export async function importListingFromUrl(url: string): Promise<ImportListingResult> {
+  const zpid = extractZpidFromUrl(url);
+  if (!zpid) {
+    return { error: "That doesn't look like a Zillow listing URL." };
+  }
+
+  const [existing] = await db.select({ id: listings.id }).from(listings).where(eq(listings.zpid, zpid));
+  if (existing) {
+    return { error: "That listing is already in your leads." };
+  }
+
+  const full = await fetchFullListing(zpid);
+  if (!full) {
+    return { error: "Couldn't fetch that listing from Zillow — try again in a bit." };
+  }
+
+  const inserted = await insertAndEnrichListings([{ ...full, sourceLabel: "Manual import" }]);
+
+  revalidatePath("/");
+  revalidatePath("/pipeline");
+  revalidatePath("/agents");
+
+  return { inserted: inserted > 0 };
 }

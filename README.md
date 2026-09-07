@@ -19,6 +19,9 @@ leads for a real estate photographer. Single-user personal tool.
    - `CRON_SECRET` — any string for local dev
    - `USE_MOCK_ZILLAPI` — leave as `true` until you've made your first real
      call (see below)
+   - `IMPORT_SHARE_SECRET` — any string, only needed if you set up the iOS
+     share-sheet Shortcut (see "Importing a single listing from Zillow"
+     below)
 4. Push the schema to your database: `npm run db:push`
 5. `npm run dev`, open `http://localhost:3000/settings`, and add at least
    one search source (bbox + optional price/home-type filters) — the sync
@@ -110,6 +113,66 @@ local dev and testing:
   Don't trust the docs' claims about what's cached/free without checking
   this header — it's how we found `/v1/properties/{zpid}` charges 1 credit
   every time, not "0 on a cache hit" as documented.
+
+## Importing a single listing from Zillow
+
+Besides the daily bbox sync, you can pull in one specific listing by URL —
+1 Zillapi credit (`fetchFullListing`, same call the AgentMail email path
+uses), no mock mode for this one (see `src/lib/zillapi.ts`), so each real
+click costs exactly one credit.
+
+**In-app button.** The "Import" button on the Leads page reads a Zillow
+URL straight from your clipboard and imports it — copy a listing link on
+Zillow (or its share button), then tap Import. If the clipboard doesn't
+have a Zillow URL (permission denied, empty, or something else copied), it
+falls back to a dialog where you can paste the link by hand.
+
+**iOS share-sheet shortcut.** Safari on iOS doesn't support the Web Share
+Target API (the standard way a PWA registers to receive shared content —
+it's an Android Chrome–only feature; WebKit has never shipped it), so an
+installed PWA can't appear directly in the Share Sheet's app list. The
+workaround is an iOS Shortcut that appears in the Share Sheet instead and
+POSTs straight to `/api/import-listing` with `IMPORT_SHARE_SECRET` baked
+in as a bearer token — no browser tab opens, the listing just shows up in
+Leads a couple seconds after you tap Share.
+
+Rather than asking you to hand-build that Shortcut action-by-action, the
+Settings page has an **"Add to Shortcuts"** button
+(`src/app/settings/ImportShortcutCard.tsx`) that downloads a real, working
+`.shortcut` file — `public/leadfinder-import.shortcut`. Tap it on your
+phone, Safari hands it to the Shortcuts app, and you're done (it may ask
+you to review the actions the first time, since it isn't Apple-reviewed —
+tap Add Untrusted Shortcut, or whatever iOS's exact wording is that
+release; that prompt is expected and specific to this shortcut, not a
+device-wide setting).
+
+That file isn't generated at request time — signing a Shortcut requires
+Apple's own `shortcuts` CLI, which only exists on macOS, and Vercel's build
+machine is Linux. It's a static asset built once, locally, by
+`scripts/generate-shortcut.sh`, and committed like the splash images
+under `public/splash/`. Re-run it and commit the result whenever
+`IMPORT_SHARE_SECRET` rotates or the deployed domain changes:
+
+```bash
+brew tap electrikmilk/cherri && brew install electrikmilk/cherri/cherri  # one-time
+IMPORT_SHARE_SECRET=<value> scripts/generate-shortcut.sh https://<your-deployed-domain>
+```
+
+The script writes a small [Cherri](https://cherrilang.org) source file
+(the actual DSL/action names are documented in the script's comments),
+compiles it, then signs it with `shortcuts sign --mode anyone` — that
+signing mode is what lets it be imported on any device rather than only
+ones tied to your own Apple ID (the default `people-who-know-me` mode).
+
+`/api/import-listing` accepts `POST`/`GET`, body or query-string `url`,
+and requires `IMPORT_SHARE_SECRET` either as `Authorization: Bearer
+<secret>` or a `?key=<secret>` query param — it's a bare public endpoint
+that spends a Zillapi credit per call, so it's gated the same way the cron
+route is gated by `CRON_SECRET`. This is also still exactly the endpoint
+you'd hit by hand if you'd rather build the Shortcut yourself instead of
+using the pre-built download: add a "Get Contents of URL" action, method
+POST, JSON body `{"url": <Shortcut Input>}`, header
+`Authorization: Bearer <secret>`.
 
 ## Schema
 

@@ -10,6 +10,7 @@ import { SourceForm } from "./SourceForm";
 import { EmailSourceCard } from "./EmailSourceCard";
 import { NotificationsCard } from "./NotificationsCard";
 import { PipelineSettingsCard } from "./PipelineSettingsCard";
+import { ImportShortcutCard } from "./ImportShortcutCard";
 import { Button } from "@/components/ui/button";
 import { SettingsSkeleton } from "./loading";
 
@@ -56,6 +57,8 @@ async function SettingsContent() {
       </header>
 
       <NotificationsCard />
+
+      <ImportShortcutCard />
 
       <PipelineSettingsCard followUpAfterDays={followUpAfterDays} />
 
