@@ -52,6 +52,20 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+/* Hides the scroll indicator on mobile only (below Tailwind's md
+   breakpoint, matching MobileHeader/BottomTabBar's own md:hidden) —
+   purely cosmetic, doesn't touch scroll behavior/physics at all, unlike
+   the fixed/sticky positioning it sits behind. Desktop keeps its normal
+   scrollbar. */
+@media (max-width: 767px) {
+  html {
+    scrollbar-width: none;
+  }
+  html::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
