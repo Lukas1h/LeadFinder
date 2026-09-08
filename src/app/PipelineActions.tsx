@@ -49,11 +49,10 @@ export function PipelineActions({
           trigger={
             <Button disabled={isPending}>
               <MessageCircle />
-              Text {firstName(agentName) ?? "agent"}
+              Contact {firstName(agentName) ?? "agent"}
             </Button>
           }
         />
-        {callButton}
         {notInterested}
       </div>
     );
@@ -79,7 +78,6 @@ export function PipelineActions({
             }
           />
         )}
-        {callButton}
         {notInterested}
       </div>
     );

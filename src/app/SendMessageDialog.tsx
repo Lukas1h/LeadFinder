@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Phone } from "lucide-react";
 import type { PresetType } from "@/db/schema";
 import { getMessageOptions, sendMessage, type PresetOption } from "@/app/messageActions";
-import { smsUrl } from "@/lib/sms";
+import { smsUrl, telUrl } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -62,6 +62,7 @@ export function SendMessageDialog({
   };
 
   const selected = presets.find((p) => p.presetId === selectedPresetId) ?? null;
+  const callHref = telUrl(agentPhone);
 
   const handleSelectPreset = (presetId: string) => {
     setSelectedPresetId(presetId);
@@ -129,6 +130,14 @@ export function SendMessageDialog({
         )}
 
         <DialogFooter>
+          {callHref && (
+            <Button variant="outline" asChild>
+              <a href={callHref}>
+                <Phone />
+                Call
+              </a>
+            </Button>
+          )}
           <Button onClick={handleSend} disabled={!selected || !editedText.trim() || isPending}>
             <MessageCircle />
             Send text

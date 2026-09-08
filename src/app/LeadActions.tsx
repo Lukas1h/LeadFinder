@@ -1,10 +1,10 @@
 "use client";
 
 import { useTransition } from "react";
-import { MessageCircle, Bookmark, Phone } from "lucide-react";
+import { MessageCircle, Bookmark } from "lucide-react";
 import { updateListingStatus } from "./actions";
 import { SendMessageDialog } from "./SendMessageDialog";
-import { firstName, telUrl } from "@/lib/sms";
+import { firstName } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
 
 export function LeadActions({
@@ -30,8 +30,6 @@ export function LeadActions({
     });
   };
 
-  const callHref = telUrl(agentPhone);
-
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <SendMessageDialog
@@ -41,18 +39,10 @@ export function LeadActions({
         trigger={
           <Button disabled={isPending}>
             <MessageCircle />
-            Text {firstName(agentName) ?? "agent"}
+            Contact {firstName(agentName) ?? "agent"}
           </Button>
         }
       />
-
-      {callHref && (
-        <Button variant="outline" size="icon" asChild>
-          <a href={callHref} aria-label={`Call ${firstName(agentName) ?? "agent"}`}>
-            <Phone />
-          </a>
-        </Button>
-      )}
 
       <Button variant="outline" onClick={handleSave} disabled={isPending}>
         <Bookmark />

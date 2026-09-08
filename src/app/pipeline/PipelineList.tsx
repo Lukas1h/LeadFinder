@@ -82,7 +82,8 @@ export function PipelineList({
     return { replied, saved, followUpDue, quoted, waiting, closed };
   }, [filtered, followUpAfterDays]);
 
-  const needsAttentionCount = replied.length + saved.length + followUpDue.length;
+  const needsAttentionEmpty = replied.length === 0 && saved.length === 0 && followUpDue.length === 0;
+  const waitingEmpty = quoted.length === 0 && waiting.length === 0;
   const nothingFound = filtered.length === 0 && listings.length > 0;
 
   function card(lead: Listing, options?: { showDaysSinceContact?: boolean }) {
@@ -147,88 +148,76 @@ export function PipelineList({
       {nothingFound ? (
         <p className="text-muted-foreground/70 text-sm">No leads match &ldquo;{search}&rdquo;.</p>
       ) : (
-        <div className="flex flex-col gap-8">
-          <section>
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-              Needs your attention
-            </h2>
-            {needsAttentionCount === 0 ? (
-              <p className="text-muted-foreground/70 text-sm">Nothing needs attention right now.</p>
-            ) : (
-              <div className="flex flex-col gap-6">
-                {replied.length > 0 && (
-                  <div>
-                    <h3 className="flex items-center gap-1.5 text-xs font-medium text-purple-700 dark:text-purple-400 mb-2">
-                      <MessageSquareReply className="size-3.5" />
-                      Replied — respond
-                    </h3>
-                    <div className="flex flex-col gap-4">{replied.map((lead) => card(lead))}</div>
+        <div className="flex flex-col gap-6">
+          {!needsAttentionEmpty && (
+            <>
+              {replied.length > 0 && (
+                <div>
+                  <h2 className="flex items-center gap-1.5 text-xs font-medium text-purple-700 dark:text-purple-400 mb-2">
+                    <MessageSquareReply className="size-3.5" />
+                    Replied — respond
+                  </h2>
+                  <div className="flex flex-col gap-4">{replied.map((lead) => card(lead))}</div>
+                </div>
+              )}
+              {saved.length > 0 && (
+                <div>
+                  <h2 className="flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 mb-2">
+                    <Bookmark className="size-3.5" />
+                    Saved — ready to message
+                  </h2>
+                  <div className="flex flex-col gap-4">{saved.map((lead) => card(lead))}</div>
+                </div>
+              )}
+              {followUpDue.length > 0 && (
+                <div>
+                  <h2 className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">
+                    <Clock className="size-3.5" />
+                    Needs follow-up
+                  </h2>
+                  <div className="flex flex-col gap-4">
+                    {followUpDue.map((lead) => card(lead, { showDaysSinceContact: true }))}
                   </div>
-                )}
-                {saved.length > 0 && (
-                  <div>
-                    <h3 className="flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 mb-2">
-                      <Bookmark className="size-3.5" />
-                      Saved — ready to message
-                    </h3>
-                    <div className="flex flex-col gap-4">{saved.map((lead) => card(lead))}</div>
-                  </div>
-                )}
-                {followUpDue.length > 0 && (
-                  <div>
-                    <h3 className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">
-                      <Clock className="size-3.5" />
-                      Needs follow-up
-                    </h3>
-                    <div className="flex flex-col gap-4">
-                      {followUpDue.map((lead) => card(lead, { showDaysSinceContact: true }))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
+                </div>
+              )}
+            </>
+          )}
 
-          {(quoted.length > 0 || waiting.length > 0) && (
-            <section>
-              <Separator className="mb-8" />
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Waiting on a reply
-              </h2>
-              <div className="flex flex-col gap-6">
-                {quoted.length > 0 && (
-                  <div>
-                    <h3 className="flex items-center gap-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-400 mb-2">
-                      <FileText className="size-3.5" />
-                      Quoted — awaiting decision
-                    </h3>
-                    <div className="flex flex-col gap-4">{quoted.map((lead) => card(lead))}</div>
-                  </div>
-                )}
-                {waiting.length > 0 && (
-                  <div>
-                    <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
-                      <Send className="size-3.5" />
-                      Contacted — awaiting reply
-                    </h3>
-                    <div className="flex flex-col gap-4">{waiting.map((lead) => card(lead))}</div>
-                  </div>
-                )}
-              </div>
-            </section>
+          {!waitingEmpty && (
+            <>
+              {!needsAttentionEmpty && <Separator />}
+              {quoted.length > 0 && (
+                <div>
+                  <h2 className="flex items-center gap-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-400 mb-2">
+                    <FileText className="size-3.5" />
+                    Quoted — awaiting decision
+                  </h2>
+                  <div className="flex flex-col gap-4">{quoted.map((lead) => card(lead))}</div>
+                </div>
+              )}
+              {waiting.length > 0 && (
+                <div>
+                  <h2 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
+                    <Send className="size-3.5" />
+                    Contacted — awaiting reply
+                  </h2>
+                  <div className="flex flex-col gap-4">{waiting.map((lead) => card(lead))}</div>
+                </div>
+              )}
+            </>
           )}
 
           {closed.length > 0 && (
-            <section>
-              <Separator className="mb-8" />
+            <>
+              {(!needsAttentionEmpty || !waitingEmpty) && <Separator />}
               <details className="group/details">
-                <summary className="flex items-center gap-1 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
-                  <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
+                <summary className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-2 cursor-pointer select-none list-none">
+                  <ChevronRight className="size-3.5 transition-transform group-open/details:rotate-90" />
                   Closed ({closed.length})
                 </summary>
                 <div className="flex flex-col gap-4 mt-3">{closed.map((lead) => card(lead))}</div>
               </details>
-            </section>
+            </>
           )}
         </div>
       )}
