@@ -86,7 +86,7 @@ export function PipelineList({
   const waitingEmpty = quoted.length === 0 && waiting.length === 0;
   const nothingFound = filtered.length === 0 && listings.length > 0;
 
-  function card(lead: Listing, options?: { showDaysSinceContact?: boolean }) {
+  function card(lead: Listing, options?: { showDaysSinceContact?: boolean; showStatusBadge?: boolean }) {
     const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentMap);
     return (
       <LeadCard
@@ -94,7 +94,11 @@ export function PipelineList({
         lead={lead}
         badges={
           <Fragment key={lead.id}>
-            <StatusBadge status={lead.status} />
+            {/* Every other section is single-status, so the header already
+                says it — showing it again on each card is redundant.
+                Closed mixes booked + declined, so it still needs the
+                badge to tell those apart. */}
+            {options?.showStatusBadge && <StatusBadge status={lead.status} />}
             {options?.showDaysSinceContact && lead.contactedAt && (
               <DaysSinceContactBadge contactedAt={lead.contactedAt} />
             )}
@@ -215,7 +219,9 @@ export function PipelineList({
                   <ChevronRight className="size-3.5 transition-transform group-open/details:rotate-90" />
                   Closed ({closed.length})
                 </summary>
-                <div className="flex flex-col gap-4 mt-3">{closed.map((lead) => card(lead))}</div>
+                <div className="flex flex-col gap-4 mt-3">
+                  {closed.map((lead) => card(lead, { showStatusBadge: true }))}
+                </div>
               </details>
             </>
           )}
