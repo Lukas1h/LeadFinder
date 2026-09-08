@@ -11,6 +11,7 @@ export function PipelineSkeleton() {
         <Skeleton className="h-8 w-28" />
         <Skeleton className="h-4 w-40" />
       </header>
+      <Skeleton className="h-10 w-full mb-6" />
       <div className="flex flex-col gap-4">
         <LeadCardSkeleton />
         <LeadCardSkeleton />
