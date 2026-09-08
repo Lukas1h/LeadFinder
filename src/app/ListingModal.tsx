@@ -8,7 +8,8 @@ import { LEAD_STATUSES, type Listing, type LeadStatus } from "@/db/schema";
 import { updateListingNotes, updateListingStatus } from "./actions";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { STATUS_LABELS } from "./badges";
-import { formatPrice, formatDate } from "@/lib/format";
+import { formatPrice, formatDate, formatPhone } from "@/lib/format";
+import { telUrl } from "@/lib/sms";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -110,10 +111,18 @@ export function ListingModal({
             </Select>
           </div>
 
-          {(lead.agentName || lead.brokerName) && (
+          {(lead.agentName || lead.brokerName || lead.agentPhone) && (
             <div className="text-sm text-foreground/90 border-t pt-3">
               {lead.agentName && <div>{lead.agentName}</div>}
               {lead.brokerName && <div className="text-muted-foreground">{lead.brokerName}</div>}
+              {lead.agentPhone && (
+                <a
+                  href={telUrl(lead.agentPhone) ?? "#"}
+                  className="text-muted-foreground hover:underline hover:text-foreground"
+                >
+                  {formatPhone(lead.agentPhone)}
+                </a>
+              )}
             </div>
           )}
 
