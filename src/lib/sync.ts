@@ -5,6 +5,7 @@ import { scorePhotos } from "@/lib/photoScore";
 import { notifyNewListings } from "@/lib/push";
 import { FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 
 const MAX_ITEMS_PER_SOURCE = 50;
 // Kept low deliberately: scorePhotos' vision calls can each run 20k+
@@ -102,6 +103,16 @@ export async function insertAndEnrichListings(candidates: NewListing[]): Promise
   }
 
   await notifyNewListings(insertedRows.length);
+
+  if (insertedRows.length > 0) {
+    // The cron route and the AgentMail webhook both land here with no
+    // Server Action of their own to revalidate on the way out — without
+    // this, pages cached via "use cache" (see src/app/page.tsx et al.)
+    // keep serving the pre-sync render until their time-based revalidate
+    // window passes, so a lead notified about here wouldn't show up yet.
+    revalidatePath("/");
+    revalidatePath("/pipeline");
+  }
 
   return insertedRows.length;
 }
