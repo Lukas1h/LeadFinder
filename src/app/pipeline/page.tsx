@@ -17,6 +17,12 @@ export default function PipelinePage() {
 }
 
 async function PipelineContent() {
+  // Cached so switching back to this tab is instant instead of re-showing
+  // the loading skeleton every time — every mutation that touches this
+  // data already calls revalidatePath("/pipeline") (see src/app/actions.ts),
+  // which busts this on the next visit, so it can't go stale in practice.
+  "use cache";
+
   // Independent of each other, so run them concurrently instead of paying
   // for sequential round trips to Neon.
   const [all, allAgents, followUpAfterDays] = await Promise.all([

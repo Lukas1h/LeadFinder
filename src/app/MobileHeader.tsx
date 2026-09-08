@@ -15,7 +15,7 @@ export function MobileHeader() {
     // set in layout.tsx, so it needs to stay dark regardless of the
     // page's own light theme underneath it.
     <header
-      className="sticky top-0 z-10 bg-black text-white border-b border-white/10 md:hidden"
+      className="shrink-0 sticky top-0 z-10 bg-black text-white border-b border-white/10 md:hidden"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
       <div className="flex h-14 items-center justify-center px-4">

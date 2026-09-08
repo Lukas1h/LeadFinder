@@ -25,6 +25,9 @@ export default function PresetsPage() {
 }
 
 async function PresetsContent() {
+  // Cached — see the matching comment in src/app/pipeline/page.tsx.
+  "use cache";
+
   await ensureDefaultPresets();
   await Promise.all(PRESET_TYPES.map((type) => ensureAiDraftPresets(type)));
 

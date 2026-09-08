@@ -32,12 +32,17 @@ export function shortStreetName(address: string | null): string | null {
   return rest.join(" ") || address;
 }
 
-export function smsUrl(phone: string = "default", message: string): string | null {
+// Used when a listing has no agent phone on file — opens the compose sheet
+// with a placeholder recipient instead of doing nothing, so the drafted
+// text isn't lost; swap in the real number/contact once you have it.
+const PLACEHOLDER_PHONE = "+10000000000";
+
+export function smsUrl(phone: string = "default", message: string): string {
   const digits = phone.replace(/\D/g, "");
   let target: string;
   if (digits.length === 10) target = `+1${digits}`;
   else if (digits.length === 11 && digits.startsWith("1")) target = `+${digits}`;
-  else return null;
+  else target = PLACEHOLDER_PHONE;
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const separator = isIOS ? "&" : "?";

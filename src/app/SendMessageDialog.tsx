@@ -71,8 +71,7 @@ export function SendMessageDialog({
 
   const handleSend = () => {
     if (!selected) return;
-    const url = smsUrl(agentPhone ?? "", editedText);
-    if (url) window.location.href = url;
+    window.location.href = smsUrl(agentPhone ?? "", editedText);
     startTransition(async () => {
       await sendMessage(listingId, type, selected.presetId, selected.variantId, editedText);
     });

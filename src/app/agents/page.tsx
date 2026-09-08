@@ -20,6 +20,9 @@ export default function AgentsPage() {
 }
 
 async function AgentsContent() {
+  // Cached — see the matching comment in src/app/pipeline/page.tsx.
+  "use cache";
+
   await ensureAgentsBackfilled();
 
   const [all, counts, agentListings] = await Promise.all([
