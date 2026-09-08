@@ -49,7 +49,7 @@ export function ListingModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false} className="p-0 sm:max-w-lg overflow-hidden">
+      <DialogContent showCloseButton={false} className="p-0 sm:max-w-lg">
         <DialogTitle className="sr-only">{lead.address ?? "Listing details"}</DialogTitle>
 
         <div className="relative">
