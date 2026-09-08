@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { UserPlus } from "lucide-react";
 import type { Agent, Listing } from "@/db/schema";
 import { formatPrice, formatDate } from "@/lib/format";
 import { StatusBadge } from "@/app/badges";
 import { ListingModal } from "@/app/ListingModal";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -66,6 +68,13 @@ export function AgentDetailDialog({
           <DialogTitle>{agent.name ?? "Unknown name"}</DialogTitle>
           <DialogDescription className="font-mono">{agent.phone}</DialogDescription>
         </DialogHeader>
+
+        <Button variant="outline" size="sm" className="w-fit" asChild>
+          <a href={`/api/agents/${agent.id}/vcard`}>
+            <UserPlus />
+            Save contact
+          </a>
+        </Button>
 
         <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto -mx-2">
           {listings.length === 0 ? (
