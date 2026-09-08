@@ -1,12 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { UserPlus } from "lucide-react";
 import type { Agent, Listing } from "@/db/schema";
 import { formatPrice, formatDate } from "@/lib/format";
 import { StatusBadge } from "@/app/badges";
 import { ListingModal } from "@/app/ListingModal";
+import { updateAgentNotes } from "./actions";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -63,9 +68,22 @@ export function AgentDetailDialog({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
+  const router = useRouter();
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
   const onOpenChange = onOpenChangeProp ?? setOpenState;
+
+  const [notes, setNotes] = useState(agent.notes ?? "");
+  const [isPending, startTransition] = useTransition();
+  const dirty = notes !== (agent.notes ?? "");
+
+  const handleSaveNotes = () => {
+    startTransition(async () => {
+      await updateAgentNotes(agent.id, notes);
+      toast.success("Note saved");
+      router.refresh();
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -83,7 +101,25 @@ export function AgentDetailDialog({
           </a>
         </Button>
 
-        <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto -mx-2">
+        <div className="flex flex-col gap-1.5 border-t pt-3">
+          <Label htmlFor="agent-notes" className="text-xs text-muted-foreground">
+            Notes
+          </Label>
+          <Textarea
+            id="agent-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Anything worth remembering about this agent…"
+            rows={3}
+          />
+          {dirty && (
+            <Button size="sm" onClick={handleSaveNotes} disabled={isPending} className="self-end">
+              {isPending ? "Saving…" : "Save note"}
+            </Button>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto -mx-2 border-t pt-3">
           {listings.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 px-2">No listings from this agent yet.</p>
           ) : (

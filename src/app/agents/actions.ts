@@ -70,6 +70,11 @@ export async function markAgentDeclined(id: string) {
   revalidatePath("/agents");
 }
 
+export async function updateAgentNotes(id: string, notes: string) {
+  await db.update(agents).set({ notes: notes.trim() || null }).where(eq(agents.id, id));
+  revalidatePath("/agents");
+}
+
 function normalizePhone(phone: string): string {
   return phone.trim();
 }

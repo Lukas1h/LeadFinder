@@ -125,6 +125,10 @@ export const agents = pgTable("agents", {
   // means the agent isn't currently in that bucket.
   declinedAt: timestamp("declined_at", { withTimezone: true }),
 
+  // Free-text, edited from the agent detail dialog — same pattern as
+  // listings.notes above.
+  notes: text("notes"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

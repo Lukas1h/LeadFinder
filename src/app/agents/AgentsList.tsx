@@ -113,6 +113,7 @@ export function AgentsList({
     <div className="flex flex-col gap-6">
       {displayedAgent && (
         <AgentDetailDialog
+          key={displayedAgent.id}
           agent={displayedAgent}
           listings={listingsByPhone[displayedAgent.phone] ?? []}
           open={!!linkedAgent}
