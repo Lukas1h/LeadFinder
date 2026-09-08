@@ -207,7 +207,9 @@ export async function importListingFromUrl(url: string): Promise<ImportListingRe
     return { error: "Couldn't fetch that listing from Zillow — try again in a bit." };
   }
 
-  const inserted = await insertAndEnrichListings([{ ...full, sourceLabel: "Manual import" }]);
+  const inserted = await insertAndEnrichListings([
+    { ...full, sourceLabel: "Manual import", status: "saved" },
+  ]);
 
   revalidatePath("/");
   revalidatePath("/pipeline");
@@ -253,7 +255,7 @@ export async function importListingsFromUrls(urls: string[]): Promise<ImportList
   const fetched = await Promise.all(newZpids.map((zpid) => fetchFullListing(zpid)));
   const candidates: NewListing[] = fetched
     .filter((full) => full !== null)
-    .map((full) => ({ ...full, sourceLabel: "Manual import" }));
+    .map((full) => ({ ...full, sourceLabel: "Manual import", status: "saved" as const }));
   failed += newZpids.length - candidates.length;
 
   const inserted = await insertAndEnrichListings(candidates);
