@@ -58,43 +58,53 @@ function DialogContent({
   return (
     <DialogPortal>
       <DialogOverlay />
-      <DialogPrimitive.Content
-        data-slot="dialog-content"
-        className={cn(
-          // Vertically bounded (and auto-centered within those bounds via
-          // my-auto) instead of viewport-centered — below md the bounds sit
-          // clear of MobileHeader/BottomTabBar (each h-14 plus its own
-          // safe-area padding, see MobileHeader.tsx/BottomTabBar.tsx) and
-          // the notch/home-indicator behind them, not just the viewport
-          // edge, so a tall dialog scrolls internally rather than
-          // rendering under the status bar or the app chrome. md+ has no
-          // header/tab bar, so it falls back to a plain 1rem margin.
-          // h-fit is required alongside top+bottom+my-auto: without an
-          // explicit (even if content-derived) height, a fixed element with
-          // both top and bottom set stretches to fill that whole band
-          // instead of shrinking to its content and letting the auto
-          // margins center it — h-fit is what makes a short dialog stay
-          // small instead of stretching to the max-height cap.
-          "fixed left-1/2 top-[calc(env(safe-area-inset-top)+3.5rem+0.5rem)] bottom-[calc(env(safe-area-inset-bottom)+3.5rem+0.5rem)] max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-8rem)] h-fit md:top-4 md:bottom-4 md:max-h-[calc(100dvh-2rem)] z-50 grid w-full max-w-[calc(100%-2rem)] overflow-y-auto my-auto -translate-x-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-          className
-        )}
-        {...props}
+      {/*
+        Flexbox centering, not the fixed+top/bottom+margin:auto+h-fit combo
+        this used before — that combo relies on browsers resolving an
+        over-constrained top/bottom/height/margin box the same way, and
+        real iOS Safari resolves it differently than Chromium (it stretched
+        the dialog to fill the whole band instead of shrinking to content).
+        A flex row with items-center reliably centers a shrink-to-fit child
+        and only fills the cross axis when the child's own max-height forces
+        it to — the same two cases, without the cross-browser risk.
+        Bounds keep dialogs clear of MobileHeader/BottomTabBar (each h-14
+        plus its own safe-area padding, see MobileHeader.tsx/
+        BottomTabBar.tsx) and the notch/home-indicator behind them; md+ has
+        neither, so it falls back to a plain 1rem margin.
+        pointer-events-none + auto-on-Content: this wrapper visually sits
+        above DialogOverlay (same z-50, later in paint order), so without
+        this a tap in its empty space — outside the card but still inside
+        the band — would hit the wrapper instead of the overlay underneath
+        and silently swallow the tap-outside-to-close instead of triggering
+        Radix's dismiss handling on Overlay.
+      */}
+      <div
+        className="fixed inset-x-0 z-50 flex items-center justify-center px-4 pointer-events-none top-[calc(env(safe-area-inset-top)+3.5rem+0.5rem)] bottom-[calc(env(safe-area-inset-bottom)+3.5rem+0.5rem)] md:top-4 md:bottom-4"
       >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close data-slot="dialog-close" asChild>
-            <Button
-              variant="ghost"
-              className="absolute top-2 right-2"
-              size="icon-sm"
-            >
-              <XIcon
-              />
-              <span className="sr-only">Close</span>
-            </Button>
-          </DialogPrimitive.Close>
-        )}
-      </DialogPrimitive.Content>
+        <DialogPrimitive.Content
+          data-slot="dialog-content"
+          className={cn(
+            "relative grid w-full max-h-full overflow-y-auto gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none pointer-events-auto sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            className
+          )}
+          {...props}
+        >
+          {children}
+          {showCloseButton && (
+            <DialogPrimitive.Close data-slot="dialog-close" asChild>
+              <Button
+                variant="ghost"
+                className="absolute top-2 right-2"
+                size="icon-sm"
+              >
+                <XIcon
+                />
+                <span className="sr-only">Close</span>
+              </Button>
+            </DialogPrimitive.Close>
+          )}
+        </DialogPrimitive.Content>
+      </div>
     </DialogPortal>
   )
 }

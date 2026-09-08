@@ -11,6 +11,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Sonner's default bottom offset sits under BottomTabBar (fixed,
+      // h-14 + its own safe-area padding — see BottomTabBar.tsx) on
+      // narrow/mobile viewports, where its own stylesheet switches from
+      // --offset to --mobile-offset (its own <600px breakpoint, separate
+      // from this app's md:hidden one).
+      mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 3.5rem + 1rem)" }}
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />
