@@ -69,7 +69,13 @@ function DialogContent({
           // edge, so a tall dialog scrolls internally rather than
           // rendering under the status bar or the app chrome. md+ has no
           // header/tab bar, so it falls back to a plain 1rem margin.
-          "fixed left-1/2 top-[calc(env(safe-area-inset-top)+3.5rem+0.5rem)] bottom-[calc(env(safe-area-inset-bottom)+3.5rem+0.5rem)] max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-8rem)] md:top-4 md:bottom-4 md:max-h-[calc(100dvh-2rem)] z-50 grid w-full max-w-[calc(100%-2rem)] overflow-y-auto my-auto -translate-x-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // h-fit is required alongside top+bottom+my-auto: without an
+          // explicit (even if content-derived) height, a fixed element with
+          // both top and bottom set stretches to fill that whole band
+          // instead of shrinking to its content and letting the auto
+          // margins center it — h-fit is what makes a short dialog stay
+          // small instead of stretching to the max-height cap.
+          "fixed left-1/2 top-[calc(env(safe-area-inset-top)+3.5rem+0.5rem)] bottom-[calc(env(safe-area-inset-bottom)+3.5rem+0.5rem)] max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-8rem)] h-fit md:top-4 md:bottom-4 md:max-h-[calc(100dvh-2rem)] z-50 grid w-full max-w-[calc(100%-2rem)] overflow-y-auto my-auto -translate-x-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
