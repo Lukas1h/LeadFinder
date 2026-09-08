@@ -61,7 +61,15 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // Vertically bounded (and auto-centered within those bounds via
+          // my-auto) instead of viewport-centered — below md the bounds sit
+          // clear of MobileHeader/BottomTabBar (each h-14 plus its own
+          // safe-area padding, see MobileHeader.tsx/BottomTabBar.tsx) and
+          // the notch/home-indicator behind them, not just the viewport
+          // edge, so a tall dialog scrolls internally rather than
+          // rendering under the status bar or the app chrome. md+ has no
+          // header/tab bar, so it falls back to a plain 1rem margin.
+          "fixed left-1/2 top-[calc(env(safe-area-inset-top)+3.5rem+0.5rem)] bottom-[calc(env(safe-area-inset-bottom)+3.5rem+0.5rem)] max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-8rem)] md:top-4 md:bottom-4 md:max-h-[calc(100dvh-2rem)] z-50 grid w-full max-w-[calc(100%-2rem)] overflow-y-auto my-auto -translate-x-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}

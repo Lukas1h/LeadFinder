@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search, RotateCcw, ChevronRight } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { daysSince } from "@/lib/format";
 import { AgentCard, RELATIONSHIP_LABELS } from "./AgentCard";
+import { AgentDetailDialog } from "./AgentDetailDialog";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 
@@ -46,6 +48,25 @@ export function AgentsList({
   listingsByPhone: Record<string, Listing[]>;
 }) {
   const [search, setSearch] = useState("");
+
+  // Deep-link from ListingModal's agent block (?agent=<phone>) — opens that
+  // agent's detail dialog directly, regardless of which section/collapsed
+  // group they'd normally be found in below.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const linkedPhone = searchParams.get("agent");
+  const linkedAgent = linkedPhone ? agents.find((a) => a.phone === linkedPhone) : undefined;
+
+  // Keeps the last-linked agent's data around through the dialog's close
+  // animation instead of unmounting (and losing its content) the instant
+  // the URL param clears — the standard "adjust state during render"
+  // pattern, not an effect, so it commits before paint.
+  const [displayedAgent, setDisplayedAgent] = useState(linkedAgent);
+  if (linkedAgent && linkedAgent !== displayedAgent) setDisplayedAgent(linkedAgent);
+
+  const handleLinkedDialogOpenChange = (open: boolean) => {
+    if (!open) router.replace("/agents", { scroll: false });
+  };
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -90,6 +111,15 @@ export function AgentsList({
 
   return (
     <div className="flex flex-col gap-6">
+      {displayedAgent && (
+        <AgentDetailDialog
+          agent={displayedAgent}
+          listings={listingsByPhone[displayedAgent.phone] ?? []}
+          open={!!linkedAgent}
+          onOpenChange={handleLinkedDialogOpenChange}
+        />
+      )}
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <Input

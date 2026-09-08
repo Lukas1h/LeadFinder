@@ -53,16 +53,23 @@ export function AgentDetailDialog({
   agent,
   listings,
   trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
 }: {
   agent: Agent;
   listings: Listing[];
-  trigger: React.ReactNode;
+  /** Omit when driving open/onOpenChange from outside (see AgentsList's link-triggered open). */
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const onOpenChange = onOpenChangeProp ?? setOpenState;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{agent.name ?? "Unknown name"}</DialogTitle>

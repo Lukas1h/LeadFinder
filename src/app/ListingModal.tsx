@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ExternalLink, X } from "lucide-react";
@@ -113,8 +114,21 @@ export function ListingModal({
 
           {(lead.agentName || lead.brokerName || lead.agentPhone) && (
             <div className="text-sm text-foreground/90 border-t pt-3">
-              {lead.agentName && <div>{lead.agentName}</div>}
-              {lead.brokerName && <div className="text-muted-foreground">{lead.brokerName}</div>}
+              {lead.agentPhone ? (
+                <Link
+                  href={`/agents?agent=${encodeURIComponent(lead.agentPhone)}`}
+                  onClick={() => onOpenChange(false)}
+                  className="hover:underline"
+                >
+                  {lead.agentName && <div>{lead.agentName}</div>}
+                  {lead.brokerName && <div className="text-muted-foreground">{lead.brokerName}</div>}
+                </Link>
+              ) : (
+                <>
+                  {lead.agentName && <div>{lead.agentName}</div>}
+                  {lead.brokerName && <div className="text-muted-foreground">{lead.brokerName}</div>}
+                </>
+              )}
               {lead.agentPhone && (
                 <a
                   href={telUrl(lead.agentPhone) ?? "#"}
