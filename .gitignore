@@ -34,8 +34,11 @@ yarn-error.log*
 .env*
 !.env.local.example
 
-# vercel
-.vercel
+# vercel — project.json carries no secrets (just projectId/orgId), and
+# committing it lets a fresh session's `vercel env pull` find the right
+# project without an interactive `vercel link` step first.
+.vercel/*
+!.vercel/project.json
 
 # typescript
 *.tsbuildinfo
