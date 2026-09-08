@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { listings, agents, messageSends, type LeadStatus, type AgentRelationshipStatus } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { listings, agents, messageSends, type LeadStatus, type AgentRelationshipStatus, type NewListing } from "@/db/schema";
+import { desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { runSync, insertAndEnrichListings, type SyncResult } from "@/lib/sync";
 import { extractZpidFromUrl, fetchFullListing } from "@/lib/zillapi";
@@ -214,4 +214,53 @@ export async function importListingFromUrl(url: string): Promise<ImportListingRe
   revalidatePath("/agents");
 
   return { inserted: inserted > 0 };
+}
+
+export interface ImportListingsResult {
+  imported: number;
+  skipped: number;
+  failed: number;
+}
+
+/**
+ * Batch version of importListingFromUrl for the Leads page's "Import"
+ * text box — one or many pasted Zillow URLs at once. Listings already in
+ * the table are silently skipped (not counted as failures) rather than
+ * spending a fetchFullListing credit and an error message on each one.
+ */
+export async function importListingsFromUrls(urls: string[]): Promise<ImportListingsResult> {
+  const zpids = new Set<string>();
+  let failed = 0;
+  for (const url of urls) {
+    const zpid = extractZpidFromUrl(url.trim());
+    if (zpid) zpids.add(zpid);
+    else if (url.trim()) failed++;
+  }
+
+  if (zpids.size === 0) {
+    return { imported: 0, skipped: 0, failed };
+  }
+
+  const existing = await db
+    .select({ zpid: listings.zpid })
+    .from(listings)
+    .where(inArray(listings.zpid, [...zpids]));
+  const existingZpids = new Set(existing.map((row) => row.zpid));
+
+  const newZpids = [...zpids].filter((zpid) => !existingZpids.has(zpid));
+  const skipped = zpids.size - newZpids.length;
+
+  const fetched = await Promise.all(newZpids.map((zpid) => fetchFullListing(zpid)));
+  const candidates: NewListing[] = fetched
+    .filter((full) => full !== null)
+    .map((full) => ({ ...full, sourceLabel: "Manual import" }));
+  failed += newZpids.length - candidates.length;
+
+  const inserted = await insertAndEnrichListings(candidates);
+
+  revalidatePath("/");
+  revalidatePath("/pipeline");
+  revalidatePath("/agents");
+
+  return { imported: inserted, skipped, failed };
 }

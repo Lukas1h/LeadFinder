@@ -4,9 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Import } from "lucide-react";
-import { importListingFromUrl } from "./actions";
+import { importListingsFromUrls } from "./actions";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -14,100 +14,91 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 
-function looksLikeZillowUrl(value: string): boolean {
-  try {
-    return /(^|\.)zillow\.com$/i.test(new URL(value.trim()).hostname);
-  } catch {
-    return false;
-  }
+function splitUrls(value: string): string[] {
+  return value
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 export function ImportListingButton() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [manualUrl, setManualUrl] = useState("");
+  const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const runImport = (url: string) => {
+  const urls = splitUrls(text);
+
+  const handleSubmit = () => {
+    if (urls.length === 0) return;
+    setError(null);
     startTransition(async () => {
-      const result = await importListingFromUrl(url);
-      if (result.error) {
-        setError(result.error);
-        toast.error(result.error);
+      const result = await importListingsFromUrls(urls);
+
+      if (result.imported === 0 && result.skipped === 0 && result.failed > 0) {
+        setError("Couldn't import any of those — check the links are Zillow listing URLs.");
         return;
       }
-      toast.success("Listing imported");
+
+      const parts: string[] = [];
+      if (result.imported > 0) parts.push(`${result.imported} imported`);
+      if (result.skipped > 0) parts.push(`${result.skipped} already had`);
+      if (result.failed > 0) parts.push(`${result.failed} failed`);
+      toast.success(parts.join(", ") || "Nothing to import");
+
       setDialogOpen(false);
-      setManualUrl("");
-      setError(null);
+      setText("");
       router.refresh();
     });
   };
 
-  const handleClick = async () => {
-    let clipboardText = "";
-    try {
-      clipboardText = (await navigator.clipboard.readText()).trim();
-    } catch {
-      // Clipboard read denied/unsupported (e.g. no permission granted yet) —
-      // fall through to the manual-paste dialog below instead of failing.
-    }
-
-    if (looksLikeZillowUrl(clipboardText)) {
-      runImport(clipboardText);
-      return;
-    }
-
-    setManualUrl(clipboardText);
-    setError(null);
-    setDialogOpen(true);
-  };
-
   return (
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <Button
-        variant="ghost"
-        className="text-muted-foreground"
-        onClick={handleClick}
-        disabled={isPending}
-      >
-        <Import />
-        {isPending ? "Importing…" : "Import"}
-      </Button>
+    <Dialog
+      open={dialogOpen}
+      onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (!open) {
+          setText("");
+          setError(null);
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="ghost" className="text-muted-foreground">
+          <Import />
+          Import
+        </Button>
+      </DialogTrigger>
 
       <DialogContent className="sm:max-w-md">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            runImport(manualUrl.trim());
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Import from Zillow</DialogTitle>
-            <DialogDescription>
-              Couldn&rsquo;t read a Zillow URL from your clipboard — paste the listing link.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Import from Zillow</DialogTitle>
+          <DialogDescription>
+            Paste one or more Zillow listing links, one per line. Listings you already have are skipped
+            automatically.
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="py-4">
-            <Input
-              autoFocus
-              value={manualUrl}
-              onChange={(e) => setManualUrl(e.target.value)}
-              placeholder="https://www.zillow.com/homedetails/..."
-            />
-            {error && <p className="text-sm text-destructive mt-2">{error}</p>}
-          </div>
+        <div className="py-2">
+          <Textarea
+            autoFocus
+            rows={6}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={"https://www.zillow.com/homedetails/...\nhttps://www.zillow.com/homedetails/..."}
+          />
+          {error && <p className="text-sm text-destructive mt-2">{error}</p>}
+        </div>
 
-          <DialogFooter>
-            <Button type="submit" disabled={isPending || !manualUrl.trim()}>
-              {isPending ? "Importing…" : "Import"}
-            </Button>
-          </DialogFooter>
-        </form>
+        <DialogFooter>
+          <Button onClick={handleSubmit} disabled={isPending || urls.length === 0}>
+            {isPending ? "Importing…" : urls.length > 1 ? `Import ${urls.length}` : "Import"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
