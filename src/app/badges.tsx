@@ -23,7 +23,7 @@ const STATUS_STYLES: Record<LeadStatus, string> = {
   declined: "bg-muted text-muted-foreground/70",
 };
 
-const STATUS_LABELS: Record<LeadStatus, string> = {
+export const STATUS_LABELS: Record<LeadStatus, string> = {
   new: "New",
   saved: "Saved",
   contacted: "Contacted",

@@ -2,17 +2,23 @@
 
 import { useMemo, useState } from "react";
 import { Search, RotateCcw, ChevronRight } from "lucide-react";
-import type { Agent, Listing } from "@/db/schema";
+import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { daysSince } from "@/lib/format";
-import { AgentCard } from "./AgentCard";
+import { AgentCard, RELATIONSHIP_LABELS } from "./AgentCard";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 
 const DECLINED_RESURFACE_AFTER_DAYS = 30;
 
-// Relationship statuses that mean "an actual working relationship exists"
-// — these get pinned above everyone else regardless of recency.
-const PINNED_STATUSES = new Set(["worked_once", "regular"]);
+// Most-established relationship first — mirrors the natural progression
+// (see bumpAgentRelationshipOnMilestone in src/app/actions.ts).
+const RELATIONSHIP_ORDER: AgentRelationshipStatus[] = [
+  "regular",
+  "worked_once",
+  "interested",
+  "warm",
+  "cold",
+];
 
 function byRecency(a: Agent, b: Agent) {
   const aTime = a.lastContactedAt?.getTime() ?? 0;
@@ -46,11 +52,20 @@ export function AgentsList({
     return agents.filter((a) => matchesSearch(a, query));
   }, [agents, search]);
 
-  const { pinned, active, readyToReconnect, recentlyDeclined } = useMemo(() => {
+  const { byStatus, readyToReconnect, recentlyDeclined } = useMemo(() => {
     const notDeclined = filtered.filter((a) => !a.declinedAt);
+    const groups: Record<AgentRelationshipStatus, Agent[]> = {
+      cold: [],
+      warm: [],
+      interested: [],
+      worked_once: [],
+      regular: [],
+    };
+    for (const a of notDeclined) groups[a.relationshipStatus].push(a);
+    for (const status of RELATIONSHIP_ORDER) groups[status].sort(byRecency);
+
     return {
-      pinned: notDeclined.filter((a) => PINNED_STATUSES.has(a.relationshipStatus)).sort(byRecency),
-      active: notDeclined.filter((a) => !PINNED_STATUSES.has(a.relationshipStatus)).sort(byRecency),
+      byStatus: groups,
       readyToReconnect: filtered
         .filter((a) => a.declinedAt && daysSince(a.declinedAt) >= DECLINED_RESURFACE_AFTER_DAYS)
         .sort((a, b) => daysSince(b.declinedAt!) - daysSince(a.declinedAt!)),
@@ -90,20 +105,21 @@ export function AgentsList({
       ) : (
         <div className="flex flex-col gap-8">
           <section>
-            {pinned.length === 0 && active.length === 0 ? (
+            {RELATIONSHIP_ORDER.every((status) => byStatus[status].length === 0) ? (
               <p className="text-muted-foreground/70 text-sm">No active agents right now.</p>
             ) : (
-              <div className="flex flex-col gap-4">
-                {pinned.length > 0 && (
-                  <>
-                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Working with
-                    </h2>
-                    {pinned.map(card)}
-                    {active.length > 0 && <Separator className="my-1" />}
-                  </>
+              <div className="flex flex-col gap-6">
+                {RELATIONSHIP_ORDER.map(
+                  (status) =>
+                    byStatus[status].length > 0 && (
+                      <div key={status}>
+                        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                          {RELATIONSHIP_LABELS[status]} ({byStatus[status].length})
+                        </h2>
+                        <div className="flex flex-col gap-4">{byStatus[status].map(card)}</div>
+                      </div>
+                    )
                 )}
-                {active.map(card)}
               </div>
             )}
           </section>

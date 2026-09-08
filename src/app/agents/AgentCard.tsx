@@ -1,11 +1,12 @@
 "use client";
 
 import { useTransition } from "react";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Phone } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { updateAgentRelationshipStatus, reconnectAgent, markAgentDeclined } from "./actions";
 import { AgentDetailDialog } from "./AgentDetailDialog";
 import { formatDate, daysSince } from "@/lib/format";
+import { telUrl } from "@/lib/sms";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,8 @@ export function AgentCard({
     startTransition(() => markAgentDeclined(agent.id));
   };
 
+  const callHref = telUrl(agent.phone);
+
   return (
     <Card className="flex-row items-start justify-between gap-4 p-4 flex-wrap">
       <div className="min-w-0">
@@ -72,6 +75,14 @@ export function AgentCard({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        {callHref && (
+          <Button variant="outline" size="icon" asChild>
+            <a href={callHref} aria-label={`Call ${agent.name ?? agent.phone}`}>
+              <Phone />
+            </a>
+          </Button>
+        )}
+
         <Select value={agent.relationshipStatus} onValueChange={handleStatusChange} disabled={isPending}>
           <SelectTrigger className="w-36">
             <SelectValue />

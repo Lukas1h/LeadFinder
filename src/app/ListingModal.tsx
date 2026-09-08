@@ -4,14 +4,16 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ExternalLink, X } from "lucide-react";
-import type { Listing } from "@/db/schema";
-import { updateListingNotes } from "./actions";
+import { LEAD_STATUSES, type Listing, type LeadStatus } from "@/db/schema";
+import { updateListingNotes, updateListingStatus } from "./actions";
 import { PhotoCarousel } from "./PhotoCarousel";
+import { STATUS_LABELS } from "./badges";
 import { formatPrice, formatDate } from "@/lib/format";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function ListingModal({
   lead,
@@ -25,12 +27,21 @@ export function ListingModal({
   const router = useRouter();
   const [notes, setNotes] = useState(lead.notes ?? "");
   const [isPending, startTransition] = useTransition();
+  const [statusPending, startStatusTransition] = useTransition();
   const dirty = notes !== (lead.notes ?? "");
 
   const handleSaveNotes = () => {
     startTransition(async () => {
       await updateListingNotes(lead.id, notes);
       toast.success("Note saved");
+      router.refresh();
+    });
+  };
+
+  const handleStatusChange = (status: LeadStatus) => {
+    startStatusTransition(async () => {
+      await updateListingStatus(lead.id, status);
+      toast.success("Status updated");
       router.refresh();
     });
   };
@@ -77,6 +88,26 @@ export function ListingModal({
             <span>{lead.livingArea ? `${lead.livingArea.toLocaleString()} sqft` : "—"}</span>
             {lead.homeType && <span>{lead.homeType}</span>}
             <span>Listed {formatDate(lead.listedAt)}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground shrink-0">Status</Label>
+            <Select
+              value={lead.status}
+              onValueChange={(v) => handleStatusChange(v as LeadStatus)}
+              disabled={statusPending}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LEAD_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {STATUS_LABELS[s]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {(lead.agentName || lead.brokerName) && (

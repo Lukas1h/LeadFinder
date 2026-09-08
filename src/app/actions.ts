@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { listings, agents, messageSends, type LeadStatus } from "@/db/schema";
+import { listings, agents, messageSends, type LeadStatus, type AgentRelationshipStatus } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { runSync, insertAndEnrichListings, type SyncResult } from "@/lib/sync";
@@ -49,6 +49,42 @@ async function touchAgentDeclined(agentPhone: string | null, agentName: string |
       target: agents.phone,
       set: { declinedAt: now }, // don't touch name here — a decline shouldn't clobber a known name
     });
+}
+
+/**
+ * Bumps an agent's relationship status forward the moment one of their
+ * listings hits a milestone — a reply or a booking — so the Agents tab
+ * reflects real pipeline activity instead of drifting from whatever was
+ * last set (or never set) by hand. Never downgrades, and a reply on an
+ * agent already past "interested" (worked_once/regular) leaves it alone.
+ */
+async function bumpAgentRelationshipOnMilestone(
+  agentPhone: string | null,
+  agentName: string | null,
+  milestone: "replied" | "booked"
+) {
+  if (!agentPhone) return;
+
+  const [existing] = await db
+    .select({ id: agents.id, relationshipStatus: agents.relationshipStatus })
+    .from(agents)
+    .where(eq(agents.phone, agentPhone));
+
+  const current = existing?.relationshipStatus ?? "cold";
+  let target: AgentRelationshipStatus | null = null;
+  if (milestone === "replied") {
+    if (current === "cold" || current === "warm") target = "interested";
+  } else {
+    if (current === "cold" || current === "warm" || current === "interested") target = "worked_once";
+    else if (current === "worked_once") target = "regular";
+  }
+  if (!target) return;
+
+  if (existing) {
+    await db.update(agents).set({ relationshipStatus: target }).where(eq(agents.id, existing.id));
+  } else {
+    await db.insert(agents).values({ phone: agentPhone, name: agentName, relationshipStatus: target });
+  }
 }
 
 /**
@@ -106,6 +142,9 @@ export async function updateListingStatus(
   }
   if (status === "declined" && lead) {
     await touchAgentDeclined(lead.agentPhone, lead.agentName);
+  }
+  if ((status === "replied" || status === "booked") && lead) {
+    await bumpAgentRelationshipOnMilestone(lead.agentPhone, lead.agentName, status);
   }
 
   await resolveSendOutcome(listingId, status);

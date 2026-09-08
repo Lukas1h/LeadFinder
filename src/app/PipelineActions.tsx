@@ -1,11 +1,11 @@
 "use client";
 
 import { useTransition } from "react";
-import { MessageCircle, CheckCircle2, FileText, RotateCcw } from "lucide-react";
+import { MessageCircle, CheckCircle2, FileText, RotateCcw, Phone } from "lucide-react";
 import { updateListingStatus } from "./actions";
 import { SendMessageDialog } from "./SendMessageDialog";
 import { MarkBookedDialog } from "./MarkBookedDialog";
-import { firstName } from "@/lib/sms";
+import { firstName, telUrl } from "@/lib/sms";
 import type { LeadStatus } from "@/db/schema";
 import { Button } from "@/components/ui/button";
 
@@ -30,6 +30,15 @@ export function PipelineActions({
     </Button>
   );
 
+  const callHref = telUrl(agentPhone);
+  const callButton = callHref && (
+    <Button variant="outline" size="icon" asChild>
+      <a href={callHref} aria-label={`Call ${firstName(agentName) ?? "agent"}`}>
+        <Phone />
+      </a>
+    </Button>
+  );
+
   if (status === "saved") {
     return (
       <div className="flex items-center gap-2 flex-wrap">
@@ -44,6 +53,7 @@ export function PipelineActions({
             </Button>
           }
         />
+        {callButton}
         {notInterested}
       </div>
     );
@@ -69,6 +79,7 @@ export function PipelineActions({
             }
           />
         )}
+        {callButton}
         {notInterested}
       </div>
     );
@@ -82,6 +93,7 @@ export function PipelineActions({
           Mark quoted
         </Button>
         <MarkBookedDialog listingId={listingId} />
+        {callButton}
         {notInterested}
       </div>
     );
@@ -91,6 +103,7 @@ export function PipelineActions({
     return (
       <div className="flex items-center gap-2 flex-wrap">
         <MarkBookedDialog listingId={listingId} />
+        {callButton}
         {notInterested}
       </div>
     );
