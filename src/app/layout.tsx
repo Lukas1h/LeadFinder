@@ -7,7 +7,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegistration } from "./ServiceWorkerRegistration";
 import { MobileHeader } from "./MobileHeader";
 import { BottomTabBar } from "./BottomTabBar";
-import { ScrollableContent } from "./ScrollableContent";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -90,20 +89,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <SidebarProvider>
             <AppSidebar />
             <SidebarInset>
-              {/*
-                Mobile: a fixed-height (h-dvh) non-scrolling shell with
-                header/tab-bar as normal flex children and only the middle
-                content scrolling (ScrollableContent) — keeps the native
-                scrollbar confined between them instead of spanning the
-                full screen on top of them. md:contents makes this whole
-                wrapper disappear on desktop, where MobileHeader/BottomTabBar
-                are hidden anyway and the document scrolls as before.
-              */}
-              <div className="flex flex-col h-dvh overflow-hidden md:contents">
-                <MobileHeader />
-                <ScrollableContent>{children}</ScrollableContent>
-                <BottomTabBar />
+              <MobileHeader />
+              <div
+                className="pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen"
+              >
+                {children}
               </div>
+              <BottomTabBar />
             </SidebarInset>
           </SidebarProvider>
         </TooltipProvider>

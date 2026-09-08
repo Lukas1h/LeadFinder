@@ -9,12 +9,8 @@ export function BottomTabBar() {
   const pathname = usePathname();
 
   return (
-    // Normal flow, not fixed — it's the last child of layout.tsx's h-dvh
-    // shell now, so it just sits at the bottom naturally and the middle
-    // content (ScrollableContent) correctly reserves space for it instead
-    // of needing an overlay-compensating padding hack.
     <nav
-      className="shrink-0 border-t bg-background/95 backdrop-blur-sm md:hidden"
+      className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 backdrop-blur-sm md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <div className="flex h-14 items-stretch">

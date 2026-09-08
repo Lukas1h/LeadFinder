@@ -52,19 +52,6 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
-/* The document itself shouldn't scroll at all on mobile (see
-   ScrollableContent — content scrolls in its own inner container), but
-   iOS Safari's elastic overscroll bounce is a chrome-level default tied
-   to the whole page's touch handling, not gated on there being anything
-   to actually scroll. Without this, a drag on a short page (nothing to
-   scroll inside ScrollableContent either) still bounces the entire
-   rendered page — tab bar included, since it's normal flow now, not a
-   fixed overlay. */
-html,
-body {
-  overscroll-behavior: none;
-}
-
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
