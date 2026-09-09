@@ -35,7 +35,7 @@ export async function runPhotoScoreTest(listingId: string): Promise<PhotoScoreTe
   return {
     score: result.score,
     reasoning: result.reasoning,
-    photosScored: listing.photos.slice(0, MAX_PHOTOS_TO_SCORE),
+    photosScored: result.scoredPhotos || [],
     error: result.score == null ? "scorePhotos returned no score — check server logs" : null,
   };
 }

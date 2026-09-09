@@ -68,8 +68,9 @@ export const listings = pgTable("listings", {
   bookingValue: integer("booking_value"),
 
   // AI photo-quality score (1-10, higher = more clearly professional
-  // photography) from gpt-4o-mini vision, scored once per newly-inserted
-  // lead in the sync route. See src/lib/photoScore.ts for the rubric. A
+  // photography) from Gemini 3.5 Flash-Lite vision, scored once per
+  // newly-inserted lead in the sync route. See src/lib/photoScore.ts for
+  // the rubric. A
   // LOW score is the valuable lead here — it means the listing likely
   // doesn't have a pro photographer yet.
   score: integer("score"),

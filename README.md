@@ -14,7 +14,8 @@ leads for a real estate photographer. Single-user personal tool.
 3. Copy `.env.local.example` to `.env.local` and fill in:
    - `DATABASE_URL` — from step 2
    - `ZILLAPI_KEY` — from your Zillapi dashboard
-   - `OPENAI_API_KEY` — from platform.openai.com, for AI photo scoring
+   - `OPENAI_API_KEY` — from platform.openai.com, for AI message drafting
+   - `GEMINI_API_KEY` — from aistudio.google.com, for AI photo scoring
      (see below)
    - `CRON_SECRET` — any string for local dev
    - `USE_MOCK_ZILLAPI` — leave as `true` until you've made your first real
@@ -208,12 +209,10 @@ present.
 
 `score` (integer, 1-10) and `score_reasoning` are set once per
 newly-inserted lead by [`scorePhotos`](src/lib/photoScore.ts), which sends
-all of a listing's photos to `gpt-4o-mini` (OpenAI, not Claude — picked
-for cost: at `detail: "low"` per image, one call per listing with ~15
-photos runs well under a tenth of a cent, `temperature: 0` for consistent
-repeat scoring) in a single request, asking it to judge professional vs.
-amateur/cellphone photography. Rubric signals, in order of how reliable
-they've tested:
+a sampled subset of a listing's photos to `gemini-3.5-flash-lite` (`temperature:
+0` for consistent repeat scoring) in a single request, asking it to judge
+professional vs. amateur/cellphone photography. Rubric signals, in order
+of how reliable they've tested:
 - Converging/leaning vertical lines (door frames, window frames, wall
   corners not truly vertical) — happens when the camera's tilted up/down
   instead of held level, extremely common in cellphone photos and, per
@@ -226,13 +225,12 @@ they've tested:
   tells the model to judge photography technique only, not how nice the
   property itself looks.
 
-⚠️ **`detail: "high"` costs far more than expected** — tested at
-~411,000 tokens for one 16-photo listing (Zillow's photos are large
-enough that OpenAI tiles them into many sub-images at high res), vs.
-~1,500 tokens at `detail: "low"` for the identical result. Stick with
-`"low"` — verified against real photos to give the same score and
-reasoning quality at a fraction of the cost and without blowing through
-OpenAI's per-minute rate limit.
+Moved from OpenAI `gpt-4o-mini` to Gemini `gemini-3.5-flash-lite` on
+2026-09-09 (no code changes to the rubric itself, just the model —
+`gemini-2.5-flash` was tried first but is deprecated for new API keys).
+The token-cost figures previously measured here were `gpt-4o-mini`-specific
+and don't carry over — re-measure against real Gemini usage before
+trusting a budget estimate for it.
 
 **The relationship is inverted from what "score" might suggest**: a LOW
 score is the good lead — it means the listing likely doesn't have
@@ -243,7 +241,7 @@ tiers: **Poor** (1-3, red) and **Amateur** (4-5, amber) are the leads you
 want; **Good** (6-7) and **Pro** (8-10, muted/deprioritized) are
 progressively less interesting.
 
-Set `USE_MOCK_OPENAI=true` locally (default in `.env.local.example`) to
+Set `USE_MOCK_GEMINI=true` locally (default in `.env.local.example`) to
 skip the real call — same reasoning as `USE_MOCK_ZILLAPI`, no cost either
 way at this scale, but no reason to spend anything during dev.
 
