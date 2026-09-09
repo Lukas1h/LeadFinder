@@ -36,7 +36,7 @@ export function PhotoScoreTester({ listings }: { listings: ListingOption[] }) {
     <div className="rounded-lg border p-4">
       <h2 className="font-semibold text-foreground mb-1">Photo Rating Test</h2>
       <p className="text-sm text-muted-foreground mb-4">
-        Runs the real scorePhotos() rubric against a saved listing's photos — doesn&rsquo;t write
+        Runs the real scorePhotos() rubric against a saved listing&rsquo;s photos — doesn&rsquo;t write
         anything back, so it&rsquo;s safe to re-run while tweaking src/lib/photoScore.ts.
       </p>
 
