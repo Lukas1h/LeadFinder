@@ -186,10 +186,11 @@ export interface ImportListingResult {
 }
 
 /**
- * Imports a single listing from a Zillow URL — the "Import" button's
- * clipboard flow on the Leads page, and the iOS share-sheet shortcut (see
- * src/app/api/import-listing/route.ts), both funnel into this. One Zillapi
- * credit (fetchFullListing), same as a single email-alert import.
+ * Imports a single listing from a Zillow URL — the "Import" button's text
+ * box on the Leads page, and the iOS share-sheet shortcut (see
+ * src/app/api/import-listing/route.ts, which runs this in the background
+ * via after() rather than waiting on it), both funnel into this. One
+ * Zillapi credit (fetchFullListing), same as a single email-alert import.
  */
 export async function importListingFromUrl(url: string): Promise<ImportListingResult> {
   const zpid = extractZpidFromUrl(url);
@@ -207,13 +208,12 @@ export async function importListingFromUrl(url: string): Promise<ImportListingRe
     return { error: "Couldn't fetch that listing from Zillow — try again in a bit." };
   }
 
-  const inserted = await insertAndEnrichListings([
-    { ...full, sourceLabel: "Manual import", status: "saved" },
-  ]);
+  const inserted = await insertAndEnrichListings(
+    [{ ...full, sourceLabel: "Manual import", status: "saved" }],
+    { notificationUrl: "/pipeline" }
+  );
 
-  revalidatePath("/");
-  revalidatePath("/pipeline");
-  revalidatePath("/agents");
+  revalidatePath("/", "layout");
 
   return { inserted: inserted > 0 };
 }
@@ -258,11 +258,9 @@ export async function importListingsFromUrls(urls: string[]): Promise<ImportList
     .map((full) => ({ ...full, sourceLabel: "Manual import", status: "saved" as const }));
   failed += newZpids.length - candidates.length;
 
-  const inserted = await insertAndEnrichListings(candidates);
+  const inserted = await insertAndEnrichListings(candidates, { notificationUrl: "/pipeline" });
 
-  revalidatePath("/");
-  revalidatePath("/pipeline");
-  revalidatePath("/agents");
+  revalidatePath("/", "layout");
 
   return { imported: inserted, skipped, failed };
 }

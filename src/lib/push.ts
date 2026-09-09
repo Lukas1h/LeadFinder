@@ -29,8 +29,13 @@ interface PushPayload {
  * path trigger it the same way. A subscription that comes back 404/410
  * (uninstalled PWA, revoked permission) is deleted rather than retried —
  * it will never succeed again.
+ *
+ * `url` is where tapping the notification lands — defaults to the Leads
+ * page ("/"), where auto-synced "new"-status listings actually show up.
+ * Manual/Shortcut imports land in "saved" instead (see insertAndEnrichListings's
+ * notificationUrl option), which lives on /pipeline, not /.
  */
-export async function notifyNewListings(count: number): Promise<void> {
+export async function notifyNewListings(count: number, url: string = "/"): Promise<void> {
   if (count === 0) return;
   if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
 
@@ -42,7 +47,7 @@ export async function notifyNewListings(count: number): Promise<void> {
   const payload: PushPayload = {
     title: count === 1 ? "1 new lead" : `${count} new leads`,
     body: "New listings just came in on LeadFinder.",
-    url: "/",
+    url,
   };
 
   await Promise.all(

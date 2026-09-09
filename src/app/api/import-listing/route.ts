@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
+import { db } from "@/db";
+import { listings } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { extractZpidFromUrl } from "@/lib/zillapi";
 import { importListingFromUrl } from "@/app/actions";
 
 export const maxDuration = 60;
@@ -27,8 +32,23 @@ async function handle(req: NextRequest, url: string | null): Promise<Response> {
     return NextResponse.json({ error: "missing url" }, { status: 400 });
   }
 
-  const result = await importListingFromUrl(url);
-  return NextResponse.json(result, { status: result.error ? 400 : 200 });
+  const zpid = extractZpidFromUrl(url);
+  if (!zpid) {
+    return NextResponse.json({ error: "That doesn't look like a Zillow listing URL." }, { status: 400 });
+  }
+
+  const [existing] = await db.select({ id: listings.id }).from(listings).where(eq(listings.zpid, zpid));
+  if (existing) {
+    return NextResponse.json({ status: "exists" });
+  }
+
+  // The actual fetch+enrich+score round trip runs in the background —
+  // the Shortcut doesn't need to block on it, and a push notification
+  // already fires once the listing is actually in (see notifyNewListings),
+  // so there's nothing left worth waiting to report back.
+  after(() => importListingFromUrl(url));
+
+  return NextResponse.json({ status: "importing" }, { status: 202 });
 }
 
 export async function POST(req: NextRequest) {

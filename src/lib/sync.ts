@@ -104,8 +104,7 @@ async function retryMissingPhotoScores(): Promise<number> {
   }
 
   if (rescored > 0) {
-    revalidatePath("/");
-    revalidatePath("/pipeline");
+    revalidatePath("/", "layout");
   }
 
   return rescored;
@@ -119,8 +118,15 @@ async function retryMissingPhotoScores(): Promise<number> {
  * Rows that already have agent info (from fetchFullListing, used by the
  * email path) skip the extra fetchAgentInfo lookup rather than paying for
  * a redundant Zillapi credit.
+ *
+ * notificationUrl overrides where the resulting push notification links to
+ * — see the comment on notifyNewListings. Manual imports (status "saved")
+ * pass "/pipeline"; everything else defaults to "/".
  */
-export async function insertAndEnrichListings(candidates: NewListing[]): Promise<number> {
+export async function insertAndEnrichListings(
+  candidates: NewListing[],
+  options?: { notificationUrl?: string }
+): Promise<number> {
   if (candidates.length === 0) return 0;
 
   const insertedRows = await db
@@ -163,7 +169,7 @@ export async function insertAndEnrichListings(candidates: NewListing[]): Promise
     );
   }
 
-  await notifyNewListings(insertedRows.length);
+  await notifyNewListings(insertedRows.length, options?.notificationUrl);
 
   if (insertedRows.length > 0) {
     // The cron route and the AgentMail webhook both land here with no
@@ -171,8 +177,12 @@ export async function insertAndEnrichListings(candidates: NewListing[]): Promise
     // this, pages cached via "use cache" (see src/app/page.tsx et al.)
     // keep serving the pre-sync render until their time-based revalidate
     // window passes, so a lead notified about here wouldn't show up yet.
-    revalidatePath("/");
-    revalidatePath("/pipeline");
+    // 'layout' (not per-page) also purges the client-side router cache —
+    // without it, an already-open PWA session can keep serving an older
+    // client-cached copy of a page even after the server-side data is
+    // fresh, which is exactly what made the Pipeline page look stale after
+    // a Shortcut import until its cache naturally expired.
+    revalidatePath("/", "layout");
   }
 
   return insertedRows.length;
