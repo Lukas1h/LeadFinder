@@ -8,12 +8,13 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { NAV_LINKS } from "./nav-links";
+import { NAV_LINKS, DEV_LINKS } from "./nav-links";
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -35,6 +36,23 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {NAV_LINKS.map((link) => (
+                <SidebarMenuItem key={link.href}>
+                  <SidebarMenuButton asChild isActive={pathname === link.href} tooltip={link.label}>
+                    <Link href={link.href}>
+                      <link.icon />
+                      <span>{link.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Dev</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {DEV_LINKS.map((link) => (
                 <SidebarMenuItem key={link.href}>
                   <SidebarMenuButton asChild isActive={pathname === link.href} tooltip={link.label}>
                     <Link href={link.href}>

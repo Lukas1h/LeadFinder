@@ -18,6 +18,7 @@ const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 // also tested and measured at 5x the token cost (real usage: 2,836
 // tokens/photo at "low" vs 14,170 at "high"), which would blow the
 // project's ~$2-3/month budget for a few points of accuracy; not worth it.
+
 const RUBRIC = `Your goal: determine whether these real estate listing photos were taken
 by a professional real estate photographer, or on a cellphone by the agent/
 homeowner. Score from 1 (clearly cellphone/amateur) to 10 (clearly professional).
@@ -79,7 +80,7 @@ const MOCK_RESULT: PhotoScoreResult = {
 // against 20, so treat "8 is enough" as a reasonable assumption (first 8
 // are almost always hero/exterior/kitchen/living, the most diagnostic
 // shots), not a proven equivalence.
-const MAX_PHOTOS_TO_SCORE = 8;
+export const MAX_PHOTOS_TO_SCORE = 8;
 
 const MAX_ATTEMPTS = 3;
 
