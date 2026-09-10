@@ -17,7 +17,14 @@ import { LeadsSkeleton } from "./loading";
 // they're invoked from — triggerManualSync (RefreshButton's action, in
 // ./actions.ts) needs headroom for fetchAgentInfo's retry/timeout budget
 // in src/lib/zillapi.ts, same reasoning as the cron route's maxDuration.
-export const maxDuration = 60;
+// Raised from 60 to 300 on 2026-09-10 after real cron runs came in at
+// 42-62s with zero photo-scoring work (Zillapi's own listing-search
+// latency alone), leaving no margin once Gemini scoring is added on top —
+// Hobby plan's actual ceiling (with Fluid compute, on by default) is 300s,
+// not 60; the old 60 was an unnecessarily tight self-imposed limit, and
+// raising it is free since Vercel bills active CPU time, not wall-clock
+// time spent waiting on Zillapi/Gemini.
+export const maxDuration = 300;
 
 export default function LeadsPage() {
   return (

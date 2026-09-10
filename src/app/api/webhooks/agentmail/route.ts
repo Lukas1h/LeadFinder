@@ -7,7 +7,9 @@ import { insertAndEnrichListings } from "@/lib/sync";
 import { fetchAgentMailMessage } from "@/lib/agentmail";
 import type { NewListing } from "@/db/schema";
 
-export const maxDuration = 60;
+// See matching comment in src/app/page.tsx — Hobby plan's real ceiling is
+// 300s with Fluid compute, and 60 wasn't leaving enough margin.
+export const maxDuration = 300;
 
 // AgentMail sends "message.received" events for inbound mail, signed via
 // Svix (same HMAC scheme as e.g. Clerk/Resend webhooks). Zillow alert

@@ -6,7 +6,9 @@ import { eq } from "drizzle-orm";
 import { extractZpidFromUrl } from "@/lib/zillapi";
 import { importListingFromUrl } from "@/app/actions";
 
-export const maxDuration = 60;
+// See matching comment in src/app/page.tsx — Hobby plan's real ceiling is
+// 300s with Fluid compute, and 60 wasn't leaving enough margin.
+export const maxDuration = 300;
 
 // Hit directly by an iOS Shortcut run from the Share Sheet (see the Import
 // button's own instructions on the Leads page) — no browser involved, so

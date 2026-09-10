@@ -47,27 +47,42 @@ const MOCK_RESULT: PhotoScoreResult = {
   scoredPhotos: []
 };
 
-// A listing can have 60+ photos; sending all of them at "low" detail still
-// runs ~2,800 tokens/photo for this model (not the flat 85 tokens/image
-// gpt-4o gets at "low" — verified empirically, gpt-4o-mini prices images
-// differently). A handful of concurrent full-gallery scores during a sync
-// can blow well past OpenAI's per-minute token limit. Capping to the first
-// N photos — which are almost always the hero/exterior/kitchen shots, the
-// most diagnostic ones anyway — keeps each call's token cost bounded.
-// Cut from 20 to 8 on 2026-09-05, mainly to fit budget: at ~600
-// listings/month (real measured rate) 20 photos/listing runs ~$5/month,
-// over the ~$2-3/month target; 8 runs ~$2/month. All rubric testing that
-// day was done at 7-8 photos and gave reasonable, consistent results, so
-// there's no evidence this loses accuracy — but it also wasn't A/B tested
-// against 20, so treat "8 is enough" as a reasonable assumption (first 8
-// are almost always hero/exterior/kitchen/living, the most diagnostic
-// shots), not a proven equivalence.
-export const MAX_PHOTOS_TO_SCORE = 10;
+// A listing can have 60+ photos. Capping to a handful, evenly sampled
+// across the gallery — see the sampling loop below — keeps each call's
+// token cost and (since the Gemini migration) image-fetch/encode time
+// bounded. Cut from 10 to 8 on 2026-09-10 specifically to shave per-listing
+// latency: fewer photos means fewer server-side fetches to base64-encode
+// and a smaller request body, which matters now that sync runs were
+// coming in close to the function's time budget (see maxDuration comments
+// in the cron route and src/app/page.tsx). Not re-validated for scoring
+// accuracy at 8 vs 10 under Gemini — carried over from the OpenAI-era
+// assumption that the first/sampled few photos are the most diagnostic.
+export const MAX_PHOTOS_TO_SCORE = 8;
 
 const MAX_ATTEMPTS = 3;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// On a 429, Gemini's real wait-time hint lives in the JSON error body, not
+// the HTTP Retry-After header (unlike OpenAI) — a google.rpc.RetryInfo
+// entry in error.details, e.g. {"@type": ".../google.rpc.RetryInfo",
+// "retryDelay": "40s"}. Checking only the header (the original mistake
+// here) meant this was silently always falling back to a guessed backoff.
+function parseGeminiRetryDelayMs(body: string): number | null {
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: { details?: { "@type"?: string; retryDelay?: string }[] };
+    };
+    const retryInfo = parsed.error?.details?.find((d) => d["@type"]?.includes("RetryInfo"));
+    const match = retryInfo?.retryDelay?.match(/^([\d.]+)s$/);
+    if (!match) return null;
+    const seconds = Number(match[1]);
+    return Number.isFinite(seconds) ? seconds * 1000 : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function scorePhotos(photos: string[] | null): Promise<PhotoScoreResult> {
@@ -146,19 +161,21 @@ export async function scorePhotos(photos: string[] | null): Promise<PhotoScoreRe
     });
 
     if (!res.ok) {
-      // 429 (rate limit) and 5xx are transient — retry with backoff. A
-      // 429's retry-after header is authoritative when present; otherwise
-      // back off hard since these requests are large enough that a short
-      // wait rarely clears the per-minute token budget.
+      // 429 (rate limit) and 5xx are transient — retry with backoff.
+      // Gemini's own suggested delay (in the error body) is authoritative
+      // when present; the Retry-After header is a fallback in case that
+      // ever changes; a fixed guess is the last resort.
       const isRetryable = res.status === 429 || res.status >= 500;
       const body = await res.text();
       console.error(`scorePhotos: Gemini ${res.status} (attempt ${attempt}/${MAX_ATTEMPTS})`, body);
 
       if (isRetryable && attempt < MAX_ATTEMPTS) {
         const retryAfterHeader = Number(res.headers.get("retry-after"));
-        const waitMs = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
-          ? retryAfterHeader * 1000
-          : attempt * 15000;
+        const waitMs =
+          parseGeminiRetryDelayMs(body) ??
+          (Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+            ? retryAfterHeader * 1000
+            : attempt * 15000);
         await sleep(waitMs);
         continue;
       }
