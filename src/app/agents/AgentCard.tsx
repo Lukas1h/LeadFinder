@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { RotateCcw, Phone } from "lucide-react";
+import { RotateCcw, Phone, StickyNote } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { updateAgentRelationshipStatus, reconnectAgent, markAgentDeclined } from "./actions";
 import { AgentDetailDialog } from "./AgentDetailDialog";
@@ -71,6 +71,13 @@ export function AgentCard({
           <Badge variant="secondary" className="mt-2">
             Declined {daysSince(agent.declinedAt)}d ago
           </Badge>
+        )}
+
+        {agent.notes && (
+          <p className="flex items-start gap-1.5 text-sm text-muted-foreground mt-2 max-w-md">
+            <StickyNote className="size-3.5 shrink-0 mt-0.5" />
+            <span className="line-clamp-2">{agent.notes}</span>
+          </p>
         )}
       </div>
 
