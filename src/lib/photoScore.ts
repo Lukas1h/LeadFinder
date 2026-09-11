@@ -1,5 +1,6 @@
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent";
+import { fetchImagePart, callGemini } from "@/lib/gemini";
+
+const MODEL = "gemini-3.5-flash-lite";
 
 // Revised 2026-09-05 after 5 real listings came back mis-scored (2 badly:
 // a genuinely professional gallery rated "Amateur", and another rated
@@ -59,32 +60,6 @@ const MOCK_RESULT: PhotoScoreResult = {
 // assumption that the first/sampled few photos are the most diagnostic.
 export const MAX_PHOTOS_TO_SCORE = 8;
 
-const MAX_ATTEMPTS = 3;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// On a 429, Gemini's real wait-time hint lives in the JSON error body, not
-// the HTTP Retry-After header (unlike OpenAI) — a google.rpc.RetryInfo
-// entry in error.details, e.g. {"@type": ".../google.rpc.RetryInfo",
-// "retryDelay": "40s"}. Checking only the header (the original mistake
-// here) meant this was silently always falling back to a guessed backoff.
-function parseGeminiRetryDelayMs(body: string): number | null {
-  try {
-    const parsed = JSON.parse(body) as {
-      error?: { details?: { "@type"?: string; retryDelay?: string }[] };
-    };
-    const retryInfo = parsed.error?.details?.find((d) => d["@type"]?.includes("RetryInfo"));
-    const match = retryInfo?.retryDelay?.match(/^([\d.]+)s$/);
-    if (!match) return null;
-    const seconds = Number(match[1]);
-    return Number.isFinite(seconds) ? seconds * 1000 : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function scorePhotos(photos: string[] | null): Promise<PhotoScoreResult> {
   if (!photos || photos.length === 0) {
     return { score: null, reasoning: null, scoredPhotos: null };
@@ -99,105 +74,38 @@ export async function scorePhotos(photos: string[] | null): Promise<PhotoScoreRe
     throw new Error("GEMINI_API_KEY is not set");
   }
 
-
-  let scoredPhotos = [];
-  const step = photos.length / MAX_PHOTOS_TO_SCORE
+  let scoredPhotos: string[] = [];
+  const step = photos.length / MAX_PHOTOS_TO_SCORE;
 
   if (photos.length <= MAX_PHOTOS_TO_SCORE) {
     scoredPhotos = photos;
   } else {
     for (let i = 0; i < MAX_PHOTOS_TO_SCORE; i++) {
-      console.log("Scoring photo #", Math.floor(i * step))
       scoredPhotos.push(photos[Math.floor(i * step)]);
     }
   }
 
-
-
-  // const scoredPhotos = photos.slice(0, MAX_PHOTOS_TO_SCORE);
-
-  // Gemini's inline_data parts need raw bytes, not a URL — unlike OpenAI's
-  // image_url, there's no way to hand it a hosted photo URL directly
-  // (that requires the separate Files API / a GCS URI). Fetch and
-  // base64-encode each photo once, up front, so a retry doesn't re-fetch.
-  const imageParts = (
-    await Promise.all(
-      scoredPhotos.map(async (url) => {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) return null;
-          const mimeType = res.headers.get("content-type")?.split(";")[0] || "image/jpeg";
-          const data = Buffer.from(await res.arrayBuffer()).toString("base64");
-          return { inlineData: { mimeType, data } };
-        } catch {
-          return null;
-        }
-      })
-    )
-  ).filter((part): part is { inlineData: { mimeType: string; data: string } } => part !== null);
+  // Fetched and base64-encoded once, up front, so a retry doesn't re-fetch.
+  const imageParts = (await Promise.all(scoredPhotos.map(fetchImagePart))).filter((part) => part !== null);
 
   if (imageParts.length === 0) {
     return { score: null, reasoning: null, scoredPhotos: null };
   }
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const res = await fetch(GEMINI_URL, {
-      method: "POST",
-      headers: {
-        "x-goog-api-key": apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: RUBRIC }, ...imageParts],
-          },
-        ],
-        generationConfig: {
-          temperature: 0,
-          responseMimeType: "application/json",
-        },
-      }),
-    });
+  const content = await callGemini({
+    model: MODEL,
+    apiKey,
+    parts: [{ text: RUBRIC }, ...imageParts],
+    generationConfig: { temperature: 0, responseMimeType: "application/json" },
+    logLabel: "scorePhotos",
+  });
+  if (!content) return { score: null, reasoning: null, scoredPhotos: null };
 
-    if (!res.ok) {
-      // 429 (rate limit) and 5xx are transient — retry with backoff.
-      // Gemini's own suggested delay (in the error body) is authoritative
-      // when present; the Retry-After header is a fallback in case that
-      // ever changes; a fixed guess is the last resort.
-      const isRetryable = res.status === 429 || res.status >= 500;
-      const body = await res.text();
-      console.error(`scorePhotos: Gemini ${res.status} (attempt ${attempt}/${MAX_ATTEMPTS})`, body);
-
-      if (isRetryable && attempt < MAX_ATTEMPTS) {
-        const retryAfterHeader = Number(res.headers.get("retry-after"));
-        const waitMs =
-          parseGeminiRetryDelayMs(body) ??
-          (Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
-            ? retryAfterHeader * 1000
-            : attempt * 15000);
-        await sleep(waitMs);
-        continue;
-      }
-
-      return { score: null, reasoning: null, scoredPhotos: null };
-    }
-
-    const data = (await res.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-    };
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!content) return { score: null, reasoning: null, scoredPhotos: null };
-
-    try {
-      const parsed = JSON.parse(content) as { score?: number; reasoning?: string };
-      const score =
-        typeof parsed.score === "number" ? Math.max(1, Math.min(10, Math.round(parsed.score))) : null;
-      return { score, reasoning: parsed.reasoning ?? null, scoredPhotos: scoredPhotos };
-    } catch {
-      return { score: null, reasoning: null, scoredPhotos: null };
-    }
+  try {
+    const parsed = JSON.parse(content) as { score?: number; reasoning?: string };
+    const score = typeof parsed.score === "number" ? Math.max(1, Math.min(10, Math.round(parsed.score))) : null;
+    return { score, reasoning: parsed.reasoning ?? null, scoredPhotos };
+  } catch {
+    return { score: null, reasoning: null, scoredPhotos: null };
   }
-
-  return { score: null, reasoning: null, scoredPhotos: null };
 }

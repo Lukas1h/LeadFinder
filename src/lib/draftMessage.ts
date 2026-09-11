@@ -1,12 +1,17 @@
-import type { AgentRelationshipStatus, PresetType } from "@/db/schema";
+import type { AgentRelationshipStatus, PresetType, LeadStatus } from "@/db/schema";
 import { shortStreetName } from "@/lib/sms";
+import { fetchImagePart, callGemini } from "@/lib/gemini";
 
-const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
+// Gemini 3.5 Flash (not Lite) — this is a low-volume, synchronous,
+// interactive call (one draft per Send-dialog open, not a batch job like
+// photoScore), so the free-tier rate-limit headroom Lite buys matters much
+// less here than the writing/reasoning quality the full model gives.
+const MODEL = "gemini-3.5-flash";
 
 // Interactive, synchronous call (blocks the Send dialog) — capped lower
-// than photoScore's batch-job limit of 20. The first few photos are
-// almost always the hero/exterior/kitchen shots anyway, enough to judge
-// quality, room coverage, drone presence, and architectural interest.
+// than photoScore's batch-job limit of 8. The first few photos are almost
+// always the hero/exterior/kitchen shots anyway, enough to judge quality,
+// room coverage, drone presence, and architectural interest.
 const MAX_PHOTOS_FOR_DRAFT = 6;
 
 export interface DraftMessageInput {
@@ -14,21 +19,26 @@ export interface DraftMessageInput {
   address: string | null;
   city: string | null;
   state: string | null;
+  zipcode: string | null;
   price: number | null;
   bedrooms: string | null;
   bathrooms: string | null;
   livingArea: number | null;
   homeType: string | null;
   isComingSoon: boolean;
+  listingUrl: string | null;
+  brokerName: string | null;
+  status: LeadStatus;
+  notes: string | null;
+  bookingValue: number | null;
   photoCount: number | null;
   photos: string[] | null;
-  score: number | null;
-  scoreReasoning: string | null;
   ageDays: number;
   agentName: string | null;
   agentRelationshipStatus: AgentRelationshipStatus | null;
   agentListingCount: number;
   agentLastContactedAt: Date | null;
+  agentNotes: string | null;
 }
 
 const RELATIONSHIP_GUIDANCE: Record<AgentRelationshipStatus, string> = {
@@ -80,31 +90,49 @@ Hey {{firstName}}, I'm Lukas. I've seen your listings around {{city}} and it loo
 12. Simple Listing Introduction
 Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}} and wanted to reach out. I'm a local real estate photographer and shoot photo + drone. If you still need someone for the property, I'd be happy to get you taken care of.`;
 
-function buildInitialOutreachPrompt(input: DraftMessageInput, street: string, skipIntro: boolean): string {
-  return `The purpose of this message is to automatically write a short, personalized text message to a real estate agent based on the listing, the agent, and the available listing photos. It should feel like a real local photographer personally reaching out, not automated marketing.
+/** Only non-null fields render — keeps the prompt from padding out with a wall of "unknown"s. */
+function formatListingFacts(input: DraftMessageInput): string {
+  const lines: string[] = [];
+  if (input.price != null) lines.push(`Price: $${input.price.toLocaleString()}`);
+  if (input.homeType) lines.push(`Type: ${input.homeType}`);
+  if (input.bedrooms || input.bathrooms) lines.push(`${input.bedrooms ?? "?"} bd / ${input.bathrooms ?? "?"} ba`);
+  if (input.livingArea != null) lines.push(`${input.livingArea.toLocaleString()} sqft`);
+  if (input.zipcode) lines.push(`Zip: ${input.zipcode}`);
+  if (input.isComingSoon) lines.push("Status: coming soon, not actively listed yet");
+  else lines.push(`Pipeline status: ${input.status}`);
+  lines.push(`Photo count on listing: ${input.photoCount ?? "unknown"}`);
+  lines.push(`Days on market (or since found): ${input.ageDays}`);
+  if (input.brokerName) lines.push(`Brokerage: ${input.brokerName}`);
+  if (input.listingUrl) lines.push(`Zillow URL: ${input.listingUrl}`);
+  if (input.bookingValue != null) lines.push(`Already booked, job value: $${input.bookingValue.toLocaleString()}`);
+  if (input.notes) lines.push(`Lukas's own notes on this listing: ${input.notes}`);
+  return lines.map((l) => `- ${l}`).join("\n");
+}
 
-Analyze the listing details AND the attached photos (if any) before deciding what to say.
+function buildInitialOutreachPrompt(input: DraftMessageInput, street: string, skipIntro: boolean): string {
+  return `The purpose of this message is to automatically write a short, personalized text message to a real estate agent based on the listing, the agent, and the attached listing photos. It should feel like a real local photographer personally reaching out, not automated marketing.
+
+Analyze the listing details AND the attached photos closely before deciding what to say — you are the one judging the photography here, nothing has been pre-scored for you. Look at composition, lighting, exposure, whether an aerial/drone shot is present, whether a twilight/dusk exterior shot is present, whether windows show real exterior detail (a "window pull") vs. blown out to white, converging/leaning vertical lines (a cellphone tell), and whether the property's best features are actually shown.
 
 How to choose the approach — determine the strongest reason to contact this agent, in this priority order:
 1. If the listing is coming soon or has little/no photography, focus on helping them get the listing photographed quickly.
 2. If the photos are poor, amateur, cellphone-quality, outdated, poorly composed, or fail to showcase the property, offer a professional refresh without insulting the agent or their current photographer.
 3. If the photos are good but there's no video or no aerial/drone shot among them, offer the specific missing service.
 4. If the property is unusually expensive, attractive, architectural, unique, or visually interesting, emphasize that strong photography could showcase it particularly well.
-5. If the agent appears high-volume or established (see "Listings we've seen from this agent" below) and likely already has a photographer, do not try to convince them to replace that photographer — position Lukas as another local option or backup for busy/last-minute/quick-turnaround situations.
+5. If the agent appears high-volume or established (see "Listings we've seen from this agent" below) and the photos already look professional, do not try to convince them to replace that photographer — position Lukas as another local option or backup for busy/last-minute/quick-turnaround situations.
 6. If none of the above clearly applies, simply introduce Lukas as a local real estate photographer and put him on the agent's radar.
 
-What to look for in the photos: cellphone/amateur look, poor lighting or exposure, awkward composition, too few photos, important rooms or features not shown, weak exterior shots, whether an aerial/drone shot is present, whether the property has strong architectural or design features that could be showcased better. Do not automatically criticize the photography — if it's already good, acknowledge that implicitly and use the backup/additional-photographer approach (case 3 or 5 above).
+Do not automatically criticize the photography — if it's already good, acknowledge that implicitly and use the backup/additional-photographer approach (case 3 or 5 above).
 
-Listing:
-- Street (use this for {{street}}): ${street}
-${input.price != null ? `- Price: $${input.price.toLocaleString()}\n` : ""}${input.homeType ? `- Type: ${input.homeType}\n` : ""}${input.bedrooms || input.bathrooms ? `- ${input.bedrooms ?? "?"} bd / ${input.bathrooms ?? "?"} ba\n` : ""}${input.livingArea != null ? `- ${input.livingArea.toLocaleString()} sqft\n` : ""}${input.isComingSoon ? "- Status: coming soon, not actively listed yet\n" : ""}- Photo count on listing: ${input.photoCount ?? "unknown"}
-${input.score != null ? `- Existing photo-quality score (1-10, technique only): ${input.score}/10${input.scoreReasoning ? ` — ${input.scoreReasoning}` : ""}\n` : ""}
+Listing — street (use this for {{street}}): ${street}
+${formatListingFacts(input)}
+
 Agent (use first name for {{firstName}}, city for {{city}}):
 - Name: ${input.agentName ?? "unknown"}
 - City: ${input.city ?? "unknown"}
 - Relationship: ${input.agentRelationshipStatus ?? "cold"} — ${RELATIONSHIP_GUIDANCE[input.agentRelationshipStatus ?? "cold"]}
 - Listings we've seen from this agent: ${input.agentListingCount}
-
+${input.agentNotes ? `- Lukas's own notes on this agent: ${input.agentNotes}\n` : ""}
 Writing style:
 - Short, conversational, natural, low-pressure. 2-4 sentences.
 - The message should usually: (1) address the agent by first name, (2) introduce Lukas as a local real estate photographer, (3) reference the specific listing/street, (4) give a natural reason for reaching out, (5) offer an easy way for Lukas to help.${skipIntro ? `\n- IMPORTANT override to step (2) above: do NOT say "I'm Lukas," "it's Lukas," or name-drop Lukas at all in this message. The relationship status above means this agent already has him saved in their phone and knows exactly who's texting — treat this like a text from a contact already in their contacts list. Start straight from the greeting into the reason for reaching out.` : ""}
@@ -125,7 +153,7 @@ Final rules:
 }
 
 function buildFollowUpPrompt(input: DraftMessageInput, street: string, skipIntro: boolean): string {
-  return `Write a short SMS follow-up to a real estate agent — an initial text about this listing already went out and got no reply yet. This is from Lukas, a local real estate photographer.
+  return `Write a short SMS follow-up to a real estate agent — an initial text about this listing already went out and got no reply yet. This is from Lukas, a local real estate photographer. Look at the attached photos yourself to judge whether they're worth mentioning (e.g. as a reason there's still an opening, or to drop if they already look professional).
 
 Rules specific to follow-ups:
 - NEVER say "just checking in," "following up," or anything that adds zero new information — that's the #1 thing to avoid in a follow-up.
@@ -134,9 +162,10 @@ Rules specific to follow-ups:
 - ${skipIntro ? `Do NOT say "I'm Lukas," "it's Lukas," or name-drop Lukas at all — the relationship below means this agent already has him saved in their phone.` : "A brief self-introduction is fine since this is still effectively a first-ever contact."}
 - Reference the street (${street}) naturally, don't just say "the listing."
 
-Listing: ${street}${input.price != null ? `, $${input.price.toLocaleString()}` : ""}${input.score != null ? `. Photo score ${input.score}/10${input.scoreReasoning ? ` (${input.scoreReasoning})` : ""}` : ""}.
+Listing — street: ${street}
+${formatListingFacts(input)}
 
-Agent: ${input.agentName ?? "unknown"}, relationship: ${input.agentRelationshipStatus ?? "cold"} — ${RELATIONSHIP_GUIDANCE[input.agentRelationshipStatus ?? "cold"]}`;
+Agent: ${input.agentName ?? "unknown"}, relationship: ${input.agentRelationshipStatus ?? "cold"} — ${RELATIONSHIP_GUIDANCE[input.agentRelationshipStatus ?? "cold"]}${input.agentNotes ? `\nLukas's own notes on this agent: ${input.agentNotes}` : ""}`;
 }
 
 function buildPrompt(input: DraftMessageInput): string {
@@ -184,61 +213,42 @@ function stripDashes(text: string): string {
 }
 
 /**
- * Drafts one message live for this exact listing+agent. Vision-capable —
- * sends a handful of the listing's actual photos (gpt-4o-mini, same model
- * as scorePhotos) alongside the text context, since the writing guide
- * calls for judging composition/coverage/drone-presence/architectural
- * interest directly from the photos, not just the pre-computed technique
- * score. Runs synchronously while the Send dialog is open, so a failure
+ * Drafts one message live for this exact listing+agent, judging the actual
+ * listing photos directly (Gemini vision, same provider as scorePhotos)
+ * rather than being handed a pre-computed score — the writing guide calls
+ * for judging composition/coverage/drone-presence/architectural interest
+ * itself. Runs synchronously while the Send dialog is open, so a failure
  * should just mean "no AI option this time" rather than blocking the
  * dialog with retries. Returns null on any failure.
  */
 export async function draftMessage(input: DraftMessageInput): Promise<string | null> {
-  if (process.env.USE_MOCK_OPENAI === "true") {
-    return `[Mock AI draft, set USE_MOCK_OPENAI=false for a real one] Hey${input.agentName ? ` ${input.agentName.split(" ")[0]}` : ""}, saw your listing${input.address ? ` on ${input.address}` : ""}. Got time this week if you need photos?`;
+  if (process.env.USE_MOCK_GEMINI === "true") {
+    return `[Mock AI draft, set USE_MOCK_GEMINI=false for a real one] Hey${input.agentName ? ` ${input.agentName.split(" ")[0]}` : ""}, saw your listing${input.address ? ` on ${input.address}` : ""}. Got time this week if you need photos?`;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
   const promptText = buildPrompt(input);
   const photos = (input.photos ?? []).slice(0, MAX_PHOTOS_FOR_DRAFT);
-
-  const content =
-    photos.length > 0
-      ? [
-          { type: "text", text: promptText },
-          ...photos.map((url) => ({ type: "image_url", image_url: { url, detail: "low" } })),
-        ]
-      : promptText;
+  const imageParts = (await Promise.all(photos.map(fetchImagePart))).filter((part) => part !== null);
 
   try {
-    const res = await fetch(OPENAI_CHAT_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
+    const text = await callGemini({
+      model: MODEL,
+      apiKey,
+      parts: [{ text: promptText }, ...imageParts],
+      // presencePenalty/frequencyPenalty (used under the old OpenAI setup
+      // to push against repetitive phrasing) aren't supported on this
+      // model — confirmed via a real 400 ("Penalty is not enabled for
+      // this model") — so that job falls entirely to the prompt's banned
+      // words/phrases list and temperature instead.
+      generationConfig: {
         temperature: 0.9,
-        // Pushes against the model's default tendency to reach for the
-        // same stock phrasing (and the same banned punctuation/words)
-        // every time — see the "Additional writing rules" in buildPrompt.
-        presence_penalty: 0.4,
-        frequency_penalty: 0.3,
-        messages: [{ role: "user", content }],
-      }),
+      },
+      logLabel: "draftMessage",
     });
-
-    if (!res.ok) {
-      console.error(`draftMessage: OpenAI ${res.status}`, await res.text());
-      return null;
-    }
-
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const text = data.choices?.[0]?.message?.content?.trim();
-    return text && text.length > 0 ? stripDashes(text) : null;
+    return text ? stripDashes(text.trim()) : null;
   } catch (err) {
     console.error("draftMessage: request failed", err);
     return null;

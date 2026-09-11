@@ -9,6 +9,7 @@ import {
   messageSends,
   type PresetType,
   type AgentRelationshipStatus,
+  type Listing,
 } from "@/db/schema";
 import { and, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -153,28 +154,9 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   await ensureDefaultPresets();
   await ensureAiDraftPresets(type);
 
-  const [listing] = await db
-    .select({
-      agentName: listings.agentName,
-      agentPhone: listings.agentPhone,
-      address: listings.address,
-      city: listings.city,
-      state: listings.state,
-      price: listings.price,
-      bedrooms: listings.bedrooms,
-      bathrooms: listings.bathrooms,
-      livingArea: listings.livingArea,
-      homeType: listings.homeType,
-      isComingSoon: listings.isComingSoon,
-      score: listings.score,
-      scoreReasoning: listings.scoreReasoning,
-      photoCount: listings.photoCount,
-      photos: listings.photos,
-      listedAt: listings.listedAt,
-      foundAt: listings.foundAt,
-    })
-    .from(listings)
-    .where(eq(listings.id, listingId));
+  // Full row (not a curated field list) — buildAiDraftOption below feeds
+  // the AI draft literally everything we have on the listing.
+  const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
   if (!listing) return { presets: [] };
 
   const ageDays = listingAgeDays(listing.listedAt, listing.foundAt);
@@ -269,24 +251,6 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   return { presets };
 }
 
-interface ListingForDraft {
-  agentName: string | null;
-  agentPhone: string | null;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  price: number | null;
-  bedrooms: string | null;
-  bathrooms: string | null;
-  livingArea: number | null;
-  homeType: string | null;
-  isComingSoon: boolean;
-  score: number | null;
-  scoreReasoning: string | null;
-  photoCount: number | null;
-  photos: string[] | null;
-}
-
 /**
  * Drafts and returns the AI option, or null if there's no enabled AI-draft
  * preset for this type or the draft call fails — either way the dialog
@@ -295,7 +259,7 @@ interface ListingForDraft {
 async function buildAiDraftOption(
   listingId: string,
   type: PresetType,
-  listing: ListingForDraft,
+  listing: Listing,
   ageDays: number
 ): Promise<PresetOption | null> {
   const [preset] = await db
@@ -304,11 +268,12 @@ async function buildAiDraftOption(
     .where(and(eq(messagePresets.type, type), eq(messagePresets.aiGenerated, true), eq(messagePresets.enabled, true)));
   if (!preset) return null;
 
-  let agent: { relationshipStatus: AgentRelationshipStatus; lastContactedAt: Date | null } | null = null;
+  let agent: { relationshipStatus: AgentRelationshipStatus; lastContactedAt: Date | null; notes: string | null } | null =
+    null;
   let agentListingCount = 0;
   if (listing.agentPhone) {
     const [agentRow] = await db
-      .select({ relationshipStatus: agents.relationshipStatus, lastContactedAt: agents.lastContactedAt })
+      .select({ relationshipStatus: agents.relationshipStatus, lastContactedAt: agents.lastContactedAt, notes: agents.notes })
       .from(agents)
       .where(eq(agents.phone, listing.agentPhone));
     agent = agentRow ?? null;
@@ -320,26 +285,34 @@ async function buildAiDraftOption(
     agentListingCount = listingCount;
   }
 
+  // Everything we have on the listing, not a curated subset — including
+  // the actual photos (draftMessage judges them itself, vision-based,
+  // rather than being handed the pre-computed photoScore).
   const text = await draftMessage({
     type,
     address: listing.address,
     city: listing.city,
     state: listing.state,
+    zipcode: listing.zipcode,
     price: listing.price,
     bedrooms: listing.bedrooms,
     bathrooms: listing.bathrooms,
     livingArea: listing.livingArea,
     homeType: listing.homeType,
     isComingSoon: listing.isComingSoon,
+    listingUrl: listing.listingUrl,
+    brokerName: listing.brokerName,
+    status: listing.status,
+    notes: listing.notes,
+    bookingValue: listing.bookingValue,
     photoCount: listing.photoCount,
     photos: listing.photos,
-    score: listing.score,
-    scoreReasoning: listing.scoreReasoning,
     ageDays,
     agentName: listing.agentName,
     agentRelationshipStatus: agent?.relationshipStatus ?? null,
     agentListingCount,
     agentLastContactedAt: agent?.lastContactedAt ?? null,
+    agentNotes: agent?.notes ?? null,
   });
   if (!text) return null;
 

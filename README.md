@@ -14,9 +14,8 @@ leads for a real estate photographer. Single-user personal tool.
 3. Copy `.env.local.example` to `.env.local` and fill in:
    - `DATABASE_URL` — from step 2
    - `ZILLAPI_KEY` — from your Zillapi dashboard
-   - `OPENAI_API_KEY` — from platform.openai.com, for AI message drafting
-   - `GEMINI_API_KEY` — from aistudio.google.com, for AI photo scoring
-     (see below)
+   - `GEMINI_API_KEY` — from aistudio.google.com, for AI photo scoring and
+     AI message drafting (see below)
    - `CRON_SECRET` — any string for local dev
    - `USE_MOCK_ZILLAPI` — leave as `true` until you've made your first real
      call (see below)
