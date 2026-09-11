@@ -1,12 +1,13 @@
 "use client";
 
 import { useTransition } from "react";
-import { RotateCcw, Phone, StickyNote } from "lucide-react";
+import Link from "next/link";
+import { RotateCcw, Phone, MessageCircle, Mail, StickyNote } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { updateAgentRelationshipStatus, reconnectAgent, markAgentDeclined } from "./actions";
 import { AgentDetailDialog } from "./AgentDetailDialog";
 import { formatDate, daysSince } from "@/lib/format";
-import { telUrl } from "@/lib/sms";
+import { telUrl, smsUrl } from "@/lib/sms";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,7 +60,10 @@ export function AgentCard({
             </button>
           }
         />
-        <p className="text-xs text-muted-foreground font-mono mt-0.5">{agent.phone}</p>
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          {agent.phone && <p className="text-xs text-muted-foreground font-mono mt-0.5">{agent.phone}</p>}
+          {agent.email && <p className="text-xs text-muted-foreground font-mono mt-0.5">{agent.email}</p>}
+        </div>
         <div className="text-sm text-muted-foreground mt-1.5 flex flex-wrap gap-x-3">
           <span>
             {listingCount} listing{listingCount === 1 ? "" : "s"}
@@ -87,6 +91,20 @@ export function AgentCard({
             <a href={callHref} aria-label={`Call ${agent.name ?? agent.phone}`}>
               <Phone />
             </a>
+          </Button>
+        )}
+        {agent.phone && (
+          <Button variant="outline" size="icon" asChild>
+            <a href={smsUrl(agent.phone, "")} aria-label={`Text ${agent.name ?? agent.phone}`}>
+              <MessageCircle />
+            </a>
+          </Button>
+        )}
+        {agent.email && (
+          <Button variant="outline" size="icon" asChild>
+            <Link href={`/messaging?agent=${agent.id}`} aria-label={`Email ${agent.name ?? agent.email}`}>
+              <Mail />
+            </Link>
           </Button>
         )}
 

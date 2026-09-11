@@ -61,3 +61,18 @@ Lukas Hahn
 Hahn Media
 https://www.lukashahn.art/real-estate
 (541) 430-3372`;
+
+// Seed copy for the "Blank" email preset (ensureBlankEmailPreset in
+// composeEmailActions.ts) — just a greeting and the signature, empty
+// middle for writing something custom each time. Subject is deliberately
+// left blank so it's never accidentally sent unedited.
+export const BLANK_EMAIL_SUBJECT = "";
+
+export const BLANK_EMAIL_BODY = `Hello {{firstName}},
+
+
+
+Lukas Hahn
+Hahn Media
+https://www.lukashahn.art/real-estate
+(541) 430-3372`;

@@ -234,6 +234,13 @@ export const messagePresets = pgTable("message_presets", {
   // management UI rather than re-attached per send, since the whole point
   // of the Compose flow is ~2 seconds per realtor.
   attachments: jsonb("attachments").$type<PresetAttachment[]>().notNull().default([]),
+
+  // Marks a preset the delete button refuses to touch regardless of send
+  // history — used for the seeded "Blank" email preset (see
+  // ensureBlankEmailPreset in composeEmailActions.ts), which should always
+  // be available as a scaffold even with zero sends. Unlike aiGenerated,
+  // the variant body/subject stays fully user-editable.
+  protected: boolean("protected").notNull().default(false),
 });
 
 export interface PresetAttachment {

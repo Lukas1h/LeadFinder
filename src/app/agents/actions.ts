@@ -1,8 +1,17 @@
 "use server";
 
 import { db } from "@/db";
-import { agents, listings, type AgentRelationshipStatus } from "@/db/schema";
-import { eq, isNotNull, sql } from "drizzle-orm";
+import {
+  agents,
+  listings,
+  messageSends,
+  messagePresets,
+  type AgentRelationshipStatus,
+  type MessageChannel,
+  type PresetType,
+  type MessageResult,
+} from "@/db/schema";
+import { eq, isNotNull, sql, desc, and, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -79,23 +88,93 @@ function normalizePhone(phone: string): string {
   return phone.trim();
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+interface ContactInfoResult {
+  error?: string;
+  phone?: string | null;
+  email?: string | null;
+}
+
+/** Shared by importAgent and updateAgentContactInfo — at least one of phone/email required, both format-checked. */
+function parseContactInfo(phoneInput: string, emailInput: string): ContactInfoResult {
+  const trimmedPhone = phoneInput.trim();
+  const trimmedEmail = emailInput.trim().toLowerCase();
+  if (!trimmedPhone && !trimmedEmail) return { error: "Enter a phone number or an email" };
+
+  let phone: string | null = null;
+  if (trimmedPhone) {
+    phone = normalizePhone(trimmedPhone);
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10) return { error: "Enter a valid phone number" };
+  }
+  let email: string | null = null;
+  if (trimmedEmail) {
+    if (!EMAIL_RE.test(trimmedEmail)) return { error: "Enter a valid email address" };
+    email = trimmedEmail;
+  }
+
+  return { phone, email };
+}
+
 export async function importAgent(input: {
   name: string;
   phone: string;
+  email: string;
   relationshipStatus: AgentRelationshipStatus;
 }) {
-  const phone = normalizePhone(input.phone);
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length < 10) return { error: "Enter a valid phone number" };
+  const parsed = parseContactInfo(input.phone, input.email);
+  if (parsed.error) return { error: parsed.error };
+  const { phone, email } = parsed;
 
-  const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, phone));
-  if (existing) return { error: "An agent with this phone number already exists" };
+  if (phone) {
+    const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, phone));
+    if (existing) return { error: "An agent with this phone number already exists" };
+  }
+  if (email) {
+    const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.email, email));
+    if (existing) return { error: "An agent with this email already exists" };
+  }
 
   await db.insert(agents).values({
     phone,
+    email,
     name: input.name.trim() || null,
     relationshipStatus: input.relationshipStatus,
   });
+
+  revalidatePath("/agents");
+  return { error: null };
+}
+
+/** Edits an existing agent's name/phone/email — from the "Edit" control in AgentDetailDialog. */
+export async function updateAgentContactInfo(
+  id: string,
+  input: { name: string; phone: string; email: string }
+): Promise<{ error: string | null }> {
+  const parsed = parseContactInfo(input.phone, input.email);
+  if (parsed.error) return { error: parsed.error };
+  const { phone, email } = parsed;
+
+  if (phone) {
+    const [existing] = await db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(eq(agents.phone, phone), ne(agents.id, id)));
+    if (existing) return { error: "Another agent already has this phone number" };
+  }
+  if (email) {
+    const [existing] = await db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(eq(agents.email, email), ne(agents.id, id)));
+    if (existing) return { error: "Another agent already has this email" };
+  }
+
+  await db
+    .update(agents)
+    .set({ name: input.name.trim() || null, phone, email })
+    .where(eq(agents.id, id));
 
   revalidatePath("/agents");
   return { error: null };
@@ -114,4 +193,32 @@ export async function listingCountsByPhone(): Promise<Record<string, number>> {
     if (r.phone) result[r.phone] = r.count;
   }
   return result;
+}
+
+export interface AgentSendHistoryItem {
+  id: string;
+  presetName: string;
+  channel: MessageChannel;
+  type: PresetType;
+  sentAt: Date;
+  respondedAt: Date | null;
+  result: MessageResult;
+}
+
+/** Every SMS/email logged against this agent (any listing, or none — see the cold-email Compose flow), newest first. */
+export async function getAgentSendHistory(agentId: string): Promise<AgentSendHistoryItem[]> {
+  return db
+    .select({
+      id: messageSends.id,
+      presetName: messagePresets.name,
+      channel: messageSends.channel,
+      type: messageSends.type,
+      sentAt: messageSends.sentAt,
+      respondedAt: messageSends.respondedAt,
+      result: messageSends.result,
+    })
+    .from(messageSends)
+    .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))
+    .where(eq(messageSends.agentId, agentId))
+    .orderBy(desc(messageSends.sentAt));
 }

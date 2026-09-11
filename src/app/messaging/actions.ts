@@ -72,6 +72,12 @@ export async function togglePreset(id: string, enabled: boolean) {
 }
 
 export async function deletePreset(id: string) {
+  const [preset] = await db
+    .select({ protected: messagePresets.protected })
+    .from(messagePresets)
+    .where(eq(messagePresets.id, id));
+  if (preset?.protected) return { error: "This is a built-in preset and can't be deleted." };
+
   const [sent] = await db
     .select({ id: messageSends.id })
     .from(messageSends)

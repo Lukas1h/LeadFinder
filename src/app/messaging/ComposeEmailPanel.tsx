@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Mail, Paperclip } from "lucide-react";
 import type { PresetType } from "@/db/schema";
 import { getComposeEmailOptions, sendComposeEmail } from "@/app/composeEmailActions";
-import { findAgentMatches, searchAgentsByName, type AgentMatchSummary } from "@/app/agents/matchActions";
+import {
+  findAgentMatches,
+  searchAgentsByName,
+  mergeAgentEmail,
+  getAgentContactInfo,
+  type AgentMatchSummary,
+} from "@/app/agents/matchActions";
 import type { PresetOption } from "@/app/messageActions";
 import { renderMessageBody, renderSubject } from "@/lib/messageTemplate";
 import { formatDate, formatPhone } from "@/lib/format";
@@ -32,13 +38,18 @@ const TYPE_LABELS: Record<PresetType, string> = {
 
 export function ComposeEmailPanel() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const nameRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [presets, setPresets] = useState<PresetOption[]>([]);
   const [presetsLoaded, setPresetsLoaded] = useState(false);
-  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  // "" rather than null — keeps the Template Select controlled from the
+  // very first render instead of switching from uncontrolled (value=
+  // undefined before presets load) to controlled once they do, which
+  // otherwise trips React's controlled/uncontrolled warning.
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   // False until the user edits Subject/Body directly — while false, both
@@ -51,6 +62,7 @@ export function ComposeEmailPanel() {
   const [exactMatch, setExactMatch] = useState<AgentMatchSummary | null>(null);
   const [fuzzyMatches, setFuzzyMatches] = useState<AgentMatchSummary[]>([]);
   const [mergedAgent, setMergedAgent] = useState<{ id: string; name: string | null } | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
   const [confirmAnyway, setConfirmAnyway] = useState(false);
 
   const [nameSuggestions, setNameSuggestions] = useState<AgentMatchSummary[]>([]);
@@ -69,13 +81,36 @@ export function ComposeEmailPanel() {
     getComposeEmailOptions().then(({ presets: options }) => {
       setPresets(options);
       const recommended = options.find((p) => p.recommended) ?? options[0] ?? null;
-      setSelectedPresetId(recommended?.presetId ?? null);
+      setSelectedPresetId(recommended?.presetId ?? "");
       applyTemplate(recommended, "");
       setPresetsLoaded(true);
     });
     // Loads once — Compose always shows every enabled email template.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // "Email" contact button deep link (AgentCard/AgentDetailDialog ->
+  // /messaging?agent=<id>) — prefills Name/Email once presets have loaded
+  // (so applyTemplate has something to render {{firstName}} into) and runs
+  // the normal match check, same as if it'd been typed by hand.
+  useEffect(() => {
+    const agentId = searchParams.get("agent");
+    if (!agentId || !presetsLoaded) return;
+    getAgentContactInfo(agentId).then((info) => {
+      if (!info) return;
+      updateNameAndTemplate(info.name ?? "");
+      setEmail(info.email ?? "");
+      if (info.name || info.email) {
+        findAgentMatches(info.name ?? "", info.email ?? "").then((result) => {
+          setExactMatch(result.exactEmailMatch);
+          setFuzzyMatches(result.exactEmailMatch ? [] : result.fuzzyMatches);
+        });
+      }
+    });
+    // Runs once presets finish loading — not meant to re-fire on every
+    // searchParams/selected change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetsLoaded]);
 
   const handleSelectPreset = (presetId: string) => {
     setSelectedPresetId(presetId);
@@ -153,6 +188,20 @@ export function ComposeEmailPanel() {
     }
   }
 
+  async function handleMergeClick(candidate: AgentMatchSummary) {
+    setIsMerging(true);
+    await mergeAgentEmail(candidate.id, name, email);
+    setIsMerging(false);
+    // Merged for real now (not deferred to send) — reflects as the same
+    // "known contact" state an exact email match would produce, carrying
+    // over the candidate's real lastContactedAt so the resend-confirm gate
+    // below still only fires when they were actually contacted before.
+    setExactMatch({ ...candidate, email });
+    setFuzzyMatches([]);
+    setMergedAgent(null);
+    toast.success(`Merged into ${candidate.name}`);
+  }
+
   function resetForm() {
     setName("");
     setEmail("");
@@ -169,7 +218,10 @@ export function ComposeEmailPanel() {
   async function handleSend() {
     if (!selected || !selected.type) return;
 
-    if (exactMatch && !confirmAnyway) {
+    // Only require the extra click when they were actually contacted
+    // before — an agent that's merely on file (e.g. just merged, or
+    // imported but never messaged) isn't a real double-send risk.
+    if (exactMatch?.lastContactedAt && !confirmAnyway) {
       setConfirmAnyway(true);
       return;
     }
@@ -183,7 +235,6 @@ export function ComposeEmailPanel() {
       variantId: selected.variantId,
       subject,
       body,
-      matchedAgentId: mergedAgent?.id,
     });
     setIsSending(false);
 
@@ -251,10 +302,25 @@ export function ComposeEmailPanel() {
       </div>
 
       {exactMatch && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-          <p className="text-amber-700 dark:text-amber-400">
-            Already contacted <strong>{exactMatch.name ?? "this agent"}</strong>
-            {exactMatch.lastContactedAt && ` on ${formatDate(exactMatch.lastContactedAt)}`}.
+        <div
+          className={
+            exactMatch.lastContactedAt
+              ? "rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+              : "rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm"
+          }
+        >
+          <p className={exactMatch.lastContactedAt ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}>
+            {exactMatch.lastContactedAt ? (
+              <>
+                Already contacted <strong>{exactMatch.name ?? "this agent"}</strong> on{" "}
+                {formatDate(exactMatch.lastContactedAt)}.
+              </>
+            ) : (
+              <>
+                <strong className="text-foreground">{exactMatch.name ?? "This agent"}</strong> is already in your
+                agents list — not yet contacted.
+              </>
+            )}
           </p>
         </div>
       )}
@@ -270,11 +336,12 @@ export function ComposeEmailPanel() {
               type="button"
               size="sm"
               variant="outline"
-              onClick={() => setMergedAgent({ id: fuzzyMatches[0].id, name: fuzzyMatches[0].name })}
+              disabled={isMerging}
+              onClick={() => handleMergeClick(fuzzyMatches[0])}
             >
-              Merge
+              {isMerging ? "Merging…" : "Merge"}
             </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setFuzzyMatches([])}>
+            <Button type="button" size="sm" variant="ghost" disabled={isMerging} onClick={() => setFuzzyMatches([])}>
               Keep separate
             </Button>
           </div>
@@ -300,7 +367,7 @@ export function ComposeEmailPanel() {
         <>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="compose-preset">Template</Label>
-            <Select value={selectedPresetId ?? undefined} onValueChange={handleSelectPreset}>
+            <Select value={selectedPresetId} onValueChange={handleSelectPreset}>
               <SelectTrigger id="compose-preset" className="w-full">
                 <SelectValue />
               </SelectTrigger>

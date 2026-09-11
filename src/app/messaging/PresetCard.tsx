@@ -252,6 +252,7 @@ export function PresetCard({
                 AI
               </Badge>
             )}
+            {preset.protected && <Badge variant="secondary">Built-in</Badge>}
             {!preset.enabled && <span className="text-xs text-muted-foreground">(disabled)</span>}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
@@ -291,6 +292,7 @@ export function PresetCard({
               }
             />
           )}
+          {!preset.protected && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="ghost" size="icon" className="text-muted-foreground">
@@ -313,6 +315,7 @@ export function PresetCard({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          )}
         </div>
       </div>
 

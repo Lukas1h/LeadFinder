@@ -83,3 +83,24 @@ export async function searchAgentsByName(query: string): Promise<AgentMatchSumma
     .orderBy(desc(agents.lastContactedAt))
     .limit(8);
 }
+
+/** Powers the "Email" contact button's deep link into Compose (?agent=<id>) — prefills name/email. */
+export async function getAgentContactInfo(id: string): Promise<{ name: string | null; email: string | null } | null> {
+  const [agent] = await db.select({ name: agents.name, email: agents.email }).from(agents).where(eq(agents.id, id));
+  return agent ?? null;
+}
+
+/**
+ * Merges a fuzzy-matched agent's email/name live, the moment the user
+ * clicks "Merge" in Compose's duplicate-contact banner — not deferred
+ * until an actual send (the previous behavior), since confirming "yes,
+ * this is the same person" shouldn't be contingent on a send that might
+ * fail or get abandoned. Deliberately does NOT touch lastContactedAt —
+ * merging isn't itself a contact.
+ */
+export async function mergeAgentEmail(agentId: string, name: string, email: string): Promise<void> {
+  await db
+    .update(agents)
+    .set({ email: email.trim().toLowerCase(), name: name.trim() })
+    .where(eq(agents.id, agentId));
+}

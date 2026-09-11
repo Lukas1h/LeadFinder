@@ -28,6 +28,7 @@ export function ImportAgentForm({ trigger }: { trigger: React.ReactNode }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [relationshipStatus, setRelationshipStatus] = useState<AgentRelationshipStatus>("cold");
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +37,7 @@ export function ImportAgentForm({ trigger }: { trigger: React.ReactNode }) {
     setError(null);
     setIsSubmitting(true);
 
-    const result = await importAgent({ name, phone, relationshipStatus });
+    const result = await importAgent({ name, phone, email, relationshipStatus });
 
     setIsSubmitting(false);
 
@@ -48,6 +49,7 @@ export function ImportAgentForm({ trigger }: { trigger: React.ReactNode }) {
     toast.success("Agent added");
     setName("");
     setPhone("");
+    setEmail("");
     setRelationshipStatus("cold");
     setOpen(false);
     router.refresh();
@@ -62,6 +64,7 @@ export function ImportAgentForm({ trigger }: { trigger: React.ReactNode }) {
             <DialogTitle>Import agent</DialogTitle>
             <DialogDescription>
               Add an agent who exists outside the automated pipeline — an existing client or contact.
+              Phone or email, at least one.
             </DialogDescription>
           </DialogHeader>
 
@@ -76,15 +79,26 @@ export function ImportAgentForm({ trigger }: { trigger: React.ReactNode }) {
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="agent-phone">Phone</Label>
-              <Input
-                id="agent-phone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="(555) 123-4567"
-                required
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="agent-phone">Phone</Label>
+                <Input
+                  id="agent-phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="agent-email">Email</Label>
+                <Input
+                  id="agent-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="agent@brokerage.com"
+                />
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">

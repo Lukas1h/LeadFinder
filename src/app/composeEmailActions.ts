@@ -4,7 +4,12 @@ import { db } from "@/db";
 import { agents, messagePresets, messagePresetVariants, messageSends, type PresetType } from "@/db/schema";
 import { and, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { DEFAULT_COLD_EMAIL_SUBJECT, DEFAULT_COLD_EMAIL_BODY } from "@/lib/messageTemplate";
+import {
+  DEFAULT_COLD_EMAIL_SUBJECT,
+  DEFAULT_COLD_EMAIL_BODY,
+  BLANK_EMAIL_SUBJECT,
+  BLANK_EMAIL_BODY,
+} from "@/lib/messageTemplate";
 import { sendEmail } from "@/lib/mailer";
 import type { PresetOption, MessageOptions } from "@/app/messageActions";
 
@@ -38,6 +43,36 @@ export async function ensureDefaultEmailPreset() {
     subject: DEFAULT_COLD_EMAIL_SUBJECT,
     body: DEFAULT_COLD_EMAIL_BODY,
   });
+  revalidatePath("/messaging");
+}
+
+/**
+ * Idempotent — seeds a "Blank" email preset (just "Hello {{firstName}},"
+ * and the signature, empty middle) the first time this is called with none
+ * existing. protected: true keeps it from ever being deleted (see
+ * deletePreset in src/app/messaging/actions.ts) even with zero send
+ * history, since the whole point is it's always there as a scaffold — but
+ * its variant body/subject stay normally editable.
+ */
+export async function ensureBlankEmailPreset() {
+  const [existing] = await db
+    .select({ id: messagePresets.id })
+    .from(messagePresets)
+    .where(and(eq(messagePresets.channel, "email"), eq(messagePresets.protected, true)))
+    .limit(1);
+  if (existing) return;
+
+  const [preset] = await db
+    .insert(messagePresets)
+    .values({ name: "Blank", type: "initial_outreach", channel: "email", protected: true })
+    .returning({ id: messagePresets.id });
+  await db.insert(messagePresetVariants).values({
+    presetId: preset.id,
+    label: "A",
+    subject: BLANK_EMAIL_SUBJECT,
+    body: BLANK_EMAIL_BODY,
+  });
+  revalidatePath("/messaging");
 }
 
 /**
@@ -52,6 +87,7 @@ export async function ensureDefaultEmailPreset() {
  */
 export async function getComposeEmailOptions(): Promise<MessageOptions> {
   await ensureDefaultEmailPreset();
+  await ensureBlankEmailPreset();
 
   const rows = await db
     .select({
@@ -129,18 +165,18 @@ export interface SendComposeEmailInput {
   variantId: string;
   subject: string;
   body: string;
-  /** Set only when the user explicitly confirmed merging into a fuzzy-matched agent (see findAgentMatches). */
-  matchedAgentId?: string;
 }
 
 /**
  * Sends first, writes to the DB only on success — inverted from sendMessage
  * (SMS)'s order, since an actual SMTP call can fail server-side, unlike an
  * sms: deep link which can't meaningfully fail client-side. On success:
- * resolves the target agent by exact email match, then by an explicitly
- * confirmed fuzzy match, then creates a new agent row — and always logs a
- * messageSends row with no listingId, so this shows up in the same A/B
- * stats as SMS sends.
+ * resolves the target agent by exact email match (this also covers a
+ * fuzzy-matched agent explicitly merged moments earlier via
+ * mergeAgentEmail — merging sets the email column live, so by send time
+ * it's already an exact match here, no separate branch needed) or else
+ * creates a new agent row — and always logs a messageSends row with no
+ * listingId, so this shows up in the same A/B stats as SMS sends.
  */
 export async function sendComposeEmail(input: SendComposeEmailInput): Promise<{ error?: string }> {
   const name = input.name.trim();
@@ -172,9 +208,6 @@ export async function sendComposeEmail(input: SendComposeEmailInput): Promise<{ 
   if (exactMatch) {
     await db.update(agents).set({ name, lastContactedAt: now }).where(eq(agents.id, exactMatch.id));
     agentId = exactMatch.id;
-  } else if (input.matchedAgentId) {
-    await db.update(agents).set({ email, name, lastContactedAt: now }).where(eq(agents.id, input.matchedAgentId));
-    agentId = input.matchedAgentId;
   } else {
     const [inserted] = await db
       .insert(agents)
