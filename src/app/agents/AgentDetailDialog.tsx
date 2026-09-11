@@ -181,9 +181,16 @@ export function AgentDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{agent.name ?? "Unknown name"}</DialogTitle>
+          <DialogDescription className="flex flex-col font-mono">
+            {agent.phone && <span>{agent.phone}</span>}
+            {agent.email && <span>{agent.email}</span>}
+          </DialogDescription>
+        </DialogHeader>
+
         {isEditingContact ? (
-          <div className="flex flex-col gap-2 pr-6">
-            <Label className="text-xs text-muted-foreground">Edit agent</Label>
+          <div className="flex flex-col gap-2">
             <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Name" />
             <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="Phone" />
             <Input
@@ -203,53 +210,43 @@ export function AgentDetailDialog({
             </div>
           </div>
         ) : (
-          <DialogHeader className="flex-row items-start gap-2 space-y-0">
-            <div className="min-w-0 flex-1">
-              <DialogTitle>{agent.name ?? "Unknown name"}</DialogTitle>
-              <DialogDescription className="flex flex-col font-mono">
-                {agent.phone && <span>{agent.phone}</span>}
-                {agent.email && <span>{agent.email}</span>}
-              </DialogDescription>
-            </div>
-            <Button variant="ghost" size="icon" className="shrink-0" onClick={startEditingContact}>
+          <div className="flex flex-wrap gap-2">
+            {callHref && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={callHref}>
+                  <Phone />
+                  Call
+                </a>
+              </Button>
+            )}
+            {agent.phone && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={smsUrl(agent.phone, "")}>
+                  <MessageCircle />
+                  Text
+                </a>
+              </Button>
+            )}
+            {agent.email && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/messaging?agent=${agent.id}`}>
+                  <Mail />
+                  Email
+                </Link>
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={startEditingContact}>
               <Pencil />
-              <span className="sr-only">Edit agent</span>
+              Edit
             </Button>
-          </DialogHeader>
+            <Button variant="outline" size="sm" className="ml-auto" asChild>
+              <a href={`/api/agents/${agent.id}/vcard`}>
+                <UserPlus />
+                Save contact
+              </a>
+            </Button>
+          </div>
         )}
-
-        <div className="flex flex-wrap gap-2">
-          {callHref && (
-            <Button variant="outline" size="sm" asChild>
-              <a href={callHref}>
-                <Phone />
-                Call
-              </a>
-            </Button>
-          )}
-          {agent.phone && (
-            <Button variant="outline" size="sm" asChild>
-              <a href={smsUrl(agent.phone, "")}>
-                <MessageCircle />
-                Text
-              </a>
-            </Button>
-          )}
-          {agent.email && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/messaging?agent=${agent.id}`}>
-                <Mail />
-                Email
-              </Link>
-            </Button>
-          )}
-          <Button variant="outline" size="sm" className="ml-auto" asChild>
-            <a href={`/api/agents/${agent.id}/vcard`}>
-              <UserPlus />
-              Save contact
-            </a>
-          </Button>
-        </div>
 
         <div className="flex flex-col gap-1.5 border-t pt-3">
           <Label htmlFor="agent-notes" className="text-xs text-muted-foreground">
