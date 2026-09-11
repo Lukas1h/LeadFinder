@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
  */
 export function ImportShortcutCard() {
   return (
-    <Card className="p-4 mb-8 gap-3">
+    <Card className="p-4 mb-4 gap-3">
       <div className="flex items-center gap-2">
         <Share className="size-4 text-muted-foreground" />
         <h2 className="font-semibold text-foreground text-sm">Import from Zillow&rsquo;s Share Sheet</h2>

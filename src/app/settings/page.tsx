@@ -61,8 +61,6 @@ async function SettingsContent() {
 
       <NotificationsCard />
 
-      <ImportShortcutCard />
-
       <PipelineSettingsCard followUpAfterDays={followUpAfterDays} />
 
       <header className="mb-4 flex items-end justify-between gap-4 flex-wrap">
@@ -80,10 +78,12 @@ async function SettingsContent() {
         </div>
       </header>
 
+      <ImportShortcutCard />
+
       {totalCount === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
           <MapPinned className="size-8" />
-          <p>No sources yet — add one to start finding leads.</p>
+          <p>No other sources yet — add one to start finding leads.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
