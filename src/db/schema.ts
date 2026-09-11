@@ -8,6 +8,7 @@ import {
   timestamp,
   boolean,
   jsonb,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 export const LEAD_STATUSES = [
@@ -64,9 +65,22 @@ export const listings = pgTable("listings", {
   contactedAt: timestamp("contacted_at", { withTimezone: true }),
   statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
 
-  // Job $ value, entered (optionally) when marking a listing "booked" — the
-  // seed data for revenue-per-preset/variant math on the presets page.
-  bookingValue: integer("booking_value"),
+  // Points at this listing's current/most-recent bookings row (see below) —
+  // a listing can be booked more than once over time (reshoots), so this is
+  // a pointer to the latest one, not the source of history. bookings.listingId
+  // is the reverse FK that gives the full history. Set together with
+  // status="booked" whenever a booking is created for this listing.
+  bookingId: uuid("booking_id").references((): AnyPgColumn => bookings.id),
+
+  // Manual "come back to this on a specific date" reminder — distinct from
+  // the automatic contactedAt-driven follow-up flagging in
+  // src/lib/settings.ts, which only fires after Lukas has messaged someone
+  // and gone quiet. This is for cases like "the agent said check back
+  // Thursday once the house doesn't sell." Surfaced as its own Pipeline
+  // section once followUpAt has arrived; followUpNote is optional context
+  // shown alongside it.
+  followUpAt: timestamp("follow_up_at", { withTimezone: true }),
+  followUpNote: text("follow_up_note"),
 
   // AI photo-quality score (1-10, higher = more clearly professional
   // photography) from Gemini 3.5 Flash-Lite vision, scored once per
@@ -142,6 +156,52 @@ export const agents = pgTable("agents", {
 export type Agent = typeof agents.$inferSelect;
 export type NewAgent = typeof agents.$inferInsert;
 
+// An actual job on the calendar — distinct from a listing (which is just
+// property info) because a booking carries logistics a property doesn't
+// have: when Lukas needs to be there, who the on-site contact is, what
+// services were sold, the lockbox code. listingId is nullable because a
+// realtor sometimes books him directly with only partial info (city, date,
+// agent, notes) and no tracked Zillow listing at all — address/city/state
+// below are only used in that case; when listingId is set, those come from
+// the listing instead. A listing can be booked more than once over time
+// (reshoots), so this is the many side of a one-to-many with listings — see
+// listings.bookingId for the "current" pointer.
+export const bookings = pgTable("bookings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  listingId: uuid("listing_id").references((): AnyPgColumn => listings.id, { onDelete: "set null" }),
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  contactAgentId: uuid("contact_agent_id").references(() => agents.id, { onDelete: "set null" }),
+  jobDate: timestamp("job_date", { withTimezone: true }),
+  lockboxCode: text("lockbox_code"),
+  notes: text("notes"),
+  // Null = upcoming/active, shown on the Booked page's Upcoming section.
+  // Set via a "Mark completed" action.
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Booking = typeof bookings.$inferSelect;
+export type NewBooking = typeof bookings.$inferInsert;
+
+// Price/services as line items rather than a flat number, so this can
+// eventually generate real invoices — a line item like "Twilight shoot —
+// $100" answers both "what did I charge" and "what did I do" at once. A
+// booking's total is sum(amount), computed on read, never stored.
+export const bookingLineItems = pgTable("booking_line_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bookingId: uuid("booking_id")
+    .notNull()
+    .references(() => bookings.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  amount: integer("amount").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type BookingLineItem = typeof bookingLineItems.$inferSelect;
+export type NewBookingLineItem = typeof bookingLineItems.$inferInsert;
+
 // One row per search area — each is fetched independently on every
 // sync/refresh (its own Zillapi call, its own bbox/filters). Lets Lukas
 // search e.g. Eugene and Roseburg at once instead of being locked to one
@@ -172,6 +232,12 @@ export type NewSearchSource = typeof searchSources.$inferInsert;
 export const appSettings = pgTable("app_settings", {
   id: text("id").primaryKey().default("singleton"),
   followUpAfterDays: integer("follow_up_after_days").notNull().default(3),
+
+  // Where drive-time estimates on the Booked page start from (see
+  // src/lib/driveTime.ts) — a free, no-API haversine-distance guess against
+  // a hardcoded table of Oregon city coordinates, not real routing.
+  homeCity: text("home_city").notNull().default("Winston"),
+  homeState: text("home_state").notNull().default("OR"),
 });
 
 export type AppSettings = typeof appSettings.$inferSelect;

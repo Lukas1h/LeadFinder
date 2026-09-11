@@ -4,12 +4,14 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { UserPlus, Phone, MessageCircle, Mail, History, Pencil } from "lucide-react";
+import { UserPlus, Phone, MessageCircle, Mail, History, CalendarCheck, Pencil } from "lucide-react";
 import type { Agent, Listing } from "@/db/schema";
-import { formatPrice, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
-import { StatusBadge } from "@/app/badges";
-import { ListingModal } from "@/app/ListingModal";
+import { ListingRow } from "@/app/ListingRow";
+import { getAgentBookings } from "@/app/booked/actions";
+import { BookingRow } from "@/app/booked/BookingRow";
+import type { BookingWithDetails } from "@/app/booked/BookedList";
 import {
   updateAgentNotes,
   updateAgentContactInfo,
@@ -29,39 +31,6 @@ import {
   DialogDescription,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
-function ListingRow({ listing }: { listing: Listing }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-3 w-full text-left rounded-lg p-2 hover:bg-muted/50"
-      >
-        <div className="size-12 rounded-md overflow-hidden bg-muted shrink-0 flex items-center justify-center">
-          {listing.photos && listing.photos.length > 0 ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={listing.photos[0]} alt="" className="w-full h-full object-cover" />
-          ) : (
-            <span className="text-[9px] text-muted-foreground text-center px-1">No photo</span>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground truncate">
-            {listing.address ?? "Unknown address"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {formatPrice(listing.price)} · {formatDate(listing.listedAt)}
-          </p>
-        </div>
-        <StatusBadge status={listing.status} />
-      </button>
-      <ListingModal lead={listing} open={open} onOpenChange={setOpen} />
-    </>
-  );
-}
 
 const RESULT_LABELS: Record<AgentSendHistoryItem["result"], string> = {
   pending: "Pending",
@@ -164,6 +133,18 @@ export function AgentDetailDialog({
     getAgentSendHistory(agent.id).then((items) => {
       setHistory(items);
       setHistoryLoaded(true);
+    });
+  }, [open, agent.id]);
+
+  const [agentBookings, setAgentBookings] = useState<BookingWithDetails[]>([]);
+  const [bookingsLoaded, setBookingsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setBookingsLoaded(false);
+    getAgentBookings(agent.id).then((items) => {
+      setAgentBookings(items);
+      setBookingsLoaded(true);
     });
   }, [open, agent.id]);
 
@@ -275,6 +256,20 @@ export function AgentDetailDialog({
             <div className="max-h-40 overflow-y-auto -mx-1 px-1 divide-y divide-border/70">
               {history.map((item) => (
                 <SendHistoryRow key={item.id} item={item} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {bookingsLoaded && agentBookings.length > 0 && (
+          <div className="flex flex-col gap-0.5 border-t pt-3">
+            <Label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-1">
+              <CalendarCheck className="size-3.5" />
+              Bookings ({agentBookings.length})
+            </Label>
+            <div className="flex flex-col max-h-56 overflow-y-auto -mx-1">
+              {agentBookings.map((b) => (
+                <BookingRow key={b.id} bookingId={b.id} booking={b} />
               ))}
             </div>
           </div>

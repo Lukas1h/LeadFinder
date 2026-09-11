@@ -29,10 +29,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     "VERSION:3.0",
     `FN:${escapeVCardValue(name)}`,
     `N:${escapeVCardValue(familyName)};${escapeVCardValue(givenName)};;;`,
-    `TEL;TYPE=CELL:${agent.phone}`,
+    agent.phone ? `TEL;TYPE=CELL:${agent.phone}` : null,
+    agent.email ? `EMAIL:${escapeVCardValue(agent.email)}` : null,
     "END:VCARD",
     "",
-  ].join("\r\n");
+  ]
+    .filter(Boolean)
+    .join("\r\n");
 
   return new NextResponse(vcard, {
     headers: {

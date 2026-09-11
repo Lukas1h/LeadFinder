@@ -14,7 +14,7 @@ export function BottomTabBar() {
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <div className="flex h-14 items-stretch">
-        {NAV_LINKS.map((link) => {
+        {NAV_LINKS.filter((link) => !("hideOnMobile" in link && link.hideOnMobile)).map((link) => {
           const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
           return (
             <Link

@@ -7,11 +7,12 @@ import {
   messagePresets,
   messagePresetVariants,
   messageSends,
+  bookingLineItems,
   type PresetType,
   type AgentRelationshipStatus,
   type Listing,
 } from "@/db/schema";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, sum } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
   renderMessageBody,
@@ -320,6 +321,17 @@ async function buildAiDraftOption(
     agentListingCount = listingCount;
   }
 
+  // Price now lives as line items on the listing's linked booking, not a
+  // flat column here — sum them for the prompt if one exists.
+  let bookingValue: number | null = null;
+  if (listing.bookingId) {
+    const [row] = await db
+      .select({ total: sum(bookingLineItems.amount) })
+      .from(bookingLineItems)
+      .where(eq(bookingLineItems.bookingId, listing.bookingId));
+    bookingValue = row?.total != null ? Number(row.total) : null;
+  }
+
   // Everything we have on the listing, not a curated subset — including
   // the actual photos (draftMessage judges them itself, vision-based,
   // rather than being handed the pre-computed photoScore).
@@ -339,7 +351,7 @@ async function buildAiDraftOption(
     brokerName: listing.brokerName,
     status: listing.status,
     notes: listing.notes,
-    bookingValue: listing.bookingValue,
+    bookingValue,
     photoCount: listing.photoCount,
     photos: listing.photos,
     ageDays,

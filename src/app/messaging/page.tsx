@@ -4,10 +4,11 @@ import { db } from "@/db";
 import { messagePresets, messagePresetVariants, PRESET_TYPES, type PresetType, type MessageChannel } from "@/db/schema";
 import { ensureDefaultPresets, ensureAiDraftPresets } from "@/app/messageActions";
 import { ensureDefaultEmailPreset } from "@/app/composeEmailActions";
-import { computeVariantStats } from "@/lib/messageStats";
+import { computeVariantStats, getRecentMessageSends } from "@/lib/messageStats";
 import { PresetCard } from "./PresetCard";
 import { PresetForm } from "./PresetForm";
 import { ComposeEmailPanel } from "./ComposeEmailPanel";
+import { RecentSendsCard } from "./RecentSendsCard";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { PresetsSkeleton } from "./loading";
@@ -35,10 +36,11 @@ async function MessagingContent() {
   await Promise.all(PRESET_TYPES.map((type) => ensureAiDraftPresets(type)));
   await ensureDefaultEmailPreset();
 
-  const [presets, variants, statsByVariant] = await Promise.all([
+  const [presets, variants, statsByVariant, recentSends] = await Promise.all([
     db.select().from(messagePresets).orderBy(messagePresets.createdAt),
     db.select().from(messagePresetVariants).orderBy(messagePresetVariants.createdAt),
     computeVariantStats(),
+    getRecentMessageSends(),
   ]);
 
   const variantsByPreset: Record<string, typeof variants> = {};
@@ -59,9 +61,11 @@ async function MessagingContent() {
         </p>
       </header>
 
-      <section className="mb-10">
+      <section className="mb-6">
         <ComposeEmailPanel />
       </section>
+
+      <RecentSendsCard sends={recentSends} />
 
       <Separator className="mb-8" />
 

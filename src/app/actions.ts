@@ -60,7 +60,7 @@ async function touchAgentDeclined(agentPhone: string | null, agentName: string |
  * last set (or never set) by hand. Never downgrades, and a reply on an
  * agent already past "interested" (worked_once/regular) leaves it alone.
  */
-async function bumpAgentRelationshipOnMilestone(
+export async function bumpAgentRelationshipOnMilestone(
   agentPhone: string | null,
   agentName: string | null,
   milestone: "replied" | "booked"
@@ -98,7 +98,7 @@ async function bumpAgentRelationshipOnMilestone(
  * being silently dropped. A no-op if nothing was ever logged (e.g. a
  * listing marked declined without ever being texted).
  */
-async function resolveSendOutcome(listingId: string, status: LeadStatus) {
+export async function resolveSendOutcome(listingId: string, status: LeadStatus) {
   if (status !== "replied" && status !== "quoted" && status !== "booked" && status !== "declined") return;
 
   const [latest] = await db
@@ -122,11 +122,7 @@ async function resolveSendOutcome(listingId: string, status: LeadStatus) {
   }
 }
 
-export async function updateListingStatus(
-  listingId: string,
-  status: LeadStatus,
-  bookingValue?: number | null
-) {
+export async function updateListingStatus(listingId: string, status: LeadStatus) {
   const now = new Date();
   const [lead] = await db
     .update(listings)
@@ -134,7 +130,6 @@ export async function updateListingStatus(
       status,
       statusChangedAt: now,
       ...(status === "contacted" ? { contactedAt: now } : {}),
-      ...(status === "booked" && bookingValue != null ? { bookingValue } : {}),
     })
     .where(eq(listings.id, listingId))
     .returning({ agentPhone: listings.agentPhone, agentName: listings.agentName });
@@ -162,6 +157,27 @@ export async function updateListingNotes(listingId: string, notes: string) {
   await db
     .update(listings)
     .set({ notes: notes.trim() || null })
+    .where(eq(listings.id, listingId));
+
+  revalidatePath("/");
+  revalidatePath("/pipeline");
+}
+
+/**
+ * Manual "come back to this on a specific date" reminder, edited from the
+ * listing detail modal — independent of the automatic contactedAt-driven
+ * follow-up flagging (see getFollowUpAfterDays in src/lib/settings.ts),
+ * which only fires after a message has gone unanswered. This is for cases
+ * like "the agent said check back Thursday."
+ */
+export async function updateListingFollowUp(
+  listingId: string,
+  followUpAt: Date | null,
+  followUpNote: string | null
+) {
+  await db
+    .update(listings)
+    .set({ followUpAt, followUpNote: followUpNote?.trim() || null })
     .where(eq(listings.id, listingId));
 
   revalidatePath("/");

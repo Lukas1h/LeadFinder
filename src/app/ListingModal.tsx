@@ -6,14 +6,17 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ExternalLink, X } from "lucide-react";
 import { LEAD_STATUSES, type Listing, type LeadStatus } from "@/db/schema";
-import { updateListingNotes, updateListingStatus } from "./actions";
+import { updateListingNotes, updateListingStatus, updateListingFollowUp } from "./actions";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { STATUS_LABELS } from "./badges";
+import { BookingForm } from "./booked/BookingForm";
+import { BookingRow } from "./booked/BookingRow";
 import { formatPrice, formatDate, formatPhone } from "@/lib/format";
 import { telUrl } from "@/lib/sms";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -32,6 +35,14 @@ export function ListingModal({
   const [statusPending, startStatusTransition] = useTransition();
   const dirty = notes !== (lead.notes ?? "");
 
+  const [bookingFormOpen, setBookingFormOpen] = useState(false);
+
+  const initialFollowUpAt = lead.followUpAt ? lead.followUpAt.toISOString().slice(0, 10) : "";
+  const [followUpAt, setFollowUpAt] = useState(initialFollowUpAt);
+  const [followUpNote, setFollowUpNote] = useState(lead.followUpNote ?? "");
+  const [followUpPending, startFollowUpTransition] = useTransition();
+  const followUpDirty = followUpAt !== initialFollowUpAt || followUpNote !== (lead.followUpNote ?? "");
+
   const handleSaveNotes = () => {
     startTransition(async () => {
       await updateListingNotes(lead.id, notes);
@@ -40,7 +51,23 @@ export function ListingModal({
     });
   };
 
+  const handleSaveFollowUp = () => {
+    startFollowUpTransition(async () => {
+      await updateListingFollowUp(lead.id, followUpAt ? new Date(followUpAt) : null, followUpNote);
+      toast.success("Follow-up saved");
+      router.refresh();
+    });
+  };
+
   const handleStatusChange = (status: LeadStatus) => {
+    // Booking needs more than a bare status flip — job date, contact, price
+    // — so open the booking form instead of transitioning immediately. The
+    // Select stays showing the old status (it's bound to lead.status, not
+    // local state) unless the booking is actually confirmed.
+    if (status === "booked") {
+      setBookingFormOpen(true);
+      return;
+    }
     startStatusTransition(async () => {
       await updateListingStatus(lead.id, status);
       toast.success("Status updated");
@@ -151,6 +178,50 @@ export function ListingModal({
             </a>
           </Button>
 
+          {lead.bookingId && (
+            <div className="flex flex-col gap-1 border-t pt-2">
+              <BookingRow bookingId={lead.bookingId} />
+              <BookingForm
+                listingId={lead.id}
+                agentName={lead.agentName}
+                agentPhone={lead.agentPhone}
+                trigger={
+                  <Button variant="outline" size="sm" className="self-end">
+                    New booking
+                  </Button>
+                }
+              />
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1.5 border-t pt-3">
+            <Label className="text-xs text-muted-foreground">Follow up</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                value={followUpAt}
+                onChange={(e) => setFollowUpAt(e.target.value)}
+                className="w-40"
+              />
+              <Input
+                value={followUpNote}
+                onChange={(e) => setFollowUpNote(e.target.value)}
+                placeholder="e.g. check if the house sold yet"
+                className="flex-1"
+              />
+            </div>
+            {followUpDirty && (
+              <Button
+                size="sm"
+                onClick={handleSaveFollowUp}
+                disabled={followUpPending}
+                className="self-end"
+              >
+                {followUpPending ? "Saving…" : "Save follow-up"}
+              </Button>
+            )}
+          </div>
+
           <div className="flex flex-col gap-1.5 border-t pt-3">
             <Label htmlFor="listing-notes" className="text-xs text-muted-foreground">
               Notes
@@ -170,6 +241,14 @@ export function ListingModal({
           </div>
         </div>
       </DialogContent>
+
+      <BookingForm
+        listingId={lead.id}
+        agentName={lead.agentName}
+        agentPhone={lead.agentPhone}
+        open={bookingFormOpen}
+        onOpenChange={setBookingFormOpen}
+      />
     </Dialog>
   );
 }

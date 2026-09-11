@@ -10,6 +10,7 @@ import {
   FileText,
   Send,
   ChevronRight,
+  Bell,
 } from "lucide-react";
 import type { Agent, Listing } from "@/db/schema";
 import { LeadCard } from "../LeadCard";
@@ -21,9 +22,10 @@ import {
   ComingSoonBadge,
   FewPhotosBadge,
   DaysSinceContactBadge,
+  FollowUpBadge,
 } from "../badges";
 import { findDuplicateAgentContact, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
-import { daysSince } from "@/lib/format";
+import { daysSince, isDue } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 
@@ -62,31 +64,45 @@ export function PipelineList({
     return listings.filter((l) => matchesSearch(l, query));
   }, [listings, search]);
 
-  const { replied, saved, followUpDue, quoted, waiting, closed } = useMemo(() => {
-    const replied = filtered.filter((l) => l.status === "replied").sort((a, b) => byOldest(a, b, "statusChangedAt"));
-    const saved = filtered.filter((l) => l.status === "saved").sort((a, b) => byOldest(a, b, "statusChangedAt"));
-    const followUpDue = filtered
+  const { manualFollowUp, replied, saved, followUpDue, quoted, waiting, closed } = useMemo(() => {
+    // Distinct from the automatic contactedAt-driven followUpDue below —
+    // this is a manually-set reminder, can apply to a listing in any
+    // (non-terminal) status, and takes priority: pulled out of whichever
+    // bucket it'd otherwise land in so it isn't shown twice.
+    const manualFollowUp = filtered
+      .filter((l) => l.status !== "booked" && l.status !== "declined" && l.followUpAt != null && isDue(l.followUpAt))
+      .sort((a, b) => a.followUpAt!.getTime() - b.followUpAt!.getTime());
+    const manualFollowUpIds = new Set(manualFollowUp.map((l) => l.id));
+    const rest = filtered.filter((l) => !manualFollowUpIds.has(l.id));
+
+    const replied = rest.filter((l) => l.status === "replied").sort((a, b) => byOldest(a, b, "statusChangedAt"));
+    const saved = rest.filter((l) => l.status === "saved").sort((a, b) => byOldest(a, b, "statusChangedAt"));
+    const followUpDue = rest
       .filter(
         (l) => l.status === "contacted" && l.contactedAt != null && daysSince(l.contactedAt) >= followUpAfterDays
       )
       .sort((a, b) => byOldest(a, b, "contactedAt"));
-    const quoted = filtered.filter((l) => l.status === "quoted").sort((a, b) => byOldest(a, b, "statusChangedAt"));
-    const waiting = filtered
+    const quoted = rest.filter((l) => l.status === "quoted").sort((a, b) => byOldest(a, b, "statusChangedAt"));
+    const waiting = rest
       .filter(
         (l) => l.status === "contacted" && (l.contactedAt == null || daysSince(l.contactedAt) < followUpAfterDays)
       )
       .sort((a, b) => byOldest(a, b, "contactedAt"));
-    const closed = filtered
+    const closed = rest
       .filter((l) => l.status === "booked" || l.status === "declined")
       .sort((a, b) => -byOldest(a, b, "statusChangedAt"));
-    return { replied, saved, followUpDue, quoted, waiting, closed };
+    return { manualFollowUp, replied, saved, followUpDue, quoted, waiting, closed };
   }, [filtered, followUpAfterDays]);
 
-  const needsAttentionEmpty = replied.length === 0 && saved.length === 0 && followUpDue.length === 0;
+  const needsAttentionEmpty =
+    manualFollowUp.length === 0 && replied.length === 0 && saved.length === 0 && followUpDue.length === 0;
   const waitingEmpty = quoted.length === 0 && waiting.length === 0;
   const nothingFound = filtered.length === 0 && listings.length > 0;
 
-  function card(lead: Listing, options?: { showDaysSinceContact?: boolean; showStatusBadge?: boolean }) {
+  function card(
+    lead: Listing,
+    options?: { showDaysSinceContact?: boolean; showStatusBadge?: boolean; showFollowUp?: boolean }
+  ) {
     const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentMap);
     return (
       <LeadCard
@@ -96,9 +112,13 @@ export function PipelineList({
           <Fragment key={lead.id}>
             {/* Every other section is single-status, so the header already
                 says it — showing it again on each card is redundant.
-                Closed mixes booked + declined, so it still needs the
-                badge to tell those apart. */}
+                Closed mixes booked + declined, and the manual follow-up
+                section spans any status, so both still need the badge to
+                tell listings apart. */}
             {options?.showStatusBadge && <StatusBadge status={lead.status} />}
+            {options?.showFollowUp && lead.followUpAt && (
+              <FollowUpBadge followUpAt={lead.followUpAt} followUpNote={lead.followUpNote} />
+            )}
             {options?.showDaysSinceContact && lead.contactedAt && (
               <DaysSinceContactBadge contactedAt={lead.contactedAt} />
             )}
@@ -155,6 +175,19 @@ export function PipelineList({
         <div className="flex flex-col gap-6">
           {!needsAttentionEmpty && (
             <>
+              {manualFollowUp.length > 0 && (
+                <div>
+                  <h2 className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">
+                    <Bell className="size-3.5" />
+                    Follow-up due
+                  </h2>
+                  <div className="flex flex-col gap-4">
+                    {manualFollowUp.map((lead) =>
+                      card(lead, { showStatusBadge: true, showFollowUp: true })
+                    )}
+                  </div>
+                </div>
+              )}
               {replied.length > 0 && (
                 <div>
                   <h2 className="flex items-center gap-1.5 text-xs font-medium text-purple-700 dark:text-purple-400 mb-2">
