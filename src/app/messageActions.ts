@@ -242,13 +242,48 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
     };
   });
 
-  const aiOption = await buildAiDraftOption(listingId, type, listing, ageDays);
-  if (aiOption) {
-    for (const p of presets) p.recommended = false;
-    presets.unshift(aiOption);
+  // A placeholder only — no Gemini call here. The AI draft is never the
+  // default (see draftAiPresetOption's comment), so eagerly drafting one
+  // on every dialog open regardless of whether it gets used would just be
+  // a wasted call most of the time. Appended, not unshifted, so it can't
+  // accidentally become the presets[0] fallback if nothing else is
+  // recommended either.
+  const aiPreset = await getAiPreset(type);
+  if (aiPreset) {
+    presets.push({
+      presetId: aiPreset.id,
+      presetName: aiPreset.name,
+      variantId: AI_DRAFT_VARIANT_SENTINEL,
+      variantLabel: "AI",
+      text: "",
+      recommended: false,
+    });
   }
 
   return { presets };
+}
+
+async function getAiPreset(type: PresetType): Promise<{ id: string; name: string } | null> {
+  const [preset] = await db
+    .select({ id: messagePresets.id, name: messagePresets.name })
+    .from(messagePresets)
+    .where(and(eq(messagePresets.type, type), eq(messagePresets.aiGenerated, true), eq(messagePresets.enabled, true)));
+  return preset ?? null;
+}
+
+/**
+ * Actually drafts the AI option — called on demand when the user selects
+ * "AI Draft" from the dropdown (see the placeholder appended in
+ * getMessageOptions above), never eagerly. Confirmed with Lukas: the AI
+ * draft should never be auto-selected/default, only used when explicitly
+ * chosen — drafting it upfront on every dialog open (the old behavior)
+ * would burn a real Gemini call most of the time for nothing.
+ */
+export async function draftAiPresetOption(listingId: string, type: PresetType): Promise<PresetOption | null> {
+  const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
+  if (!listing) return null;
+  const ageDays = listingAgeDays(listing.listedAt, listing.foundAt);
+  return buildAiDraftOption(listingId, type, listing, ageDays);
 }
 
 /**
@@ -322,7 +357,8 @@ async function buildAiDraftOption(
     variantId: AI_DRAFT_VARIANT_SENTINEL,
     variantLabel: "AI",
     text,
-    recommended: true,
+    // Never — see draftAiPresetOption's comment above.
+    recommended: false,
   };
 }
 

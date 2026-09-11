@@ -5,7 +5,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { MessageCircle, Phone } from "lucide-react";
 import type { PresetType } from "@/db/schema";
-import { getMessageOptions, sendMessage, type PresetOption } from "@/app/messageActions";
+import { getMessageOptions, sendMessage, draftAiPresetOption, type PresetOption } from "@/app/messageActions";
+import { AI_DRAFT_VARIANT_SENTINEL } from "@/lib/messageTemplate";
 import { smsUrl, telUrl } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,6 +43,7 @@ export function SendMessageDialog({
   const [presets, setPresets] = useState<PresetOption[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [editedText, setEditedText] = useState("");
+  const [isDraftingAi, setIsDraftingAi] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const handleOpenChange = (next: boolean) => {
@@ -51,6 +53,7 @@ export function SendMessageDialog({
     setPresets([]);
     setSelectedPresetId(null);
     setEditedText("");
+    setIsDraftingAi(false);
     getMessageOptions(listingId, type).then(({ presets }) => {
       setPresets(presets);
       const recommended = presets.find((p) => p.recommended);
@@ -64,9 +67,29 @@ export function SendMessageDialog({
   const selected = presets.find((p) => p.presetId === selectedPresetId) ?? null;
   const callHref = telUrl(agentPhone);
 
-  const handleSelectPreset = (presetId: string) => {
+  const handleSelectPreset = async (presetId: string) => {
     setSelectedPresetId(presetId);
-    setEditedText(presets.find((p) => p.presetId === presetId)?.text ?? "");
+    const option = presets.find((p) => p.presetId === presetId);
+
+    // The AI option starts as an empty placeholder (see getMessageOptions)
+    // so it can appear in the dropdown without costing a Gemini call on
+    // every dialog open — only draft it for real the moment it's actually
+    // picked.
+    if (option?.variantId === AI_DRAFT_VARIANT_SENTINEL && !option.text) {
+      setEditedText("");
+      setIsDraftingAi(true);
+      const drafted = await draftAiPresetOption(listingId, type);
+      setIsDraftingAi(false);
+      if (!drafted) {
+        toast.error("AI draft failed — pick another preset or try again.");
+        return;
+      }
+      setPresets((prev) => prev.map((p) => (p.presetId === presetId ? drafted : p)));
+      setEditedText(drafted.text);
+      return;
+    }
+
+    setEditedText(option?.text ?? "");
   };
 
   const handleSend = () => {
@@ -117,14 +140,17 @@ export function SendMessageDialog({
                 </SelectContent>
               </Select>
             )}
-            {selected && (
-              <Textarea
-                value={editedText}
-                onChange={(e) => setEditedText(e.target.value)}
-                rows={5}
-                className="text-sm resize-none"
-              />
-            )}
+            {selected &&
+              (isDraftingAi ? (
+                <p className="text-sm text-muted-foreground py-4">Drafting…</p>
+              ) : (
+                <Textarea
+                  value={editedText}
+                  onChange={(e) => setEditedText(e.target.value)}
+                  rows={5}
+                  className="text-sm resize-none"
+                />
+              ))}
           </div>
         )}
 
@@ -137,7 +163,7 @@ export function SendMessageDialog({
               </a>
             </Button>
           )}
-          <Button onClick={handleSend} disabled={!selected || !editedText.trim() || isPending}>
+          <Button onClick={handleSend} disabled={!selected || !editedText.trim() || isPending || isDraftingAi}>
             <MessageCircle />
             Send text
           </Button>
