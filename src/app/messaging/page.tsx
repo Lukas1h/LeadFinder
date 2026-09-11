@@ -1,12 +1,15 @@
 import { Suspense } from "react";
 import { Plus, FlaskConical } from "lucide-react";
 import { db } from "@/db";
-import { messagePresets, messagePresetVariants, PRESET_TYPES, type PresetType } from "@/db/schema";
+import { messagePresets, messagePresetVariants, PRESET_TYPES, type PresetType, type MessageChannel } from "@/db/schema";
 import { ensureDefaultPresets, ensureAiDraftPresets } from "@/app/messageActions";
+import { ensureDefaultEmailPreset } from "@/app/composeEmailActions";
 import { computeVariantStats } from "@/lib/messageStats";
 import { PresetCard } from "./PresetCard";
 import { PresetForm } from "./PresetForm";
+import { ComposeEmailPanel } from "./ComposeEmailPanel";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { PresetsSkeleton } from "./loading";
 
 const TYPE_LABELS: Record<PresetType, string> = {
@@ -14,22 +17,23 @@ const TYPE_LABELS: Record<PresetType, string> = {
   follow_up: "Follow-up",
 };
 
-export default function PresetsPage() {
+export default function MessagingPage() {
   return (
     <main className="max-w-3xl mx-auto w-full px-6 py-10">
       <Suspense fallback={<PresetsSkeleton />}>
-        <PresetsContent />
+        <MessagingContent />
       </Suspense>
     </main>
   );
 }
 
-async function PresetsContent() {
+async function MessagingContent() {
   // Cached — see the matching comment in src/app/pipeline/page.tsx.
   "use cache";
 
   await ensureDefaultPresets();
   await Promise.all(PRESET_TYPES.map((type) => ensureAiDraftPresets(type)));
+  await ensureDefaultEmailPreset();
 
   const [presets, variants, statsByVariant] = await Promise.all([
     db.select().from(messagePresets).orderBy(messagePresets.createdAt),
@@ -42,22 +46,67 @@ async function PresetsContent() {
     (variantsByPreset[v.presetId] ??= []).push(v);
   }
 
+  const smsPresets = presets.filter((p) => p.channel === "sms");
+  const emailPresets = presets.filter((p) => p.channel === "email");
+
   return (
     <>
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Message Presets</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Messaging</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          A/B test your outreach copy — add as many presets as you want per phase (one per angle,
-          e.g. &ldquo;Bad Photos Pitch&rdquo;, &ldquo;Coming Soon&rdquo;), each with a few variants.
-          Every send is logged, and marking a lead replied/quoted/booked/declined credits that
-          outcome back to the exact variant that was sent.
+          Compose a cold email to any realtor, and manage the SMS/email templates the app sends
+          from — both share the same A/B rotation and stats.
         </p>
       </header>
 
+      <section className="mb-10">
+        <ComposeEmailPanel />
+      </section>
+
+      <Separator className="mb-8" />
+
+      <TemplateSection
+        title="SMS Templates"
+        channel="sms"
+        presets={smsPresets}
+        variantsByPreset={variantsByPreset}
+        statsByVariant={statsByVariant}
+      />
+
+      <Separator className="my-8" />
+
+      <TemplateSection
+        title="Email Templates"
+        channel="email"
+        presets={emailPresets}
+        variantsByPreset={variantsByPreset}
+        statsByVariant={statsByVariant}
+      />
+    </>
+  );
+}
+
+function TemplateSection({
+  title,
+  channel,
+  presets,
+  variantsByPreset,
+  statsByVariant,
+}: {
+  title: string;
+  channel: MessageChannel;
+  presets: (typeof messagePresets.$inferSelect)[];
+  variantsByPreset: Record<string, (typeof messagePresetVariants.$inferSelect)[]>;
+  statsByVariant: Awaited<ReturnType<typeof computeVariantStats>>;
+}) {
+  return (
+    <div>
+      <h2 className="text-lg font-semibold text-foreground mb-1">{title}</h2>
+
       {presets.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
+        <div className="flex flex-col items-center justify-center gap-2 text-center py-10 text-muted-foreground">
           <FlaskConical className="size-8" />
-          <p>No presets yet — add one below to start A/B testing your outreach.</p>
+          <p>No {title.toLowerCase()} yet — add one below to start A/B testing your outreach.</p>
         </div>
       )}
 
@@ -66,9 +115,10 @@ async function PresetsContent() {
         return (
           <section key={type} className="mb-8">
             <div className="flex items-center justify-between gap-4 mb-3">
-              <h2 className="text-sm font-medium text-muted-foreground">{TYPE_LABELS[type]}</h2>
+              <h3 className="text-sm font-medium text-muted-foreground">{TYPE_LABELS[type]}</h3>
               <PresetForm
                 defaultType={type}
+                defaultChannel={channel}
                 trigger={
                   <Button variant="outline" size="sm">
                     <Plus />
@@ -95,6 +145,6 @@ async function PresetsContent() {
           </section>
         );
       })}
-    </>
+    </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   numeric,
   timestamp,
   boolean,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 export const LEAD_STATUSES = [
@@ -112,7 +113,12 @@ export const agentRelationshipStatusEnum = pgEnum(
 
 export const agents = pgTable("agents", {
   id: uuid("id").primaryKey().defaultRandom(),
-  phone: text("phone").notNull().unique(),
+  // Nullable as of the cold-email feature — an agent found on an external
+  // realtor list and emailed cold has no phone at all. At least one of
+  // phone/email is enforced at the application layer (importAgent,
+  // sendComposeEmail), not by a DB constraint.
+  phone: text("phone").unique(),
+  email: text("email").unique(),
   name: text("name"),
   lastContactedAt: timestamp("last_contacted_at", { withTimezone: true }),
   lastContactedListingId: uuid("last_contacted_listing_id").references(() => listings.id),
@@ -176,6 +182,15 @@ export const PRESET_TYPES = ["initial_outreach", "follow_up"] as const;
 export type PresetType = (typeof PRESET_TYPES)[number];
 export const presetTypeEnum = pgEnum("preset_type", PRESET_TYPES);
 
+// SMS (texted, tied to a listing) vs email (sent via SMTP, often to a
+// realtor with no listing at all — see the cold-email Compose flow). Lives
+// on the preset rather than the variant since a preset is one coherent
+// channel — mixing sms/email variants within one preset would break the
+// existing "one preset = one thing being A/B tested" shape.
+export const MESSAGE_CHANNELS = ["sms", "email"] as const;
+export type MessageChannel = (typeof MESSAGE_CHANNELS)[number];
+export const messageChannelEnum = pgEnum("message_channel", MESSAGE_CHANNELS);
+
 export const MESSAGE_RESULTS = ["pending", "quoted", "booked", "declined"] as const;
 export type MessageResult = (typeof MESSAGE_RESULTS)[number];
 export const messageResultEnum = pgEnum("message_result", MESSAGE_RESULTS);
@@ -184,6 +199,7 @@ export const messagePresets = pgTable("message_presets", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   type: presetTypeEnum("type").notNull(),
+  channel: messageChannelEnum("channel").notNull().default("sms"),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
@@ -210,7 +226,20 @@ export const messagePresets = pgTable("message_presets", {
   // since it's always the recommended default when enabled. See
   // ensureAiDraftPresets in src/app/messageActions.ts.
   aiGenerated: boolean("ai_generated").notNull().default(false),
+
+  // Files attached to every email sent from this preset (e.g. a pricing
+  // sheet, portfolio samples) — only meaningful for channel "email". Stored
+  // in Vercel Blob (see src/lib/attachments.ts); this column just holds the
+  // filename + public URL pairs, uploaded/removed from the preset's own
+  // management UI rather than re-attached per send, since the whole point
+  // of the Compose flow is ~2 seconds per realtor.
+  attachments: jsonb("attachments").$type<PresetAttachment[]>().notNull().default([]),
 });
+
+export interface PresetAttachment {
+  filename: string;
+  url: string;
+}
 
 export type MessagePreset = typeof messagePresets.$inferSelect;
 export type NewMessagePreset = typeof messagePresets.$inferInsert;
@@ -223,6 +252,9 @@ export const messagePresetVariants = pgTable("message_preset_variants", {
     .notNull()
     .references(() => messagePresets.id, { onDelete: "cascade" }),
   label: text("label").notNull(),
+  // Only used (and required, enforced in createVariant/updateVariant) when
+  // the parent preset's channel is "email" — sms has no subject line.
+  subject: text("subject"),
   body: text("body").notNull(),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -240,9 +272,13 @@ export type NewMessagePresetVariant = typeof messagePresetVariants.$inferInsert;
 // resolveSendOutcome in src/app/actions.ts.
 export const messageSends = pgTable("message_sends", {
   id: uuid("id").primaryKey().defaultRandom(),
-  listingId: uuid("listing_id")
-    .notNull()
-    .references(() => listings.id, { onDelete: "cascade" }),
+  // Nullable as of the cold-email feature — a cold-emailed realtor found on
+  // an external list has no listing at all. Which agent got the message is
+  // tracked via agentId below instead (previously only derivable by joining
+  // through listingId -> listings.agentPhone, which breaks once listingId
+  // can be null).
+  listingId: uuid("listing_id").references(() => listings.id, { onDelete: "cascade" }),
+  agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
   presetId: uuid("preset_id")
     .notNull()
     .references(() => messagePresets.id),
@@ -250,6 +286,8 @@ export const messageSends = pgTable("message_sends", {
     .notNull()
     .references(() => messagePresetVariants.id),
   type: presetTypeEnum("type").notNull(),
+  // Denormalized from the preset, same pattern `type` already uses.
+  channel: messageChannelEnum("channel").notNull().default("sms"),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   respondedAt: timestamp("responded_at", { withTimezone: true }),
   result: messageResultEnum("result").notNull().default("pending"),

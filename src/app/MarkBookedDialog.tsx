@@ -41,7 +41,7 @@ export function MarkBookedDialog({ listingId }: { listingId: string }) {
         <DialogHeader>
           <DialogTitle>Mark booked</DialogTitle>
           <DialogDescription>
-            Job value is optional, but it&rsquo;s what lets the presets page eventually show revenue
+            Job value is optional, but it&rsquo;s what lets the messaging page eventually show revenue
             per message, not just response rate.
           </DialogDescription>
         </DialogHeader>

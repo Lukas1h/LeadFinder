@@ -78,6 +78,11 @@ export interface PresetOption {
   variantId: string;
   variantLabel: string;
   text: string;
+  /** Only set for email options — see getComposeEmailOptions in composeEmailActions.ts. */
+  subject?: string;
+  attachments?: { filename: string; url: string }[];
+  /** Only set for email options, which span both types in one list — see getComposeEmailOptions. */
+  type?: PresetType;
   recommended: boolean;
 }
 
@@ -197,6 +202,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
     .where(
       and(
         eq(messagePresets.type, type),
+        eq(messagePresets.channel, "sms"),
         eq(messagePresets.enabled, true),
         eq(messagePresets.aiGenerated, false),
         eq(messagePresetVariants.enabled, true)
@@ -376,8 +382,6 @@ export async function sendMessage(
     resolvedVariantId = variant.id;
   }
 
-  await db.insert(messageSends).values({ listingId, presetId, variantId: resolvedVariantId, type, sentAt: now });
-
   const [lead] = await db
     .update(listings)
     .set({
@@ -388,11 +392,19 @@ export async function sendMessage(
     .where(eq(listings.id, listingId))
     .returning({ agentPhone: listings.agentPhone, agentName: listings.agentName });
 
-  if (lead) {
-    await touchAgentContact(listingId, lead.agentPhone, lead.agentName);
-  }
+  const agentId = lead ? await touchAgentContact(listingId, lead.agentPhone, lead.agentName) : null;
+
+  await db.insert(messageSends).values({
+    listingId,
+    agentId,
+    presetId,
+    variantId: resolvedVariantId,
+    type,
+    channel: "sms",
+    sentAt: now,
+  });
 
   revalidatePath("/");
   revalidatePath("/pipeline");
-  revalidatePath("/presets");
+  revalidatePath("/messaging");
 }

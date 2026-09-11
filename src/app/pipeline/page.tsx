@@ -35,7 +35,7 @@ async function PipelineContent() {
   // objects instead, converted back to a Map inside PipelineList where
   // findDuplicateAgentContact needs one.
   const agentByPhone: Record<string, Agent> = {};
-  for (const a of allAgents) agentByPhone[a.phone] = a;
+  for (const a of allAgents) if (a.phone) agentByPhone[a.phone] = a;
 
   const referencedIds = allAgents
     .map((a) => a.lastContactedListingId)

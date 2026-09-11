@@ -95,8 +95,8 @@ export function SendMessageDialog({
         ) : presets.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">
             No active preset for this message.{" "}
-            <Link href="/presets" className="underline">
-              Set one up on the Presets page
+            <Link href="/messaging" className="underline">
+              Set one up on the Messaging page
             </Link>
             .
           </p>

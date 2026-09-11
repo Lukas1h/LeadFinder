@@ -26,15 +26,16 @@ function byRecency(a: Agent, b: Agent) {
   const aTime = a.lastContactedAt?.getTime() ?? 0;
   const bTime = b.lastContactedAt?.getTime() ?? 0;
   if (aTime !== bTime) return bTime - aTime;
-  return (a.name ?? a.phone).localeCompare(b.name ?? b.phone);
+  return (a.name ?? a.phone ?? a.email ?? "").localeCompare(b.name ?? b.phone ?? b.email ?? "");
 }
 
 function matchesSearch(agent: Agent, query: string): boolean {
   if (!query) return true;
   if (agent.name?.toLowerCase().includes(query)) return true;
-  if (agent.phone.toLowerCase().includes(query)) return true;
+  if (agent.email?.toLowerCase().includes(query)) return true;
+  if (agent.phone?.toLowerCase().includes(query)) return true;
   const digits = query.replace(/\D/g, "");
-  if (digits && agent.phone.replace(/\D/g, "").includes(digits)) return true;
+  if (digits && agent.phone?.replace(/\D/g, "").includes(digits)) return true;
   return false;
 }
 
@@ -101,8 +102,8 @@ export function AgentsList({
       <AgentCard
         key={agent.id}
         agent={agent}
-        listingCount={counts[agent.phone] ?? 0}
-        listings={listingsByPhone[agent.phone] ?? []}
+        listingCount={agent.phone ? counts[agent.phone] ?? 0 : 0}
+        listings={agent.phone ? listingsByPhone[agent.phone] ?? [] : []}
       />
     );
   }
@@ -115,7 +116,7 @@ export function AgentsList({
         <AgentDetailDialog
           key={displayedAgent.id}
           agent={displayedAgent}
-          listings={listingsByPhone[displayedAgent.phone] ?? []}
+          listings={displayedAgent.phone ? listingsByPhone[displayedAgent.phone] ?? [] : []}
           open={!!linkedAgent}
           onOpenChange={handleLinkedDialogOpenChange}
         />
@@ -126,7 +127,7 @@ export function AgentsList({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or phone…"
+          placeholder="Search by name, phone, or email…"
           className="pl-9"
         />
       </div>

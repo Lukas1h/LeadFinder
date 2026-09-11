@@ -11,9 +11,9 @@ export async function touchAgentContact(
   listingId: string,
   agentPhone: string | null,
   agentName: string | null
-) {
-  if (!agentPhone) return;
-  await db
+): Promise<string | null> {
+  if (!agentPhone) return null;
+  const [row] = await db
     .insert(agents)
     .values({
       phone: agentPhone,
@@ -28,7 +28,9 @@ export async function touchAgentContact(
         lastContactedAt: new Date(),
         lastContactedListingId: listingId,
       },
-    });
+    })
+    .returning({ id: agents.id });
+  return row?.id ?? null;
 }
 
 /**
@@ -90,7 +92,7 @@ async function bumpAgentRelationshipOnMilestone(
 /**
  * Attributes a pipeline status change back to whichever message preset
  * variant was most recently sent to this listing — the data point the
- * presets page's stats are built from. respondedAt is only ever set once
+ * messaging page's stats are built from. respondedAt is only ever set once
  * (the first reply); result is always overwritable, so a later "declined"
  * after an earlier "replied" correctly updates the same row instead of
  * being silently dropped. A no-op if nothing was ever logged (e.g. a
@@ -151,7 +153,7 @@ export async function updateListingStatus(
 
   revalidatePath("/");
   revalidatePath("/pipeline");
-  revalidatePath("/presets");
+  revalidatePath("/messaging");
   revalidatePath("/agents");
 }
 

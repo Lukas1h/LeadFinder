@@ -3,11 +3,12 @@
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus, Archive, ArchiveRestore, Sparkles } from "lucide-react";
-import type { MessagePreset, MessagePresetVariant } from "@/db/schema";
+import type { MessagePreset, MessagePresetVariant, MessageChannel } from "@/db/schema";
 import type { VariantStats } from "@/lib/messageStats";
 import { deletePreset, togglePreset, deleteVariant, toggleVariant } from "./actions";
 import { PresetForm } from "./PresetForm";
 import { VariantForm } from "./VariantForm";
+import { AttachmentManager } from "./AttachmentManager";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -65,9 +66,11 @@ function AgentBucketLine({
 
 function VariantRow({
   variant,
+  channel,
   stats,
 }: {
   variant: MessagePresetVariant;
+  channel: MessageChannel;
   stats: VariantStats;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -135,6 +138,7 @@ function VariantRow({
           <VariantForm
             presetId={variant.presetId}
             variant={variant}
+            channel={channel}
             trigger={
               <Button variant="ghost" size="icon">
                 <Pencil />
@@ -267,6 +271,11 @@ export function PresetCard({
               </p>
             )
           )}
+          {preset.channel === "email" && !preset.aiGenerated && (
+            <div className="mt-2">
+              <AttachmentManager presetId={preset.id} attachments={preset.attachments} />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -316,7 +325,12 @@ export function PresetCard({
           </p>
         ) : (
           variants.map((variant) => (
-            <VariantRow key={variant.id} variant={variant} stats={statsByVariant[variant.id] ?? emptyStats} />
+            <VariantRow
+              key={variant.id}
+              variant={variant}
+              channel={preset.channel}
+              stats={statsByVariant[variant.id] ?? emptyStats}
+            />
           ))
         )}
       </div>
@@ -324,6 +338,7 @@ export function PresetCard({
       {!preset.aiGenerated && (
         <VariantForm
           presetId={preset.id}
+          channel={preset.channel}
           trigger={
             <Button variant="outline" size="sm" className="self-start">
               <Plus />

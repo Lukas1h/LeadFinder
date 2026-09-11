@@ -53,7 +53,9 @@ async function LeadsContent() {
       .orderBy(desc(listings.foundAt), listings.id),
     db.select().from(agents),
   ]);
-  const agentByPhone = new Map(allAgents.map((a) => [a.phone, a]));
+  const agentByPhone = new Map(
+    allAgents.filter((a): a is typeof a & { phone: string } => a.phone != null).map((a) => [a.phone, a])
+  );
 
   // Every other listing referenced by an agent's last-contacted pointer —
   // used only to name the listing in the duplicate-agent warning below.
