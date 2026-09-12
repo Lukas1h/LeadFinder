@@ -24,7 +24,7 @@ import {
   DaysSinceContactBadge,
   FollowUpBadge,
 } from "../badges";
-import { findDuplicateAgentContact, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { daysSince, isDue } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -76,7 +76,11 @@ export function PipelineList({
     const rest = filtered.filter((l) => !manualFollowUpIds.has(l.id));
 
     const replied = rest.filter((l) => l.status === "replied").sort((a, b) => byOldest(a, b, "statusChangedAt"));
-    const saved = rest.filter((l) => l.status === "saved").sort((a, b) => byOldest(a, b, "statusChangedAt"));
+    // Saved = not yet contacted, same "which one's worth chasing" question
+    // as the Leads page — same priority sort, not oldest-first like the
+    // action-driven sections below (those are about how long you've been
+    // waiting on someone, not how good the listing is).
+    const saved = rest.filter((l) => l.status === "saved").sort(byLeadPriority);
     const followUpDue = rest
       .filter(
         (l) => l.status === "contacted" && l.contactedAt != null && daysSince(l.contactedAt) >= followUpAfterDays

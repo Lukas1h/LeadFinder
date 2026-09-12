@@ -72,9 +72,9 @@ async function LeadsContent() {
 
   // Cron runs once/day, so anything found in the last 24h is "today's
   // batch" — everything else is backlog from a day (or several) you
-  // haven't gotten to yet. Within each, priority order is: coming-soon,
-  // then very-few-photos, then bad-photo-score, then everything else
-  // (see byLeadPriority in lib/pipeline.ts).
+  // haven't gotten to yet. Within each, priority order combines coming-soon
+  // status, price-weighted photo opportunity, and listing age (see
+  // leadPriorityScore in lib/pipeline.ts).
   const newToday = leads.filter((l) => daysSince(l.foundAt) < 1).sort(byLeadPriority);
   const earlier = leads.filter((l) => daysSince(l.foundAt) >= 1).sort(byLeadPriority);
 
