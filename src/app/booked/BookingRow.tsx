@@ -10,8 +10,8 @@ import type { BookingWithDetails } from "./BookedList";
 
 /**
  * Compact clickable row for referencing a booking — same look as
- * ListingRow/ContactRow (@/app/ListingRow, booked/BookingDetailDialog),
- * just with a calendar icon instead of a photo. Two ways in: pass just
+ * ListingRow/AgentRow (@/app/ListingRow, @/app/AgentRow), just with a
+ * calendar icon instead of a photo. Two ways in: pass just
  * `bookingId` (a listing's detail modal only knows the bare id) and this
  * fetches the full joined details lazily on first click; pass a preloaded
  * `booking` too (AgentDetailDialog already eager-fetches its agent's whole

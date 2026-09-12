@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ExternalLink, X } from "lucide-react";
@@ -11,14 +10,26 @@ import { PhotoCarousel } from "./PhotoCarousel";
 import { STATUS_LABELS } from "./badges";
 import { BookingForm } from "./booked/BookingForm";
 import { BookingRow } from "./booked/BookingRow";
-import { formatPrice, formatDate, formatPhone } from "@/lib/format";
-import { telUrl } from "@/lib/sms";
+import { AgentRow } from "./AgentRow";
+import { formatPrice, formatDate } from "@/lib/format";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+// Realtor.com's search path accepts a full street-address slug (not just
+// city/state) and resolves straight to the matching listing when there's a
+// unique match — same "_"-joined, hyphen-spaced slug shape as their own
+// detail-page URLs (e.g. realtor.com/realestateandhomes-search/123-Main-St_Austin_TX_78701).
+function realtorSearchUrl(lead: Listing): string {
+  const slug = [lead.address, lead.city, lead.state, lead.zipcode]
+    .filter((part): part is string => !!part)
+    .map((part) => part.trim().replace(/\s+/g, "-"))
+    .join("_");
+  return `https://www.realtor.com/realestateandhomes-search/${encodeURIComponent(slug)}`;
+}
 
 export function ListingModal({
   lead,
@@ -140,30 +151,8 @@ export function ListingModal({
           </div>
 
           {(lead.agentName || lead.brokerName || lead.agentPhone) && (
-            <div className="text-sm text-foreground/90 border-t pt-3">
-              {lead.agentPhone ? (
-                <Link
-                  href={`/agents?agent=${encodeURIComponent(lead.agentPhone)}`}
-                  onClick={() => onOpenChange(false)}
-                  className="hover:underline"
-                >
-                  {lead.agentName && <div>{lead.agentName}</div>}
-                  {lead.brokerName && <div className="text-muted-foreground">{lead.brokerName}</div>}
-                </Link>
-              ) : (
-                <>
-                  {lead.agentName && <div>{lead.agentName}</div>}
-                  {lead.brokerName && <div className="text-muted-foreground">{lead.brokerName}</div>}
-                </>
-              )}
-              {lead.agentPhone && (
-                <a
-                  href={telUrl(lead.agentPhone) ?? "#"}
-                  className="text-muted-foreground hover:underline hover:text-foreground"
-                >
-                  {formatPhone(lead.agentPhone)}
-                </a>
-              )}
+            <div className="border-t pt-2">
+              <AgentRow name={lead.agentName} phone={lead.agentPhone} subtitle={lead.brokerName} />
             </div>
           )}
 
@@ -171,12 +160,20 @@ export function ListingModal({
             <div className="text-xs text-muted-foreground">Source: {lead.sourceLabel}</div>
           )}
 
-          <Button variant="outline" asChild className="mt-2">
-            <a href={lead.listingUrl ?? "#"} target="_blank" rel="noopener noreferrer">
-              View on Zillow
-              <ExternalLink />
-            </a>
-          </Button>
+          <div className="flex gap-2 mt-2">
+            <Button variant="outline" asChild className="flex-1">
+              <a href={lead.listingUrl ?? "#"} target="_blank" rel="noopener noreferrer">
+                Zillow
+                <ExternalLink />
+              </a>
+            </Button>
+            <Button variant="outline" asChild className="flex-1">
+              <a href={realtorSearchUrl(lead)} target="_blank" rel="noopener noreferrer">
+                Realtor.com
+                <ExternalLink />
+              </a>
+            </Button>
+          </div>
 
           {lead.bookingId && (
             <div className="flex flex-col gap-1 border-t pt-2">

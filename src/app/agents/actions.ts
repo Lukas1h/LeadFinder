@@ -6,6 +6,8 @@ import {
   listings,
   messageSends,
   messagePresets,
+  type Agent,
+  type Listing,
   type AgentRelationshipStatus,
   type MessageChannel,
   type PresetType,
@@ -178,6 +180,40 @@ export async function updateAgentContactInfo(
 
   revalidatePath("/agents");
   return { error: null };
+}
+
+export interface AgentWithListings {
+  agent: Agent;
+  listings: Listing[];
+}
+
+/**
+ * Looks up an agent by phone for the AgentRow component (the listing
+ * detail modal's agent reference, and the booking detail dialog's contact
+ * reference) — creates a bare row if one doesn't exist yet, same
+ * lazy-upsert reasoning as ensureAgentsBackfilled above, so clicking one
+ * of those rows always opens something instead of erroring just because
+ * the Agents tab hasn't been visited since this phone first showed up.
+ */
+export async function getOrCreateAgentByPhone(
+  phone: string,
+  name: string | null
+): Promise<AgentWithListings | null> {
+  const trimmedPhone = phone.trim();
+  if (!trimmedPhone) return null;
+
+  let [agent] = await db.select().from(agents).where(eq(agents.phone, trimmedPhone));
+  if (!agent) {
+    [agent] = await db
+      .insert(agents)
+      .values({ phone: trimmedPhone, name: name?.trim() || null })
+      .returning();
+  }
+  if (!agent) return null;
+
+  const agentListings = await db.select().from(listings).where(eq(listings.agentPhone, trimmedPhone));
+
+  return { agent, listings: agentListings };
 }
 
 /** Total distinct listings sourced from each agent phone — shown on the agent card. */

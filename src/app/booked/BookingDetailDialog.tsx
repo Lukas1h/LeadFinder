@@ -1,36 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, User, Car } from "lucide-react";
+import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car } from "lucide-react";
 import { markBookingCompleted, reopenBooking } from "./actions";
 import { BookingForm } from "./BookingForm";
 import { ListingRow } from "@/app/ListingRow";
-import { formatPrice, formatDateTime, formatPhone } from "@/lib/format";
+import { AgentRow } from "@/app/AgentRow";
+import { formatPrice, formatDateTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import type { BookingWithDetails } from "./BookedList";
-
-/** Same look as ListingRow (@/app/ListingRow) — a little card, not a text
- * link — just with a generic contact icon instead of a photo. */
-function ContactRow({ name, phone }: { name: string | null; phone: string | null }) {
-  return (
-    <Link
-      href={`/agents?agent=${encodeURIComponent(phone ?? "")}`}
-      className="flex items-center gap-3 w-full text-left rounded-lg p-2 hover:bg-muted/50"
-    >
-      <div className="size-12 rounded-md overflow-hidden bg-muted shrink-0 flex items-center justify-center">
-        <User className="size-5 text-muted-foreground" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground truncate">{name ?? "Unknown contact"}</p>
-        {phone && <p className="text-xs text-muted-foreground">{formatPhone(phone)}</p>}
-      </div>
-    </Link>
-  );
-}
 
 /**
  * Read-only detail view for a booking — opened by clicking a BookingCard.
@@ -142,7 +123,7 @@ export function BookingDetailDialog({
 
         {(booking.contactName || booking.contactPhone) && (
           <div className="border-t pt-2">
-            <ContactRow name={booking.contactName} phone={booking.contactPhone} />
+            <AgentRow name={booking.contactName} phone={booking.contactPhone} />
           </div>
         )}
 

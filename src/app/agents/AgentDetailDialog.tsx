@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { UserPlus, Phone, MessageCircle, Mail, History, CalendarCheck, Pencil } from "lucide-react";
+import { UserPlus, Phone, MessageCircle, Mail, History, CalendarCheck, Pencil, Search } from "lucide-react";
 import type { Agent, Listing } from "@/db/schema";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
@@ -220,6 +220,23 @@ export function AgentDetailDialog({
               <Pencil />
               Edit
             </Button>
+            {agent.name && (
+              // Realtor.com has no public API for "look up this agent by
+              // name" and their own site search is address/listing-
+              // oriented, not agent-profile-oriented — a Google search
+              // scoped to their domain is the reliable way to land on an
+              // agent's actual realtor.com profile page.
+              <Button variant="outline" size="sm" asChild>
+                <a
+                  href={`https://www.google.com/search?q=${encodeURIComponent(`${agent.name} realtor.com`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Search />
+                  Find agent profile
+                </a>
+              </Button>
+            )}
             <Button variant="outline" size="sm" className="ml-auto" asChild>
               <a href={`/api/agents/${agent.id}/vcard`}>
                 <UserPlus />
