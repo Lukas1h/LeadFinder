@@ -20,8 +20,7 @@ export default function AgentsPage() {
 }
 
 async function AgentsContent() {
-  // Cached — see the matching comment in src/app/pipeline/page.tsx.
-  "use cache";
+  // Deliberately NOT "use cache" — see the comment in src/app/pipeline/page.tsx.
 
   await ensureAgentsBackfilled();
 

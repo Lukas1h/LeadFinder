@@ -173,15 +173,13 @@ export async function insertAndEnrichListings(
 
   if (insertedRows.length > 0) {
     // The cron route and the AgentMail webhook both land here with no
-    // Server Action of their own to revalidate on the way out — without
-    // this, pages cached via "use cache" (see src/app/page.tsx et al.)
-    // keep serving the pre-sync render until their time-based revalidate
-    // window passes, so a lead notified about here wouldn't show up yet.
-    // 'layout' (not per-page) also purges the client-side router cache —
-    // without it, an already-open PWA session can keep serving an older
-    // client-cached copy of a page even after the server-side data is
-    // fresh, which is exactly what made the Pipeline page look stale after
-    // a Shortcut import until its cache naturally expired.
+    // Server Action of their own to revalidate on the way out. Pages
+    // themselves render fresh on every request now (see the comment in
+    // src/app/pipeline/page.tsx), but the CLIENT-side router cache doesn't
+    // know that — 'layout' (not per-page) purges it, so an already-open PWA
+    // session doesn't keep serving an older client-cached copy of a page
+    // after the server-side data is fresh, which is what made the Pipeline
+    // page look stale after a Shortcut import before this was added.
     revalidatePath("/", "layout");
   }
 

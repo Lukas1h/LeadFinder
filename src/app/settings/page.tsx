@@ -25,8 +25,7 @@ export default function SettingsPage() {
 }
 
 async function SettingsContent() {
-  // Cached — see the matching comment in src/app/pipeline/page.tsx.
-  "use cache";
+  // Deliberately NOT "use cache" — see the comment in src/app/pipeline/page.tsx.
 
   const inboxAddress = process.env.AGENTMAIL_INBOX_ADDRESS ?? null;
   // Independent of each other, so run them concurrently instead of paying

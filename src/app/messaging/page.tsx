@@ -29,8 +29,7 @@ export default function MessagingPage() {
 }
 
 async function MessagingContent() {
-  // Cached — see the matching comment in src/app/pipeline/page.tsx.
-  "use cache";
+  // Deliberately NOT "use cache" — see the comment in src/app/pipeline/page.tsx.
 
   await ensureDefaultPresets();
   await Promise.all(PRESET_TYPES.map((type) => ensureAiDraftPresets(type)));

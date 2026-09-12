@@ -17,9 +17,7 @@ export default function BookedPage() {
 }
 
 async function BookedContent() {
-  // Cached — see the matching comment in src/app/pipeline/page.tsx. Every
-  // mutation in src/app/booked/actions.ts calls revalidatePath("/booked").
-  "use cache";
+  // Deliberately NOT "use cache" — see the comment in src/app/pipeline/page.tsx.
 
   const rows = await db.select().from(bookings);
 

@@ -37,8 +37,7 @@ export default function LeadsPage() {
 }
 
 async function LeadsContent() {
-  // Cached — see the matching comment in src/app/pipeline/page.tsx.
-  "use cache";
+  // Deliberately NOT "use cache" — see the comment in src/app/pipeline/page.tsx.
 
   // foundAt is transaction-time, so a batch insert gives every row in it
   // the exact same value — listings.id as a tiebreaker keeps order stable

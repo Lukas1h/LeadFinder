@@ -17,11 +17,12 @@ export default function PipelinePage() {
 }
 
 async function PipelineContent() {
-  // Cached so switching back to this tab is instant instead of re-showing
-  // the loading skeleton every time — every mutation that touches this
-  // data already calls revalidatePath("/pipeline") (see src/app/actions.ts),
-  // which busts this on the next visit, so it can't go stale in practice.
-  "use cache";
+  // Deliberately NOT "use cache" — this is a single-user internal tool with
+  // no real traffic to serve from a shared cache, and every "use cache"
+  // page here was racking up billed Vercel ISR writes on every mutation's
+  // revalidatePath (see src/app/actions.ts) plus every deploy's prerender.
+  // Plain per-request rendering costs nothing extra at this scale and is
+  // always correct, no revalidation bookkeeping required.
 
   // Independent of each other, so run them concurrently instead of paying
   // for sequential round trips to Neon.
