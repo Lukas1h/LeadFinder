@@ -19,59 +19,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Guessing a full street-address slug (Address_City_State_Zip) doesn't
-// reliably resolve on Realtor.com — their search silently falls back to a
-// zip-only search when the slug isn't one they recognize. City/state is the
-// one pattern documented to always work, so it's the fallback below when the
-// live geocoder lookup fails.
-function realtorFallbackUrl(lead: Listing): string {
-  const slug = [lead.city, lead.state]
-    .filter((part): part is string => !!part)
-    .map((part) => part.trim().replace(/\s+/g, "-"))
-    .join("_");
-  return `https://www.realtor.com/realestateandhomes-search/${encodeURIComponent(slug)}`;
-}
-
-// Realtor.com's own address search box resolves what you type through this
-// public (open-CORS) geocoder before redirecting — querying it directly gets
-// a real, Realtor-recognized street slug instead of a guessed one.
-async function openRealtorSearch(lead: Listing) {
-  // window.open must happen synchronously in the click handler, before any
-  // await, or mobile Safari treats the later redirect as not user-initiated
-  // and blocks it as a popup — so open a blank tab now and point it at the
-  // real URL once the lookup resolves.
-  const win = window.open("", "_blank", "noopener,noreferrer");
-  let url = realtorFallbackUrl(lead);
-  try {
-    const query = [lead.address, lead.city, lead.state, lead.zipcode].filter(Boolean).join(" ");
-    const res = await fetch(
-      `https://parser-external.geo.moveaws.com/suggest?input=${encodeURIComponent(query)}&client_id=rdc-x`,
-      { signal: AbortSignal.timeout(4000) }
-    );
-    const data = await res.json();
-    const suggestions: Array<{ area_type?: string; slug_id?: string; city_slug_id?: string }> =
-      data?.autocomplete ?? [];
-    const street = suggestions.find((s) => s.area_type === "street" && s.slug_id);
-    const postal = suggestions.find((s) => s.area_type === "postal_code" && s.slug_id);
-    const best = street ?? postal;
-    if (best?.slug_id) {
-      url = `https://www.realtor.com/realestateandhomes-search/${best.slug_id}${best.city_slug_id ? `_${best.city_slug_id}` : ""}`;
-    }
-  } catch {
-    // fall through with the city/state fallback already set above
-  } finally {
-    if (win) win.location.href = url;
-  }
-}
-
-// Redfin's own address-autocomplete API is blocked from server-side/bot
-// traffic (unlike Realtor.com's), so there's no reliable way to resolve a
-// precise Redfin slug the way openRealtorSearch does above — a Google
-// search scoped to their domain is the dependable fallback here, same
-// approach as AgentDetailDialog's "Find agent profile" button.
-function redfinSearchUrl(lead: Listing): string {
+// Both Realtor.com's and Redfin's own site search require resolving the
+// address through a search-specific slug/ID first (guessing one, or trying
+// to redirect a pre-opened tab once an async lookup resolves, proved
+// unreliable in practice — Realtor.com's version was landing on
+// about:blank). A Google search scoped to the domain is the dependable
+// fallback for both, same approach as AgentDetailDialog's "Find agent
+// profile" button — plain synchronous links, no async redirect to get wrong.
+function siteSearchUrl(domain: string, lead: Listing): string {
   const address = [lead.address, lead.city, lead.state, lead.zipcode].filter(Boolean).join(" ");
-  return `https://www.google.com/search?q=${encodeURIComponent(`site:redfin.com ${address}`)}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(`site:${domain} ${address}`)}`;
 }
 
 export function ListingModal({
@@ -210,12 +167,14 @@ export function ListingModal({
                 <ExternalLink />
               </a>
             </Button>
-            <Button variant="outline" className="flex-1 min-w-28" onClick={() => openRealtorSearch(lead)}>
-              Realtor.com
-              <ExternalLink />
+            <Button variant="outline" asChild className="flex-1 min-w-28">
+              <a href={siteSearchUrl("realtor.com", lead)} target="_blank" rel="noopener noreferrer">
+                Realtor.com
+                <ExternalLink />
+              </a>
             </Button>
             <Button variant="outline" asChild className="flex-1 min-w-28">
-              <a href={redfinSearchUrl(lead)} target="_blank" rel="noopener noreferrer">
+              <a href={siteSearchUrl("redfin.com", lead)} target="_blank" rel="noopener noreferrer">
                 Redfin
                 <ExternalLink />
               </a>
