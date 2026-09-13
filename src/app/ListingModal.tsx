@@ -54,9 +54,26 @@ export function ListingModal({
 
   const handleSiteSearch = async (domain: string) => {
     setFindingSource(domain);
+    // window.open must happen synchronously in the click handler, before any
+    // await — iOS Safari (even handing off to the system browser from a
+    // standalone PWA) silently blocks a window.open() called after an await
+    // as not user-initiated. Redirecting an already-open window via
+    // location.href afterward doesn't trigger that block, so open a blank
+    // tab now and point it wherever the lookup lands once it resolves.
+    // Deliberately omitting "noopener" on this specific call: with it,
+    // window.open() always returns null (that's what noopener means — no
+    // reference to the new window), which would silently break the
+    // redirect below.
+    const win = window.open("", "_blank");
     const resolved = await findListingSourceUrl(domain, lead).catch(() => null);
     setFindingSource(null);
-    window.open(resolved ?? siteSearchUrl(domain, lead), "_blank");
+    const url = resolved ?? siteSearchUrl(domain, lead);
+    if (win) {
+      win.location.href = url;
+      win.opener = null; // sever the opener link now that we're done redirecting it
+    } else {
+      window.open(url, "_blank");
+    }
   };
 
   const handleSaveNotes = () => {

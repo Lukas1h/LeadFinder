@@ -129,10 +129,27 @@ export function AgentDetailDialog({
 
   const handleFindAgentProfile = async () => {
     setFindingProfile(true);
+    // window.open must happen synchronously in the click handler, before any
+    // await — iOS Safari (even handing off to the system browser from a
+    // standalone PWA) silently blocks a window.open() called after an await
+    // as not user-initiated. Redirecting an already-open window via
+    // location.href afterward doesn't trigger that block, so open a blank
+    // tab now and point it wherever the lookup lands once it resolves.
+    // Deliberately omitting "noopener" on this specific call: with it,
+    // window.open() always returns null (that's what noopener means — no
+    // reference to the new window), which would silently break the
+    // redirect below.
+    const win = window.open("", "_blank");
     const fallback = `https://www.google.com/search?q=${encodeURIComponent(`${agent.name} realtor.com`)}`;
     const resolved = await findAgentProfileUrl(agent).catch(() => null);
     setFindingProfile(false);
-    window.open(resolved ?? fallback, "_blank");
+    const url = resolved ?? fallback;
+    if (win) {
+      win.location.href = url;
+      win.opener = null; // sever the opener link now that we're done redirecting it
+    } else {
+      window.open(url, "_blank");
+    }
   };
 
   const [history, setHistory] = useState<AgentSendHistoryItem[]>([]);
