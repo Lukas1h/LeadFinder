@@ -50,30 +50,27 @@ export function ListingModal({
   const [followUpPending, startFollowUpTransition] = useTransition();
   const followUpDirty = followUpAt !== initialFollowUpAt || followUpNote !== (lead.followUpNote ?? "");
 
+  // Start from the cached columns when we already have one (the common case
+  // once a listing's been looked up before — renders as a real link
+  // immediately, no lookup needed at all). A JS-triggered window.open(),
+  // even one called synchronously and redirected later via location.href,
+  // turned out to be unreliable on iOS in the installed PWA — any
+  // window.open() call after an await, however short, gets silently
+  // blocked there, no workaround available from script. A plain <a href>
+  // known at render time (like the Zillow button below) doesn't have that
+  // problem, so once resolved these buttons become real links instead of
+  // trying to navigate via JS.
+  const [realtorUrl, setRealtorUrl] = useState(lead.realtorUrl);
+  const [redfinUrl, setRedfinUrl] = useState(lead.redfinUrl);
   const [findingSource, setFindingSource] = useState<string | null>(null);
 
-  const handleSiteSearch = async (domain: string) => {
+  const handleSiteSearch = async (domain: "realtor.com" | "redfin.com") => {
     setFindingSource(domain);
-    // window.open must happen synchronously in the click handler, before any
-    // await — iOS Safari (even handing off to the system browser from a
-    // standalone PWA) silently blocks a window.open() called after an await
-    // as not user-initiated. Redirecting an already-open window via
-    // location.href afterward doesn't trigger that block, so open a blank
-    // tab now and point it wherever the lookup lands once it resolves.
-    // Deliberately omitting "noopener" on this specific call: with it,
-    // window.open() always returns null (that's what noopener means — no
-    // reference to the new window), which would silently break the
-    // redirect below.
-    const win = window.open("", "_blank");
     const resolved = await findListingSourceUrl(domain, lead).catch(() => null);
     setFindingSource(null);
     const url = resolved ?? siteSearchUrl(domain, lead);
-    if (win) {
-      win.location.href = url;
-      win.opener = null; // sever the opener link now that we're done redirecting it
-    } else {
-      window.open(url, "_blank");
-    }
+    if (domain === "realtor.com") setRealtorUrl(url);
+    else setRedfinUrl(url);
   };
 
   const handleSaveNotes = () => {
@@ -189,24 +186,42 @@ export function ListingModal({
                 <ExternalLink />
               </a>
             </Button>
-            <Button
-              variant="outline"
-              className="flex-1 min-w-28"
-              onClick={() => handleSiteSearch("realtor.com")}
-              disabled={findingSource === "realtor.com"}
-            >
-              {findingSource === "realtor.com" ? "Finding…" : "Realtor.com"}
-              <ExternalLink />
-            </Button>
-            <Button
-              variant="outline"
-              className="flex-1 min-w-28"
-              onClick={() => handleSiteSearch("redfin.com")}
-              disabled={findingSource === "redfin.com"}
-            >
-              {findingSource === "redfin.com" ? "Finding…" : "Redfin"}
-              <ExternalLink />
-            </Button>
+            {realtorUrl ? (
+              <Button variant="outline" asChild className="flex-1 min-w-28">
+                <a href={realtorUrl} target="_blank" rel="noopener noreferrer">
+                  Realtor.com
+                  <ExternalLink />
+                </a>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="flex-1 min-w-28"
+                onClick={() => handleSiteSearch("realtor.com")}
+                disabled={findingSource === "realtor.com"}
+              >
+                {findingSource === "realtor.com" ? "Finding…" : "Realtor.com"}
+                <ExternalLink />
+              </Button>
+            )}
+            {redfinUrl ? (
+              <Button variant="outline" asChild className="flex-1 min-w-28">
+                <a href={redfinUrl} target="_blank" rel="noopener noreferrer">
+                  Redfin
+                  <ExternalLink />
+                </a>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="flex-1 min-w-28"
+                onClick={() => handleSiteSearch("redfin.com")}
+                disabled={findingSource === "redfin.com"}
+              >
+                {findingSource === "redfin.com" ? "Finding…" : "Redfin"}
+                <ExternalLink />
+              </Button>
+            )}
           </div>
 
           {lead.bookingId && (

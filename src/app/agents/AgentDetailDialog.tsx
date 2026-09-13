@@ -125,31 +125,24 @@ export function AgentDetailDialog({
     router.refresh();
   };
 
+  // Starts from the cached column when we already have one (the common case
+  // once an agent's been looked up before — renders as a real link
+  // immediately, no lookup needed at all). A JS-triggered window.open(),
+  // even one called synchronously and redirected later, turned out to be
+  // unreliable on iOS in the installed PWA — any window.open() call after
+  // an await, however short, gets silently blocked there, no workaround
+  // available from script. A plain <a href> known at render time (like the
+  // Zillow button elsewhere in this app) doesn't have that problem, so once
+  // resolved this button becomes one instead of trying to navigate via JS.
+  const [profileUrl, setProfileUrl] = useState(agent.realtorProfileUrl);
   const [findingProfile, setFindingProfile] = useState(false);
 
   const handleFindAgentProfile = async () => {
     setFindingProfile(true);
-    // window.open must happen synchronously in the click handler, before any
-    // await — iOS Safari (even handing off to the system browser from a
-    // standalone PWA) silently blocks a window.open() called after an await
-    // as not user-initiated. Redirecting an already-open window via
-    // location.href afterward doesn't trigger that block, so open a blank
-    // tab now and point it wherever the lookup lands once it resolves.
-    // Deliberately omitting "noopener" on this specific call: with it,
-    // window.open() always returns null (that's what noopener means — no
-    // reference to the new window), which would silently break the
-    // redirect below.
-    const win = window.open("", "_blank");
     const fallback = `https://www.google.com/search?q=${encodeURIComponent(`${agent.name} realtor.com`)}`;
     const resolved = await findAgentProfileUrl(agent).catch(() => null);
     setFindingProfile(false);
-    const url = resolved ?? fallback;
-    if (win) {
-      win.location.href = url;
-      win.opener = null; // sever the opener link now that we're done redirecting it
-    } else {
-      window.open(url, "_blank");
-    }
+    setProfileUrl(resolved ?? fallback);
   };
 
   const [history, setHistory] = useState<AgentSendHistoryItem[]>([]);
@@ -248,12 +241,19 @@ export function AgentDetailDialog({
               <Pencil />
               Edit
             </Button>
-            {agent.name && (
+            {agent.name && (profileUrl ? (
+              <Button variant="outline" size="sm" asChild>
+                <a href={profileUrl} target="_blank" rel="noopener noreferrer">
+                  <Search />
+                  Find agent profile
+                </a>
+              </Button>
+            ) : (
               <Button variant="outline" size="sm" onClick={handleFindAgentProfile} disabled={findingProfile}>
                 <Search />
                 {findingProfile ? "Finding…" : "Find agent profile"}
               </Button>
-            )}
+            ))}
             <Button variant="outline" size="sm" className="ml-auto" asChild>
               <a href={`/api/agents/${agent.id}/vcard`}>
                 <UserPlus />
