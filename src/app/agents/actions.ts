@@ -15,7 +15,7 @@ import {
 } from "@/db/schema";
 import { eq, isNotNull, sql, desc, and, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { findFirstResultUrl } from "@/lib/tavily";
+import { findFirstResultUrl, findFirstNameMatchResultUrl } from "@/lib/tavily";
 
 /**
  * Idempotent — inserts an Agent row for every unique agentPhone found
@@ -261,20 +261,25 @@ export async function getAgentSendHistory(agentId: string): Promise<AgentSendHis
 }
 
 /**
- * Resolves the agent's realtor.com profile URL — the same "search their
- * name + realtor.com" a person would type by hand, done server-side via
- * Tavily so the button can jump straight to the profile. Cached on the
- * agent row (realtorProfileUrl) once found, so a repeat click never
- * re-spends a Tavily credit or re-pays the lookup latency. Returns null on
- * any failure so the button can fall back to a plain Google search link —
- * a miss is deliberately left uncached so a later retry can still succeed.
+ * Resolves the agent's profile URL — Zillow preferred, falling back to
+ * realtor.com if Zillow doesn't have a matching profile. Same "search their
+ * name" a person would type by hand, done server-side via Tavily so the
+ * button can jump straight to the profile. Cached on the agent row
+ * (realtorProfileUrl — named for when this only searched realtor.com, now
+ * holds whichever source actually matched) once found, so a repeat click
+ * never re-spends a Tavily credit or re-pays the lookup latency. Returns
+ * null on any failure so the button can fall back to a plain Google search
+ * link — a miss is deliberately left uncached so a later retry can still
+ * succeed.
  */
 export async function findAgentProfileUrl(agent: { id: string; name: string | null }): Promise<string | null> {
   const [row] = await db.select({ url: agents.realtorProfileUrl }).from(agents).where(eq(agents.id, agent.id));
   if (row?.url) return row.url;
 
   if (!agent.name) return null;
-  const resolved = await findFirstResultUrl(agent.name, "realtor.com");
+  const resolved =
+    (await findFirstNameMatchResultUrl(agent.name, "zillow.com")) ??
+    (await findFirstResultUrl(agent.name, "realtor.com"));
 
   if (resolved) {
     await db.update(agents).set({ realtorProfileUrl: resolved }).where(eq(agents.id, agent.id));

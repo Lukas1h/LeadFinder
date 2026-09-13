@@ -139,7 +139,7 @@ export function AgentDetailDialog({
 
   const handleFindAgentProfile = async () => {
     setFindingProfile(true);
-    const fallback = `https://www.google.com/search?q=${encodeURIComponent(`${agent.name} realtor.com`)}`;
+    const fallback = `https://www.google.com/search?q=${encodeURIComponent(`${agent.name} zillow`)}`;
     const resolved = await findAgentProfileUrl(agent).catch(() => null);
     setFindingProfile(false);
     setProfileUrl(resolved ?? fallback);
