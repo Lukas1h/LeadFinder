@@ -15,6 +15,7 @@ import {
 } from "@/db/schema";
 import { eq, isNotNull, sql, desc, and, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { findFirstResultUrl } from "@/lib/tavily";
 
 /**
  * Idempotent — inserts an Agent row for every unique agentPhone found
@@ -257,4 +258,14 @@ export async function getAgentSendHistory(agentId: string): Promise<AgentSendHis
     .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))
     .where(eq(messageSends.agentId, agentId))
     .orderBy(desc(messageSends.sentAt));
+}
+
+/**
+ * Resolves the agent's realtor.com profile URL — the same "search their
+ * name + realtor.com" a person would type by hand, done server-side via
+ * Tavily so the button can jump straight to the profile. Returns null on
+ * any failure so the button can fall back to a plain Google search link.
+ */
+export async function findAgentProfileUrl(agentName: string): Promise<string | null> {
+  return findFirstResultUrl(agentName, "realtor.com");
 }

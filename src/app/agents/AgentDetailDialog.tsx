@@ -16,6 +16,7 @@ import {
   updateAgentNotes,
   updateAgentContactInfo,
   getAgentSendHistory,
+  findAgentProfileUrl,
   type AgentSendHistoryItem,
 } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -124,6 +125,23 @@ export function AgentDetailDialog({
     router.refresh();
   };
 
+  const handleFindAgentProfile = async () => {
+    // window.open must happen synchronously in the click handler, before any
+    // await, or mobile Safari treats the later redirect as not user-initiated
+    // and blocks it as a popup — open a blank tab now, point it wherever the
+    // lookup lands once it resolves. Deliberately omitting "noopener": with
+    // it, window.open() always returns null (that's what noopener means —
+    // no reference to the new window), which would silently break the
+    // redirect below.
+    const win = window.open("", "_blank");
+    const fallback = `https://www.google.com/search?q=${encodeURIComponent(`${agent.name} realtor.com`)}`;
+    const resolved = await findAgentProfileUrl(agent.name!).catch(() => null);
+    if (win) {
+      win.location.href = resolved ?? fallback;
+      win.opener = null; // sever the opener link now that we're done redirecting it
+    }
+  };
+
   const [history, setHistory] = useState<AgentSendHistoryItem[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
 
@@ -221,20 +239,9 @@ export function AgentDetailDialog({
               Edit
             </Button>
             {agent.name && (
-              // Realtor.com has no public API for "look up this agent by
-              // name" and their own site search is address/listing-
-              // oriented, not agent-profile-oriented — a Google search
-              // scoped to their domain is the reliable way to land on an
-              // agent's actual realtor.com profile page.
-              <Button variant="outline" size="sm" asChild>
-                <a
-                  href={`https://www.google.com/search?q=${encodeURIComponent(`${agent.name} realtor.com`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Search />
-                  Find agent profile
-                </a>
+              <Button variant="outline" size="sm" onClick={handleFindAgentProfile}>
+                <Search />
+                Find agent profile
               </Button>
             )}
             <Button variant="outline" size="sm" className="ml-auto" asChild>

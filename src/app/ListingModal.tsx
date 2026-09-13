@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ExternalLink, X } from "lucide-react";
 import { LEAD_STATUSES, type Listing, type LeadStatus } from "@/db/schema";
-import { updateListingNotes, updateListingStatus, updateListingFollowUp } from "./actions";
+import { updateListingNotes, updateListingStatus, updateListingFollowUp, findListingSourceUrl } from "./actions";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { STATUS_LABELS } from "./badges";
 import { BookingForm } from "./booked/BookingForm";
@@ -19,16 +19,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Both Realtor.com's and Redfin's own site search require resolving the
-// address through a search-specific slug/ID first (guessing one, or trying
-// to redirect a pre-opened tab once an async lookup resolves, proved
-// unreliable in practice — Realtor.com's version was landing on
-// about:blank). A Google search scoped to the domain is the dependable
-// fallback for both, same approach as AgentDetailDialog's "Find agent
-// profile" button — plain synchronous links, no async redirect to get wrong.
+// Plain Google search link — used as the immediate fallback if the Tavily
+// lookup below fails (missing key, network error, no results) so the button
+// always lands somewhere useful.
 function siteSearchUrl(domain: string, lead: Listing): string {
   const address = [lead.address, lead.city, lead.state, lead.zipcode].filter(Boolean).join(" ");
   return `https://www.google.com/search?q=${encodeURIComponent(`site:${domain} ${address}`)}`;
+}
+
+// window.open must happen synchronously in the click handler, before any
+// await, or mobile Safari treats the later redirect as not user-initiated
+// and blocks it as a popup — open a blank tab now, point it wherever the
+// lookup lands once it resolves. Deliberately omitting "noopener": with it,
+// window.open() always returns null (that's what noopener means — no
+// reference to the new window), which would silently break the redirect
+// below.
+async function openSiteSearch(domain: string, lead: Listing) {
+  const win = window.open("", "_blank");
+  const resolved = await findListingSourceUrl(domain, lead).catch(() => null);
+  if (win) {
+    win.location.href = resolved ?? siteSearchUrl(domain, lead);
+    win.opener = null; // sever the opener link now that we're done redirecting it
+  }
 }
 
 export function ListingModal({
@@ -167,17 +179,13 @@ export function ListingModal({
                 <ExternalLink />
               </a>
             </Button>
-            <Button variant="outline" asChild className="flex-1 min-w-28">
-              <a href={siteSearchUrl("realtor.com", lead)} target="_blank" rel="noopener noreferrer">
-                Realtor.com
-                <ExternalLink />
-              </a>
+            <Button variant="outline" className="flex-1 min-w-28" onClick={() => openSiteSearch("realtor.com", lead)}>
+              Realtor.com
+              <ExternalLink />
             </Button>
-            <Button variant="outline" asChild className="flex-1 min-w-28">
-              <a href={siteSearchUrl("redfin.com", lead)} target="_blank" rel="noopener noreferrer">
-                Redfin
-                <ExternalLink />
-              </a>
+            <Button variant="outline" className="flex-1 min-w-28" onClick={() => openSiteSearch("redfin.com", lead)}>
+              Redfin
+              <ExternalLink />
             </Button>
           </div>
 

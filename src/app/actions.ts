@@ -6,6 +6,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { runSync, insertAndEnrichListings, type SyncResult } from "@/lib/sync";
 import { extractZpidFromUrl, fetchFullListing } from "@/lib/zillapi";
+import { findFirstAddressResultUrl } from "@/lib/tavily";
 
 export async function touchAgentContact(
   listingId: string,
@@ -281,4 +282,19 @@ export async function importListingsFromUrls(urls: string[]): Promise<ImportList
   revalidatePath("/", "layout");
 
   return { imported: inserted, skipped, failed };
+}
+
+/**
+ * Resolves a listing's page on another source site (Realtor.com, Redfin) via
+ * Tavily — the same "search the address, open the first result" a person
+ * would do by hand. Returns null on any failure so the button can fall back
+ * to a plain search link.
+ */
+export async function findListingSourceUrl(
+  domain: string,
+  address: { address: string | null; city: string | null; state: string | null; zipcode: string | null }
+): Promise<string | null> {
+  if (!address.address) return null;
+  const query = [address.address, address.city, address.state, address.zipcode].filter(Boolean).join(" ");
+  return findFirstAddressResultUrl(query, domain, address.address);
 }
