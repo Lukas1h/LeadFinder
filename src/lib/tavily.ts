@@ -56,26 +56,38 @@ export async function findFirstResultUrl(query: string, domain?: string): Promis
 
 /**
  * Same as findFirstResultUrl, but for site-restricted address searches
- * where a wrong (or generic search-page) match is worse than no match. Two
- * problems verified live on realtor.com for the same real address:
+ * where a wrong (or generic search-page) match is worse than no match.
+ * Problems verified live on realtor.com, all for real addresses:
  *  - Redfin doesn't have every Zillow-sourced listing indexed, and without
  *    a check Tavily happily returns a *different*, nearby property's page
- *    instead of an empty result (searching a Winston, OR address on
- *    redfin.com returned a listing three streets over).
- *  - The correct exact-match detail page can rank well below a generic
- *    county/city search page rather than first — for that same Winston
- *    address it only surfaced at position 5 of 5, and only with
- *    search_depth "advanced" (basic depth didn't surface it in the top 5
- *    at all). Only checking result[0] would've thrown away a real match
- *    that existed a few slots down.
- * Scanning several results with advanced depth and requiring the house
- * number to actually appear in the title finds that real match instead of
- * settling for "well, it wasn't first" and falling back to a search link.
+ *    instead of an empty result (a Winston, OR address returned a listing
+ *    three streets over).
+ *  - The correct exact-match detail page doesn't reliably rank first, or
+ *    even in the top few — one address only surfaced at position 5 of 5
+ *    results, another didn't appear at all in 5 results but did in 10 (the
+ *    same query against the same index isn't fully deterministic between
+ *    calls). Only checking result[0], or too few results, throws away a
+ *    real match that exists a few slots down.
+ *  - House number alone isn't enough to validate a match: a single town
+ *    can have the same house number on several different streets (600
+ *    Railroad Ave, 600 Kings Ave, 600 Hilltop Dr all showed up as decoys
+ *    for a "600 Queens Ct" search) — a same-number-wrong-street result
+ *    would otherwise pass validation if it happened to rank above the
+ *    real one.
+ * Scanning 10 results at advanced depth and requiring both the house
+ * number AND the street name to appear in the title guards against all
+ * three.
  */
 export async function findFirstAddressResultUrl(query: string, domain: string, streetAddress: string): Promise<string | null> {
-  const results = await findResults(query, domain, 5, "advanced");
-  const houseNumber = streetAddress.match(/^\d+/)?.[0];
-  const match = results.find((r) => !houseNumber || r.title?.includes(houseNumber));
+  const results = await findResults(query, domain, 10, "advanced");
+  const [houseNumber, streetName] = streetAddress.trim().split(/\s+/);
+  const match = results.find((r) => {
+    const title = r.title?.toLowerCase();
+    if (!title) return false;
+    if (houseNumber && !title.includes(houseNumber.toLowerCase())) return false;
+    if (streetName && !title.includes(streetName.toLowerCase())) return false;
+    return true;
+  });
   return match?.url ?? null;
 }
 
