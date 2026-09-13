@@ -16,7 +16,12 @@ interface TavilyResult {
  * is a "nice to have" shortcut, never something a button should hard-fail
  * on.
  */
-async function findResults(query: string, domain?: string, maxResults = 1): Promise<TavilyResult[]> {
+async function findResults(
+  query: string,
+  domain?: string,
+  maxResults = 1,
+  searchDepth: "basic" | "advanced" = "basic"
+): Promise<TavilyResult[]> {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) return [];
 
@@ -30,6 +35,7 @@ async function findResults(query: string, domain?: string, maxResults = 1): Prom
       body: JSON.stringify({
         query,
         max_results: maxResults,
+        search_depth: searchDepth,
         include_domains: domain ? [domain] : undefined,
       }),
       signal: AbortSignal.timeout(8000),
@@ -50,22 +56,27 @@ export async function findFirstResultUrl(query: string, domain?: string): Promis
 
 /**
  * Same as findFirstResultUrl, but for site-restricted address searches
- * where a wrong match is worse than no match — e.g. Redfin doesn't have
- * every Zillow-sourced listing indexed, and without this Tavily happily
- * returns a *different*, nearby property's page instead of an empty result
- * (verified live: searching a real Winston, OR address on redfin.com
- * returned a listing three streets over). Requiring the house number to
- * actually appear in the result's title is a cheap, effective guard against
- * silently sending someone to the wrong house.
+ * where a wrong (or generic search-page) match is worse than no match. Two
+ * problems verified live on realtor.com for the same real address:
+ *  - Redfin doesn't have every Zillow-sourced listing indexed, and without
+ *    a check Tavily happily returns a *different*, nearby property's page
+ *    instead of an empty result (searching a Winston, OR address on
+ *    redfin.com returned a listing three streets over).
+ *  - The correct exact-match detail page can rank well below a generic
+ *    county/city search page rather than first — for that same Winston
+ *    address it only surfaced at position 5 of 5, and only with
+ *    search_depth "advanced" (basic depth didn't surface it in the top 5
+ *    at all). Only checking result[0] would've thrown away a real match
+ *    that existed a few slots down.
+ * Scanning several results with advanced depth and requiring the house
+ * number to actually appear in the title finds that real match instead of
+ * settling for "well, it wasn't first" and falling back to a search link.
  */
 export async function findFirstAddressResultUrl(query: string, domain: string, streetAddress: string): Promise<string | null> {
-  const [result] = await findResults(query, domain, 1);
-  if (!result?.url) return null;
-
+  const results = await findResults(query, domain, 5, "advanced");
   const houseNumber = streetAddress.match(/^\d+/)?.[0];
-  if (houseNumber && !result.title?.includes(houseNumber)) return null;
-
-  return result.url;
+  const match = results.find((r) => !houseNumber || r.title?.includes(houseNumber));
+  return match?.url ?? null;
 }
 
 /**
@@ -79,7 +90,7 @@ export async function findFirstAddressResultUrl(query: string, domain: string, s
  * against landing on the wrong person's page.
  */
 export async function findFirstNameMatchResultUrl(name: string, domain: string): Promise<string | null> {
-  const results = await findResults(name, domain, 5);
+  const results = await findResults(name, domain, 5, "advanced");
   const tokens = name.toLowerCase().split(/\s+/).filter(Boolean);
   const match = results.find((r) => tokens.every((t) => r.title?.toLowerCase().includes(t)));
   return match?.url ?? null;
