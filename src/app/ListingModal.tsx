@@ -27,22 +27,6 @@ function siteSearchUrl(domain: string, lead: Listing): string {
   return `https://www.google.com/search?q=${encodeURIComponent(`site:${domain} ${address}`)}`;
 }
 
-// window.open must happen synchronously in the click handler, before any
-// await, or mobile Safari treats the later redirect as not user-initiated
-// and blocks it as a popup — open a blank tab now, point it wherever the
-// lookup lands once it resolves. Deliberately omitting "noopener": with it,
-// window.open() always returns null (that's what noopener means — no
-// reference to the new window), which would silently break the redirect
-// below.
-async function openSiteSearch(domain: string, lead: Listing) {
-  const win = window.open("", "_blank");
-  const resolved = await findListingSourceUrl(domain, lead).catch(() => null);
-  if (win) {
-    win.location.href = resolved ?? siteSearchUrl(domain, lead);
-    win.opener = null; // sever the opener link now that we're done redirecting it
-  }
-}
-
 export function ListingModal({
   lead,
   open,
@@ -65,6 +49,15 @@ export function ListingModal({
   const [followUpNote, setFollowUpNote] = useState(lead.followUpNote ?? "");
   const [followUpPending, startFollowUpTransition] = useTransition();
   const followUpDirty = followUpAt !== initialFollowUpAt || followUpNote !== (lead.followUpNote ?? "");
+
+  const [findingSource, setFindingSource] = useState<string | null>(null);
+
+  const handleSiteSearch = async (domain: string) => {
+    setFindingSource(domain);
+    const resolved = await findListingSourceUrl(domain, lead).catch(() => null);
+    setFindingSource(null);
+    window.open(resolved ?? siteSearchUrl(domain, lead), "_blank");
+  };
 
   const handleSaveNotes = () => {
     startTransition(async () => {
@@ -179,12 +172,22 @@ export function ListingModal({
                 <ExternalLink />
               </a>
             </Button>
-            <Button variant="outline" className="flex-1 min-w-28" onClick={() => openSiteSearch("realtor.com", lead)}>
-              Realtor.com
+            <Button
+              variant="outline"
+              className="flex-1 min-w-28"
+              onClick={() => handleSiteSearch("realtor.com")}
+              disabled={findingSource === "realtor.com"}
+            >
+              {findingSource === "realtor.com" ? "Finding…" : "Realtor.com"}
               <ExternalLink />
             </Button>
-            <Button variant="outline" className="flex-1 min-w-28" onClick={() => openSiteSearch("redfin.com", lead)}>
-              Redfin
+            <Button
+              variant="outline"
+              className="flex-1 min-w-28"
+              onClick={() => handleSiteSearch("redfin.com")}
+              disabled={findingSource === "redfin.com"}
+            >
+              {findingSource === "redfin.com" ? "Finding…" : "Redfin"}
               <ExternalLink />
             </Button>
           </div>

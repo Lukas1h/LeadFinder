@@ -125,21 +125,14 @@ export function AgentDetailDialog({
     router.refresh();
   };
 
+  const [findingProfile, setFindingProfile] = useState(false);
+
   const handleFindAgentProfile = async () => {
-    // window.open must happen synchronously in the click handler, before any
-    // await, or mobile Safari treats the later redirect as not user-initiated
-    // and blocks it as a popup — open a blank tab now, point it wherever the
-    // lookup lands once it resolves. Deliberately omitting "noopener": with
-    // it, window.open() always returns null (that's what noopener means —
-    // no reference to the new window), which would silently break the
-    // redirect below.
-    const win = window.open("", "_blank");
+    setFindingProfile(true);
     const fallback = `https://www.google.com/search?q=${encodeURIComponent(`${agent.name} realtor.com`)}`;
     const resolved = await findAgentProfileUrl(agent).catch(() => null);
-    if (win) {
-      win.location.href = resolved ?? fallback;
-      win.opener = null; // sever the opener link now that we're done redirecting it
-    }
+    setFindingProfile(false);
+    window.open(resolved ?? fallback, "_blank");
   };
 
   const [history, setHistory] = useState<AgentSendHistoryItem[]>([]);
@@ -239,9 +232,9 @@ export function AgentDetailDialog({
               Edit
             </Button>
             {agent.name && (
-              <Button variant="outline" size="sm" onClick={handleFindAgentProfile}>
+              <Button variant="outline" size="sm" onClick={handleFindAgentProfile} disabled={findingProfile}>
                 <Search />
-                Find agent profile
+                {findingProfile ? "Finding…" : "Find agent profile"}
               </Button>
             )}
             <Button variant="outline" size="sm" className="ml-auto" asChild>
