@@ -11,6 +11,7 @@ import { STATUS_LABELS } from "./badges";
 import { BookingForm } from "./booked/BookingForm";
 import { BookingRow } from "./booked/BookingRow";
 import { AgentRow } from "./AgentRow";
+import { FindLinkButton } from "./FindLinkButton";
 import { formatPrice, formatDate } from "@/lib/format";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -49,29 +50,6 @@ export function ListingModal({
   const [followUpNote, setFollowUpNote] = useState(lead.followUpNote ?? "");
   const [followUpPending, startFollowUpTransition] = useTransition();
   const followUpDirty = followUpAt !== initialFollowUpAt || followUpNote !== (lead.followUpNote ?? "");
-
-  // Start from the cached columns when we already have one (the common case
-  // once a listing's been looked up before — renders as a real link
-  // immediately, no lookup needed at all). A JS-triggered window.open(),
-  // even one called synchronously and redirected later via location.href,
-  // turned out to be unreliable on iOS in the installed PWA — any
-  // window.open() call after an await, however short, gets silently
-  // blocked there, no workaround available from script. A plain <a href>
-  // known at render time (like the Zillow button below) doesn't have that
-  // problem, so once resolved these buttons become real links instead of
-  // trying to navigate via JS.
-  const [realtorUrl, setRealtorUrl] = useState(lead.realtorUrl);
-  const [redfinUrl, setRedfinUrl] = useState(lead.redfinUrl);
-  const [findingSource, setFindingSource] = useState<string | null>(null);
-
-  const handleSiteSearch = async (domain: "realtor.com" | "redfin.com") => {
-    setFindingSource(domain);
-    const resolved = await findListingSourceUrl(domain, lead).catch(() => null);
-    setFindingSource(null);
-    const url = resolved ?? siteSearchUrl(domain, lead);
-    if (domain === "realtor.com") setRealtorUrl(url);
-    else setRedfinUrl(url);
-  };
 
   const handleSaveNotes = () => {
     startTransition(async () => {
@@ -179,49 +157,31 @@ export function ListingModal({
             <div className="text-xs text-muted-foreground">Source: {lead.sourceLabel}</div>
           )}
 
-          <div className="flex flex-wrap gap-2 mt-2">
-            <Button variant="outline" asChild className="flex-1 min-w-28">
+          <div className="flex flex-col gap-2 mt-2">
+            <Button variant="outline" asChild className="w-full">
               <a href={lead.listingUrl ?? "#"} target="_blank" rel="noopener noreferrer">
                 Zillow
                 <ExternalLink />
               </a>
             </Button>
-            {realtorUrl ? (
-              <Button variant="outline" asChild className="flex-1 min-w-28">
-                <a href={realtorUrl} target="_blank" rel="noopener noreferrer">
-                  Realtor.com
-                  <ExternalLink />
-                </a>
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                className="flex-1 min-w-28"
-                onClick={() => handleSiteSearch("realtor.com")}
-                disabled={findingSource === "realtor.com"}
-              >
-                {findingSource === "realtor.com" ? "Finding…" : "Realtor.com"}
-                <ExternalLink />
-              </Button>
-            )}
-            {redfinUrl ? (
-              <Button variant="outline" asChild className="flex-1 min-w-28">
-                <a href={redfinUrl} target="_blank" rel="noopener noreferrer">
-                  Redfin
-                  <ExternalLink />
-                </a>
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                className="flex-1 min-w-28"
-                onClick={() => handleSiteSearch("redfin.com")}
-                disabled={findingSource === "redfin.com"}
-              >
-                {findingSource === "redfin.com" ? "Finding…" : "Redfin"}
-                <ExternalLink />
-              </Button>
-            )}
+            <div className="flex gap-2">
+              <FindLinkButton
+                label="Realtor.com"
+                initialUrl={lead.realtorUrl}
+                onFind={async () =>
+                  (await findListingSourceUrl("realtor.com", lead).catch(() => null)) ?? siteSearchUrl("realtor.com", lead)
+                }
+                className="flex-1"
+              />
+              <FindLinkButton
+                label="Redfin"
+                initialUrl={lead.redfinUrl}
+                onFind={async () =>
+                  (await findListingSourceUrl("redfin.com", lead).catch(() => null)) ?? siteSearchUrl("redfin.com", lead)
+                }
+                className="flex-1"
+              />
+            </div>
           </div>
 
           {lead.bookingId && (

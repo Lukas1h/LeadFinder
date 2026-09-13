@@ -4,11 +4,12 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { UserPlus, Phone, MessageCircle, Mail, History, CalendarCheck, Pencil, Search } from "lucide-react";
+import { UserPlus, Phone, MessageCircle, Mail, History, CalendarCheck, Pencil } from "lucide-react";
 import type { Agent, Listing } from "@/db/schema";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { ListingRow } from "@/app/ListingRow";
+import { FindLinkButton } from "@/app/FindLinkButton";
 import { getAgentBookings } from "@/app/booked/actions";
 import { BookingRow } from "@/app/booked/BookingRow";
 import type { BookingWithDetails } from "@/app/booked/BookedList";
@@ -125,24 +126,9 @@ export function AgentDetailDialog({
     router.refresh();
   };
 
-  // Starts from the cached column when we already have one (the common case
-  // once an agent's been looked up before — renders as a real link
-  // immediately, no lookup needed at all). A JS-triggered window.open(),
-  // even one called synchronously and redirected later, turned out to be
-  // unreliable on iOS in the installed PWA — any window.open() call after
-  // an await, however short, gets silently blocked there, no workaround
-  // available from script. A plain <a href> known at render time (like the
-  // Zillow button elsewhere in this app) doesn't have that problem, so once
-  // resolved this button becomes one instead of trying to navigate via JS.
-  const [profileUrl, setProfileUrl] = useState(agent.realtorProfileUrl);
-  const [findingProfile, setFindingProfile] = useState(false);
-
-  const handleFindAgentProfile = async () => {
-    setFindingProfile(true);
+  const findAgentProfile = async () => {
     const fallback = `https://www.google.com/search?q=${encodeURIComponent(`${agent.name} zillow`)}`;
-    const resolved = await findAgentProfileUrl(agent).catch(() => null);
-    setFindingProfile(false);
-    setProfileUrl(resolved ?? fallback);
+    return (await findAgentProfileUrl(agent).catch(() => null)) ?? fallback;
   };
 
   const [history, setHistory] = useState<AgentSendHistoryItem[]>([]);
@@ -212,54 +198,48 @@ export function AgentDetailDialog({
             </div>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {callHref && (
-              <Button variant="outline" size="sm" asChild>
-                <a href={callHref}>
-                  <Phone />
-                  Call
+          <div className="flex flex-col gap-2">
+            {(callHref || agent.phone || agent.email) && (
+              <div className="flex gap-2">
+                {callHref && (
+                  <Button variant="outline" size="sm" asChild className="flex-1">
+                    <a href={callHref}>
+                      <Phone />
+                      Call
+                    </a>
+                  </Button>
+                )}
+                {agent.phone && (
+                  <Button variant="outline" size="sm" asChild className="flex-1">
+                    <a href={smsUrl(agent.phone, "")}>
+                      <MessageCircle />
+                      Text
+                    </a>
+                  </Button>
+                )}
+                {agent.email && (
+                  <Button variant="outline" size="sm" asChild className="flex-1">
+                    <Link href={`/messaging?agent=${agent.id}`}>
+                      <Mail />
+                      Email
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={startEditingContact}>
+                <Pencil />
+                Edit
+              </Button>
+              {agent.name && <FindLinkButton label="profile" initialUrl={agent.realtorProfileUrl} onFind={findAgentProfile} />}
+              <Button variant="outline" size="sm" className="ml-auto" asChild>
+                <a href={`/api/agents/${agent.id}/vcard`}>
+                  <UserPlus />
+                  Save contact
                 </a>
               </Button>
-            )}
-            {agent.phone && (
-              <Button variant="outline" size="sm" asChild>
-                <a href={smsUrl(agent.phone, "")}>
-                  <MessageCircle />
-                  Text
-                </a>
-              </Button>
-            )}
-            {agent.email && (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/messaging?agent=${agent.id}`}>
-                  <Mail />
-                  Email
-                </Link>
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={startEditingContact}>
-              <Pencil />
-              Edit
-            </Button>
-            {agent.name && (profileUrl ? (
-              <Button variant="outline" size="sm" asChild>
-                <a href={profileUrl} target="_blank" rel="noopener noreferrer">
-                  <Search />
-                  Find agent profile
-                </a>
-              </Button>
-            ) : (
-              <Button variant="outline" size="sm" onClick={handleFindAgentProfile} disabled={findingProfile}>
-                <Search />
-                {findingProfile ? "Finding…" : "Find agent profile"}
-              </Button>
-            ))}
-            <Button variant="outline" size="sm" className="ml-auto" asChild>
-              <a href={`/api/agents/${agent.id}/vcard`}>
-                <UserPlus />
-                Save contact
-              </a>
-            </Button>
+            </div>
           </div>
         )}
 
