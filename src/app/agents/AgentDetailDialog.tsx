@@ -135,7 +135,7 @@ export function AgentDetailDialog({
     // redirect below.
     const win = window.open("", "_blank");
     const fallback = `https://www.google.com/search?q=${encodeURIComponent(`${agent.name} realtor.com`)}`;
-    const resolved = await findAgentProfileUrl(agent.name!).catch(() => null);
+    const resolved = await findAgentProfileUrl(agent).catch(() => null);
     if (win) {
       win.location.href = resolved ?? fallback;
       win.opener = null; // sever the opener link now that we're done redirecting it

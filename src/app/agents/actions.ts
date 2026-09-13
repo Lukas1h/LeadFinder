@@ -263,9 +263,22 @@ export async function getAgentSendHistory(agentId: string): Promise<AgentSendHis
 /**
  * Resolves the agent's realtor.com profile URL — the same "search their
  * name + realtor.com" a person would type by hand, done server-side via
- * Tavily so the button can jump straight to the profile. Returns null on
- * any failure so the button can fall back to a plain Google search link.
+ * Tavily so the button can jump straight to the profile. Cached on the
+ * agent row (realtorProfileUrl) once found, so a repeat click never
+ * re-spends a Tavily credit or re-pays the lookup latency. Returns null on
+ * any failure so the button can fall back to a plain Google search link —
+ * a miss is deliberately left uncached so a later retry can still succeed.
  */
-export async function findAgentProfileUrl(agentName: string): Promise<string | null> {
-  return findFirstResultUrl(agentName, "realtor.com");
+export async function findAgentProfileUrl(agent: { id: string; name: string | null }): Promise<string | null> {
+  const [row] = await db.select({ url: agents.realtorProfileUrl }).from(agents).where(eq(agents.id, agent.id));
+  if (row?.url) return row.url;
+
+  if (!agent.name) return null;
+  const resolved = await findFirstResultUrl(agent.name, "realtor.com");
+
+  if (resolved) {
+    await db.update(agents).set({ realtorProfileUrl: resolved }).where(eq(agents.id, agent.id));
+  }
+
+  return resolved;
 }

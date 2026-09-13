@@ -98,6 +98,17 @@ export const listings = pgTable("listings", {
   // "Eugene") or "Zillow email alert". Set once at insert time, shown in
   // the listing detail modal.
   sourceLabel: text("source_label"),
+
+  // Resolved once via Tavily (see findListingSourceUrl in src/app/actions.ts)
+  // and cached here so the "Realtor.com"/"Redfin" buttons on the listing
+  // detail modal don't re-spend a credit (and re-pay the lookup latency) on
+  // every click — a listing's address never changes, so the result is good
+  // forever once found. Null means "not looked up yet, try Tavily"; a
+  // failed/no-match lookup is deliberately left null too rather than cached,
+  // so a later retry (e.g. once Redfin indexes the listing) can still
+  // succeed instead of being stuck on a stale miss.
+  realtorUrl: text("realtor_url"),
+  redfinUrl: text("redfin_url"),
 });
 
 export type Listing = typeof listings.$inferSelect;
@@ -149,6 +160,14 @@ export const agents = pgTable("agents", {
   // Free-text, edited from the agent detail dialog — same pattern as
   // listings.notes above.
   notes: text("notes"),
+
+  // Resolved once via Tavily (see findAgentProfileUrl in
+  // src/app/agents/actions.ts) and cached here so "Find agent profile"
+  // doesn't re-spend a credit/re-pay the lookup latency on every click — an
+  // agent's name doesn't change, so the result is good forever once found.
+  // Same "leave a miss uncached, only cache a real hit" reasoning as
+  // listings.realtorUrl above.
+  realtorProfileUrl: text("realtor_profile_url"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

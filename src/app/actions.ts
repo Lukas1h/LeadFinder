@@ -290,11 +290,35 @@ export async function importListingsFromUrls(urls: string[]): Promise<ImportList
  * would do by hand. Returns null on any failure so the button can fall back
  * to a plain search link.
  */
+const LISTING_URL_FIELD = {
+  "realtor.com": "realtorUrl",
+  "redfin.com": "redfinUrl",
+} as const satisfies Record<string, keyof NewListing>;
+
 export async function findListingSourceUrl(
   domain: string,
-  address: { address: string | null; city: string | null; state: string | null; zipcode: string | null }
+  lead: {
+    id: string;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    zipcode: string | null;
+  }
 ): Promise<string | null> {
-  if (!address.address) return null;
-  const query = [address.address, address.city, address.state, address.zipcode].filter(Boolean).join(" ");
-  return findFirstAddressResultUrl(query, domain, address.address);
+  const field = LISTING_URL_FIELD[domain as keyof typeof LISTING_URL_FIELD];
+
+  if (field) {
+    const [row] = await db.select({ url: listings[field] }).from(listings).where(eq(listings.id, lead.id));
+    if (row?.url) return row.url;
+  }
+
+  if (!lead.address) return null;
+  const query = [lead.address, lead.city, lead.state, lead.zipcode].filter(Boolean).join(" ");
+  const resolved = await findFirstAddressResultUrl(query, domain, lead.address);
+
+  if (resolved && field) {
+    await db.update(listings).set({ [field]: resolved }).where(eq(listings.id, lead.id));
+  }
+
+  return resolved;
 }
