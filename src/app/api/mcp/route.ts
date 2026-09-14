@@ -10,11 +10,15 @@ export const maxDuration = 60;
 
 // Bearer-token gated, same pattern as IMPORT_SHARE_SECRET on
 // /api/import-listing — this exposes real writes (send email, edit/import
-// agents), not just a public read endpoint.
+// agents), not just a public read endpoint. Also accepts ?key= (same
+// fallback import-listing uses), since MCP client connector UIs vary in
+// whether they let you set a custom Authorization header vs. only a plain
+// URL.
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.MCP_SHARE_SECRET;
   if (!secret) return false;
-  return req.headers.get("authorization") === `Bearer ${secret}`;
+  if (req.headers.get("authorization") === `Bearer ${secret}`) return true;
+  return new URL(req.url).searchParams.get("key") === secret;
 }
 
 /**
