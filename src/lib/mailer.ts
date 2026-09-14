@@ -54,6 +54,9 @@ async function appendToSentFolder(raw: Buffer): Promise<void> {
     auth: { user, pass },
     logger: false,
   });
+  // ImapFlow is an EventEmitter — an 'error' event (e.g. a flaky timeout)
+  // with no listener crashes the whole process, not just this function.
+  client.on("error", (err) => console.error("appendToSentFolder: ImapFlow error event", err));
 
   try {
     await client.connect();
