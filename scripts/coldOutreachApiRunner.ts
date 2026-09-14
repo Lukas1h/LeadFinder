@@ -50,16 +50,18 @@ async function main() {
     if (result.status === "sent") {
       sent++;
       console.log(`SENT ${name} <${email}> (${sent} sent, ${skipped} skipped, ${failed} failed)`);
+      await new Promise((r) => setTimeout(r, DELAY_MS));
     } else if (result.status === "skipped") {
+      // Already contacted (e.g. resuming after an interrupted run) — no
+      // pacing delay needed, nothing was actually sent.
       skipped++;
       console.log(`SKIP ${name} — ${result.reason ?? "already contacted"}`);
     } else {
       failed++;
       failedNames.push(`${name} <${email}>`);
       console.log(`FAILED ${name} <${email}> — ${result.error ?? "unknown error"}`);
+      await new Promise((r) => setTimeout(r, DELAY_MS));
     }
-
-    await new Promise((r) => setTimeout(r, DELAY_MS));
   }
 
   const elapsedMin = ((Date.now() - startedAt) / 60000).toFixed(1);
