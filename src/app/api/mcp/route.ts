@@ -4,9 +4,11 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { registerLeadFinderTools } from "@/mcp/tools";
 
 // A cold-start MCP round trip (spin up server, register tools, handle one
-// JSON-RPC call) is fast, but send_agent_email's SMTP call can be slow —
-// same reasoning as the other routes that touch mailer.ts/zillapi.ts.
-export const maxDuration = 60;
+// JSON-RPC call) is fast, but send_agent_email's SMTP call can be slow, and
+// send_bulk_agent_emails does that up to 40x sequentially in one request —
+// matches the 300s ceiling /api/compose/cold-outreach already uses for the
+// same reason.
+export const maxDuration = 300;
 
 // Bearer-token gated, same pattern as IMPORT_SHARE_SECRET on
 // /api/import-listing — this exposes real writes (send email, edit/import

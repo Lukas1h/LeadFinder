@@ -8,6 +8,95 @@ import { renderMessageBody, renderSubject } from "@/lib/messageTemplate";
 import { getFollowUpAfterDays } from "@/lib/settings";
 import { text, errorText, EMAIL_RE } from "./shared";
 
+interface BulkSendResult {
+  name: string;
+  email: string;
+  status: "sent" | "skipped" | "failed";
+  reason?: string;
+  agentId?: string;
+}
+
+interface BulkSendVariant {
+  subject: string | null;
+  body: string;
+  type: (typeof messagePresets.$inferSelect)["type"];
+  attachments: (typeof messagePresets.$inferSelect)["attachments"];
+}
+
+/**
+ * One contact's worth of the send_agent_email flow, minus the interactive
+ * needsConfirmation step (a bulk caller can't answer a confirmation prompt
+ * per row) — instead an already-contacted agent is silently skipped, same
+ * as /api/compose/cold-outreach. Also reuses that route's phone-collision
+ * fallback: agents.phone is unique, and it's a real case in this app's own
+ * data for two agents at the same brokerage to share one office line.
+ */
+async function sendBulkTemplateEmail(
+  contact: { name: string; email: string; phone?: string },
+  variant: BulkSendVariant,
+  presetId: string,
+  variantId: string,
+  skipAlreadyContacted: boolean
+): Promise<BulkSendResult> {
+  const name = contact.name.trim();
+  const email = contact.email.trim().toLowerCase();
+  const phone = contact.phone?.trim() || null;
+  if (!name) return { name: contact.name, email, status: "failed", reason: "name is required" };
+  if (!EMAIL_RE.test(email)) return { name, email, status: "failed", reason: "invalid email address" };
+
+  const [existingAgent] = await db.select().from(agents).where(eq(agents.email, email));
+  if (existingAgent?.lastContactedAt && skipAlreadyContacted) {
+    return { name, email, status: "skipped", reason: "already contacted", agentId: existingAgent.id };
+  }
+
+  const subject = renderSubject(variant.subject ?? "", name);
+  const body = renderMessageBody(variant.body, name, null);
+
+  try {
+    await sendEmail({ to: email, toName: name, subject, text: body, attachments: variant.attachments });
+  } catch (err) {
+    return { name, email, status: "failed", reason: `SMTP send failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  const now = new Date();
+  let agentId: string;
+  try {
+    if (existingAgent) {
+      await db
+        .update(agents)
+        .set({ name, lastContactedAt: now, phone: existingAgent.phone ?? phone })
+        .where(eq(agents.id, existingAgent.id));
+      agentId = existingAgent.id;
+    } else {
+      const [inserted] = await db.insert(agents).values({ email, name, phone, lastContactedAt: now }).returning({ id: agents.id });
+      agentId = inserted.id;
+    }
+  } catch {
+    // Likely a phone unique-constraint collision (two agents sharing one
+    // office line happens for real in this data) — retry without phone
+    // rather than losing/failing an already-sent email.
+    if (existingAgent) {
+      await db.update(agents).set({ name, lastContactedAt: now }).where(eq(agents.id, existingAgent.id));
+      agentId = existingAgent.id;
+    } else {
+      const [inserted] = await db.insert(agents).values({ email, name, phone: null, lastContactedAt: now }).returning({ id: agents.id });
+      agentId = inserted.id;
+    }
+  }
+
+  await db.insert(messageSends).values({
+    listingId: null,
+    agentId,
+    presetId,
+    variantId,
+    type: variant.type,
+    channel: "email",
+    sentAt: now,
+  });
+
+  return { name, email, status: "sent", agentId };
+}
+
 export function registerMessagingTools(server: McpServer): void {
   server.registerTool(
     "list_email_templates",
@@ -145,6 +234,58 @@ export function registerMessagingTools(server: McpServer): void {
         .returning({ id: messageSends.id });
 
       return text({ sent: true, agentId, messageSendId: send.id, subject, body });
+    }
+  );
+
+  server.registerTool(
+    "send_bulk_agent_emails",
+    {
+      title: "Bulk-send a template email to a list of agents",
+      description:
+        "Sends one email template (from list_email_templates) to a whole list of contacts in one call — e.g. a brokerage roster collected as name/email/phone rows. Same per-contact behavior as send_agent_email (render, send, save the agent, log the send), but without an interactive duplicate-confirmation step: an agent already marked contacted is silently skipped unless skipAlreadyContacted is set to false. One contact failing (bad address, SMTP error) doesn't stop the rest. " +
+        "Capped at 40 contacts per call to stay inside the server's time budget — for a longer list, call this again with the next slice.",
+      inputSchema: {
+        presetId: z.string().uuid(),
+        variantId: z.string().uuid(),
+        contacts: z
+          .array(
+            z.object({
+              name: z.string(),
+              email: z.string(),
+              phone: z.string().optional(),
+            })
+          )
+          .min(1)
+          .max(40),
+        skipAlreadyContacted: z
+          .boolean()
+          .default(true)
+          .describe("Skip (don't resend to) any contact whose email is already marked contacted — recommended for re-running a partial batch."),
+      },
+    },
+    async ({ presetId, variantId, contacts, skipAlreadyContacted }) => {
+      const [variant] = await db
+        .select({
+          subject: messagePresetVariants.subject,
+          body: messagePresetVariants.body,
+          type: messagePresets.type,
+          attachments: messagePresets.attachments,
+        })
+        .from(messagePresetVariants)
+        .innerJoin(messagePresets, eq(messagePresetVariants.presetId, messagePresets.id))
+        .where(and(eq(messagePresetVariants.id, variantId), eq(messagePresetVariants.presetId, presetId)));
+      if (!variant) return errorText("No such presetId/variantId pair");
+
+      const results: BulkSendResult[] = [];
+      for (const contact of contacts) {
+        results.push(await sendBulkTemplateEmail(contact, variant, presetId, variantId, skipAlreadyContacted));
+      }
+
+      const sent = results.filter((r) => r.status === "sent").length;
+      const skipped = results.filter((r) => r.status === "skipped").length;
+      const failed = results.filter((r) => r.status === "failed").length;
+
+      return text({ total: contacts.length, sent, skipped, failed, results });
     }
   );
 }
