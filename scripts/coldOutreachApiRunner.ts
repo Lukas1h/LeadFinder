@@ -1,14 +1,23 @@
 // Drives the deployed /api/compose/cold-outreach endpoint from outside the
-// app — for running the batch from an environment with no direct SMTP/IMAP
+// app — for running a batch from an environment with no direct SMTP/IMAP
 // network access of its own (only HTTPS), unlike coldOutreachBatch.ts which
 // calls sendEmail()/the DB directly and needs to run somewhere with real
 // outbound network access.
 //
-// Usage: COMPOSE_API_URL=https://... COMPOSE_API_SECRET=... npx tsx scripts/coldOutreachApiRunner.ts
-import { candidates } from "./coldOutreachCandidates";
-
-const TOTAL_MS = 105 * 60_000; // 1h45m wall clock for the whole batch
-const DELAY_MS = Math.floor(TOTAL_MS / candidates.length);
+// Usage:
+//   COMPOSE_API_URL=https://... COMPOSE_API_SECRET=... \
+//   CANDIDATES_MODULE=./windermereCandidates \
+//   DELAY_SECONDS=30 \
+//   npx tsx scripts/coldOutreachApiRunner.ts
+//
+// CANDIDATES_MODULE defaults to ./coldOutreachCandidates. Pacing: set
+// DELAY_SECONDS directly, or TOTAL_MINUTES to spread the whole list over a
+// target wall-clock duration instead; DELAY_SECONDS wins if both are set.
+interface Candidate {
+  name: string;
+  email: string;
+  phone: string | null;
+}
 
 const apiUrl = process.env.COMPOSE_API_URL;
 const apiSecret = process.env.COMPOSE_API_SECRET;
@@ -18,14 +27,26 @@ if (!apiUrl || !apiSecret) {
 }
 const endpoint = `${apiUrl.replace(/\/$/, "")}/api/compose/cold-outreach`;
 
+const candidatesModule = process.env.CANDIDATES_MODULE || "./coldOutreachCandidates";
+
 async function main() {
+  const { candidates }: { candidates: Candidate[] } = await import(candidatesModule);
+
+  const delaySecondsEnv = process.env.DELAY_SECONDS;
+  const totalMinutesEnv = process.env.TOTAL_MINUTES;
+  const DELAY_MS = delaySecondsEnv
+    ? Math.round(parseFloat(delaySecondsEnv) * 1000)
+    : Math.floor((parseFloat(totalMinutesEnv || "105") * 60_000) / candidates.length);
+
   const startedAt = Date.now();
   let sent = 0,
     skipped = 0,
     failed = 0;
   const failedNames: string[] = [];
 
-  console.log(`${candidates.length} candidates, ${(DELAY_MS / 1000).toFixed(1)}s between calls, target ~${(TOTAL_MS / 60000).toFixed(0)}min total`);
+  console.log(
+    `${candidatesModule}: ${candidates.length} candidates, ${(DELAY_MS / 1000).toFixed(1)}s between calls, target ~${((DELAY_MS * candidates.length) / 60000).toFixed(0)}min total`
+  );
 
   for (const r of candidates) {
     const name = r.name.trim();
