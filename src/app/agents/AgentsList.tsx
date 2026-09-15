@@ -12,6 +12,14 @@ import { Separator } from "@/components/ui/separator";
 
 const DECLINED_RESURFACE_AFTER_DAYS = 30;
 
+// "cold" is where every freshly-scraped/imported lead starts out, so with
+// thousands of agents on file it dwarfs every other bucket and was the
+// entire reason the page got slow — capping its initial render (while
+// leaving the small buckets alone) is what actually fixes that; search
+// still searches everything, capped or not, since a cap that hid search
+// results would just be confusing.
+const COLD_INITIAL_LIMIT = 15;
+
 // Most-established relationship first — mirrors the natural progression
 // (see bumpAgentRelationshipOnMilestone in src/app/actions.ts).
 const RELATIONSHIP_ORDER: AgentRelationshipStatus[] = [
@@ -27,6 +35,14 @@ function byRecency(a: Agent, b: Agent) {
   const bTime = b.lastContactedAt?.getTime() ?? 0;
   if (aTime !== bTime) return bTime - aTime;
   return (a.name ?? a.phone ?? a.email ?? "").localeCompare(b.name ?? b.phone ?? b.email ?? "");
+}
+
+// "cold" agents have never been contacted, so byRecency's lastContactedAt
+// always ties and falls back to alphabetical — useless for "show the
+// recently added ones" (the whole point of the cap below), so this group
+// sorts by when the row was created instead.
+function byCreatedDesc(a: Agent, b: Agent) {
+  return b.createdAt.getTime() - a.createdAt.getTime();
 }
 
 function matchesSearch(agent: Agent, query: string): boolean {
@@ -49,6 +65,7 @@ export function AgentsList({
   listingsByPhone: Record<string, Listing[]>;
 }) {
   const [search, setSearch] = useState("");
+  const [showAllCold, setShowAllCold] = useState(false);
 
   // Deep-link from ListingModal's agent block (?agent=<phone>) — opens that
   // agent's detail dialog directly, regardless of which section/collapsed
@@ -84,7 +101,7 @@ export function AgentsList({
       regular: [],
     };
     for (const a of notDeclined) groups[a.relationshipStatus].push(a);
-    for (const status of RELATIONSHIP_ORDER) groups[status].sort(byRecency);
+    for (const status of RELATIONSHIP_ORDER) groups[status].sort(status === "cold" ? byCreatedDesc : byRecency);
 
     return {
       byStatus: groups,
@@ -109,6 +126,10 @@ export function AgentsList({
   }
 
   const nothingFound = filtered.length === 0;
+
+  // A search query already narrows "cold" down to something worth scanning
+  // in full, so the cap only applies to the unfiltered, browse-everything view.
+  const isSearching = search.trim().length > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -141,17 +162,30 @@ export function AgentsList({
               <p className="text-muted-foreground/70 text-sm">No active agents right now.</p>
             ) : (
               <div className="flex flex-col gap-6">
-                {RELATIONSHIP_ORDER.map(
-                  (status) =>
-                    byStatus[status].length > 0 && (
-                      <div key={status}>
-                        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                          {RELATIONSHIP_LABELS[status]} ({byStatus[status].length})
-                        </h2>
-                        <div className="flex flex-col gap-4">{byStatus[status].map(card)}</div>
-                      </div>
-                    )
-                )}
+                {RELATIONSHIP_ORDER.map((status) => {
+                  if (byStatus[status].length === 0) return null;
+
+                  const capped = status === "cold" && !isSearching && !showAllCold;
+                  const visible = capped ? byStatus[status].slice(0, COLD_INITIAL_LIMIT) : byStatus[status];
+
+                  return (
+                    <div key={status}>
+                      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                        {RELATIONSHIP_LABELS[status]} ({byStatus[status].length})
+                      </h2>
+                      <div className="flex flex-col gap-4">{visible.map(card)}</div>
+                      {capped && byStatus[status].length > COLD_INITIAL_LIMIT && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllCold(true)}
+                          className="mt-4 w-full text-sm text-muted-foreground hover:text-foreground text-center py-2 rounded-md border border-dashed hover:border-solid transition-colors"
+                        >
+                          View all {byStatus[status].length.toLocaleString()} agents
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
