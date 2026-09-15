@@ -58,7 +58,7 @@ function parseCsv(text: string): AgentRecord[] {
     while ((m = lineRe.exec(line))) values.push(m[1].replace(/""/g, '"'));
     if (values.length !== CSV_HEADERS.length) continue;
     const rec = {} as AgentRecord;
-    CSV_HEADERS.forEach((h, i) => ((rec as Record<string, string>)[h] = values[i]));
+    CSV_HEADERS.forEach((h, i) => ((rec as unknown as Record<string, string>)[h] = values[i]));
     rows.push(rec);
   }
   return rows;

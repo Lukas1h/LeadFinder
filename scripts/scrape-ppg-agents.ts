@@ -228,7 +228,7 @@ function parseCsv(text: string): AgentRecord[] {
     if (values.length !== CSV_HEADERS.length) continue;
     const record = {} as AgentRecord;
     CSV_HEADERS.forEach((h, i) => {
-      (record as Record<string, string>)[h] = values[i];
+      (record as unknown as Record<string, string>)[h] = values[i];
     });
     rows.push(record);
   }
