@@ -13,6 +13,13 @@
 // CANDIDATES_MODULE defaults to ./coldOutreachCandidates. Pacing: set
 // DELAY_SECONDS directly, or TOTAL_MINUTES to spread the whole list over a
 // target wall-clock duration instead; DELAY_SECONDS wins if both are set.
+//
+// FLAGGED_FILE (optional): path to a flagCandidates.ts report — every email
+// in its flaggedEmails list is skipped entirely (not sent to the API at
+// all, not even a skip-delay) so a suspected duplicate person never gets
+// emailed while still awaiting manual verification.
+import fs from "fs";
+
 interface Candidate {
   name: string;
   email: string;
@@ -32,6 +39,13 @@ const candidatesModule = process.env.CANDIDATES_MODULE || "./coldOutreachCandida
 async function main() {
   const { candidates }: { candidates: Candidate[] } = await import(candidatesModule);
 
+  let flaggedEmails = new Set<string>();
+  if (process.env.FLAGGED_FILE) {
+    const report = JSON.parse(fs.readFileSync(process.env.FLAGGED_FILE, "utf8"));
+    flaggedEmails = new Set<string>(report.flaggedEmails.map((e: string) => e.toLowerCase()));
+    console.log(`Loaded ${flaggedEmails.size} flagged emails from ${process.env.FLAGGED_FILE} — these will be held out`);
+  }
+
   const delaySecondsEnv = process.env.DELAY_SECONDS;
   const totalMinutesEnv = process.env.TOTAL_MINUTES;
   const DELAY_MS = delaySecondsEnv
@@ -41,7 +55,8 @@ async function main() {
   const startedAt = Date.now();
   let sent = 0,
     skipped = 0,
-    failed = 0;
+    failed = 0,
+    heldForVerification = 0;
   const failedNames: string[] = [];
 
   console.log(
@@ -52,6 +67,12 @@ async function main() {
     const name = r.name.trim();
     const email = r.email.trim().toLowerCase();
     const phone = r.phone || null;
+
+    if (flaggedEmails.has(email)) {
+      heldForVerification++;
+      console.log(`HOLD ${name} <${email}> — flagged as a possible existing agent, needs manual verification`);
+      continue;
+    }
 
     let result: { status?: string; reason?: string; error?: string; agentId?: string } = {};
     try {
@@ -86,7 +107,9 @@ async function main() {
   }
 
   const elapsedMin = ((Date.now() - startedAt) / 60000).toFixed(1);
-  console.log(`DONE. Sent ${sent}, skipped ${skipped}, failed ${failed}, out of ${candidates.length}. Elapsed ${elapsedMin} min.`);
+  console.log(
+    `DONE. Sent ${sent}, skipped ${skipped}, failed ${failed}, held for verification ${heldForVerification}, out of ${candidates.length}. Elapsed ${elapsedMin} min.`
+  );
   if (failedNames.length) console.log(`Failed: ${failedNames.join("; ")}`);
 }
 
