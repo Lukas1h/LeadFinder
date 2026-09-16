@@ -79,6 +79,8 @@ async function BookedContent() {
       driveTime: city ? estimateDriveTime(city) : null,
       invoiceNumber: b.invoiceNumber,
       invoicedAt: b.invoicedAt,
+      dropboxFolderLink: b.dropboxFolderLink,
+      galleryToken: b.galleryToken,
     };
   });
 

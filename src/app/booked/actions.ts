@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "crypto";
 import { db } from "@/db";
 import { bookings, bookingLineItems, listings, agents, type NewBookingLineItem } from "@/db/schema";
 import { eq, inArray, desc } from "drizzle-orm";
@@ -229,6 +230,8 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     driveTime: city ? estimateDriveTime(city) : null,
     invoiceNumber: booking.invoiceNumber,
     invoicedAt: booking.invoicedAt,
+    dropboxFolderLink: booking.dropboxFolderLink,
+    galleryToken: booking.galleryToken,
   };
 }
 
@@ -295,8 +298,45 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       lineItems: lineItemsByBookingId.get(b.id) ?? [],
       invoiceNumber: b.invoiceNumber,
       invoicedAt: b.invoicedAt,
+      dropboxFolderLink: b.dropboxFolderLink,
+      galleryToken: b.galleryToken,
     };
   });
+}
+
+/**
+ * Sets/clears this booking's Dropbox delivery folder — the source the
+ * client-facing gallery page (src/app/gallery/[token]/page.tsx) lists
+ * photos from. Doesn't touch galleryToken; that's assigned separately (see
+ * getOrAssignGalleryToken below) so editing the folder link later never
+ * changes a URL already sent to a client.
+ */
+export async function updateBookingDropboxFolderLink(bookingId: string, link: string) {
+  await db
+    .update(bookings)
+    .set({ dropboxFolderLink: link.trim() || null })
+    .where(eq(bookings.id, bookingId));
+  revalidatePath("/booked");
+}
+
+/**
+ * Assigns this booking's client-gallery token the first time it's
+ * requested, then never again — same assign-lazily-never-reassign shape as
+ * getOrAssignInvoiceNumber (src/app/api/bookings/[id]/invoice/route.ts), so
+ * re-opening "Get client gallery link" always returns the same URL instead
+ * of silently breaking one already sent to a client.
+ */
+export async function getOrAssignGalleryToken(bookingId: string): Promise<string> {
+  const [existing] = await db.select({ galleryToken: bookings.galleryToken }).from(bookings).where(eq(bookings.id, bookingId));
+  if (existing?.galleryToken) return existing.galleryToken;
+
+  // 24 random bytes (base64url) — unguessable, and distinct from this
+  // booking's own uuid so the client-facing URL can't be used to look up
+  // the rest of the booking (line items, lockbox code, notes).
+  const token = randomBytes(24).toString("base64url");
+  await db.update(bookings).set({ galleryToken: token }).where(eq(bookings.id, bookingId));
+  revalidatePath("/booked");
+  return token;
 }
 
 export async function markBookingCompleted(bookingId: string) {

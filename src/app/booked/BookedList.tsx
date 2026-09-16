@@ -34,6 +34,11 @@ export interface BookingWithDetails {
   // "View invoice" vs "Create invoice" without a separate fetch.
   invoiceNumber: number | null;
   invoicedAt: Date | null;
+  // The Dropbox folder photos were delivered into, and the resulting
+  // client-facing gallery's token (null until "Get client gallery link" is
+  // first clicked) — see src/app/gallery/[token]/page.tsx.
+  dropboxFolderLink: string | null;
+  galleryToken: string | null;
 }
 
 export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {

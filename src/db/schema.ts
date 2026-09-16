@@ -210,6 +210,21 @@ export const bookings = pgTable("bookings", {
   // first tracked invoice, not skipped).
   invoiceNumber: integer("invoice_number").unique(),
   invoicedAt: timestamp("invoiced_at", { withTimezone: true }),
+
+  // The Dropbox folder Lukas already drops a shoot's delivered photos into
+  // (a normal Dropbox shared-folder link) — set from the booking's detail
+  // view. See src/lib/dropbox.ts for how this becomes a live photo grid
+  // instead of a bare "here's a Dropbox link" message.
+  dropboxFolderLink: text("dropbox_folder_link"),
+
+  // Assigned once, the first time "Get client gallery link" is clicked (see
+  // getOrAssignGalleryToken in src/app/booked/actions.ts) — same
+  // assign-lazily-never-reassign shape as invoiceNumber above, so
+  // re-generating the link never breaks one already sent to a client. An
+  // unguessable random string rather than this row's own id, so the
+  // client-facing /gallery/[token] URL can't also be used to look up the
+  // rest of the booking (line items, lockbox code, notes).
+  galleryToken: text("gallery_token").unique(),
 });
 
 export type Booking = typeof bookings.$inferSelect;

@@ -1,12 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { AppSidebar } from "./AppSidebar";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegistration } from "./ServiceWorkerRegistration";
-import { MobileHeader } from "./MobileHeader";
-import { BottomTabBar } from "./BottomTabBar";
+import { AppChrome } from "./AppChrome";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -86,18 +83,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="bg-black">
         <ServiceWorkerRegistration />
         <TooltipProvider>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-              <MobileHeader />
-              <div
-                className="pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen"
-              >
-                {children}
-              </div>
-              <BottomTabBar />
-            </SidebarInset>
-          </SidebarProvider>
+          <AppChrome>{children}</AppChrome>
         </TooltipProvider>
         <Toaster />
       </body>
