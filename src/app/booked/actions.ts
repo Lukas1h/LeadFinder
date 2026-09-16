@@ -227,6 +227,8 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     contactPhone: contact?.phone ?? null,
     lineItems,
     driveTime: city ? estimateDriveTime(city) : null,
+    invoiceNumber: booking.invoiceNumber,
+    invoicedAt: booking.invoicedAt,
   };
 }
 
@@ -291,6 +293,8 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       contactPhone: agent?.phone ?? null,
       driveTime: city ? estimateDriveTime(city) : null,
       lineItems: lineItemsByBookingId.get(b.id) ?? [],
+      invoiceNumber: b.invoiceNumber,
+      invoicedAt: b.invoicedAt,
     };
   });
 }

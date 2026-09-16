@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car } from "lucide-react";
+import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt } from "lucide-react";
 import { markBookingCompleted, reopenBooking } from "./actions";
 import { BookingForm } from "./BookingForm";
 import { ListingRow } from "@/app/ListingRow";
@@ -83,6 +83,23 @@ export function BookingDetailDialog({
               Mark completed
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            onClick={() => {
+              // The invoice route assigns a number server-side on first
+              // open (see its own comment) — this component has no signal
+              // for when that finishes, so refresh after a beat to pick up
+              // the new number for next time this dialog opens.
+              if (!booking.invoiceNumber) setTimeout(() => router.refresh(), 1500);
+            }}
+          >
+            <a href={`/api/bookings/${booking.id}/invoice`} target="_blank" rel="noopener noreferrer">
+              <Receipt />
+              {booking.invoiceNumber ? `Invoice #${booking.invoiceNumber}` : "Create invoice"}
+            </a>
+          </Button>
           <Button variant="outline" size="sm" className="ml-auto" onClick={() => setEditOpen(true)}>
             <Pencil />
             Edit

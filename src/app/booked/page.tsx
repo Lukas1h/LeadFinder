@@ -77,6 +77,8 @@ async function BookedContent() {
       contactPhone: contact?.phone ?? null,
       lineItems: lineItemsByBookingId.get(b.id) ?? [],
       driveTime: city ? estimateDriveTime(city) : null,
+      invoiceNumber: b.invoiceNumber,
+      invoicedAt: b.invoicedAt,
     };
   });
 

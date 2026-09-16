@@ -29,6 +29,11 @@ export interface BookingWithDetails {
   // src/lib/driveTime.ts. Null if either city isn't in its coordinate
   // table (no address on file, or an unrecognized city).
   driveTime: string | null;
+  // Null until "Create invoice" is first clicked (see the invoice route,
+  // src/app/api/bookings/[id]/invoice/route.ts) — lets the UI show
+  // "View invoice" vs "Create invoice" without a separate fetch.
+  invoiceNumber: number | null;
+  invoicedAt: Date | null;
 }
 
 export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
