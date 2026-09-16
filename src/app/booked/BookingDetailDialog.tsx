@@ -102,7 +102,7 @@ export function BookingDetailDialog({
             </a>
           </Button>
           <GalleryLinkButton booking={booking} onAddGallery={() => setEditOpen(true)} />
-          <Button variant="outline" size="sm" className="ml-auto" onClick={() => setEditOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             <Pencil />
             Edit
           </Button>
