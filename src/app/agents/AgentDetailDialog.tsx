@@ -4,8 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { UserPlus, Phone, MessageCircle, Mail, History, CalendarCheck, Pencil } from "lucide-react";
-import type { Agent, Listing } from "@/db/schema";
+import { UserPlus, Phone, MessageCircle, Mail, History, CalendarCheck, Pencil, Trash2 } from "lucide-react";
+import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { ListingRow } from "@/app/ListingRow";
@@ -16,15 +16,18 @@ import type { BookingWithDetails } from "@/app/booked/BookedList";
 import {
   updateAgentNotes,
   updateAgentContactInfo,
+  deleteAgent,
   getAgentSendHistory,
   findAgentProfileUrl,
   type AgentSendHistoryItem,
 } from "./actions";
+import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +36,17 @@ import {
   DialogDescription,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const RESULT_LABELS: Record<AgentSendHistoryItem["result"], string> = {
   pending: "Pending",
@@ -101,13 +115,16 @@ export function AgentDetailDialog({
   const [editName, setEditName] = useState(agent.name ?? "");
   const [editPhone, setEditPhone] = useState(agent.phone ?? "");
   const [editEmail, setEditEmail] = useState(agent.email ?? "");
+  const [editStatus, setEditStatus] = useState<AgentRelationshipStatus>(agent.relationshipStatus);
   const [contactError, setContactError] = useState<string | null>(null);
   const [isSavingContact, setIsSavingContact] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const startEditingContact = () => {
     setEditName(agent.name ?? "");
     setEditPhone(agent.phone ?? "");
     setEditEmail(agent.email ?? "");
+    setEditStatus(agent.relationshipStatus);
     setContactError(null);
     setIsEditingContact(true);
   };
@@ -115,7 +132,12 @@ export function AgentDetailDialog({
   const handleSaveContactInfo = async () => {
     setContactError(null);
     setIsSavingContact(true);
-    const result = await updateAgentContactInfo(agent.id, { name: editName, phone: editPhone, email: editEmail });
+    const result = await updateAgentContactInfo(agent.id, {
+      name: editName,
+      phone: editPhone,
+      email: editEmail,
+      relationshipStatus: editStatus,
+    });
     setIsSavingContact(false);
     if (result.error) {
       setContactError(result.error);
@@ -123,6 +145,15 @@ export function AgentDetailDialog({
     }
     toast.success("Agent updated");
     setIsEditingContact(false);
+    router.refresh();
+  };
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    await deleteAgent(agent.id);
+    setIsDeleting(false);
+    toast.success("Agent deleted");
+    onOpenChange(false);
     router.refresh();
   };
 
@@ -187,8 +218,51 @@ export function AgentDetailDialog({
               placeholder="Email"
               type="email"
             />
+            <Select value={editStatus} onValueChange={(v) => setEditStatus(v as AgentRelationshipStatus)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RELATIONSHIP_OPTIONS.map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {contactError && <p className="text-sm text-destructive">{contactError}</p>}
-            <div className="flex gap-2 justify-end">
+            <div className="flex items-center gap-2">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive mr-auto"
+                    disabled={isSavingContact}
+                  >
+                    <Trash2 />
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete {agent.name ?? "this agent"}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This removes their profile, notes, and relationship status for good. Any bookings or messages
+                      tied to them keep their own records, just no longer linked to a name. If they still have
+                      listings on file, a bare profile for their phone number will reappear next time you open the
+                      Agents page.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isDeleting}>Keep agent</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
+                      {isDeleting ? "Deleting…" : "Delete"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
               <Button variant="ghost" size="sm" onClick={() => setIsEditingContact(false)} disabled={isSavingContact}>
                 Cancel
               </Button>

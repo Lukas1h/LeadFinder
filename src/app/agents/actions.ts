@@ -150,10 +150,10 @@ export async function importAgent(input: {
   return { error: null };
 }
 
-/** Edits an existing agent's name/phone/email — from the "Edit" control in AgentDetailDialog. */
+/** Edits an existing agent's name/phone/email/relationship — from the "Edit" control in AgentDetailDialog. */
 export async function updateAgentContactInfo(
   id: string,
-  input: { name: string; phone: string; email: string }
+  input: { name: string; phone: string; email: string; relationshipStatus: AgentRelationshipStatus }
 ): Promise<{ error: string | null }> {
   const parsed = parseContactInfo(input.phone, input.email);
   if (parsed.error) return { error: parsed.error };
@@ -176,9 +176,80 @@ export async function updateAgentContactInfo(
 
   await db
     .update(agents)
-    .set({ name: input.name.trim() || null, phone, email })
+    .set({ name: input.name.trim() || null, phone, email, relationshipStatus: input.relationshipStatus })
     .where(eq(agents.id, id));
 
+  revalidatePath("/agents");
+  return { error: null };
+}
+
+/**
+ * Permanently deletes an agent — the "Delete" control in AgentDetailDialog's
+ * edit form, same directness as deleteBooking. bookings.contactAgentId and
+ * messageSends.agentId both cascade to null on delete (see schema.ts), so
+ * those records survive, just unlinked — the confirmation dialog spells
+ * this out rather than letting it be a surprise. A listing that still
+ * carries this agent's phone in its own agentName/agentPhone columns is
+ * untouched (they're plain text, not a foreign key), so
+ * ensureAgentsBackfilled will recreate a bare profile for that phone next
+ * time the Agents page loads.
+ */
+export async function deleteAgent(id: string) {
+  await db.delete(agents).where(eq(agents.id, id));
+  revalidatePath("/agents");
+  revalidatePath("/");
+  revalidatePath("/pipeline");
+  revalidatePath("/booked");
+  revalidatePath("/messaging");
+}
+
+/**
+ * Fills in agent info for a listing Zillapi returned with none at all (see
+ * ListingModal's "Add agent" prompt) — sets the listing's own
+ * agentName/agentPhone/brokerName columns, the same ones Zillapi would have
+ * populated, and creates or reuses an Agent row for that phone. Reuses
+ * rather than errors on an existing match (unlike importAgent) — linking a
+ * listing to an agent already in the system from another lead should never
+ * be blocked, it should just fill in whatever gaps that existing row has.
+ */
+export async function linkAgentToListing(
+  listingId: string,
+  input: { name: string; phone: string; email: string; brokerName: string }
+): Promise<{ error: string | null }> {
+  const phone = normalizePhone(input.phone.trim());
+  const digits = phone.replace(/\D/g, "");
+  if (!phone || digits.length < 10) return { error: "Enter a valid phone number" };
+
+  const trimmedEmail = input.email.trim().toLowerCase();
+  if (trimmedEmail && !EMAIL_RE.test(trimmedEmail)) return { error: "Enter a valid email address" };
+  const typedEmail = trimmedEmail || null;
+  const typedName = input.name.trim() || null;
+  const brokerName = input.brokerName.trim() || null;
+
+  const [existing] = await db.select().from(agents).where(eq(agents.phone, phone));
+  const resolvedName = existing?.name ?? typedName;
+  const resolvedEmail = existing?.email ?? typedEmail;
+
+  if (resolvedEmail && resolvedEmail !== existing?.email) {
+    const [conflict] = await db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(
+        existing ? and(eq(agents.email, resolvedEmail), ne(agents.id, existing.id)) : eq(agents.email, resolvedEmail)
+      );
+    if (conflict) return { error: "Another agent already has this email" };
+  }
+
+  if (existing) {
+    await db.update(agents).set({ name: resolvedName, email: resolvedEmail }).where(eq(agents.id, existing.id));
+  } else {
+    await db.insert(agents).values({ phone, email: resolvedEmail, name: resolvedName });
+  }
+
+  await db.update(listings).set({ agentName: resolvedName, agentPhone: phone, brokerName }).where(eq(listings.id, listingId));
+
+  revalidatePath("/");
+  revalidatePath("/pipeline");
   revalidatePath("/agents");
   return { error: null };
 }

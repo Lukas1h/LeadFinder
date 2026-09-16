@@ -6,22 +6,13 @@ import { RotateCcw, Phone, MessageCircle, Mail, StickyNote } from "lucide-react"
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { updateAgentRelationshipStatus, reconnectAgent, markAgentDeclined } from "./actions";
 import { AgentDetailDialog } from "./AgentDetailDialog";
+import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
 import { formatDate, daysSince } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-export const RELATIONSHIP_LABELS: Record<AgentRelationshipStatus, string> = {
-  cold: "Cold",
-  warm: "Warm",
-  interested: "Interested",
-  worked_once: "Worked once",
-  regular: "Regular",
-};
-
-const RELATIONSHIP_OPTIONS = Object.entries(RELATIONSHIP_LABELS) as [AgentRelationshipStatus, string][];
 
 export function AgentCard({
   agent,

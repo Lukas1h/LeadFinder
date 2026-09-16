@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink, X, UserPlus } from "lucide-react";
 import { LEAD_STATUSES, type Listing, type LeadStatus } from "@/db/schema";
 import { updateListingNotes, updateListingStatus, updateListingFollowUp, findListingSourceUrl } from "./actions";
 import { PhotoCarousel } from "./PhotoCarousel";
@@ -11,6 +11,7 @@ import { STATUS_LABELS } from "./badges";
 import { BookingForm } from "./booked/BookingForm";
 import { BookingRow } from "./booked/BookingRow";
 import { AgentRow } from "./AgentRow";
+import { LinkAgentForm } from "./LinkAgentForm";
 import { FindLinkButton } from "./FindLinkButton";
 import { formatPrice, formatDate } from "@/lib/format";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
@@ -147,11 +148,21 @@ export function ListingModal({
             </Select>
           </div>
 
-          {(lead.agentName || lead.brokerName || lead.agentPhone) && (
-            <div className="border-t pt-2">
+          <div className="border-t pt-2">
+            {lead.agentName || lead.brokerName || lead.agentPhone ? (
               <AgentRow name={lead.agentName} phone={lead.agentPhone} subtitle={lead.brokerName} />
-            </div>
-          )}
+            ) : (
+              <LinkAgentForm
+                listingId={lead.id}
+                trigger={
+                  <Button variant="outline" size="sm" className="w-full">
+                    <UserPlus />
+                    Add agent
+                  </Button>
+                }
+              />
+            )}
+          </div>
 
           {lead.sourceLabel && (
             <div className="text-xs text-muted-foreground">Source: {lead.sourceLabel}</div>
