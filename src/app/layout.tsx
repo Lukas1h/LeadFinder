@@ -1,10 +1,18 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegistration } from "./ServiceWorkerRegistration";
 import { AppChrome } from "./AppChrome";
 import "./globals.css";
+
+// headers() below (to read x-gallery-view) makes every route depend on
+// runtime request data at the root, which blocks static-shell
+// prerendering app-wide — this is the documented way to opt out of that
+// validation at the layout that actually needs it, per Next's own
+// guidance for exactly this shape of dependency.
+export const instant = false;
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -74,7 +82,16 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Set by src/proxy.ts on any request serving the public /gallery/[token]
+  // experience — decided here, server-side, off the same signal proxy.ts
+  // itself used, rather than client-side by matching usePathname() against
+  // "/gallery/". That client-side version shipped a real bug: a rewrite is
+  // invisible to the browser's URL bar, so on gallery.lukashahn.art/<token>
+  // usePathname() reports the bare /<token> path, never "/gallery/...", and
+  // the admin nav chrome rendered anyway.
+  const isGalleryView = (await headers()).get("x-gallery-view") === "1";
+
   return (
     <html
       lang="en"
@@ -82,9 +99,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="bg-black">
         <ServiceWorkerRegistration />
-        <TooltipProvider>
-          <AppChrome>{children}</AppChrome>
-        </TooltipProvider>
+        <TooltipProvider>{isGalleryView ? children : <AppChrome>{children}</AppChrome>}</TooltipProvider>
         <Toaster />
       </body>
     </html>

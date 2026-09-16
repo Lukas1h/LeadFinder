@@ -23,18 +23,45 @@ import { eq } from "drizzle-orm";
 const GALLERY_HOST = "gallery.lukashahn.art";
 const MAIN_SITE_URL = "https://lukashahn.art/real-estate";
 
+// Marks a request as "serving the gallery experience" so layout.tsx (a
+// Server Component) can decide server-side whether to wrap it in the
+// admin app's nav chrome — NOT decided client-side by matching
+// usePathname() against "/gallery/", which silently never matches here:
+// a rewrite is invisible to the browser's URL bar, so usePathname() on
+// gallery.lukashahn.art/<token> reports the bare /<token> path, never the
+// rewritten /gallery/<token> destination. That gap shipped the admin
+// sidebar/nav bar straight to a real client's phone before it was caught.
+const GALLERY_VIEW_HEADER = "x-gallery-view";
+
+function markGalleryView(headers: Headers): Headers {
+  const clone = new Headers(headers);
+  clone.set(GALLERY_VIEW_HEADER, "1");
+  return clone;
+}
+
 export async function proxy(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
-  if (host !== GALLERY_HOST && !host.startsWith(`${GALLERY_HOST}:`)) {
+  const isGalleryHost = host === GALLERY_HOST || host.startsWith(`${GALLERY_HOST}:`);
+  const { pathname } = req.nextUrl;
+
+  if (!isGalleryHost) {
+    // Direct /gallery/[token] access on any other domain (the admin app's
+    // own aliases, or someone who bookmarked an old link) still needs to be
+    // chrome-less — same header, same single source of truth in layout.tsx.
+    if (pathname.startsWith("/gallery/")) {
+      return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
+    }
     return NextResponse.next();
   }
 
-  const { pathname } = req.nextUrl;
   if (pathname === "/") {
     return NextResponse.redirect(MAIN_SITE_URL);
   }
-  if (pathname.startsWith("/api/") || pathname.startsWith("/gallery/")) {
+  if (pathname.startsWith("/api/")) {
     return NextResponse.next();
+  }
+  if (pathname.startsWith("/gallery/")) {
+    return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
   }
 
   const token = pathname.slice(1);
@@ -48,7 +75,9 @@ export async function proxy(req: NextRequest) {
     console.error("proxy: gallery token lookup failed", err);
   }
 
-  return NextResponse.rewrite(new URL(`/gallery${pathname}`, req.url));
+  return NextResponse.rewrite(new URL(`/gallery${pathname}`, req.url), {
+    request: { headers: markGalleryView(req.headers) },
+  });
 }
 
 export const config = {
