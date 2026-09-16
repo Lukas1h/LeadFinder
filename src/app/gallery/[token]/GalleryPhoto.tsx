@@ -11,7 +11,7 @@ export function GalleryPhoto({ thumbUrl, fullUrl, name }: { thumbUrl: string; fu
       href={fullUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="relative block aspect-square overflow-hidden rounded-lg border border-[#181A1C]/10 bg-[#F9F4F1]"
+      className="relative block aspect-[3/2] overflow-hidden rounded-lg border border-[#181A1C]/10 bg-[#F9F4F1]"
     >
       {!loaded && (
         <div className="absolute inset-0 flex items-center justify-center">

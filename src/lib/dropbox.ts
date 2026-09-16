@@ -73,7 +73,11 @@ export async function listGalleryPhotos(sharedLink: string): Promise<GalleryPhot
   return photos;
 }
 
-export type GalleryThumbnailSize = "w256h256" | "w640h480" | "w1024h768" | "w2048h1536";
+// w480h320/w960h640 are Dropbox's two 3:2 sizes — real estate photos are
+// natively shot 3:2, and requesting one of these directly (instead of a
+// 4:3 size CSS-cropped down to 3:2 client-side) gets an actual 3:2 crop
+// from Dropbox at full quality for that box, not a wasted/soft one.
+export type GalleryThumbnailSize = "w256h256" | "w480h320" | "w640h480" | "w960h640" | "w1024h768" | "w2048h1536";
 
 /**
  * Fetches a rendered JPEG thumbnail for one photo at the given size, via

@@ -3,9 +3,10 @@ import type { Metadata } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
 import { Download, ImageOff, Receipt } from "lucide-react";
 import { db } from "@/db";
-import { bookings, listings } from "@/db/schema";
+import { bookings, listings, agents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { listGalleryPhotos, dropboxZipDownloadUrl } from "@/lib/dropbox";
+import { firstName } from "@/lib/sms";
 import { GalleryPhoto } from "./GalleryPhoto";
 
 // The root layout's MobileHeader/BottomTabBar read usePathname(), which
@@ -28,10 +29,11 @@ const outfit = Outfit({ subsets: ["latin"], weight: ["400", "500", "600"], varia
  * Public, no-login client-facing gallery — the URL itself (an unguessable
  * galleryToken, not this booking's own id) is the only access control, same
  * spirit as the invoice/vcard routes' plain-link simplicity. Deliberately
- * reads only address, the Dropbox link, and the invoice number (itself
- * already a plain, ungated link elsewhere — see the invoice route) — never
- * line items, lockbox code, or notes. Those stay in the app, not on a link
- * that gets texted to a client.
+ * reads only address, the Dropbox link, the contact's first name (for the
+ * greeting note), and the invoice number (itself already a plain, ungated
+ * link elsewhere — see the invoice route) — never line items, lockbox
+ * code, or other notes. Those stay in the app, not on a link that gets
+ * texted to a client.
  */
 async function getGalleryBooking(token: string) {
   const [booking] = await db
@@ -41,6 +43,7 @@ async function getGalleryBooking(token: string) {
       city: bookings.city,
       state: bookings.state,
       listingId: bookings.listingId,
+      contactAgentId: bookings.contactAgentId,
       dropboxFolderLink: bookings.dropboxFolderLink,
       invoiceNumber: bookings.invoiceNumber,
     })
@@ -58,10 +61,15 @@ async function getGalleryBooking(token: string) {
         .where(eq(listings.id, booking.listingId))
     : [];
 
+  const [contact] = booking.contactAgentId
+    ? await db.select({ name: agents.name }).from(agents).where(eq(agents.id, booking.contactAgentId))
+    : [];
+
   return {
     id: booking.id,
     dropboxFolderLink: booking.dropboxFolderLink,
     invoiceNumber: booking.invoiceNumber,
+    contactName: contact?.name ?? null,
     address: linkedListing?.address ?? booking.address,
     city: linkedListing?.city ?? booking.city,
     state: linkedListing?.state ?? booking.state,
@@ -78,14 +86,15 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   return { title: booking ? formatLocation(booking) : "Photo Gallery" };
 }
 
-/** Wraps every branch below (found/not-ready/empty/full) so the fonts and header always match. */
-function GalleryShell({ children }: { children: React.ReactNode }) {
+/** Wraps every branch below (found/not-ready/empty/full) so the fonts, header, and greeting always match. */
+function GalleryShell({ greeting, children }: { greeting: string; children: React.ReactNode }) {
   return (
     <div className={`${notoSerif.variable} ${outfit.variable} min-h-screen bg-white`}>
       <main className="max-w-5xl mx-auto px-6 py-12 flex flex-col items-center gap-2 font-[family-name:var(--font-gallery-sans)] text-[#181A1C]">
         <div className="font-[family-name:var(--font-gallery-serif)] font-bold text-4xl sm:text-5xl tracking-tight">Hahn Media</div>
         <div className="text-xs uppercase tracking-[0.3em] text-[#181A1C]/70">Real Estate Photo &amp; Video</div>
         <div className="w-full h-px bg-[#181A1C]/10 my-6" />
+        <p className="italic text-sm text-[#181A1C]/70 text-center max-w-md mb-6">{greeting}</p>
         {children}
       </main>
     </div>
@@ -112,10 +121,11 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
   if (!booking) notFound();
 
   const location = formatLocation(booking);
+  const greeting = `Hi ${firstName(booking.contactName) ?? "there"}! Please let me know if there are any edits you'd like made or any angles missing and I'll get it taken care of quickly.`;
 
   if (!booking.dropboxFolderLink) {
     return (
-      <GalleryShell>
+      <GalleryShell greeting={greeting}>
         <h1 className="text-xl font-semibold text-center">{location}</h1>
         <p className="mt-2 text-[#181A1C]/60 text-center">Photos aren&rsquo;t ready yet — check back soon.</p>
         {booking.invoiceNumber && (
@@ -131,7 +141,7 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
   const downloadAllUrl = dropboxZipDownloadUrl(booking.dropboxFolderLink);
 
   return (
-    <GalleryShell>
+    <GalleryShell greeting={greeting}>
       <h1 className="text-xl font-semibold text-center">{location}</h1>
       <p className="text-sm text-[#181A1C]/60">
         {photos.length} photo{photos.length === 1 ? "" : "s"}
@@ -157,17 +167,11 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
       ) : (
         <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {photos.map((photo) => {
-            const thumbUrl = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(photo.name)}&size=w640h480`;
+            const thumbUrl = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(photo.name)}&size=w960h640`;
             const fullUrl = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(photo.name)}&size=w2048h1536`;
             return <GalleryPhoto key={photo.name} thumbUrl={thumbUrl} fullUrl={fullUrl} name={photo.name} />;
           })}
         </div>
-      )}
-
-      {photos.length > 0 && (
-        <p className="italic text-sm text-[#181A1C]/70 text-center mt-10 max-w-md">
-          See something you&rsquo;d like changed, or need a different angle? Just text or email me — happy to help.
-        </p>
       )}
 
       <footer className="w-full mt-12 pt-6 border-t border-[#181A1C]/10 text-center text-xs text-[#181A1C]/50">

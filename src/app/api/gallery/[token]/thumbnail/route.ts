@@ -4,7 +4,7 @@ import { bookings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { listGalleryPhotos, getGalleryThumbnail, type GalleryThumbnailSize } from "@/lib/dropbox";
 
-const VALID_SIZES = new Set<GalleryThumbnailSize>(["w256h256", "w640h480", "w1024h768", "w2048h1536"]);
+const VALID_SIZES = new Set<GalleryThumbnailSize>(["w256h256", "w480h320", "w640h480", "w960h640", "w1024h768", "w2048h1536"]);
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
