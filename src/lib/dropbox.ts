@@ -90,11 +90,14 @@ export async function getGalleryThumbnail(pathLower: string, size: GalleryThumbn
     size: { ".tag": size },
     mode: { ".tag": "bestfit" },
   });
-  // The SDK's return type is a fileBinary/fileBlob union (Node vs.
-  // browser) — this always runs server-side, so fileBinary is the real
-  // branch, but TS can't narrow that from the union alone.
-  if (!res.result.fileBinary) throw new Error("Dropbox thumbnail response had no fileBinary");
-  return Buffer.from(res.result.fileBinary);
+  // The SDK's return type is a fileBinary/fileBlob union, and which branch
+  // actually comes back depends on which fetch/Response implementation is
+  // in play at runtime — confirmed by testing: a plain tsx script gets
+  // fileBinary, but the same call inside a Next.js route handler gets
+  // fileBlob instead. Handle both rather than assuming either.
+  if (res.result.fileBinary) return Buffer.from(res.result.fileBinary);
+  if (res.result.fileBlob) return Buffer.from(await res.result.fileBlob.arrayBuffer());
+  throw new Error("Dropbox thumbnail response had neither fileBinary nor fileBlob");
 }
 
 /**
