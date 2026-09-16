@@ -76,3 +76,8 @@ Lukas Hahn
 Hahn Media
 https://www.lukashahn.art/real-estate
 (541) 430-3372`;
+
+// Seed copy for the "Blank" SMS preset (ensureBlankSmsPreset in
+// messageActions.ts) — completely empty, unlike the email one, since a text
+// doesn't need a greeting/signature scaffold to start typing into.
+export const BLANK_SMS_BODY = "";

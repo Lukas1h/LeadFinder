@@ -18,12 +18,14 @@ import {
   renderMessageBody,
   DEFAULT_INITIAL_BODY,
   DEFAULT_FOLLOWUP_BODY,
+  BLANK_SMS_BODY,
   AI_DRAFT_VARIANT_SENTINEL,
 } from "@/lib/messageTemplate";
 import { draftMessage } from "@/lib/draftMessage";
 import { touchAgentContact } from "@/app/actions";
 
 const AI_DRAFT_PRESET_NAME = "AI Draft";
+const BLANK_SMS_PRESET_NAME = "Blank";
 
 /**
  * Idempotent — inserts the two starter presets ("Initial Outreach",
@@ -58,6 +60,32 @@ export async function ensureDefaultPresets() {
 }
 
 /**
+ * Idempotent — inserts a "Blank" SMS preset for `type` (protected: true, so
+ * the delete button in Messaging refuses to touch it — same reasoning as
+ * ensureBlankEmailPreset in composeEmailActions.ts) the first time it's
+ * needed, for texting something custom instead of picking a template. This
+ * is the option getMessageOptions defaults the Send message dialog to.
+ */
+export async function ensureBlankSmsPreset(type: PresetType) {
+  const [existing] = await db
+    .select({ id: messagePresets.id })
+    .from(messagePresets)
+    .where(and(eq(messagePresets.type, type), eq(messagePresets.channel, "sms"), eq(messagePresets.protected, true)))
+    .limit(1);
+  if (existing) return;
+
+  const [preset] = await db
+    .insert(messagePresets)
+    .values({ name: BLANK_SMS_PRESET_NAME, type, protected: true })
+    .returning({ id: messagePresets.id });
+  await db.insert(messagePresetVariants).values({
+    presetId: preset.id,
+    label: "A",
+    body: BLANK_SMS_BODY,
+  });
+}
+
+/**
  * Idempotent — inserts the "AI Draft" system preset for each type the
  * first time it's needed. Unlike ensureDefaultPresets, these start with
  * zero variants: a variant only gets created (see sendMessage) at the
@@ -86,6 +114,8 @@ export interface PresetOption {
   /** Only set for email options, which span both types in one list — see getComposeEmailOptions. */
   type?: PresetType;
   recommended: boolean;
+  /** The "Blank"/"type your own" preset — see ensureBlankSmsPreset. Send dialogs default to this over `recommended`. */
+  blank?: boolean;
 }
 
 export interface MessageOptions {
@@ -153,6 +183,7 @@ function criteriaCount(preset: PresetCriteria): number {
  */
 export async function getMessageOptions(listingId: string, type: PresetType): Promise<MessageOptions> {
   await ensureDefaultPresets();
+  await ensureBlankSmsPreset(type);
   await ensureAiDraftPresets(type);
 
   // Full row (not a curated field list) — buildAiDraftOption below feeds
@@ -169,6 +200,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
     .select({
       presetId: messagePresets.id,
       presetName: messagePresets.name,
+      protected: messagePresets.protected,
       minScore: messagePresets.minScore,
       maxScore: messagePresets.maxScore,
       minPrice: messagePresets.minPrice,
@@ -210,6 +242,10 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   let bestCriteriaCount = -1;
   for (const group of rowsByPreset.values()) {
     const preset = group[0];
+    // The Blank preset is never "recommended" — it's always the dialog's
+    // default (see below), and tagging it "(Recommended)" too would just
+    // be a confusing double label on the same option.
+    if (preset.protected) continue;
     if (
       !matchesCriteria(preset, {
         score: listing.score,
@@ -240,6 +276,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       variantLabel: picked.label,
       text: renderMessageBody(picked.body, listing.agentName, listing.address),
       recommended: picked.presetId === recommendedPresetId,
+      blank: picked.protected,
     };
   });
 

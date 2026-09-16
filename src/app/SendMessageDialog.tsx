@@ -56,8 +56,12 @@ export function SendMessageDialog({
     setIsDraftingAi(false);
     getMessageOptions(listingId, type).then(({ presets }) => {
       setPresets(presets);
+      // Blank ("type your own") wins over a criteria-matched recommendation
+      // — Lukas usually wants to write the text himself, not start from a
+      // template he then has to edit away.
+      const blank = presets.find((p) => p.blank);
       const recommended = presets.find((p) => p.recommended);
-      const initial = recommended ?? presets[0] ?? null;
+      const initial = blank ?? recommended ?? presets[0] ?? null;
       setSelectedPresetId(initial?.presetId ?? null);
       setEditedText(initial?.text ?? "");
       setLoading(false);
