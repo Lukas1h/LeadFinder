@@ -201,12 +201,13 @@ export const bookings = pgTable("bookings", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
   // Assigned once, the first time "Create invoice" is clicked (see
-  // getOrAssignInvoiceNumber in src/app/booked/actions.ts) — null until
-  // then. Never reassigned after that, so re-opening/re-printing the same
-  // booking's invoice always shows the same number instead of incrementing
-  // on every view. Numbering picks up after 106, Lukas's last invoice sent
-  // before this feature existed (numbers below that were sent by hand,
-  // outside the app, and aren't tracked here).
+  // getOrAssignInvoiceNumber in src/app/api/bookings/[id]/invoice/route.ts)
+  // — null until then. Never reassigned after that, so re-opening/
+  // re-printing the same booking's invoice always shows the same number
+  // instead of incrementing on every view. Numbering picks up after 105 —
+  // everything at or below that was sent by hand, outside the app, and
+  // isn't tracked here (106 itself is meant to be recreated as this app's
+  // first tracked invoice, not skipped).
   invoiceNumber: integer("invoice_number").unique(),
   invoicedAt: timestamp("invoiced_at", { withTimezone: true }),
 });

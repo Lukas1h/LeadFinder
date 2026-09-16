@@ -4,9 +4,11 @@ import { bookings, bookingLineItems, listings, agents } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { formatDate, formatPrice } from "@/lib/format";
 
-// Numbering picks up after 106, Lukas's last invoice sent by hand before
-// this feature existed — see the comment on bookings.invoiceNumber.
-const LAST_MANUAL_INVOICE_NUMBER = 106;
+// Numbering picks up after 105 — 106 itself was the 1353 Dalton Ct /
+// Chandra Reynolds job, sent by hand before this feature existed, and is
+// meant to be (re)created as this app's very first tracked invoice rather
+// than skipped over. See the comment on bookings.invoiceNumber.
+const LAST_MANUAL_INVOICE_NUMBER = 105;
 
 // Fixed business details from Lukas's real invoice template — not
 // booking-specific, so hardcoded here rather than modeled in the DB, same
