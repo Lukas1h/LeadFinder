@@ -330,6 +330,18 @@ export async function getOrAssignGalleryToken(bookingId: string): Promise<string
   return token;
 }
 
+/**
+ * Clears this booking's assigned invoice number/date — for a mistakenly
+ * created or since-voided invoice. Numbers are never reused (matches how
+ * paper invoice numbering already works): the next "Create invoice" click
+ * assigns a fresh, higher number via getOrAssignInvoiceNumber, it doesn't
+ * bring this one back.
+ */
+export async function deleteBookingInvoice(bookingId: string) {
+  await db.update(bookings).set({ invoiceNumber: null, invoicedAt: null }).where(eq(bookings.id, bookingId));
+  revalidatePath("/booked");
+}
+
 export async function markBookingCompleted(bookingId: string) {
   await db.update(bookings).set({ completedAt: new Date() }).where(eq(bookings.id, bookingId));
   revalidatePath("/booked");

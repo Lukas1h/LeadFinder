@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
-import { Download, ImageOff } from "lucide-react";
+import { Download, ImageOff, Receipt } from "lucide-react";
 import { db } from "@/db";
 import { bookings, listings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { listGalleryPhotos, dropboxZipDownloadUrl } from "@/lib/dropbox";
+import { GalleryPhoto } from "./GalleryPhoto";
 
 // The root layout's MobileHeader/BottomTabBar read usePathname(), which
 // can't be prerendered into an instant static shell for a dynamic [token]
@@ -27,18 +28,21 @@ const outfit = Outfit({ subsets: ["latin"], weight: ["400", "500", "600"], varia
  * Public, no-login client-facing gallery — the URL itself (an unguessable
  * galleryToken, not this booking's own id) is the only access control, same
  * spirit as the invoice/vcard routes' plain-link simplicity. Deliberately
- * reads only address + the Dropbox link, never the booking's line items,
- * lockbox code, or notes — those stay in the app, not on a link that gets
- * texted to a client.
+ * reads only address, the Dropbox link, and the invoice number (itself
+ * already a plain, ungated link elsewhere — see the invoice route) — never
+ * line items, lockbox code, or notes. Those stay in the app, not on a link
+ * that gets texted to a client.
  */
 async function getGalleryBooking(token: string) {
   const [booking] = await db
     .select({
+      id: bookings.id,
       address: bookings.address,
       city: bookings.city,
       state: bookings.state,
       listingId: bookings.listingId,
       dropboxFolderLink: bookings.dropboxFolderLink,
+      invoiceNumber: bookings.invoiceNumber,
     })
     .from(bookings)
     .where(eq(bookings.galleryToken, token));
@@ -55,7 +59,9 @@ async function getGalleryBooking(token: string) {
     : [];
 
   return {
+    id: booking.id,
     dropboxFolderLink: booking.dropboxFolderLink,
+    invoiceNumber: booking.invoiceNumber,
     address: linkedListing?.address ?? booking.address,
     city: linkedListing?.city ?? booking.city,
     state: linkedListing?.state ?? booking.state,
@@ -86,6 +92,20 @@ function GalleryShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function InvoiceLink({ bookingId }: { bookingId: string }) {
+  return (
+    <a
+      href={`/api/bookings/${bookingId}/invoice`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-2 rounded-lg border border-[#181A1C]/15 px-5 py-2.5 text-sm font-semibold hover:bg-[#F9F4F1] transition-colors"
+    >
+      <Receipt className="size-4" />
+      View invoice
+    </a>
+  );
+}
+
 export default async function GalleryPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const booking = await getGalleryBooking(token);
@@ -98,6 +118,11 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
       <GalleryShell>
         <h1 className="text-xl font-semibold text-center">{location}</h1>
         <p className="mt-2 text-[#181A1C]/60 text-center">Photos aren&rsquo;t ready yet — check back soon.</p>
+        {booking.invoiceNumber && (
+          <div className="mt-4">
+            <InvoiceLink bookingId={booking.id} />
+          </div>
+        )}
       </GalleryShell>
     );
   }
@@ -111,15 +136,18 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
       <p className="text-sm text-[#181A1C]/60">
         {photos.length} photo{photos.length === 1 ? "" : "s"}
       </p>
-      {photos.length > 0 && (
-        <a
-          href={downloadAllUrl}
-          className="mt-3 mb-8 inline-flex items-center gap-2 rounded-lg bg-[#181A1C] text-white px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
-        >
-          <Download className="size-4" />
-          Download all (.zip)
-        </a>
-      )}
+      <div className="flex flex-wrap items-center justify-center gap-3 mt-3 mb-8">
+        {photos.length > 0 && (
+          <a
+            href={downloadAllUrl}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#181A1C] text-white px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
+          >
+            <Download className="size-4" />
+            Download all (.zip)
+          </a>
+        )}
+        {booking.invoiceNumber && <InvoiceLink bookingId={booking.id} />}
+      </div>
 
       {photos.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 text-center py-16 text-[#181A1C]/50">
@@ -131,20 +159,15 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
           {photos.map((photo) => {
             const thumbUrl = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(photo.name)}&size=w640h480`;
             const fullUrl = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(photo.name)}&size=w2048h1536`;
-            return (
-              <a
-                key={photo.name}
-                href={fullUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block aspect-square overflow-hidden rounded-lg border border-[#181A1C]/10 bg-[#F9F4F1]"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element -- proxied Dropbox photo, not a static/optimizable local asset */}
-                <img src={thumbUrl} alt={photo.name} loading="lazy" className="w-full h-full object-cover" />
-              </a>
-            );
+            return <GalleryPhoto key={photo.name} thumbUrl={thumbUrl} fullUrl={fullUrl} name={photo.name} />;
           })}
         </div>
+      )}
+
+      {photos.length > 0 && (
+        <p className="italic text-sm text-[#181A1C]/70 text-center mt-10 max-w-md">
+          See something you&rsquo;d like changed, or need a different angle? Just text or email me — happy to help.
+        </p>
       )}
 
       <footer className="w-full mt-12 pt-6 border-t border-[#181A1C]/10 text-center text-xs text-[#181A1C]/50">

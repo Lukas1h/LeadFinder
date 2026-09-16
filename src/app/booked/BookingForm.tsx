@@ -3,8 +3,8 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, CheckCircle2 } from "lucide-react";
-import { createBooking, updateBooking, deleteBooking } from "./actions";
+import { Plus, Trash2, CheckCircle2, Receipt } from "lucide-react";
+import { createBooking, updateBooking, deleteBooking, deleteBookingInvoice } from "./actions";
 import { searchAgentsByName, type AgentMatchSummary } from "@/app/agents/matchActions";
 import type { BookingWithDetails } from "./BookedList";
 import { formatPhone } from "@/lib/format";
@@ -93,6 +93,7 @@ export function BookingForm({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeletingInvoice, setIsDeletingInvoice] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!booking;
@@ -209,6 +210,15 @@ export function BookingForm({
     setIsDeleting(false);
     toast.success("Booking deleted");
     setOpen(false);
+    router.refresh();
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!booking) return;
+    setIsDeletingInvoice(true);
+    await deleteBookingInvoice(booking.id);
+    setIsDeletingInvoice(false);
+    toast.success("Invoice deleted");
     router.refresh();
   };
 
@@ -361,6 +371,44 @@ export function BookingForm({
                   onChange={(e) => setDropboxFolderLink(e.target.value)}
                   placeholder="https://www.dropbox.com/scl/fo/…"
                 />
+              </div>
+            )}
+
+            {isEditing && booking.invoiceNumber != null && (
+              <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+                <span className="text-sm text-foreground flex items-center gap-1.5">
+                  <Receipt className="size-3.5 text-muted-foreground" />
+                  Invoice #{booking.invoiceNumber}
+                </span>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      disabled={isDeletingInvoice}
+                    >
+                      <Trash2 />
+                      Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete invoice #{booking.invoiceNumber}?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This clears the invoice from this booking. Creating another one later assigns a new,
+                        different number — #{booking.invoiceNumber} won&rsquo;t be reused.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isDeletingInvoice}>Keep invoice</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDeleteInvoice} disabled={isDeletingInvoice}>
+                        {isDeletingInvoice ? "Deleting…" : "Delete"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             )}
 
