@@ -31,6 +31,19 @@ const ENRICHMENT_CONCURRENCY = 2;
 const SCORE_RETRY_WINDOW_DAYS = 3;
 const SCORE_RETRY_LIMIT = 20;
 
+// Same failure mode as the photo-score retry above, for agent info instead:
+// insertAndEnrichListings only enriches rows it just inserted (Postgres's
+// ON CONFLICT DO NOTHING + .returning() never returns a row that already
+// existed), so a listing left with no agentPhone by a sync that ran out of
+// Zillapi budget mid-run stayed that way forever — clicking Refresh again
+// re-fetched the search results but silently skipped enrichment for
+// anything already in the DB. retryMissingAgentInfo sweeps for those and
+// retries, same bounded window/limit shape as the score retry so a
+// listing whose agent is genuinely unfetchable doesn't burn a credit on
+// every single sync run.
+const AGENT_RETRY_WINDOW_DAYS = 3;
+const AGENT_RETRY_LIMIT = 20;
+
 export interface SyncResult {
   fetched: number;
   inserted: number;
@@ -63,8 +76,49 @@ export async function runSync(): Promise<SyncResult> {
   const fetched = fetchedPerSource.flat();
 
   const inserted = await insertAndEnrichListings(fetched);
-  await retryMissingPhotoScores();
+  await Promise.all([retryMissingAgentInfo(), retryMissingPhotoScores()]);
   return { fetched: fetched.length, inserted };
+}
+
+/**
+ * Re-attempts fetchAgentInfo for recently-found listings that still have no
+ * agentPhone — see the comment on AGENT_RETRY_WINDOW_DAYS above for why
+ * this exists.
+ */
+async function retryMissingAgentInfo(): Promise<number> {
+  const cutoff = new Date(Date.now() - AGENT_RETRY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const candidates = await db
+    .select({ id: listings.id, zpid: listings.zpid })
+    .from(listings)
+    .where(and(isNull(listings.agentPhone), gte(listings.foundAt, cutoff)));
+
+  const eligible = candidates.slice(0, AGENT_RETRY_LIMIT);
+  if (eligible.length === 0) return 0;
+
+  let updated = 0;
+  for (let i = 0; i < eligible.length; i += ENRICHMENT_CONCURRENCY) {
+    const batch = eligible.slice(i, i + ENRICHMENT_CONCURRENCY);
+    await Promise.all(
+      batch.map(async (row) => {
+        const agent = await fetchAgentInfo(row.zpid);
+        if (!agent.agentName && !agent.agentPhone && !agent.brokerName) return;
+
+        const update: Record<string, unknown> = {};
+        if (agent.agentName) update.agentName = agent.agentName;
+        if (agent.agentPhone) update.agentPhone = agent.agentPhone;
+        if (agent.brokerName) update.brokerName = agent.brokerName;
+
+        await db.update(listings).set(update).where(eq(listings.id, row.id));
+        updated++;
+      })
+    );
+  }
+
+  if (updated > 0) {
+    revalidatePath("/", "layout");
+  }
+
+  return updated;
 }
 
 /**
