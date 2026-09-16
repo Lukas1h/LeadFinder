@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { Noto_Serif, Outfit } from "next/font/google";
 import { Download, ImageOff } from "lucide-react";
 import { db } from "@/db";
 import { bookings, listings } from "@/db/schema";
@@ -14,6 +15,13 @@ import { listGalleryPhotos, dropboxZipDownloadUrl } from "@/lib/dropbox";
 // fresh navigation from outside the app, not an in-app tab switch, so
 // there's no "instant" navigation to preserve.
 export const instant = false;
+
+// Same brand type pairing as the invoice route (src/app/api/bookings/[id]/invoice/route.ts)
+// — Noto Serif for the "Hahn Media" wordmark, Outfit for everything else —
+// loaded here instead, since this is a real page (not a raw HTML string
+// response) and next/font self-hosts + caches properly.
+const notoSerif = Noto_Serif({ subsets: ["latin"], weight: ["400", "700"], variable: "--font-gallery-serif" });
+const outfit = Outfit({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-gallery-sans" });
 
 /**
  * Public, no-login client-facing gallery — the URL itself (an unguessable
@@ -64,6 +72,20 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   return { title: booking ? formatLocation(booking) : "Photo Gallery" };
 }
 
+/** Wraps every branch below (found/not-ready/empty/full) so the fonts and header always match. */
+function GalleryShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className={`${notoSerif.variable} ${outfit.variable} min-h-screen bg-white`}>
+      <main className="max-w-5xl mx-auto px-6 py-12 flex flex-col items-center gap-2 font-[family-name:var(--font-gallery-sans)] text-[#181A1C]">
+        <div className="font-[family-name:var(--font-gallery-serif)] font-bold text-4xl sm:text-5xl tracking-tight">Hahn Media</div>
+        <div className="text-xs uppercase tracking-[0.3em] text-[#181A1C]/70">Real Estate Photo &amp; Video</div>
+        <div className="w-full h-px bg-[#181A1C]/10 my-6" />
+        {children}
+      </main>
+    </div>
+  );
+}
+
 export default async function GalleryPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const booking = await getGalleryBooking(token);
@@ -73,10 +95,10 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
 
   if (!booking.dropboxFolderLink) {
     return (
-      <main className="max-w-2xl mx-auto px-6 py-20 text-center">
-        <h1 className="text-xl font-semibold text-foreground">{location}</h1>
-        <p className="mt-3 text-muted-foreground">Photos aren&rsquo;t ready yet — check back soon.</p>
-      </main>
+      <GalleryShell>
+        <h1 className="text-xl font-semibold text-center">{location}</h1>
+        <p className="mt-2 text-[#181A1C]/60 text-center">Photos aren&rsquo;t ready yet — check back soon.</p>
+      </GalleryShell>
     );
   }
 
@@ -84,30 +106,28 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
   const downloadAllUrl = dropboxZipDownloadUrl(booking.dropboxFolderLink);
 
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 flex flex-col gap-8">
-      <header className="flex flex-col items-center text-center gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{location}</h1>
-        <p className="text-sm text-muted-foreground">
-          {photos.length} photo{photos.length === 1 ? "" : "s"}
-        </p>
-        {photos.length > 0 && (
-          <a
-            href={downloadAllUrl}
-            className="mt-3 inline-flex items-center gap-2 rounded-md bg-foreground text-background px-4 py-2.5 text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Download className="size-4" />
-            Download all (.zip)
-          </a>
-        )}
-      </header>
+    <GalleryShell>
+      <h1 className="text-xl font-semibold text-center">{location}</h1>
+      <p className="text-sm text-[#181A1C]/60">
+        {photos.length} photo{photos.length === 1 ? "" : "s"}
+      </p>
+      {photos.length > 0 && (
+        <a
+          href={downloadAllUrl}
+          className="mt-3 mb-8 inline-flex items-center gap-2 rounded-lg bg-[#181A1C] text-white px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
+        >
+          <Download className="size-4" />
+          Download all (.zip)
+        </a>
+      )}
 
       {photos.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 text-center py-16 text-muted-foreground">
+        <div className="flex flex-col items-center justify-center gap-3 text-center py-16 text-[#181A1C]/50">
           <ImageOff className="size-8" />
           <p>No photos yet — check back soon.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {photos.map((photo) => {
             const thumbUrl = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(photo.name)}&size=w640h480`;
             const fullUrl = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(photo.name)}&size=w2048h1536`;
@@ -117,7 +137,7 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
                 href={fullUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block aspect-square overflow-hidden rounded-lg border border-border bg-muted"
+                className="block aspect-square overflow-hidden rounded-lg border border-[#181A1C]/10 bg-[#F9F4F1]"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element -- proxied Dropbox photo, not a static/optimizable local asset */}
                 <img src={thumbUrl} alt={photo.name} loading="lazy" className="w-full h-full object-cover" />
@@ -126,6 +146,10 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
           })}
         </div>
       )}
-    </main>
+
+      <footer className="w-full mt-12 pt-6 border-t border-[#181A1C]/10 text-center text-xs text-[#181A1C]/50">
+        Lukas Hahn · (541) 430-3372 · lukas@lukashahn.art
+      </footer>
+    </GalleryShell>
   );
 }

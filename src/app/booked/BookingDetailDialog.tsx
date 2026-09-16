@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt } from "lucide-react";
 import { markBookingCompleted, reopenBooking } from "./actions";
 import { BookingForm } from "./BookingForm";
-import { GallerySection } from "./GallerySection";
+import { GalleryLinkButton } from "./GallerySection";
 import { ListingRow } from "@/app/ListingRow";
 import { AgentRow } from "@/app/AgentRow";
 import { formatPrice, formatDateTime } from "@/lib/format";
@@ -101,6 +101,7 @@ export function BookingDetailDialog({
               {booking.invoiceNumber ? `Invoice #${booking.invoiceNumber}` : "Create invoice"}
             </a>
           </Button>
+          <GalleryLinkButton booking={booking} onAddGallery={() => setEditOpen(true)} />
           <Button variant="outline" size="sm" className="ml-auto" onClick={() => setEditOpen(true)}>
             <Pencil />
             Edit
@@ -138,8 +139,6 @@ export function BookingDetailDialog({
             {booking.notes}
           </div>
         )}
-
-        <GallerySection booking={booking} />
 
         {(booking.contactName || booking.contactPhone) && (
           <div className="border-t pt-2">

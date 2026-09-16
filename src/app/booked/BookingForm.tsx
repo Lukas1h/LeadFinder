@@ -107,6 +107,7 @@ export function BookingForm({
   const [jobDate, setJobDate] = useState(toDateTimeInputValue(booking?.jobDate ?? null));
   const [lockboxCode, setLockboxCode] = useState(booking?.lockboxCode ?? "");
   const [notes, setNotes] = useState(booking?.notes ?? "");
+  const [dropboxFolderLink, setDropboxFolderLink] = useState(booking?.dropboxFolderLink ?? "");
   const [lineItems, setLineItems] = useState<LineItemRow[]>(toLineItemRows(booking?.lineItems ?? []));
 
   const [nameSuggestions, setNameSuggestions] = useState<AgentMatchSummary[]>([]);
@@ -157,6 +158,7 @@ export function BookingForm({
     setJobDate(toDateTimeInputValue(booking?.jobDate ?? null));
     setLockboxCode(booking?.lockboxCode ?? "");
     setNotes(booking?.notes ?? "");
+    setDropboxFolderLink(booking?.dropboxFolderLink ?? "");
     setLineItems(toLineItemRows(booking?.lineItems ?? []));
     setError(null);
     setNameSuggestions([]);
@@ -184,7 +186,7 @@ export function BookingForm({
     };
 
     const result = booking
-      ? await updateBooking(booking.id, sharedInput)
+      ? await updateBooking(booking.id, { ...sharedInput, dropboxFolderLink })
       : await createBooking({ listingId: listingId ?? null, ...sharedInput });
 
     setIsSubmitting(false);
@@ -349,6 +351,18 @@ export function BookingForm({
               <Label htmlFor="booking-notes">Notes</Label>
               <Textarea id="booking-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
             </div>
+
+            {isEditing && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="booking-dropbox-link">Client gallery — Dropbox folder link</Label>
+                <Input
+                  id="booking-dropbox-link"
+                  value={dropboxFolderLink}
+                  onChange={(e) => setDropboxFolderLink(e.target.value)}
+                  placeholder="https://www.dropbox.com/scl/fo/…"
+                />
+              </div>
+            )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>

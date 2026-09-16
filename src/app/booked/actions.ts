@@ -50,6 +50,11 @@ export interface UpdateBookingInput {
   lockboxCode: string | null;
   notes: string | null;
   lineItems: BookingLineItemInput[];
+  // The Dropbox folder the shoot's photos were delivered into — see
+  // GallerySection.tsx and src/lib/dropbox.ts for how this becomes a
+  // client-facing gallery. Doesn't touch galleryToken; see
+  // getOrAssignGalleryToken below.
+  dropboxFolderLink: string;
 }
 
 /**
@@ -163,6 +168,7 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
       jobDate: input.jobDate,
       lockboxCode: input.lockboxCode?.trim() || null,
       notes: input.notes?.trim() || null,
+      dropboxFolderLink: input.dropboxFolderLink.trim() || null,
     })
     .where(eq(bookings.id, bookingId));
 
@@ -302,21 +308,6 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       galleryToken: b.galleryToken,
     };
   });
-}
-
-/**
- * Sets/clears this booking's Dropbox delivery folder — the source the
- * client-facing gallery page (src/app/gallery/[token]/page.tsx) lists
- * photos from. Doesn't touch galleryToken; that's assigned separately (see
- * getOrAssignGalleryToken below) so editing the folder link later never
- * changes a URL already sent to a client.
- */
-export async function updateBookingDropboxFolderLink(bookingId: string, link: string) {
-  await db
-    .update(bookings)
-    .set({ dropboxFolderLink: link.trim() || null })
-    .where(eq(bookings.id, bookingId));
-  revalidatePath("/booked");
 }
 
 /**
