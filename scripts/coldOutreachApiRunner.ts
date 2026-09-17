@@ -45,7 +45,7 @@ const candidatesModule = process.env.CANDIDATES_MODULE || "./coldOutreachCandida
 
 const dailyLimit = process.env.DAILY_LIMIT ? parseInt(process.env.DAILY_LIMIT, 10) : null;
 const dailyLimitBuffer = process.env.DAILY_LIMIT_BUFFER ? parseInt(process.env.DAILY_LIMIT_BUFFER, 10) : 0;
-const rateCheckIntervalMs = (process.env.RATE_CHECK_INTERVAL_SECONDS ? parseFloat(process.env.RATE_CHECK_INTERVAL_SECONDS) : 60) * 1000;
+const rateCheckIntervalMs = (process.env.RATE_CHECK_INTERVAL_SECONDS ? parseFloat(process.env.RATE_CHECK_INTERVAL_SECONDS) : 10) * 1000;
 
 async function trailing24hSendCount(): Promise<number> {
   const { db } = await import("../src/db");
