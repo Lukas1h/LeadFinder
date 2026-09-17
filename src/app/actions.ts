@@ -153,6 +153,37 @@ export async function updateListingStatus(listingId: string, status: LeadStatus)
   revalidatePath("/agents");
 }
 
+/**
+ * Bulk marks listings as declined (used by "Not interested" on unlikely matches).
+ * Updates status, records touched agent declines, resolves any sends, and revalidates paths.
+ */
+export async function markListingsDeclined(listingIds: string[]) {
+  if (listingIds.length === 0) return;
+  const now = new Date();
+  const updated = await db
+    .update(listings)
+    .set({
+      status: "declined",
+      statusChangedAt: now,
+    })
+    .where(inArray(listings.id, listingIds))
+    .returning({ id: listings.id, agentPhone: listings.agentPhone, agentName: listings.agentName });
+
+  const seenPhones = new Set<string>();
+  for (const lead of updated) {
+    if (lead.agentPhone && !seenPhones.has(lead.agentPhone)) {
+      seenPhones.add(lead.agentPhone);
+      await touchAgentDeclined(lead.agentPhone, lead.agentName);
+    }
+    await resolveSendOutcome(lead.id, "declined");
+  }
+
+  revalidatePath("/");
+  revalidatePath("/pipeline");
+  revalidatePath("/messaging");
+  revalidatePath("/agents");
+}
+
 /** Free-text note on a listing — edited from the listing detail modal. */
 export async function updateListingNotes(listingId: string, notes: string) {
   await db

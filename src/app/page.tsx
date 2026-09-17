@@ -1,5 +1,5 @@
 import { Fragment, Suspense } from "react";
-import { PartyPopper } from "lucide-react";
+import { PartyPopper, ChevronRight } from "lucide-react";
 import { db } from "@/db";
 import { listings, agents, type Listing } from "@/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
@@ -7,8 +7,9 @@ import { LeadActions } from "./LeadActions";
 import { LeadCard } from "./LeadCard";
 import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
-import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge } from "./badges";
-import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { MarkAllNotInterestedButton } from "./MarkAllNotInterestedButton";
+import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge, AgentDeclinedBadge } from "./badges";
+import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isUnlikelyLeadMatch, findAttachedAgent } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
 import { Separator } from "@/components/ui/separator";
 import { LeadsSkeleton } from "./loading";
@@ -52,9 +53,20 @@ async function LeadsContent() {
       .orderBy(desc(listings.foundAt), listings.id),
     db.select().from(agents),
   ]);
-  const agentByPhone = new Map(
-    allAgents.filter((a): a is typeof a & { phone: string } => a.phone != null).map((a) => [a.phone, a])
-  );
+  const agentByPhone = new Map<string, (typeof allAgents)[number]>();
+  for (const a of allAgents) {
+    if (a.phone) {
+      agentByPhone.set(a.phone, a);
+      const digits = a.phone.replace(/\D/g, "").replace(/^1(\d{10})$/, "$1");
+      if (digits) agentByPhone.set(digits, a);
+    }
+  }
+  const agentByName = new Map<string, (typeof allAgents)[number]>();
+  for (const a of allAgents) {
+    if (a.name) {
+      agentByName.set(a.name.trim().toLowerCase(), a);
+    }
+  }
 
   // Every other listing referenced by an agent's last-contacted pointer —
   // used only to name the listing in the duplicate-agent warning below.
@@ -70,16 +82,31 @@ async function LeadsContent() {
       : [];
   const addressById = new Map(referencedListings.map((l) => [l.id, l.address]));
 
+  // Listings unlikely to be good matches (high photo score with price < $650k,
+  // or agent marked declined) are demoted to a dedicated section at the bottom.
+  const likelyLeads: Listing[] = [];
+  const unlikelyMatches: Listing[] = [];
+  for (const lead of leads) {
+    if (isUnlikelyLeadMatch(lead, agentByPhone, agentByName)) {
+      unlikelyMatches.push(lead);
+    } else {
+      likelyLeads.push(lead);
+    }
+  }
+
   // Cron runs once/day, so anything found in the last 24h is "today's
   // batch" — everything else is backlog from a day (or several) you
   // haven't gotten to yet. Within each, priority order combines coming-soon
   // status, price-weighted photo opportunity, and listing age (see
   // leadPriorityScore in lib/pipeline.ts).
-  const newToday = leads.filter((l) => daysSince(l.foundAt) < 1).sort(byLeadPriority);
-  const earlier = leads.filter((l) => daysSince(l.foundAt) >= 1).sort(byLeadPriority);
+  const newToday = likelyLeads.filter((l) => daysSince(l.foundAt) < 1).sort(byLeadPriority);
+  const earlier = likelyLeads.filter((l) => daysSince(l.foundAt) >= 1).sort(byLeadPriority);
+  unlikelyMatches.sort(byLeadPriority);
 
   function card(lead: Listing) {
     const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentByPhone);
+    const attachedAgent = findAttachedAgent(lead, agentByPhone, agentByName);
+    const agentDeclined = attachedAgent?.declinedAt != null;
 
     return (
       <LeadCard
@@ -95,11 +122,22 @@ async function LeadsContent() {
             {lead.score != null && (
               <PhotoScoreBadge score={lead.score} reasoning={lead.scoreReasoning} />
             )}
-            {duplicateAgent && (
-              <DuplicateAgentBadge
-                duplicateAgent={duplicateAgent}
-                duplicateAddress={addressById.get(duplicateAgent.lastContactedListingId!)}
+            {agentDeclined && attachedAgent ? (
+              <AgentDeclinedBadge
+                agent={attachedAgent}
+                duplicateAddress={
+                  attachedAgent.lastContactedListingId
+                    ? addressById.get(attachedAgent.lastContactedListingId)
+                    : undefined
+                }
               />
+            ) : (
+              duplicateAgent && (
+                <DuplicateAgentBadge
+                  duplicateAgent={duplicateAgent}
+                  duplicateAddress={addressById.get(duplicateAgent.lastContactedListingId!)}
+                />
+              )
             )}
           </Fragment>
         }
@@ -137,6 +175,10 @@ async function LeadsContent() {
         </div>
       ) : (
         <div className="flex flex-col gap-8">
+          {newToday.length === 0 && earlier.length === 0 && unlikelyMatches.length > 0 && (
+            <p className="text-muted-foreground/70 text-sm">No new priority leads right now.</p>
+          )}
+
           {newToday.length > 0 && (
             <section>
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
@@ -153,6 +195,22 @@ async function LeadsContent() {
                 Earlier ({earlier.length})
               </h2>
               <div className="flex flex-col gap-4">{earlier.map(card)}</div>
+            </section>
+          )}
+
+          {unlikelyMatches.length > 0 && (
+            <section>
+              {(newToday.length > 0 || earlier.length > 0) && <Separator className="mb-8" />}
+              <details className="group/details">
+                <summary className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
+                  <span className="flex items-center gap-1">
+                    <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
+                    Unlikely matches ({unlikelyMatches.length})
+                  </span>
+                  <MarkAllNotInterestedButton listingIds={unlikelyMatches.map((l) => l.id)} />
+                </summary>
+                <div className="flex flex-col gap-4 mt-3">{unlikelyMatches.map(card)}</div>
+              </details>
             </section>
           )}
         </div>

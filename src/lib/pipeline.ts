@@ -81,3 +81,59 @@ export function findDuplicateAgentContact(
   if (agent.lastContactedListingId === currentListingId) return null;
   return agent;
 }
+
+// Criteria for listings unlikely to be a good fit (grouped at the bottom of the leads page):
+// 1. High photo score (> 7, pro photography) on lower-priced homes (< $650,000) that likely don't need video.
+// 2. The attached agent was marked as declined.
+export const UNLIKELY_MATCH_MIN_PHOTO_SCORE = 7;
+export const UNLIKELY_MATCH_MAX_PRICE = 650_000;
+
+export function isPhotoPriceUnlikelyMatch(lead: Pick<Listing, "score" | "price">): boolean {
+  return (
+    lead.score != null &&
+    lead.score > UNLIKELY_MATCH_MIN_PHOTO_SCORE &&
+    lead.price != null &&
+    lead.price < UNLIKELY_MATCH_MAX_PRICE
+  );
+}
+
+export function findAttachedAgent(
+  lead: Pick<Listing, "agentPhone" | "agentName">,
+  agentByPhone: Map<string, Agent>,
+  agentByName?: Map<string, Agent>
+): Agent | null {
+  if (lead.agentPhone) {
+    const raw = agentByPhone.get(lead.agentPhone);
+    if (raw) return raw;
+
+    const digits = lead.agentPhone.replace(/\D/g, "").replace(/^1(\d{10})$/, "$1");
+    if (digits) {
+      const byDigits = agentByPhone.get(digits);
+      if (byDigits) return byDigits;
+    }
+  }
+
+  if (lead.agentName && agentByName) {
+    const byName = agentByName.get(lead.agentName.trim().toLowerCase());
+    if (byName) return byName;
+  }
+
+  return null;
+}
+
+export function isAgentDeclined(
+  lead: Pick<Listing, "agentPhone" | "agentName">,
+  agentByPhone: Map<string, Agent>,
+  agentByName?: Map<string, Agent>
+): boolean {
+  const agent = findAttachedAgent(lead, agentByPhone, agentByName);
+  return agent?.declinedAt != null;
+}
+
+export function isUnlikelyLeadMatch(
+  lead: Listing,
+  agentByPhone: Map<string, Agent>,
+  agentByName?: Map<string, Agent>
+): boolean {
+  return isPhotoPriceUnlikelyMatch(lead) || isAgentDeclined(lead, agentByPhone, agentByName);
+}

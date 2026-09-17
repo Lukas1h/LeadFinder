@@ -144,3 +144,27 @@ export function DuplicateAgentBadge({
     </Tooltip>
   );
 }
+
+export function AgentDeclinedBadge({
+  agent,
+  duplicateAddress,
+}: {
+  agent: Agent;
+  duplicateAddress?: string | null | undefined;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge className="bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900">
+          <TriangleAlert />
+          Agent declined
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>
+        {agent.name ?? "This agent"} was marked as declined
+        {agent.declinedAt ? ` (${daysSince(agent.declinedAt)}d ago)` : ""}
+        {duplicateAddress ? ` · previously on ${duplicateAddress}` : ""}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
