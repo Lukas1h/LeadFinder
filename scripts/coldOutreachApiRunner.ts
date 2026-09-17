@@ -18,6 +18,13 @@
 // in its flaggedEmails list is skipped entirely (not sent to the API at
 // all, not even a skip-delay) so a suspected duplicate person never gets
 // emailed while still awaiting manual verification.
+//
+// DAILY_LIMIT / DAILY_LIMIT_BUFFER (optional, requires DATABASE_URL): before
+// each send, checks the actual trailing-24h message_sends count in the DB
+// (not just this run's own count — other runs/manual sends count too) and
+// blocks until (count + buffer) is back under DAILY_LIMIT, polling every
+// RATE_CHECK_INTERVAL_SECONDS (default 60). This can pause for hours if the
+// provider's rolling daily cap is already near full — that's the point.
 import fs from "fs";
 
 interface Candidate {
@@ -35,6 +42,39 @@ if (!apiUrl || !apiSecret) {
 const endpoint = `${apiUrl.replace(/\/$/, "")}/api/compose/cold-outreach`;
 
 const candidatesModule = process.env.CANDIDATES_MODULE || "./coldOutreachCandidates";
+
+const dailyLimit = process.env.DAILY_LIMIT ? parseInt(process.env.DAILY_LIMIT, 10) : null;
+const dailyLimitBuffer = process.env.DAILY_LIMIT_BUFFER ? parseInt(process.env.DAILY_LIMIT_BUFFER, 10) : 0;
+const rateCheckIntervalMs = (process.env.RATE_CHECK_INTERVAL_SECONDS ? parseFloat(process.env.RATE_CHECK_INTERVAL_SECONDS) : 60) * 1000;
+
+async function trailing24hSendCount(): Promise<number> {
+  const { db } = await import("../src/db");
+  const { messageSends } = await import("../src/db/schema");
+  const { gte } = await import("drizzle-orm");
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await db.select({ id: messageSends.id }).from(messageSends).where(gte(messageSends.sentAt, since24h));
+  return rows.length;
+}
+
+// Blocks (polling trailing24hSendCount) until sending one more email would
+// keep the trailing 24h count at or under (dailyLimit - dailyLimitBuffer).
+async function waitForDailyLimitHeadroom(): Promise<void> {
+  if (dailyLimit === null) return;
+  const safeMax = dailyLimit - dailyLimitBuffer;
+  let loggedWaiting = false;
+  for (;;) {
+    const count = await trailing24hSendCount();
+    if (count < safeMax) {
+      if (loggedWaiting) console.log(`Headroom freed up (${count}/${safeMax} used) — resuming`);
+      return;
+    }
+    if (!loggedWaiting) {
+      console.log(`WAITING — trailing 24h sends at ${count}, safe max is ${safeMax} (limit ${dailyLimit} - buffer ${dailyLimitBuffer}). Polling every ${rateCheckIntervalMs / 1000}s until headroom opens up.`);
+      loggedWaiting = true;
+    }
+    await new Promise((r) => setTimeout(r, rateCheckIntervalMs));
+  }
+}
 
 async function main() {
   const { candidates }: { candidates: Candidate[] } = await import(candidatesModule);
@@ -73,6 +113,8 @@ async function main() {
       console.log(`HOLD ${name} <${email}> — flagged as a possible existing agent, needs manual verification`);
       continue;
     }
+
+    await waitForDailyLimitHeadroom();
 
     let result: { status?: string; reason?: string; error?: string; agentId?: string } = {};
     try {
