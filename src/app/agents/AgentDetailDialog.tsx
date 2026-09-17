@@ -6,7 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { UserPlus, Phone, MessageCircle, Mail, History, CalendarCheck, Pencil, Trash2 } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatPrice } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { ListingRow } from "@/app/ListingRow";
 import { FindLinkButton } from "@/app/FindLinkButton";
@@ -16,11 +16,13 @@ import type { BookingWithDetails } from "@/app/booked/BookedList";
 import {
   updateAgentNotes,
   updateAgentContactInfo,
+  updateAgentStats,
   deleteAgent,
   getAgentSendHistory,
   findAgentProfileUrl,
   type AgentSendHistoryItem,
 } from "./actions";
+import { averageDaysBetweenListings } from "./stats";
 import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,6 +118,8 @@ export function AgentDetailDialog({
   const [editPhone, setEditPhone] = useState(agent.phone ?? "");
   const [editEmail, setEditEmail] = useState(agent.email ?? "");
   const [editStatus, setEditStatus] = useState<AgentRelationshipStatus>(agent.relationshipStatus);
+  const [editAvgListingsPerYear, setEditAvgListingsPerYear] = useState(agent.avgListingsPerYear?.toString() ?? "");
+  const [editAvgListingPrice, setEditAvgListingPrice] = useState(agent.avgListingPrice?.toString() ?? "");
   const [contactError, setContactError] = useState<string | null>(null);
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -125,6 +129,8 @@ export function AgentDetailDialog({
     setEditPhone(agent.phone ?? "");
     setEditEmail(agent.email ?? "");
     setEditStatus(agent.relationshipStatus);
+    setEditAvgListingsPerYear(agent.avgListingsPerYear?.toString() ?? "");
+    setEditAvgListingPrice(agent.avgListingPrice?.toString() ?? "");
     setContactError(null);
     setIsEditingContact(true);
   };
@@ -138,11 +144,16 @@ export function AgentDetailDialog({
       email: editEmail,
       relationshipStatus: editStatus,
     });
-    setIsSavingContact(false);
     if (result.error) {
+      setIsSavingContact(false);
       setContactError(result.error);
       return;
     }
+    await updateAgentStats(agent.id, {
+      avgListingsPerYear: editAvgListingsPerYear.trim() ? Number(editAvgListingsPerYear) : null,
+      avgListingPrice: editAvgListingPrice.trim() ? Number(editAvgListingPrice) : null,
+    });
+    setIsSavingContact(false);
     toast.success("Agent updated");
     setIsEditingContact(false);
     router.refresh();
@@ -195,6 +206,8 @@ export function AgentDetailDialog({
   };
 
   const callHref = telUrl(agent.phone);
+  const avgDaysBetweenListings = averageDaysBetweenListings(listings);
+  const hasAnyStats = agent.avgListingsPerYear != null || agent.avgListingPrice != null || avgDaysBetweenListings != null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -230,6 +243,24 @@ export function AgentDetailDialog({
                 ))}
               </SelectContent>
             </Select>
+            <div className="flex gap-2">
+              <Input
+                value={editAvgListingsPerYear}
+                onChange={(e) => setEditAvgListingsPerYear(e.target.value)}
+                placeholder="Avg listings/year"
+                type="number"
+                min="0"
+                className="flex-1"
+              />
+              <Input
+                value={editAvgListingPrice}
+                onChange={(e) => setEditAvgListingPrice(e.target.value)}
+                placeholder="Avg listing price $"
+                type="number"
+                min="0"
+                className="flex-1"
+              />
+            </div>
             {contactError && <p className="text-sm text-destructive">{contactError}</p>}
             <div className="flex items-center gap-2">
               <AlertDialog>
@@ -314,6 +345,26 @@ export function AgentDetailDialog({
                 </a>
               </Button>
             </div>
+          </div>
+        )}
+
+        {hasAnyStats && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 border-t pt-3 text-sm">
+            {agent.avgListingsPerYear != null && (
+              <span>
+                <span className="text-muted-foreground">Avg volume</span> {agent.avgListingsPerYear}/yr
+              </span>
+            )}
+            {agent.avgListingPrice != null && (
+              <span>
+                <span className="text-muted-foreground">Avg price</span> {formatPrice(agent.avgListingPrice)}
+              </span>
+            )}
+            {avgDaysBetweenListings != null && (
+              <span>
+                <span className="text-muted-foreground">Avg gap</span> {avgDaysBetweenListings}d
+              </span>
+            )}
           </div>
         )}
 

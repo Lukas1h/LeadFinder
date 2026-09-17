@@ -169,6 +169,16 @@ export const agents = pgTable("agents", {
   // listings.realtorUrl above.
   realtorProfileUrl: text("realtor_profile_url"),
 
+  // Business-volume stats from outside our own data (public realtor
+  // history, MLS sites) — entered by hand from the agent edit form, or
+  // backfilled by a separate lookup process. Whole-dollar average, same
+  // convention as listings.price. Distinct from the average-days-between-
+  // listings stat, which IS derived from our own tracked listings and so
+  // isn't stored here at all — see averageDaysBetweenListings in
+  // src/app/agents/stats.ts.
+  avgListingsPerYear: integer("avg_listings_per_year"),
+  avgListingPrice: integer("avg_listing_price"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

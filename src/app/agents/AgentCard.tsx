@@ -5,6 +5,7 @@ import Link from "next/link";
 import { RotateCcw, Phone, MessageCircle, Mail, StickyNote } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { updateAgentRelationshipStatus, reconnectAgent, markAgentDeclined } from "./actions";
+import { averageDaysBetweenListings } from "./stats";
 import { AgentDetailDialog } from "./AgentDetailDialog";
 import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
 import { formatDate, daysSince } from "@/lib/format";
@@ -38,6 +39,7 @@ export function AgentCard({
   };
 
   const callHref = telUrl(agent.phone);
+  const avgDaysBetweenListings = averageDaysBetweenListings(listings);
 
   return (
     <Card className="flex-row items-start justify-between gap-4 p-4 flex-wrap">
@@ -60,6 +62,7 @@ export function AgentCard({
             {listingCount} listing{listingCount === 1 ? "" : "s"}
           </span>
           {agent.lastContactedAt && <span>Last contacted {formatDate(agent.lastContactedAt)}</span>}
+          {avgDaysBetweenListings != null && <span>~{avgDaysBetweenListings}d between listings</span>}
         </div>
 
         {agent.declinedAt && (

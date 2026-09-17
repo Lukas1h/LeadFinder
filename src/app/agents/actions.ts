@@ -187,6 +187,24 @@ export async function updateAgentContactInfo(
 }
 
 /**
+ * Saves the manually-entered business-volume stats from the agent edit
+ * form — see the avgListingsPerYear/avgListingPrice comment in schema.ts.
+ * Kept separate from updateAgentContactInfo since these aren't contact
+ * info and have no validation to share with it (a blank field just clears
+ * the stat).
+ */
+export async function updateAgentStats(
+  id: string,
+  input: { avgListingsPerYear: number | null; avgListingPrice: number | null }
+) {
+  await db
+    .update(agents)
+    .set({ avgListingsPerYear: input.avgListingsPerYear, avgListingPrice: input.avgListingPrice })
+    .where(eq(agents.id, id));
+  revalidatePath("/agents");
+}
+
+/**
  * Permanently deletes an agent — the "Delete" control in AgentDetailDialog's
  * edit form, same directness as deleteBooking. bookings.contactAgentId and
  * messageSends.agentId both cascade to null on delete (see schema.ts), so
