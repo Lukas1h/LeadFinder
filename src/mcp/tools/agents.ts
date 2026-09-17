@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { and, desc, eq, ilike, isNotNull, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNotNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   agents,
@@ -12,6 +12,7 @@ import {
   AGENT_RELATIONSHIP_STATUSES,
   type AgentRelationshipStatus,
 } from "@/db/schema";
+import { averageDaysBetweenListings } from "@/app/agents/stats";
 import { text, errorText, normalizeContact } from "./shared";
 
 export function registerAgentTools(server: McpServer): void {
@@ -20,7 +21,7 @@ export function registerAgentTools(server: McpServer): void {
     {
       title: "Search agents",
       description:
-        "Search LeadFinder's agent/realtor contacts by name/phone/email substring, relationship status, and contact-info presence. Returns up to `limit` matches, newest first by default.",
+        "Search LeadFinder's agent/realtor contacts by name/phone/email substring, relationship status, and contact-info presence. Returns up to `limit` matches, newest first by default. Each result includes avgListingsPerYear/avgListingPrice (manually researched, null if not entered) and avgDaysBetweenListings (computed from our own tracked listings, null below 3 of them).",
       inputSchema: {
         query: z.string().optional().describe("Substring to match against name, phone, or email"),
         relationshipStatus: z.enum(AGENT_RELATIONSHIP_STATUSES).optional(),
@@ -67,7 +68,26 @@ export function registerAgentTools(server: McpServer): void {
         }
       });
 
-      return text(sorted.slice(0, limit));
+      const page = sorted.slice(0, limit);
+      const phones = page.map((a) => a.phone).filter((p): p is string => p != null);
+      const pageListings = phones.length
+        ? await db
+            .select({ agentPhone: listings.agentPhone, listedAt: listings.listedAt, foundAt: listings.foundAt })
+            .from(listings)
+            .where(inArray(listings.agentPhone, phones))
+        : [];
+      const listingsByPhone = new Map<string, typeof pageListings>();
+      for (const l of pageListings) {
+        if (!l.agentPhone) continue;
+        (listingsByPhone.get(l.agentPhone) ?? listingsByPhone.set(l.agentPhone, []).get(l.agentPhone)!).push(l);
+      }
+
+      return text(
+        page.map((a) => ({
+          ...a,
+          avgDaysBetweenListings: a.phone ? averageDaysBetweenListings(listingsByPhone.get(a.phone) ?? []) : null,
+        }))
+      );
     }
   );
 
@@ -76,7 +96,7 @@ export function registerAgentTools(server: McpServer): void {
     {
       title: "Get agent detail",
       description:
-        "Full detail for one agent by id, phone, or email — the agent row, every listing tied to their phone, and their send history. Exactly one of id/phone/email must be given.",
+        "Full detail for one agent by id, phone, or email — the agent row (including avgListingsPerYear/avgListingPrice, manually researched), every listing tied to their phone, avgDaysBetweenListings computed from those listings (null below 3 of them), and their send history. Exactly one of id/phone/email must be given.",
       inputSchema: {
         id: z.string().uuid().optional(),
         phone: z.string().optional(),
@@ -111,7 +131,13 @@ export function registerAgentTools(server: McpServer): void {
 
       const agentBookings = await db.select().from(bookings).where(eq(bookings.contactAgentId, agent.id));
 
-      return text({ agent, listings: agentListings, sendHistory: history, bookings: agentBookings });
+      return text({
+        agent,
+        avgDaysBetweenListings: averageDaysBetweenListings(agentListings),
+        listings: agentListings,
+        sendHistory: history,
+        bookings: agentBookings,
+      });
     }
   );
 
@@ -241,7 +267,7 @@ export function registerAgentTools(server: McpServer): void {
     {
       title: "Agent production stats",
       description:
-        "Per-agent aggregated stats — booking count, total booking revenue, most recent booking date, listing count — for answering questions like 'who is my most producing agent' or 'who have I booked least recently'. Sorted and limited; agents with zero bookings sort as the most overdue under least_recently_booked.",
+        "Per-agent aggregated stats — booking count, total booking revenue, most recent booking date, listing count, avgDaysBetweenListings (computed from our own tracked listings, null below 3 of them), and avgListingsPerYear/avgListingPrice (manually researched, null if not entered) — for answering questions like 'who is my most producing agent', 'who have I booked least recently', or 'which agents list frequently'. Sorted and limited; agents with zero bookings sort as the most overdue under least_recently_booked.",
       inputSchema: {
         sortBy: z
           .enum(["most_bookings", "most_revenue", "least_recently_booked", "most_recently_booked", "most_listings"])
@@ -251,12 +277,12 @@ export function registerAgentTools(server: McpServer): void {
       },
     },
     async ({ sortBy, onlyWithBookings, limit }) => {
-      const [allAgents, allBookings, allLineItems, agentListingCounts] = await Promise.all([
+      const [allAgents, allBookings, allLineItems, agentListingDates] = await Promise.all([
         db.select().from(agents),
         db.select().from(bookings),
         db.select().from(bookingLineItems),
         db
-          .select({ agentPhone: listings.agentPhone })
+          .select({ agentPhone: listings.agentPhone, listedAt: listings.listedAt, foundAt: listings.foundAt })
           .from(listings)
           .where(isNotNull(listings.agentPhone)),
       ]);
@@ -264,9 +290,10 @@ export function registerAgentTools(server: McpServer): void {
       const revenueByBooking = new Map<string, number>();
       for (const li of allLineItems) revenueByBooking.set(li.bookingId, (revenueByBooking.get(li.bookingId) ?? 0) + li.amount);
 
-      const listingCountByPhone = new Map<string, number>();
-      for (const l of agentListingCounts) {
-        if (l.agentPhone) listingCountByPhone.set(l.agentPhone, (listingCountByPhone.get(l.agentPhone) ?? 0) + 1);
+      const listingsByPhone = new Map<string, typeof agentListingDates>();
+      for (const l of agentListingDates) {
+        if (!l.agentPhone) continue;
+        (listingsByPhone.get(l.agentPhone) ?? listingsByPhone.set(l.agentPhone, []).get(l.agentPhone)!).push(l);
       }
 
       const bookingsByAgent = new Map<string, typeof allBookings>();
@@ -284,6 +311,7 @@ export function registerAgentTools(server: McpServer): void {
           const d = b.jobDate ?? b.createdAt;
           return !latest || d > latest ? d : latest;
         }, null);
+        const agentListings = agent.phone ? listingsByPhone.get(agent.phone) ?? [] : [];
         return {
           id: agent.id,
           name: agent.name,
@@ -293,7 +321,10 @@ export function registerAgentTools(server: McpServer): void {
           bookingCount: agentBookings.length,
           totalRevenue,
           mostRecentBookingDate,
-          listingCount: agent.phone ? listingCountByPhone.get(agent.phone) ?? 0 : 0,
+          listingCount: agentListings.length,
+          avgDaysBetweenListings: averageDaysBetweenListings(agentListings),
+          avgListingsPerYear: agent.avgListingsPerYear,
+          avgListingPrice: agent.avgListingPrice,
           lastContactedAt: agent.lastContactedAt,
         };
       });
