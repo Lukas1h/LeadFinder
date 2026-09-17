@@ -76,8 +76,20 @@ async function waitForDailyLimitHeadroom(): Promise<void> {
   }
 }
 
+function shuffle<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 async function main() {
-  const { candidates }: { candidates: Candidate[] } = await import(candidatesModule);
+  const { candidates: orderedCandidates }: { candidates: Candidate[] } = await import(candidatesModule);
+  // Spreadsheet order is alphabetical by name — shuffle so a run doesn't
+  // read as an A-to-Z sweep to anyone comparing notes with a coworker.
+  const candidates = shuffle(orderedCandidates);
 
   let flaggedEmails = new Set<string>();
   if (process.env.FLAGGED_FILE) {
