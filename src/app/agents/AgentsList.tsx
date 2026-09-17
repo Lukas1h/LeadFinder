@@ -1,25 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, RotateCcw, ChevronRight } from "lucide-react";
+import { Search, RotateCcw, ChevronRight, Loader2 } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { daysSince } from "@/lib/format";
 import { AgentCard } from "./AgentCard";
 import { RELATIONSHIP_LABELS } from "./relationshipLabels";
 import { AgentDetailDialog } from "./AgentDetailDialog";
+import { getAllColdAgents, searchAllAgents } from "./actions";
+import { COLD_INITIAL_LIMIT } from "./constants";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 
 const DECLINED_RESURFACE_AFTER_DAYS = 30;
-
-// "cold" is where every freshly-scraped/imported lead starts out, so with
-// thousands of agents on file it dwarfs every other bucket and was the
-// entire reason the page got slow — capping its initial render (while
-// leaving the small buckets alone) is what actually fixes that; search
-// still searches everything, capped or not, since a cap that hid search
-// results would just be confusing.
-const COLD_INITIAL_LIMIT = 15;
 
 // Most-established relationship first — mirrors the natural progression
 // (see bumpAgentRelationshipOnMilestone in src/app/actions.ts).
@@ -46,27 +40,34 @@ function byCreatedDesc(a: Agent, b: Agent) {
   return b.createdAt.getTime() - a.createdAt.getTime();
 }
 
-function matchesSearch(agent: Agent, query: string): boolean {
-  if (!query) return true;
-  if (agent.name?.toLowerCase().includes(query)) return true;
-  if (agent.email?.toLowerCase().includes(query)) return true;
-  if (agent.phone?.toLowerCase().includes(query)) return true;
-  const digits = query.replace(/\D/g, "");
-  if (digits && agent.phone?.replace(/\D/g, "").includes(digits)) return true;
-  return false;
+function isColdAndFresh(a: Agent): boolean {
+  return a.relationshipStatus === "cold" && !a.declinedAt;
 }
 
 export function AgentsList({
   agents,
   counts,
   listingsByPhone,
+  coldFreshTotal,
 }: {
   agents: Agent[];
   counts: Record<string, number>;
   listingsByPhone: Record<string, Listing[]>;
+  // True count of the cold-and-never-contacted bucket — the `agents` prop
+  // only carries COLD_INITIAL_LIMIT of them, so the section header and
+  // "View all" button need this separately to show the real number.
+  coldFreshTotal: number;
 }) {
   const [search, setSearch] = useState("");
-  const [showAllCold, setShowAllCold] = useState(false);
+  // null = no results known yet for the current query (still debouncing or
+  // the request is in flight) — distinct from an empty array (a real "no
+  // matches"), so the loading state can't flash stale results from a
+  // previous query.
+  const [searchResults, setSearchResults] = useState<Agent[] | null>(null);
+  const [, startSearchTransition] = useTransition();
+
+  const [coldFreshOverride, setColdFreshOverride] = useState<Agent[] | null>(null);
+  const [isLoadingAllCold, startLoadAllColdTransition] = useTransition();
 
   // Deep-link from ListingModal's agent block (?agent=<phone>) — opens that
   // agent's detail dialog directly, regardless of which section/collapsed
@@ -87,13 +88,46 @@ export function AgentsList({
     if (!open) router.replace("/agents", { scroll: false });
   };
 
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return agents.filter((a) => matchesSearch(a, query));
-  }, [agents, search]);
+  // Debounced server-side search — the page deliberately doesn't load
+  // every agent client-side anymore (see COLD_INITIAL_LIMIT above), so
+  // search has to ask the DB instead of filtering an in-memory list.
+  useEffect(() => {
+    const query = search.trim();
+    if (!query) {
+      setSearchResults(null);
+      return;
+    }
+    setSearchResults(null);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      startSearchTransition(async () => {
+        const results = await searchAllAgents(query);
+        if (!cancelled) setSearchResults(results);
+      });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [search]);
+
+  const handleViewAllCold = () => {
+    startLoadAllColdTransition(async () => {
+      const all = await getAllColdAgents();
+      setColdFreshOverride(all);
+    });
+  };
+
+  // Once "View all" has loaded the full cold bucket, it replaces (not
+  // appends to) the initial capped slice already in `agents` — otherwise
+  // the first COLD_INITIAL_LIMIT would render twice.
+  const effectiveAgents = useMemo(() => {
+    if (!coldFreshOverride) return agents;
+    return [...agents.filter((a) => !isColdAndFresh(a)), ...coldFreshOverride];
+  }, [agents, coldFreshOverride]);
 
   const { byStatus, readyToReconnect, recentlyDeclined } = useMemo(() => {
-    const notDeclined = filtered.filter((a) => !a.declinedAt);
+    const notDeclined = effectiveAgents.filter((a) => !a.declinedAt);
     const groups: Record<AgentRelationshipStatus, Agent[]> = {
       cold: [],
       warm: [],
@@ -106,14 +140,14 @@ export function AgentsList({
 
     return {
       byStatus: groups,
-      readyToReconnect: filtered
+      readyToReconnect: effectiveAgents
         .filter((a) => a.declinedAt && daysSince(a.declinedAt) >= DECLINED_RESURFACE_AFTER_DAYS)
         .sort((a, b) => daysSince(b.declinedAt!) - daysSince(a.declinedAt!)),
-      recentlyDeclined: filtered
+      recentlyDeclined: effectiveAgents
         .filter((a) => a.declinedAt && daysSince(a.declinedAt) < DECLINED_RESURFACE_AFTER_DAYS)
         .sort((a, b) => a.declinedAt!.getTime() - b.declinedAt!.getTime()),
     };
-  }, [filtered]);
+  }, [effectiveAgents]);
 
   function card(agent: Agent) {
     return (
@@ -126,11 +160,8 @@ export function AgentsList({
     );
   }
 
-  const nothingFound = filtered.length === 0;
-
-  // A search query already narrows "cold" down to something worth scanning
-  // in full, so the cap only applies to the unfiltered, browse-everything view.
   const isSearching = search.trim().length > 0;
+  const coldDisplayTotal = coldFreshOverride ? coldFreshOverride.length : coldFreshTotal;
 
   return (
     <div className="flex flex-col gap-6">
@@ -154,8 +185,17 @@ export function AgentsList({
         />
       </div>
 
-      {nothingFound ? (
-        <p className="text-muted-foreground/70 text-sm">No agents match &ldquo;{search}&rdquo;.</p>
+      {isSearching ? (
+        searchResults === null ? (
+          <p className="text-muted-foreground/70 text-sm flex items-center gap-2">
+            <Loader2 className="size-3.5 animate-spin" />
+            Searching…
+          </p>
+        ) : searchResults.length === 0 ? (
+          <p className="text-muted-foreground/70 text-sm">No agents match &ldquo;{search}&rdquo;.</p>
+        ) : (
+          <div className="flex flex-col gap-4">{searchResults.map(card)}</div>
+        )
       ) : (
         <div className="flex flex-col gap-8">
           <section>
@@ -166,22 +206,24 @@ export function AgentsList({
                 {RELATIONSHIP_ORDER.map((status) => {
                   if (byStatus[status].length === 0) return null;
 
-                  const capped = status === "cold" && !isSearching && !showAllCold;
-                  const visible = capped ? byStatus[status].slice(0, COLD_INITIAL_LIMIT) : byStatus[status];
+                  const isColdBucket = status === "cold";
+                  const visible = byStatus[status];
+                  const showViewAll = isColdBucket && !coldFreshOverride && coldFreshTotal > visible.length;
 
                   return (
                     <div key={status}>
                       <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                        {RELATIONSHIP_LABELS[status]} ({byStatus[status].length})
+                        {RELATIONSHIP_LABELS[status]} ({isColdBucket ? coldDisplayTotal.toLocaleString() : visible.length})
                       </h2>
                       <div className="flex flex-col gap-4">{visible.map(card)}</div>
-                      {capped && byStatus[status].length > COLD_INITIAL_LIMIT && (
+                      {showViewAll && (
                         <button
                           type="button"
-                          onClick={() => setShowAllCold(true)}
-                          className="mt-4 w-full text-sm text-muted-foreground hover:text-foreground text-center py-2 rounded-md border border-dashed hover:border-solid transition-colors"
+                          onClick={handleViewAllCold}
+                          disabled={isLoadingAllCold}
+                          className="mt-4 w-full text-sm text-muted-foreground hover:text-foreground text-center py-2 rounded-md border border-dashed hover:border-solid transition-colors disabled:opacity-60"
                         >
-                          View all {byStatus[status].length.toLocaleString()} agents
+                          {isLoadingAllCold ? "Loading…" : `View all ${coldFreshTotal.toLocaleString()} agents`}
                         </button>
                       )}
                     </div>

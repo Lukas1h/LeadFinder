@@ -2,9 +2,10 @@ import { Suspense } from "react";
 import { Plus, Users } from "lucide-react";
 import { db } from "@/db";
 import { agents, listings } from "@/db/schema";
-import { desc, isNotNull } from "drizzle-orm";
+import { desc, isNotNull, isNull, eq, ne, or, and, sql } from "drizzle-orm";
 import { ensureAgentsBackfilled, listingCountsByPhone } from "./actions";
 import { AgentsList } from "./AgentsList";
+import { COLD_INITIAL_LIMIT } from "./constants";
 import { ImportAgentForm } from "./ImportAgentForm";
 import { Button } from "@/components/ui/button";
 import { AgentsSkeleton } from "./loading";
@@ -24,11 +25,29 @@ async function AgentsContent() {
 
   await ensureAgentsBackfilled();
 
-  const [all, counts, agentListings] = await Promise.all([
-    db.select().from(agents).orderBy(desc(agents.createdAt)),
+  // "cold, never contacted" dwarfs every other bucket (thousands of rows
+  // from the lead scrapers) and is the entire reason this page used to be
+  // slow — fetching and shipping every one of them just to render 15 was
+  // the real cost, not the render itself. Every other bucket (any real
+  // relationship, or declined regardless of status) is small and fetched
+  // in full; "cold" gets only its most recent page, plus a count for the
+  // "View all" button — the rest loads on demand (see getAllColdAgents).
+  const isColdAndFresh = and(eq(agents.relationshipStatus, "cold"), isNull(agents.declinedAt));
+
+  const [totalAgentCount, nonColdFresh, coldFreshPage, coldFreshTotal, counts, agentListings] = await Promise.all([
+    db.select({ count: sql<number>`count(*)::int` }).from(agents),
+    db
+      .select()
+      .from(agents)
+      .where(or(ne(agents.relationshipStatus, "cold"), isNotNull(agents.declinedAt)))
+      .orderBy(desc(agents.createdAt)),
+    db.select().from(agents).where(isColdAndFresh).orderBy(desc(agents.createdAt)).limit(COLD_INITIAL_LIMIT),
+    db.select({ count: sql<number>`count(*)::int` }).from(agents).where(isColdAndFresh),
     listingCountsByPhone(),
     db.select().from(listings).where(isNotNull(listings.agentPhone)),
   ]);
+
+  const all = [...nonColdFresh, ...coldFreshPage];
 
   const listingsByPhone: Record<string, typeof agentListings> = {};
   for (const l of agentListings) {
@@ -49,8 +68,8 @@ async function AgentsContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Agents</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {all.length} agent{all.length === 1 ? "" : "s"} — relationships tracked across listings,
-            not just per-lead
+            {totalAgentCount[0].count.toLocaleString()} agent{totalAgentCount[0].count === 1 ? "" : "s"} —
+            relationships tracked across listings, not just per-lead
           </p>
         </div>
         <ImportAgentForm
@@ -63,13 +82,18 @@ async function AgentsContent() {
         />
       </header>
 
-      {all.length === 0 ? (
+      {totalAgentCount[0].count === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
           <Users className="size-8" />
           <p>No agents yet — they&rsquo;ll show up here as leads come in, or import one manually.</p>
         </div>
       ) : (
-        <AgentsList agents={all} counts={counts} listingsByPhone={listingsByPhone} />
+        <AgentsList
+          agents={all}
+          counts={counts}
+          listingsByPhone={listingsByPhone}
+          coldFreshTotal={coldFreshTotal[0].count}
+        />
       )}
     </>
   );

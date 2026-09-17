@@ -13,7 +13,7 @@ import {
   type PresetType,
   type MessageResult,
 } from "@/db/schema";
-import { eq, isNotNull, sql, desc, and, ne } from "drizzle-orm";
+import { eq, isNotNull, isNull, sql, desc, and, ne, or, ilike } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { findFirstResultUrl, findFirstNameMatchResultUrl } from "@/lib/tavily";
 
@@ -25,6 +25,12 @@ import { findFirstResultUrl, findFirstNameMatchResultUrl } from "@/lib/tavily";
  * currently "declined", the new row is seeded already-declined (using that
  * listing's statusChangedAt) so it starts in the right section immediately
  * instead of waiting for the next status change to touch it.
+ *
+ * Finds the missing phones with a LEFT JOIN rather than fetching every
+ * listing plus every agent phone into JS and diffing there — with
+ * thousands of agent rows on file, that second full-table fetch on every
+ * single page load was real, wasted latency for a check that's a no-op
+ * almost every time (there's nothing new to backfill).
  */
 export async function ensureAgentsBackfilled() {
   const rows = await db
@@ -35,7 +41,8 @@ export async function ensureAgentsBackfilled() {
       statusChangedAt: listings.statusChangedAt,
     })
     .from(listings)
-    .where(isNotNull(listings.agentPhone));
+    .leftJoin(agents, eq(agents.phone, listings.agentPhone))
+    .where(and(isNotNull(listings.agentPhone), isNull(agents.id)));
 
   const byPhone = new Map<string, { name: string | null; declinedAt: Date | null }>();
   for (const r of rows) {
@@ -53,16 +60,12 @@ export async function ensureAgentsBackfilled() {
 
   if (byPhone.size === 0) return;
 
-  const existingAgents = await db.select({ phone: agents.phone }).from(agents);
-  const existingPhones = new Set(existingAgents.map((a) => a.phone));
-
-  const toInsert = [...byPhone.entries()]
-    .filter(([phone]) => !existingPhones.has(phone))
-    .map(([phone, data]) => ({ phone, name: data.name, declinedAt: data.declinedAt }));
-
-  if (toInsert.length > 0) {
-    await db.insert(agents).values(toInsert);
-  }
+  const toInsert = [...byPhone.entries()].map(([phone, data]) => ({
+    phone,
+    name: data.name,
+    declinedAt: data.declinedAt,
+  }));
+  await db.insert(agents).values(toInsert).onConflictDoNothing({ target: agents.phone });
 }
 
 export async function updateAgentRelationshipStatus(id: string, status: AgentRelationshipStatus) {
@@ -286,6 +289,47 @@ export async function getOrCreateAgentByPhone(
   const agentListings = await db.select().from(listings).where(eq(listings.agentPhone, trimmedPhone));
 
   return { agent, listings: agentListings };
+}
+
+/**
+ * The full "cold, never contacted" bucket — deliberately NOT loaded by
+ * default (see AgentsContent in page.tsx, which fetches only the most
+ * recent COLD_PAGE_SIZE of these). Fetched on demand when "View all N
+ * agents" is clicked, so a page load doesn't have to ship every one of the
+ * thousands of untouched leads just to render 15 of them.
+ */
+export async function getAllColdAgents(): Promise<Agent[]> {
+  return db
+    .select()
+    .from(agents)
+    .where(and(eq(agents.relationshipStatus, "cold"), isNull(agents.declinedAt)))
+    .orderBy(desc(agents.createdAt));
+}
+
+/**
+ * Powers the Agents page's search box — a live DB query rather than
+ * filtering an in-memory list, since (unlike searchAgentsByName's
+ * Compose-autocomplete use) the page no longer has every agent loaded
+ * client-side to filter in the first place. Same substring semantics as
+ * the old client-side matchesSearch: name/email/phone, plus a
+ * digits-only phone comparison so "5035551234" still matches a
+ * "503-555-1234" row.
+ */
+export async function searchAllAgents(query: string): Promise<Agent[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const digits = trimmed.replace(/\D/g, "");
+  const like = `%${trimmed}%`;
+  const conditions = [ilike(agents.name, like), ilike(agents.email, like), ilike(agents.phone, like)];
+  if (digits.length >= 3) conditions.push(ilike(agents.phone, `%${digits}%`));
+
+  return db
+    .select()
+    .from(agents)
+    .where(or(...conditions))
+    .orderBy(desc(agents.createdAt))
+    .limit(100);
 }
 
 /** Total distinct listings sourced from each agent phone — shown on the agent card. */
