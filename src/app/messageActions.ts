@@ -317,23 +317,30 @@ async function getAiPreset(type: PresetType): Promise<{ id: string; name: string
  * chosen — drafting it upfront on every dialog open (the old behavior)
  * would burn a real Gemini call most of the time for nothing.
  */
-export async function draftAiPresetOption(listingId: string, type: PresetType): Promise<PresetOption | null> {
+export async function draftAiPresetOption(
+  listingId: string,
+  type: PresetType,
+  instruction?: string
+): Promise<PresetOption | null> {
   const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
   if (!listing) return null;
   const ageDays = listingAgeDays(listing.listedAt, listing.foundAt);
-  return buildAiDraftOption(listingId, type, listing, ageDays);
+  return buildAiDraftOption(listingId, type, listing, ageDays, instruction);
 }
 
 /**
  * Drafts and returns the AI option, or null if there's no enabled AI-draft
  * preset for this type or the draft call fails — either way the dialog
- * just falls back to the regular presets.
+ * just falls back to the regular presets. `instruction` is Lukas's own
+ * steering for this specific redraft ("shorter," "mention the drone shot")
+ * — see the "Regenerate" control in SendMessageDialog.
  */
 async function buildAiDraftOption(
   listingId: string,
   type: PresetType,
   listing: Listing,
-  ageDays: number
+  ageDays: number,
+  instruction?: string
 ): Promise<PresetOption | null> {
   const [preset] = await db
     .select({ id: messagePresets.id, name: messagePresets.name })
@@ -397,6 +404,7 @@ async function buildAiDraftOption(
     agentListingCount,
     agentLastContactedAt: agent?.lastContactedAt ?? null,
     agentNotes: agent?.notes ?? null,
+    instruction,
   });
   if (!text) return null;
 

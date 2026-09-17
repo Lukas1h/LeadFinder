@@ -3,12 +3,13 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { MessageCircle, Phone } from "lucide-react";
+import { MessageCircle, Phone, RefreshCw } from "lucide-react";
 import type { PresetType } from "@/db/schema";
 import { getMessageOptions, sendMessage, draftAiPresetOption, type PresetOption } from "@/app/messageActions";
 import { AI_DRAFT_VARIANT_SENTINEL } from "@/lib/messageTemplate";
 import { smsUrl, telUrl } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -44,6 +45,7 @@ export function SendMessageDialog({
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [editedText, setEditedText] = useState("");
   const [isDraftingAi, setIsDraftingAi] = useState(false);
+  const [aiInstruction, setAiInstruction] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const handleOpenChange = (next: boolean) => {
@@ -54,6 +56,7 @@ export function SendMessageDialog({
     setSelectedPresetId(null);
     setEditedText("");
     setIsDraftingAi(false);
+    setAiInstruction("");
     getMessageOptions(listingId, type).then(({ presets }) => {
       setPresets(presets);
       // Blank ("type your own") wins over a criteria-matched recommendation
@@ -94,6 +97,22 @@ export function SendMessageDialog({
     }
 
     setEditedText(option?.text ?? "");
+  };
+
+  // Re-drafts the AI option with Lukas's own steering ("shorter," "mention
+  // the drone shot," or blank for just a plain reroll) — for when the
+  // first draft isn't what he wants instead of hand-editing it himself.
+  const handleRegenerateAi = async () => {
+    if (!selected) return;
+    setIsDraftingAi(true);
+    const drafted = await draftAiPresetOption(listingId, type, aiInstruction.trim() || undefined);
+    setIsDraftingAi(false);
+    if (!drafted) {
+      toast.error("AI draft failed — try again.");
+      return;
+    }
+    setPresets((prev) => prev.map((p) => (p.presetId === selected.presetId ? drafted : p)));
+    setEditedText(drafted.text);
   };
 
   const handleSend = () => {
@@ -155,6 +174,27 @@ export function SendMessageDialog({
                   className="text-sm resize-none"
                 />
               ))}
+
+            {selected?.variantId === AI_DRAFT_VARIANT_SENTINEL && !isDraftingAi && (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={aiInstruction}
+                  onChange={(e) => setAiInstruction(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleRegenerateAi();
+                    }
+                  }}
+                  placeholder="Don't like it? Tell it what to change…"
+                  className="text-sm flex-1"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={handleRegenerateAi}>
+                  <RefreshCw />
+                  Regenerate
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

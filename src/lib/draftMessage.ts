@@ -39,6 +39,8 @@ export interface DraftMessageInput {
   agentListingCount: number;
   agentLastContactedAt: Date | null;
   agentNotes: string | null;
+  /** Lukas's own steering for this specific draft — see buildPrompt. Set when re-drafting after "I don't like this, try again with X." */
+  instruction?: string | null;
 }
 
 const RELATIONSHIP_GUIDANCE: Record<AgentRelationshipStatus, string> = {
@@ -178,11 +180,15 @@ function buildPrompt(input: DraftMessageInput): string {
       ? buildInitialOutreachPrompt(input, street, skipIntro)
       : buildFollowUpPrompt(input, street, skipIntro);
 
-  return `You are Lukas, texting a real estate agent to offer photography services. Write ONE text message.
+  const instructionBlock = input.instruction?.trim()
+    ? `\nLukas's own instruction for THIS message — follow this over any conflicting guidance below, including the approach/example-bank choice above: ${input.instruction.trim()}\n`
+    : "";
 
+  return `You are Lukas, texting a real estate agent to offer photography services. Write ONE text message.
+${instructionBlock}
 ${scenarioPrompt}
 
-Additional writing rules (these override anything above if they conflict):
+Additional writing rules (these override anything above if they conflict, except Lukas's own instruction above, which wins over everything):
 - NEVER use an em dash (—) or en dash (–), anywhere. Use a period or comma instead.
 - Zero or one exclamation point in the whole message, never more. Prefer a period.
 - Never use these words/phrases — dead giveaways of AI writing: "I noticed," "I wanted to reach out," "I hope this finds you," "don't hesitate," "in case you," "showcase"/"showcasing," "ensure," "delve," "reach out," "take care of," "beautifully," "stunning," "reliable," "pivotal," "crucial."
