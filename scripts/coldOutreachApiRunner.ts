@@ -115,14 +115,21 @@ async function main() {
     `${candidatesModule}: ${candidates.length} candidates, ${(DELAY_MS / 1000).toFixed(1)}s between calls, target ~${((DELAY_MS * candidates.length) / 60000).toFixed(0)}min total`
   );
 
+  let processed = 0;
   for (const r of candidates) {
+    processed++;
+    const pct = ((processed / candidates.length) * 100).toFixed(0);
+    const elapsedMs = Date.now() - startedAt;
+    const etaMin = processed > 1 ? (((elapsedMs / processed) * (candidates.length - processed)) / 60000).toFixed(0) : "?";
+    const progress = `[${processed}/${candidates.length} ${pct}%, ~${etaMin}min left]`;
+
     const name = r.name.trim();
     const email = r.email.trim().toLowerCase();
     const phone = r.phone || null;
 
     if (flaggedEmails.has(email)) {
       heldForVerification++;
-      console.log(`HOLD ${name} <${email}> — flagged as a possible existing agent, needs manual verification`);
+      console.log(`${progress} HOLD ${name} <${email}> — flagged as a possible existing agent, needs manual verification`);
       continue;
     }
 
@@ -145,17 +152,17 @@ async function main() {
 
     if (result.status === "sent") {
       sent++;
-      console.log(`SENT ${name} <${email}> (${sent} sent, ${skipped} skipped, ${failed} failed)`);
+      console.log(`${progress} SENT ${name} <${email}> (${sent} sent, ${skipped} skipped, ${failed} failed)`);
       await new Promise((r) => setTimeout(r, DELAY_MS));
     } else if (result.status === "skipped") {
       // Already contacted (e.g. resuming after an interrupted run) — no
       // pacing delay needed, nothing was actually sent.
       skipped++;
-      console.log(`SKIP ${name} — ${result.reason ?? "already contacted"}`);
+      console.log(`${progress} SKIP ${name} — ${result.reason ?? "already contacted"}`);
     } else {
       failed++;
       failedNames.push(`${name} <${email}>`);
-      console.log(`FAILED ${name} <${email}> — ${result.error ?? "unknown error"}`);
+      console.log(`${progress} FAILED ${name} <${email}> — ${result.error ?? "unknown error"}`);
       await new Promise((r) => setTimeout(r, DELAY_MS));
     }
   }
