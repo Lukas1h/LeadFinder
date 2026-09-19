@@ -279,7 +279,25 @@ export function registerAgentTools(server: McpServer): void {
     },
     async ({ sortBy, onlyWithBookings, limit }) => {
       const [allAgents, allBookings, allLineItems, agentListingDates] = await Promise.all([
-        db.select().from(agents),
+        // Only the columns this tool actually returns — not notes/
+        // realtorProfileUrl/declinedAt/createdAt/lastContactedListingId.
+        // This full-agents-table fetch runs unconditionally on every call
+        // with no filter to shrink it, so trimming columns matters a lot
+        // more here than on a filtered query — it was the single largest
+        // contributor to a real Neon data-transfer overage (repeated calls,
+        // ~4,700 agent rows' worth of unused columns each time).
+        db
+          .select({
+            id: agents.id,
+            name: agents.name,
+            phone: agents.phone,
+            email: agents.email,
+            relationshipStatus: agents.relationshipStatus,
+            avgListingsPerYear: agents.avgListingsPerYear,
+            avgListingPrice: agents.avgListingPrice,
+            lastContactedAt: agents.lastContactedAt,
+          })
+          .from(agents),
         db.select().from(bookings),
         db.select().from(bookingLineItems),
         db

@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lte, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, listings, messagePresets, messagePresetVariants, messageSends } from "@/db/schema";
 import { sendEmail } from "@/lib/mailer";
@@ -138,14 +138,32 @@ export function registerMessagingTools(server: McpServer): void {
     },
     async () => {
       const followUpAfterDays = await getFollowUpAfterDays();
-      const now = Date.now();
-      const cutoff = new Date(now - followUpAfterDays * 24 * 60 * 60 * 1000);
+      const now = new Date();
+      const cutoff = new Date(now.getTime() - followUpAfterDays * 24 * 60 * 60 * 1000);
 
-      const all = await db.select().from(listings);
-      const automatic = all.filter((l) => l.status === "contacted" && l.contactedAt != null && l.contactedAt <= cutoff);
-      const manual = all.filter(
-        (l) => l.status !== "booked" && l.status !== "declined" && l.followUpAt != null && l.followUpAt.getTime() <= now
-      );
+      // Filtered in SQL, not fetched-then-filtered-in-JS — this used to
+      // pull every listing (photos arrays included) on every call with no
+      // WHERE clause at all, which was a real contributor to a Neon
+      // data-transfer overage. The two branches below return the same rows
+      // the old JS filter did, just without transferring the rest of the
+      // table to throw away.
+      const [automatic, manual] = await Promise.all([
+        db
+          .select()
+          .from(listings)
+          .where(and(eq(listings.status, "contacted"), isNotNull(listings.contactedAt), lte(listings.contactedAt, cutoff))),
+        db
+          .select()
+          .from(listings)
+          .where(
+            and(
+              ne(listings.status, "booked"),
+              ne(listings.status, "declined"),
+              isNotNull(listings.followUpAt),
+              lte(listings.followUpAt, now)
+            )
+          ),
+      ]);
 
       return text({ followUpAfterDays, automatic, manual });
     }
