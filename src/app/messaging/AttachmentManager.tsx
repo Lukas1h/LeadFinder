@@ -41,9 +41,9 @@ export function AttachmentManager({
     router.refresh();
   };
 
-  const handleRemove = (url: string, filename: string) => {
+  const handleRemove = (id: string, filename: string) => {
     startTransition(async () => {
-      await removePresetAttachment(presetId, url);
+      await removePresetAttachment(presetId, id);
       toast.success(`Removed "${filename}"`);
     });
   };
@@ -51,12 +51,12 @@ export function AttachmentManager({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {attachments.map((a) => (
-        <Badge key={a.url} variant="secondary" className="gap-1 pr-1">
+        <Badge key={a.id} variant="secondary" className="gap-1 pr-1">
           <Paperclip className="size-3" />
           {a.filename}
           <button
             type="button"
-            onClick={() => handleRemove(a.url, a.filename)}
+            onClick={() => handleRemove(a.id, a.filename)}
             disabled={isPending}
             className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
           >

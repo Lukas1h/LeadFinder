@@ -30,13 +30,11 @@ export interface SendEmailInput {
   toName: string | null;
   subject: string;
   text: string;
-  // `url` mode has nodemailer fetch the bytes itself at send time — fine
-  // for a one-off send, but wasteful for a bulk loop reusing the same
-  // attachment across many recipients (see resolveAttachments in
-  // src/lib/attachments.ts, used by send_bulk_agent_emails). `content`
-  // mode lets a caller fetch once and pass the bytes through for every
-  // recipient in the batch.
-  attachments?: ({ filename: string } & ({ url: string } | { content: Buffer }))[];
+  // Base64 content, straight off the preset row (see
+  // messagePresets.attachments) — never a URL to fetch, so a send never
+  // makes a network call for its attachment(s), whether it's one send or
+  // a bulk batch of 40.
+  attachments?: { filename: string; content: string }[];
 }
 
 /**
@@ -102,9 +100,7 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     to: input.toName ? `"${input.toName.replace(/"/g, "")}" <${input.to}>` : input.to,
     subject: input.subject,
     text: input.text,
-    attachments: input.attachments?.map((a) =>
-      "content" in a ? { filename: a.filename, content: a.content } : { filename: a.filename, href: a.url }
-    ),
+    attachments: input.attachments?.map((a) => ({ filename: a.filename, content: a.content, encoding: "base64" as const })),
   };
 
   await getTransporter().sendMail(mailOptions);

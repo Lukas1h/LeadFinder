@@ -349,11 +349,16 @@ export const messagePresets = pgTable("message_presets", {
   aiGenerated: boolean("ai_generated").notNull().default(false),
 
   // Files attached to every email sent from this preset (e.g. a pricing
-  // sheet, portfolio samples) — only meaningful for channel "email". Stored
-  // in Vercel Blob (see src/lib/attachments.ts); this column just holds the
-  // filename + public URL pairs, uploaded/removed from the preset's own
-  // management UI rather than re-attached per send, since the whole point
-  // of the Compose flow is ~2 seconds per realtor.
+  // sheet, portfolio samples) — only meaningful for channel "email". The
+  // bytes live right here (base64, see encodeAttachment in
+  // src/lib/attachments.ts), not in external storage — every send (bulk or
+  // single) reads this same row, so nothing ever re-fetches the file over
+  // the network. That used to go through Vercel Blob keyed by URL, which
+  // meant nodemailer's per-recipient href fetch re-downloaded the same file
+  // from Blob on every single send; storing the bytes inline removes that
+  // entirely. Uploaded/removed from the preset's own management UI rather
+  // than re-attached per send, since the whole point of the Compose flow is
+  // ~2 seconds per realtor.
   attachments: jsonb("attachments").$type<PresetAttachment[]>().notNull().default([]),
 
   // Marks a preset the delete button refuses to touch regardless of send
@@ -365,8 +370,9 @@ export const messagePresets = pgTable("message_presets", {
 });
 
 export interface PresetAttachment {
+  id: string;
   filename: string;
-  url: string;
+  content: string; // base64-encoded file bytes
 }
 
 export type MessagePreset = typeof messagePresets.$inferSelect;

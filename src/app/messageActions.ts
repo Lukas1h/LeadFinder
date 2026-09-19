@@ -11,6 +11,7 @@ import {
   type PresetType,
   type AgentRelationshipStatus,
   type Listing,
+  type PresetAttachment,
 } from "@/db/schema";
 import { and, count, eq, sum } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -110,7 +111,7 @@ export interface PresetOption {
   text: string;
   /** Only set for email options — see getComposeEmailOptions in composeEmailActions.ts. */
   subject?: string;
-  attachments?: { filename: string; url: string }[];
+  attachments?: PresetAttachment[];
   /** Only set for email options, which span both types in one list — see getComposeEmailOptions. */
   type?: PresetType;
   recommended: boolean;

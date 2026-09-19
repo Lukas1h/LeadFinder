@@ -11,7 +11,7 @@ import {
 } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { uploadAttachment, deleteAttachment } from "@/lib/attachments";
+import { encodeAttachment } from "@/lib/attachments";
 
 export interface PresetCriteriaInput {
   minScore: number | null;
@@ -170,17 +170,17 @@ export async function uploadPresetAttachment(presetId: string, formData: FormDat
     .where(eq(messagePresets.id, presetId));
   if (!preset) return { error: "Preset not found" };
 
-  const uploaded = await uploadAttachment(file);
+  const encoded = await encodeAttachment(file);
   await db
     .update(messagePresets)
-    .set({ attachments: [...preset.attachments, uploaded] })
+    .set({ attachments: [...preset.attachments, encoded] })
     .where(eq(messagePresets.id, presetId));
 
   revalidatePath("/messaging");
   return { error: null };
 }
 
-export async function removePresetAttachment(presetId: string, url: string) {
+export async function removePresetAttachment(presetId: string, attachmentId: string) {
   const [preset] = await db
     .select({ attachments: messagePresets.attachments })
     .from(messagePresets)
@@ -189,9 +189,8 @@ export async function removePresetAttachment(presetId: string, url: string) {
 
   await db
     .update(messagePresets)
-    .set({ attachments: preset.attachments.filter((a: PresetAttachment) => a.url !== url) })
+    .set({ attachments: preset.attachments.filter((a: PresetAttachment) => a.id !== attachmentId) })
     .where(eq(messagePresets.id, presetId));
-  await deleteAttachment(url).catch(() => {}); // best-effort — a stray blob is harmless, a stuck UI isn't
 
   revalidatePath("/messaging");
   return { error: null };

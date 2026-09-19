@@ -4,7 +4,6 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, listings, messagePresets, messagePresetVariants, messageSends } from "@/db/schema";
 import { sendEmail } from "@/lib/mailer";
-import { resolveAttachments } from "@/lib/attachments";
 import { renderMessageBody, renderSubject } from "@/lib/messageTemplate";
 import { getFollowUpAfterDays } from "@/lib/settings";
 import { text, errorText, EMAIL_RE } from "./shared";
@@ -21,10 +20,7 @@ interface BulkSendVariant {
   subject: string | null;
   body: string;
   type: (typeof messagePresets.$inferSelect)["type"];
-  // Already-fetched bytes, not the {filename, url} rows straight off the
-  // preset row — see resolveAttachments and the send_bulk_agent_emails
-  // handler below, which fetches once for the whole batch.
-  attachments: { filename: string; content: Buffer }[];
+  attachments: (typeof messagePresets.$inferSelect)["attachments"];
 }
 
 /**
@@ -280,25 +276,9 @@ export function registerMessagingTools(server: McpServer): void {
         .where(and(eq(messagePresetVariants.id, variantId), eq(messagePresetVariants.presetId, presetId)));
       if (!variant) return errorText("No such presetId/variantId pair");
 
-      // Fetched once for the whole batch, not once per contact — see
-      // resolveAttachments' comment for why (Blob data-transfer, not the
-      // stored bytes, is what a bulk send actually multiplies). One
-      // failure here means every contact would fail identically (they'd
-      // all hit the same broken attachment), so this reports it as one
-      // clear error instead of N duplicate per-contact failures.
-      let resolvedAttachments: { filename: string; content: Buffer }[];
-      try {
-        resolvedAttachments = variant.attachments.length ? await resolveAttachments(variant.attachments) : [];
-      } catch (err) {
-        return errorText(
-          `Couldn't fetch this preset's attachment(s), so none of the ${contacts.length} contacts were sent: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
-      const resolvedVariant: BulkSendVariant = { ...variant, attachments: resolvedAttachments };
-
       const results: BulkSendResult[] = [];
       for (const contact of contacts) {
-        results.push(await sendBulkTemplateEmail(contact, resolvedVariant, presetId, variantId, skipAlreadyContacted));
+        results.push(await sendBulkTemplateEmail(contact, variant, presetId, variantId, skipAlreadyContacted));
       }
 
       const sent = results.filter((r) => r.status === "sent").length;
