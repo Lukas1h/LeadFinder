@@ -63,7 +63,16 @@ async function waitForDailyLimitHeadroom(): Promise<void> {
   const safeMax = dailyLimit - dailyLimitBuffer;
   let loggedWaiting = false;
   for (;;) {
-    const count = await trailing24hSendCount();
+    let count: number;
+    try {
+      count = await trailing24hSendCount();
+    } catch (err) {
+      // Transient DB blips (e.g. a Neon DNS hiccup) shouldn't kill an
+      // hours-long batch — log and retry on the next poll instead.
+      console.log(`WARN — trailing24hSendCount failed, will retry: ${err}`);
+      await new Promise((r) => setTimeout(r, rateCheckIntervalMs));
+      continue;
+    }
     if (count < safeMax) {
       if (loggedWaiting) console.log(`Headroom freed up (${count}/${safeMax} used) — resuming`);
       return;
