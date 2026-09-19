@@ -108,6 +108,7 @@ export function PipelineList({
     options?: { showDaysSinceContact?: boolean; showStatusBadge?: boolean; showFollowUp?: boolean }
   ) {
     const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentMap);
+    const attachedAgent = lead.agentPhone ? agentMap.get(lead.agentPhone) : undefined;
     return (
       <LeadCard
         key={lead.id}
@@ -146,6 +147,8 @@ export function PipelineList({
             status={lead.status}
             agentName={lead.agentName}
             agentPhone={lead.agentPhone}
+            agentEmail={attachedAgent?.email}
+            address={lead.address}
           />
         }
       />

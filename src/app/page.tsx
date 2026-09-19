@@ -147,6 +147,8 @@ async function LeadsContent() {
             listingId={lead.id}
             agentName={lead.agentName}
             agentPhone={lead.agentPhone}
+            agentEmail={attachedAgent?.email}
+            address={lead.address}
           />
         }
       />

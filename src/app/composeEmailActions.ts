@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { agents, messagePresets, messagePresetVariants, messageSends, type PresetType } from "@/db/schema";
+import { agents, listings, messagePresets, messagePresetVariants, messageSends, type PresetType } from "@/db/schema";
 import { and, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
@@ -9,8 +9,11 @@ import {
   DEFAULT_COLD_EMAIL_BODY,
   BLANK_EMAIL_SUBJECT,
   BLANK_EMAIL_BODY,
+  renderMessageBody,
+  renderSubject,
 } from "@/lib/messageTemplate";
 import { sendEmail } from "@/lib/mailer";
+import { touchAgentContact } from "@/app/actions";
 import type { PresetOption, MessageOptions } from "@/app/messageActions";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -77,17 +80,35 @@ export async function ensureBlankEmailPreset() {
 
 /**
  * Like getMessageOptions but for the cold-compose flow: no listing, so no
- * criteria-matching, and no separate "type" argument — Compose shows one
- * Template dropdown spanning both initial_outreach and follow_up (grouped
- * into sections), so picking a template also picks the type, rather than
- * making the user pick a type first to even see their templates. Every
- * enabled email preset is equally eligible; the oldest (first created) is
- * recommended by default. Same least-sent-variant rotation as SMS, so
- * email A/B stats stay honest too.
+ * criteria-matching, and no separate "type" argument by default — Compose
+ * shows one Template dropdown spanning both initial_outreach and follow_up
+ * (grouped into sections), so picking a template also picks the type,
+ * rather than making the user pick a type first to even see their
+ * templates. Every enabled email preset is equally eligible; the oldest
+ * (first created) is recommended by default. Same least-sent-variant
+ * rotation as SMS, so email A/B stats stay honest too.
+ *
+ * `listingContext` is used by the per-listing Send email dialog (see
+ * SendEmailDialog.tsx) rather than the standalone Compose page — it scopes
+ * to one `type` (matching the listing's SendMessageDialog counterpart) and
+ * renders {{firstName}}/{{street}} against that listing's actual agent,
+ * the same way getMessageOptions does for SMS.
  */
-export async function getComposeEmailOptions(): Promise<MessageOptions> {
+export async function getComposeEmailOptions(listingContext?: {
+  type: PresetType;
+  agentName: string | null;
+  address: string | null;
+}): Promise<MessageOptions> {
   await ensureDefaultEmailPreset();
   await ensureBlankEmailPreset();
+
+  const conditions = [
+    eq(messagePresets.channel, "email"),
+    eq(messagePresets.enabled, true),
+    eq(messagePresets.aiGenerated, false),
+    eq(messagePresetVariants.enabled, true),
+  ];
+  if (listingContext) conditions.push(eq(messagePresets.type, listingContext.type));
 
   const rows = await db
     .select({
@@ -102,14 +123,7 @@ export async function getComposeEmailOptions(): Promise<MessageOptions> {
     })
     .from(messagePresetVariants)
     .innerJoin(messagePresets, eq(messagePresetVariants.presetId, messagePresets.id))
-    .where(
-      and(
-        eq(messagePresets.channel, "email"),
-        eq(messagePresets.enabled, true),
-        eq(messagePresets.aiGenerated, false),
-        eq(messagePresetVariants.enabled, true)
-      )
-    )
+    .where(and(...conditions))
     .orderBy(messagePresets.createdAt);
 
   if (rows.length === 0) return { presets: [] };
@@ -142,12 +156,16 @@ export async function getComposeEmailOptions(): Promise<MessageOptions> {
       presetName: picked.presetName,
       variantId: picked.variantId,
       variantLabel: picked.label,
-      // Left un-substituted (unlike getMessageOptions' SMS path) — there's
-      // no agent name yet at load time here, it's whatever's currently
-      // typed into Compose's Name field, so ComposeEmailPanel renders
-      // {{firstName}} client-side as that field changes instead.
-      text: picked.body,
-      subject: picked.subject ?? "",
+      // Un-substituted when there's no listing context (the standalone
+      // Compose flow) — there's no agent name yet at load time there, it's
+      // whatever's currently typed into Compose's Name field, so
+      // ComposeEmailPanel renders {{firstName}} client-side as that field
+      // changes instead. With listingContext, render against the actual
+      // agent/listing now, same as getMessageOptions' SMS path.
+      text: listingContext
+        ? renderMessageBody(picked.body, listingContext.agentName, listingContext.address)
+        : picked.body,
+      subject: listingContext ? renderSubject(picked.subject ?? "", listingContext.agentName) : picked.subject ?? "",
       attachments: picked.attachments,
       type: picked.presetType,
       recommended: picked.presetId === recommendedPresetId,
@@ -155,6 +173,83 @@ export async function getComposeEmailOptions(): Promise<MessageOptions> {
   });
 
   return { presets };
+}
+
+export interface SendListingEmailInput {
+  listingId: string;
+  type: PresetType;
+  presetId: string;
+  variantId: string;
+  agentEmail: string;
+  agentName: string | null;
+  subject: string;
+  body: string;
+}
+
+/**
+ * Listing-scoped counterpart to sendComposeEmail, for the per-listing Send
+ * email dialog — same send-first-log-on-success order (a real SMTP call,
+ * unlike sms:'s client-side deep link, can fail server-side), but also
+ * applies the same listing-status side effect sendMessage (SMS) does:
+ * initial outreach moves the lead to "contacted", and either way
+ * touchAgentContact keeps the agent row's lastContactedAt/
+ * lastContactedListingId current. Unlike sendComposeEmail's standalone
+ * flow (which resolves/creates an agent by exact email match), the agent
+ * here is resolved by the listing's own phone — this listing already has
+ * a known agent, phone is its canonical identity across the app.
+ */
+export async function sendListingEmail(input: SendListingEmailInput): Promise<{ error?: string }> {
+  const subject = input.subject.trim();
+  const body = input.body.trim();
+  if (!subject) return { error: "Subject is required" };
+  if (!body) return { error: "Message body is required" };
+
+  const [preset] = await db
+    .select({ attachments: messagePresets.attachments })
+    .from(messagePresets)
+    .where(eq(messagePresets.id, input.presetId));
+
+  try {
+    await sendEmail({
+      to: input.agentEmail,
+      toName: input.agentName,
+      subject,
+      text: body,
+      attachments: preset?.attachments,
+    });
+  } catch (err) {
+    console.error("sendListingEmail: SMTP send failed", err);
+    return { error: "Failed to send — try again." };
+  }
+
+  const now = new Date();
+  const [lead] = await db
+    .update(listings)
+    .set({
+      contactedAt: now,
+      statusChangedAt: now,
+      ...(input.type === "initial_outreach" ? { status: "contacted" as const } : {}),
+    })
+    .where(eq(listings.id, input.listingId))
+    .returning({ agentPhone: listings.agentPhone, agentName: listings.agentName });
+
+  const agentId = lead ? await touchAgentContact(input.listingId, lead.agentPhone, lead.agentName) : null;
+
+  await db.insert(messageSends).values({
+    listingId: input.listingId,
+    agentId,
+    presetId: input.presetId,
+    variantId: input.variantId,
+    type: input.type,
+    channel: "email",
+    sentAt: now,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/pipeline");
+  revalidatePath("/messaging");
+
+  return {};
 }
 
 export interface SendComposeEmailInput {

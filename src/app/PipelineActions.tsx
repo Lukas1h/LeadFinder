@@ -1,9 +1,10 @@
 "use client";
 
 import { useTransition } from "react";
-import { MessageCircle, CheckCircle2, FileText, RotateCcw } from "lucide-react";
+import { MessageCircle, CheckCircle2, FileText, RotateCcw, Mail } from "lucide-react";
 import { updateListingStatus } from "./actions";
 import { SendMessageDialog } from "./SendMessageDialog";
+import { SendEmailDialog } from "./SendEmailDialog";
 import { BookingForm } from "./booked/BookingForm";
 import { firstName } from "@/lib/sms";
 import type { LeadStatus } from "@/db/schema";
@@ -14,11 +15,15 @@ export function PipelineActions({
   status,
   agentName,
   agentPhone,
+  agentEmail,
+  address,
 }: {
   listingId: string;
   status: LeadStatus;
   agentName: string | null;
   agentPhone: string | null;
+  agentEmail?: string | null;
+  address?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -44,6 +49,20 @@ export function PipelineActions({
             </Button>
           }
         />
+        {agentEmail && (
+          <SendEmailDialog
+            listingId={listingId}
+            type="initial_outreach"
+            agentEmail={agentEmail}
+            agentName={agentName}
+            address={address ?? null}
+            trigger={
+              <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
+                <Mail />
+              </Button>
+            }
+          />
+        )}
         {notInterested}
       </div>
     );
@@ -65,6 +84,20 @@ export function PipelineActions({
               <Button variant="outline" disabled={isPending}>
                 <MessageCircle />
                 Follow up
+              </Button>
+            }
+          />
+        )}
+        {agentEmail && (
+          <SendEmailDialog
+            listingId={listingId}
+            type="follow_up"
+            agentEmail={agentEmail}
+            agentName={agentName}
+            address={address ?? null}
+            trigger={
+              <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
+                <Mail />
               </Button>
             }
           />
