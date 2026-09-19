@@ -1,10 +1,9 @@
 "use client";
 
 import { useTransition } from "react";
-import { MessageCircle, CheckCircle2, FileText, RotateCcw, Mail } from "lucide-react";
+import { MessageCircle, CheckCircle2, FileText, RotateCcw } from "lucide-react";
 import { updateListingStatus } from "./actions";
-import { SendMessageDialog } from "./SendMessageDialog";
-import { SendEmailDialog } from "./SendEmailDialog";
+import { SendContactDialog } from "./SendContactDialog";
 import { BookingForm } from "./booked/BookingForm";
 import { firstName } from "@/lib/sms";
 import type { LeadStatus } from "@/db/schema";
@@ -38,26 +37,17 @@ export function PipelineActions({
   if (status === "saved") {
     return (
       <div className="flex items-center gap-2 flex-wrap">
-        <SendMessageDialog
+        <SendContactDialog
           listingId={listingId}
           type="initial_outreach"
           agentPhone={agentPhone}
-          trigger={
-            <Button disabled={isPending}>
-              <MessageCircle />
-              Contact {firstName(agentName) ?? "agent"}
-            </Button>
-          }
-        />
-        <SendEmailDialog
-          listingId={listingId}
-          type="initial_outreach"
           agentEmail={agentEmail ?? null}
           agentName={agentName}
           address={address ?? null}
           trigger={
-            <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
-              <Mail />
+            <Button disabled={isPending}>
+              <MessageCircle />
+              Contact {firstName(agentName) ?? "agent"}
             </Button>
           }
         />
@@ -73,28 +63,17 @@ export function PipelineActions({
           <CheckCircle2 />
           Mark replied
         </Button>
-        {agentPhone && (
-          <SendMessageDialog
-            listingId={listingId}
-            type="follow_up"
-            agentPhone={agentPhone}
-            trigger={
-              <Button variant="outline" disabled={isPending}>
-                <MessageCircle />
-                Follow up
-              </Button>
-            }
-          />
-        )}
-        <SendEmailDialog
+        <SendContactDialog
           listingId={listingId}
           type="follow_up"
+          agentPhone={agentPhone}
           agentEmail={agentEmail ?? null}
           agentName={agentName}
           address={address ?? null}
           trigger={
-            <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
-              <Mail />
+            <Button variant="outline" disabled={isPending}>
+              <MessageCircle />
+              Follow up
             </Button>
           }
         />

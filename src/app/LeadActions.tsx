@@ -1,10 +1,9 @@
 "use client";
 
 import { useTransition } from "react";
-import { MessageCircle, Bookmark, Mail } from "lucide-react";
+import { MessageCircle, Bookmark } from "lucide-react";
 import { updateListingStatus } from "./actions";
-import { SendMessageDialog } from "./SendMessageDialog";
-import { SendEmailDialog } from "./SendEmailDialog";
+import { SendContactDialog } from "./SendContactDialog";
 import { firstName } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
 
@@ -37,27 +36,17 @@ export function LeadActions({
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <SendMessageDialog
+      <SendContactDialog
         listingId={listingId}
         type="initial_outreach"
         agentPhone={agentPhone}
-        trigger={
-          <Button disabled={isPending}>
-            <MessageCircle />
-            Contact {firstName(agentName) ?? "agent"}
-          </Button>
-        }
-      />
-
-      <SendEmailDialog
-        listingId={listingId}
-        type="initial_outreach"
         agentEmail={agentEmail ?? null}
         agentName={agentName}
         address={address ?? null}
         trigger={
-          <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
-            <Mail />
+          <Button disabled={isPending}>
+            <MessageCircle />
+            Contact {firstName(agentName) ?? "agent"}
           </Button>
         }
       />
