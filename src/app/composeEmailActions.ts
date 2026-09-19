@@ -13,7 +13,6 @@ import {
   renderSubject,
 } from "@/lib/messageTemplate";
 import { sendEmail } from "@/lib/mailer";
-import { touchAgentContact } from "@/app/actions";
 import type { PresetOption, MessageOptions } from "@/app/messageActions";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -191,16 +190,19 @@ export interface SendListingEmailInput {
  * email dialog — same send-first-log-on-success order (a real SMTP call,
  * unlike sms:'s client-side deep link, can fail server-side), but also
  * applies the same listing-status side effect sendMessage (SMS) does:
- * initial outreach moves the lead to "contacted", and either way
- * touchAgentContact keeps the agent row's lastContactedAt/
- * lastContactedListingId current. Unlike sendComposeEmail's standalone
- * flow (which resolves/creates an agent by exact email match), the agent
- * here is resolved by the listing's own phone — this listing already has
- * a known agent, phone is its canonical identity across the app.
+ * initial outreach moves the lead to "contacted". The email address is
+ * always whatever's in the dialog when Send is clicked — pre-filled from
+ * the agent's email if known, but editable/fillable either way (this
+ * listing's agent might not have an email on file yet). On success, that
+ * address gets attached to the listing's agent the same way
+ * sendComposeEmail attaches one to a standalone Compose send — see
+ * touchAgentEmailContact below for exactly how.
  */
 export async function sendListingEmail(input: SendListingEmailInput): Promise<{ error?: string }> {
+  const email = input.agentEmail.trim().toLowerCase();
   const subject = input.subject.trim();
   const body = input.body.trim();
+  if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address" };
   if (!subject) return { error: "Subject is required" };
   if (!body) return { error: "Message body is required" };
 
@@ -210,16 +212,10 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
     .where(eq(messagePresets.id, input.presetId));
 
   try {
-    await sendEmail({
-      to: input.agentEmail,
-      toName: input.agentName,
-      subject,
-      text: body,
-      attachments: preset?.attachments,
-    });
+    await sendEmail({ to: email, toName: input.agentName, subject, text: body, attachments: preset?.attachments });
   } catch (err) {
     console.error("sendListingEmail: SMTP send failed", err);
-    return { error: "Failed to send — try again." };
+    return { error: "Failed to send — check the address and try again." };
   }
 
   const now = new Date();
@@ -233,7 +229,7 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
     .where(eq(listings.id, input.listingId))
     .returning({ agentPhone: listings.agentPhone, agentName: listings.agentName });
 
-  const agentId = lead ? await touchAgentContact(input.listingId, lead.agentPhone, lead.agentName) : null;
+  const agentId = lead ? await touchAgentEmailContact(input.listingId, lead.agentPhone, lead.agentName, email) : null;
 
   await db.insert(messageSends).values({
     listingId: input.listingId,
@@ -248,8 +244,80 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
   revalidatePath("/");
   revalidatePath("/pipeline");
   revalidatePath("/messaging");
+  revalidatePath("/agents");
 
   return {};
+}
+
+/**
+ * Like touchAgentContact (src/app/actions.ts), but also attaches the email
+ * address this send actually used — the one gap that action has no reason
+ * to cover, since SMS never carries an email. Phone stays the primary
+ * match key when the listing has one (that's this app's canonical agent
+ * identity); email only fills in when that agent doesn't already have one,
+ * and never overwrites a different email already on file, or one that
+ * already belongs to a different agent row (the column is unique) — those
+ * cases just skip the email write and fall through to the same contact-
+ * tracking update touchAgentContact does. Falls back to matching/creating
+ * by email alone on the rare listing with no agentPhone at all, mirroring
+ * sendComposeEmail's standalone resolution.
+ */
+async function touchAgentEmailContact(
+  listingId: string,
+  agentPhone: string | null,
+  agentName: string | null,
+  email: string
+): Promise<string | null> {
+  const now = new Date();
+
+  if (!agentPhone) {
+    const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.email, email));
+    if (existing) {
+      await db
+        .update(agents)
+        .set({ name: agentName ?? undefined, lastContactedAt: now, lastContactedListingId: listingId })
+        .where(eq(agents.id, existing.id));
+      return existing.id;
+    }
+    const [inserted] = await db
+      .insert(agents)
+      .values({ email, name: agentName, lastContactedAt: now, lastContactedListingId: listingId })
+      .returning({ id: agents.id });
+    return inserted.id;
+  }
+
+  const [existingByPhone] = await db.select().from(agents).where(eq(agents.phone, agentPhone));
+  const [emailOwner] = await db.select({ id: agents.id }).from(agents).where(eq(agents.email, email));
+  const emailIsFree = !emailOwner || emailOwner.id === existingByPhone?.id;
+
+  if (existingByPhone) {
+    await db
+      .update(agents)
+      .set({
+        name: agentName ?? existingByPhone.name,
+        lastContactedAt: now,
+        lastContactedListingId: listingId,
+        email: existingByPhone.email ?? (emailIsFree ? email : null),
+      })
+      .where(eq(agents.id, existingByPhone.id));
+    return existingByPhone.id;
+  }
+
+  const [inserted] = await db
+    .insert(agents)
+    .values({
+      phone: agentPhone,
+      email: emailIsFree ? email : null,
+      name: agentName,
+      lastContactedAt: now,
+      lastContactedListingId: listingId,
+    })
+    .onConflictDoUpdate({
+      target: agents.phone,
+      set: { name: agentName, lastContactedAt: now, lastContactedListingId: listingId },
+    })
+    .returning({ id: agents.id });
+  return inserted.id;
 }
 
 export interface SendComposeEmailInput {

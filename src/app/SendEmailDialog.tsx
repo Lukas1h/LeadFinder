@@ -24,9 +24,16 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Mirrors SendMessageDialog's shape (load on open, pick a preset, edit,
-// send) plus a Subject field — the one thing an email needs that a text
-// doesn't. No AI draft/regenerate here yet, unlike the SMS dialog: email
-// currently sends from a picked template, not a live per-listing draft.
+// send) plus Subject and (when not already known) To fields — the things
+// an email needs that a text doesn't. No AI draft/regenerate here yet,
+// unlike the SMS dialog: email currently sends from a picked template, not
+// a live per-listing draft.
+//
+// agentEmail is a starting point, not a gate — this listing's agent might
+// not have one on file yet, so the To field is always editable. Whatever's
+// typed there when Send is clicked gets attached to that agent afterward
+// (see touchAgentEmailContact in composeEmailActions.ts), same as typing
+// one into the standalone Compose page does.
 export function SendEmailDialog({
   listingId,
   type,
@@ -37,7 +44,7 @@ export function SendEmailDialog({
 }: {
   listingId: string;
   type: PresetType;
-  agentEmail: string;
+  agentEmail: string | null;
   agentName: string | null;
   address: string | null;
   trigger: React.ReactNode;
@@ -46,6 +53,7 @@ export function SendEmailDialog({
   const [loading, setLoading] = useState(false);
   const [presets, setPresets] = useState<PresetOption[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [editedEmail, setEditedEmail] = useState("");
   const [editedSubject, setEditedSubject] = useState("");
   const [editedBody, setEditedBody] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -56,6 +64,7 @@ export function SendEmailDialog({
     setLoading(true);
     setPresets([]);
     setSelectedPresetId(null);
+    setEditedEmail(agentEmail ?? "");
     setEditedSubject("");
     setEditedBody("");
     getComposeEmailOptions({ type, agentName, address }).then(({ presets }) => {
@@ -87,7 +96,7 @@ export function SendEmailDialog({
       type,
       presetId: selected.presetId,
       variantId: selected.variantId,
-      agentEmail,
+      agentEmail: editedEmail,
       agentName,
       subject: editedSubject,
       body: editedBody,
@@ -143,6 +152,18 @@ export function SendEmailDialog({
             {selected && (
               <>
                 <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="email-to" className="text-xs text-muted-foreground">
+                    To
+                  </Label>
+                  <Input
+                    id="email-to"
+                    type="email"
+                    value={editedEmail}
+                    onChange={(e) => setEditedEmail(e.target.value)}
+                    placeholder="agent@example.com"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
                   <Label htmlFor="email-subject" className="text-xs text-muted-foreground">
                     Subject
                   </Label>
@@ -172,7 +193,7 @@ export function SendEmailDialog({
         <DialogFooter>
           <Button
             onClick={handleSend}
-            disabled={!selected || !editedSubject.trim() || !editedBody.trim() || isSending}
+            disabled={!selected || !editedEmail.trim() || !editedSubject.trim() || !editedBody.trim() || isSending}
           >
             <Mail />
             {isSending ? "Sending…" : "Send email"}

@@ -49,20 +49,18 @@ export function PipelineActions({
             </Button>
           }
         />
-        {agentEmail && (
-          <SendEmailDialog
-            listingId={listingId}
-            type="initial_outreach"
-            agentEmail={agentEmail}
-            agentName={agentName}
-            address={address ?? null}
-            trigger={
-              <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
-                <Mail />
-              </Button>
-            }
-          />
-        )}
+        <SendEmailDialog
+          listingId={listingId}
+          type="initial_outreach"
+          agentEmail={agentEmail ?? null}
+          agentName={agentName}
+          address={address ?? null}
+          trigger={
+            <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
+              <Mail />
+            </Button>
+          }
+        />
         {notInterested}
       </div>
     );
@@ -88,20 +86,18 @@ export function PipelineActions({
             }
           />
         )}
-        {agentEmail && (
-          <SendEmailDialog
-            listingId={listingId}
-            type="follow_up"
-            agentEmail={agentEmail}
-            agentName={agentName}
-            address={address ?? null}
-            trigger={
-              <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
-                <Mail />
-              </Button>
-            }
-          />
-        )}
+        <SendEmailDialog
+          listingId={listingId}
+          type="follow_up"
+          agentEmail={agentEmail ?? null}
+          agentName={agentName}
+          address={address ?? null}
+          trigger={
+            <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
+              <Mail />
+            </Button>
+          }
+        />
         {notInterested}
       </div>
     );

@@ -49,20 +49,18 @@ export function LeadActions({
         }
       />
 
-      {agentEmail && (
-        <SendEmailDialog
-          listingId={listingId}
-          type="initial_outreach"
-          agentEmail={agentEmail}
-          agentName={agentName}
-          address={address ?? null}
-          trigger={
-            <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
-              <Mail />
-            </Button>
-          }
-        />
-      )}
+      <SendEmailDialog
+        listingId={listingId}
+        type="initial_outreach"
+        agentEmail={agentEmail ?? null}
+        agentName={agentName}
+        address={address ?? null}
+        trigger={
+          <Button variant="outline" size="icon" disabled={isPending} aria-label={`Email ${firstName(agentName) ?? "agent"}`}>
+            <Mail />
+          </Button>
+        }
+      />
 
       <Button variant="outline" onClick={handleSave} disabled={isPending}>
         <Bookmark />
