@@ -5,6 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { sendEmail } from "@/lib/mailer";
 import { renderSubject, renderMessageBody } from "@/lib/messageTemplate";
 import { getComposeEmailOptions } from "@/app/composeEmailActions";
+import { normalizeEmail, normalizeName, normalizePhone } from "@/lib/normalize";
 
 // Same ceiling reasoning as /api/cron/sync-listings — SMTP send + the
 // best-effort IMAP Sent-folder append can run long on a slow connection.
@@ -50,9 +51,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
-  const email = body.email?.trim().toLowerCase();
-  const name = body.name?.trim();
-  const phone = body.phone?.trim() || null;
+  const email = body.email?.trim() ? normalizeEmail(body.email) : undefined;
+  const name = body.name?.trim() ? normalizeName(body.name) : undefined;
+  const phone = body.phone?.trim() ? normalizePhone(body.phone) : null;
   if (!email || !name) {
     return NextResponse.json({ error: "name and email are required" }, { status: 400 });
   }

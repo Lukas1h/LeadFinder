@@ -7,6 +7,7 @@ import { sendEmail } from "@/lib/mailer";
 import { renderMessageBody, renderSubject } from "@/lib/messageTemplate";
 import { getFollowUpAfterDays } from "@/lib/settings";
 import { text, errorText, EMAIL_RE } from "./shared";
+import { normalizeEmail, normalizeName, normalizePhone } from "@/lib/normalize";
 
 interface BulkSendResult {
   name: string;
@@ -38,9 +39,9 @@ async function sendBulkTemplateEmail(
   variantId: string,
   skipAlreadyContacted: boolean
 ): Promise<BulkSendResult> {
-  const name = contact.name.trim();
-  const email = contact.email.trim().toLowerCase();
-  const phone = contact.phone?.trim() || null;
+  const name = contact.name.trim() ? normalizeName(contact.name) : "";
+  const email = normalizeEmail(contact.email);
+  const phone = contact.phone?.trim() ? normalizePhone(contact.phone) : null;
   if (!name) return { name: contact.name, email, status: "failed", reason: "name is required" };
   if (!EMAIL_RE.test(email)) return { name, email, status: "failed", reason: "invalid email address" };
 
@@ -168,8 +169,8 @@ export function registerMessagingTools(server: McpServer): void {
       },
     },
     async ({ agentName, agentEmail, presetId, variantId, subjectOverride, bodyOverride, confirmDuplicate }) => {
-      const name = agentName.trim();
-      const email = agentEmail.trim().toLowerCase();
+      const name = agentName.trim() ? normalizeName(agentName) : "";
+      const email = normalizeEmail(agentEmail);
       if (!name) return errorText("agentName is required");
       if (!EMAIL_RE.test(email)) return errorText("agentEmail is not a valid address");
 

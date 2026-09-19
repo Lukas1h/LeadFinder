@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings, bookingLineItems, listings, agents, type NewBookingLineItem } from "@/db/schema";
 import { estimateDriveTime } from "@/lib/driveTime";
+import { normalizePhone, normalizeName } from "@/lib/normalize";
 import { text, errorText } from "./shared";
 
 async function joinedBooking(bookingId: string) {
@@ -36,13 +37,16 @@ async function joinedBooking(bookingId: string) {
 
 /** Same lazy find-or-create-by-phone pattern used elsewhere (findOrCreateAgentByPhone in booked/actions.ts, touchAgentContact in actions.ts). */
 async function findOrCreateAgentByPhone(phone: string, name: string): Promise<string | null> {
-  const trimmedPhone = phone.trim();
-  if (!trimmedPhone) return null;
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) return null;
 
-  const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, trimmedPhone));
+  const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, normalizedPhone));
   if (existing) return existing.id;
 
-  const [row] = await db.insert(agents).values({ phone: trimmedPhone, name: name.trim() || null }).returning({ id: agents.id });
+  const [row] = await db
+    .insert(agents)
+    .values({ phone: normalizedPhone, name: name.trim() ? normalizeName(name) : null })
+    .returning({ id: agents.id });
   return row?.id ?? null;
 }
 

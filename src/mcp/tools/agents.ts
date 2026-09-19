@@ -13,6 +13,7 @@ import {
   type AgentRelationshipStatus,
 } from "@/db/schema";
 import { averageDaysBetweenListings } from "@/app/agents/stats";
+import { normalizeName } from "@/lib/normalize";
 import { text, errorText, normalizeContact } from "./shared";
 
 export function registerAgentTools(server: McpServer): void {
@@ -216,7 +217,7 @@ export function registerAgentTools(server: McpServer): void {
       const [inserted] = await db
         .insert(agents)
         .values({
-          name: name.trim() || null,
+          name: name.trim() ? normalizeName(name) : null,
           phone: parsed.phone,
           email: parsed.email,
           notes: notes?.trim() || null,
@@ -247,7 +248,7 @@ export function registerAgentTools(server: McpServer): void {
       if (!existing) return errorText("No agent with that id");
 
       const patch: Partial<typeof agents.$inferInsert> = {};
-      if (name !== undefined) patch.name = name.trim() || null;
+      if (name !== undefined) patch.name = name.trim() ? normalizeName(name) : null;
       if (notes !== undefined) patch.notes = notes.trim() || null;
       if (relationshipStatus !== undefined) patch.relationshipStatus = relationshipStatus as AgentRelationshipStatus;
       if (phone !== undefined || email !== undefined) {

@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { runSync, insertAndEnrichListings, type SyncResult } from "@/lib/sync";
 import { extractZpidFromUrl, fetchFullListing } from "@/lib/zillapi";
 import { findFirstAddressResultUrl } from "@/lib/tavily";
+import { normalizePhone, normalizeName } from "@/lib/normalize";
 
 export async function touchAgentContact(
   listingId: string,
@@ -14,18 +15,20 @@ export async function touchAgentContact(
   agentName: string | null
 ): Promise<string | null> {
   if (!agentPhone) return null;
+  const phone = normalizePhone(agentPhone);
+  const name = agentName ? normalizeName(agentName) : null;
   const [row] = await db
     .insert(agents)
     .values({
-      phone: agentPhone,
-      name: agentName,
+      phone,
+      name,
       lastContactedAt: new Date(),
       lastContactedListingId: listingId,
     })
     .onConflictDoUpdate({
       target: agents.phone,
       set: {
-        name: agentName,
+        name,
         lastContactedAt: new Date(),
         lastContactedListingId: listingId,
       },
@@ -47,7 +50,7 @@ async function touchAgentDeclined(agentPhone: string | null, agentName: string |
   const now = new Date();
   await db
     .insert(agents)
-    .values({ phone: agentPhone, name: agentName, declinedAt: now })
+    .values({ phone: normalizePhone(agentPhone), name: agentName ? normalizeName(agentName) : null, declinedAt: now })
     .onConflictDoUpdate({
       target: agents.phone,
       set: { declinedAt: now }, // don't touch name here — a decline shouldn't clobber a known name
@@ -67,11 +70,12 @@ export async function bumpAgentRelationshipOnMilestone(
   milestone: "replied" | "booked"
 ) {
   if (!agentPhone) return;
+  const phone = normalizePhone(agentPhone);
 
   const [existing] = await db
     .select({ id: agents.id, relationshipStatus: agents.relationshipStatus })
     .from(agents)
-    .where(eq(agents.phone, agentPhone));
+    .where(eq(agents.phone, phone));
 
   const current = existing?.relationshipStatus ?? "cold";
   let target: AgentRelationshipStatus | null = null;
@@ -86,7 +90,7 @@ export async function bumpAgentRelationshipOnMilestone(
   if (existing) {
     await db.update(agents).set({ relationshipStatus: target }).where(eq(agents.id, existing.id));
   } else {
-    await db.insert(agents).values({ phone: agentPhone, name: agentName, relationshipStatus: target });
+    await db.insert(agents).values({ phone, name: agentName ? normalizeName(agentName) : null, relationshipStatus: target });
   }
 }
 

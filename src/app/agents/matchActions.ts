@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { agents } from "@/db/schema";
 import { eq, ilike, isNotNull, and, desc } from "drizzle-orm";
 import { nameSimilarity, FUZZY_MATCH_THRESHOLD } from "@/lib/agentMatch";
+import { normalizeEmail, normalizeName } from "@/lib/normalize";
 
 export interface AgentMatchSummary {
   id: string;
@@ -101,6 +102,6 @@ export async function getAgentContactInfo(id: string): Promise<{ name: string | 
 export async function mergeAgentEmail(agentId: string, name: string, email: string): Promise<void> {
   await db
     .update(agents)
-    .set({ email: email.trim().toLowerCase(), name: name.trim() })
+    .set({ email: normalizeEmail(email), name: name.trim() ? normalizeName(name) : null })
     .where(eq(agents.id, agentId));
 }

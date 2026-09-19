@@ -14,8 +14,7 @@ import {
 } from "@/lib/messageTemplate";
 import { sendEmail } from "@/lib/mailer";
 import type { PresetOption, MessageOptions } from "@/app/messageActions";
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { normalizeEmail, normalizeName, normalizePhone, EMAIL_RE } from "@/lib/normalize";
 
 /**
  * Idempotent — seeds one "Cold Outreach" email preset with Lukas's own
@@ -199,7 +198,7 @@ export interface SendListingEmailInput {
  * touchAgentEmailContact below for exactly how.
  */
 export async function sendListingEmail(input: SendListingEmailInput): Promise<{ error?: string }> {
-  const email = input.agentEmail.trim().toLowerCase();
+  const email = normalizeEmail(input.agentEmail);
   const subject = input.subject.trim();
   const body = input.body.trim();
   if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address" };
@@ -264,11 +263,13 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
  */
 async function touchAgentEmailContact(
   listingId: string,
-  agentPhone: string | null,
-  agentName: string | null,
+  rawAgentPhone: string | null,
+  rawAgentName: string | null,
   email: string
 ): Promise<string | null> {
   const now = new Date();
+  const agentPhone = rawAgentPhone ? normalizePhone(rawAgentPhone) : null;
+  const agentName = rawAgentName ? normalizeName(rawAgentName) : null;
 
   if (!agentPhone) {
     const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.email, email));
@@ -342,8 +343,8 @@ export interface SendComposeEmailInput {
  * listingId, so this shows up in the same A/B stats as SMS sends.
  */
 export async function sendComposeEmail(input: SendComposeEmailInput): Promise<{ error?: string }> {
-  const name = input.name.trim();
-  const email = input.email.trim().toLowerCase();
+  const name = input.name.trim() ? normalizeName(input.name) : "";
+  const email = normalizeEmail(input.email);
   const subject = input.subject.trim();
   const body = input.body.trim();
 

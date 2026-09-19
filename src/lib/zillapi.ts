@@ -1,5 +1,6 @@
 import type { NewListing } from "@/db/schema";
 import mockListings from "../../data/mock-listings.json";
+import { normalizePhone, normalizeName } from "@/lib/normalize";
 
 const ZILLAPI_LISTINGS_URL = "https://api.zillapi.com/v1/listings";
 const ZILLAPI_PROPERTIES_URL = "https://api.zillapi.com/v1/properties";
@@ -287,8 +288,8 @@ export async function fetchAgentInfo(zpid: string): Promise<AgentInfo> {
   };
 
   return {
-    agentName: parsed.data?.agent?.name ?? null,
-    agentPhone: parsed.data?.agent?.phoneNumber ?? null,
+    agentName: parsed.data?.agent?.name ? normalizeName(parsed.data.agent.name) : null,
+    agentPhone: parsed.data?.agent?.phoneNumber ? normalizePhone(parsed.data.agent.phoneNumber) : null,
     brokerName: parsed.data?.broker?.name ?? null,
   };
 }
@@ -362,7 +363,7 @@ export async function fetchFullListing(zpid: string): Promise<NewListing | null>
     photoCount: raw.photoCount ?? null,
     isComingSoon: raw.listingType?.isComingSoon ?? false,
     brokerName: raw.broker?.name ?? null,
-    agentName: raw.agent?.name ?? null,
-    agentPhone: raw.agent?.phoneNumber ?? null,
+    agentName: raw.agent?.name ? normalizeName(raw.agent.name) : null,
+    agentPhone: raw.agent?.phoneNumber ? normalizePhone(raw.agent.phoneNumber) : null,
   };
 }

@@ -16,6 +16,7 @@ import {
 import { eq, isNotNull, isNull, sql, desc, and, ne, or, ilike } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { findFirstResultUrl, findFirstNameMatchResultUrl } from "@/lib/tavily";
+import { normalizePhone, normalizeEmail, normalizeName, EMAIL_RE, hasValidPhoneDigitCount } from "@/lib/normalize";
 
 /**
  * Idempotent — inserts an Agent row for every unique agentPhone found
@@ -46,10 +47,14 @@ export async function ensureAgentsBackfilled() {
 
   const byPhone = new Map<string, { name: string | null; declinedAt: Date | null }>();
   for (const r of rows) {
-    const phone = r.agentPhone;
-    if (!phone) continue;
+    if (!r.agentPhone) continue;
+    // listings.agentPhone is normalized at import time (see fetchAgentInfo/
+    // fetchFullListing in src/lib/zillapi.ts), but the LEFT JOIN above
+    // matched on the raw column, so re-normalize here too in case any
+    // pre-existing row predates that.
+    const phone = normalizePhone(r.agentPhone);
     const existing = byPhone.get(phone) ?? { name: null, declinedAt: null };
-    if (!existing.name && r.agentName) existing.name = r.agentName;
+    if (!existing.name && r.agentName) existing.name = normalizeName(r.agentName);
     if (r.status === "declined" && r.statusChangedAt) {
       if (!existing.declinedAt || r.statusChangedAt > existing.declinedAt) {
         existing.declinedAt = r.statusChangedAt;
@@ -90,12 +95,6 @@ export async function updateAgentNotes(id: string, notes: string) {
   revalidatePath("/agents");
 }
 
-function normalizePhone(phone: string): string {
-  return phone.trim();
-}
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 interface ContactInfoResult {
   error?: string;
   phone?: string | null;
@@ -105,19 +104,19 @@ interface ContactInfoResult {
 /** Shared by importAgent and updateAgentContactInfo — at least one of phone/email required, both format-checked. */
 function parseContactInfo(phoneInput: string, emailInput: string): ContactInfoResult {
   const trimmedPhone = phoneInput.trim();
-  const trimmedEmail = emailInput.trim().toLowerCase();
+  const trimmedEmail = emailInput.trim();
   if (!trimmedPhone && !trimmedEmail) return { error: "Enter a phone number or an email" };
 
   let phone: string | null = null;
   if (trimmedPhone) {
     phone = normalizePhone(trimmedPhone);
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length < 10) return { error: "Enter a valid phone number" };
+    if (!hasValidPhoneDigitCount(phone)) return { error: "Enter a valid phone number" };
   }
   let email: string | null = null;
   if (trimmedEmail) {
-    if (!EMAIL_RE.test(trimmedEmail)) return { error: "Enter a valid email address" };
-    email = trimmedEmail;
+    const normalized = normalizeEmail(trimmedEmail);
+    if (!EMAIL_RE.test(normalized)) return { error: "Enter a valid email address" };
+    email = normalized;
   }
 
   return { phone, email };
@@ -145,7 +144,7 @@ export async function importAgent(input: {
   await db.insert(agents).values({
     phone,
     email,
-    name: input.name.trim() || null,
+    name: input.name.trim() ? normalizeName(input.name) : null,
     relationshipStatus: input.relationshipStatus,
   });
 
@@ -179,7 +178,7 @@ export async function updateAgentContactInfo(
 
   await db
     .update(agents)
-    .set({ name: input.name.trim() || null, phone, email, relationshipStatus: input.relationshipStatus })
+    .set({ name: input.name.trim() ? normalizeName(input.name) : null, phone, email, relationshipStatus: input.relationshipStatus })
     .where(eq(agents.id, id));
 
   revalidatePath("/agents");
@@ -238,13 +237,12 @@ export async function linkAgentToListing(
   input: { name: string; phone: string; email: string; brokerName: string }
 ): Promise<{ error: string | null }> {
   const phone = normalizePhone(input.phone.trim());
-  const digits = phone.replace(/\D/g, "");
-  if (!phone || digits.length < 10) return { error: "Enter a valid phone number" };
+  if (!phone || !hasValidPhoneDigitCount(phone)) return { error: "Enter a valid phone number" };
 
-  const trimmedEmail = input.email.trim().toLowerCase();
+  const trimmedEmail = normalizeEmail(input.email);
   if (trimmedEmail && !EMAIL_RE.test(trimmedEmail)) return { error: "Enter a valid email address" };
   const typedEmail = trimmedEmail || null;
-  const typedName = input.name.trim() || null;
+  const typedName = input.name.trim() ? normalizeName(input.name) : null;
   const brokerName = input.brokerName.trim() || null;
 
   const [existing] = await db.select().from(agents).where(eq(agents.phone, phone));
@@ -292,19 +290,19 @@ export async function getOrCreateAgentByPhone(
   phone: string,
   name: string | null
 ): Promise<AgentWithListings | null> {
-  const trimmedPhone = phone.trim();
-  if (!trimmedPhone) return null;
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) return null;
 
-  let [agent] = await db.select().from(agents).where(eq(agents.phone, trimmedPhone));
+  let [agent] = await db.select().from(agents).where(eq(agents.phone, normalizedPhone));
   if (!agent) {
     [agent] = await db
       .insert(agents)
-      .values({ phone: trimmedPhone, name: name?.trim() || null })
+      .values({ phone: normalizedPhone, name: name?.trim() ? normalizeName(name) : null })
       .returning();
   }
   if (!agent) return null;
 
-  const agentListings = await db.select().from(listings).where(eq(listings.agentPhone, trimmedPhone));
+  const agentListings = await db.select().from(listings).where(eq(listings.agentPhone, normalizedPhone));
 
   return { agent, listings: agentListings };
 }

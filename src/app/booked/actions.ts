@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { bookings, bookingLineItems, listings, agents, type NewBookingLineItem } from "@/db/schema";
 import { eq, inArray, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { normalizePhone, normalizeName } from "@/lib/normalize";
 import { bumpAgentRelationshipOnMilestone, resolveSendOutcome } from "@/app/actions";
 import { estimateDriveTime } from "@/lib/driveTime";
 import type { BookingWithDetails } from "./BookedList";
@@ -66,15 +67,15 @@ export interface UpdateBookingInput {
  * differently while filling out the form.
  */
 async function findOrCreateAgentByPhone(phone: string, name: string): Promise<string | null> {
-  const trimmedPhone = phone.trim();
-  if (!trimmedPhone) return null;
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) return null;
 
-  const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, trimmedPhone));
+  const [existing] = await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, normalizedPhone));
   if (existing) return existing.id;
 
   const [row] = await db
     .insert(agents)
-    .values({ phone: trimmedPhone, name: name.trim() || null })
+    .values({ phone: normalizedPhone, name: name.trim() ? normalizeName(name) : null })
     .returning({ id: agents.id });
   return row?.id ?? null;
 }
