@@ -53,33 +53,54 @@ interface AgentMailMessageReceived {
 // one of these actually fires.
 const EXCLUDED_ALERT_RE = /sale pending|pending sale|\bsold\b|off.?market|tour reminder|open house reminder/i;
 
-// Zillow's "New Listing: <addr>. Your search" digest puts the one real
-// result first, then a "Our recommendations for you / Based on your
-// recent activity" section linking several unrelated listings — verified
-// against a real email (Fwd: New Listing: 1466 SE Pine St): 7 unique
-// zpids total, only the first matched the subject's address, the other 6
-// were unrelated recommendations. Cutting the body off at this marker
-// before extracting zpids keeps that digest to just its real result,
-// while every other format tried (single "Just listed" alerts, "<N>
-// Result(s) for" digests) has no such section at all, so the cut is a
-// no-op for them and every genuine result they contain gets extracted.
-const RECOMMENDATIONS_SECTION_RE = /our recommendations for you|based on your recent activity/i;
+// Zillow's "New Listing: <addr>. Your search" digest (and the "instant
+// home recs" price-cut alert, e.g. "A $5K price cut in Sutherlin") puts
+// the one real result first, then a recommendation carousel — headed
+// "Our recommendations for you" / "Based on your recent activity" /
+// "Improve your recommendations" depending on the template — linking
+// several unrelated listings. Verified against real emails: one digest
+// had 7 unique zpids total, only the first matched the subject; another
+// (a price-cut alert, 2026-09-20) had the same shape but its carousel
+// heading wasn't one of the two patterns previously matched here, so all
+// 6 carousel zpids slipped through as if they were the real result.
+//
+// Rather than discard the carousel outright (a genuinely new listing can
+// legitimately show up as a "recommendation"), zpids found after this
+// marker are kept but only trusted if the listing itself is recent — see
+// RECOMMENDATION_MAX_AGE_DAYS below.
+const RECOMMENDATIONS_SECTION_RE = /our recommendations for you|based on your recent activity|improve your recommendations/i;
+
+// How new a "recommended" listing has to be (by Zillow's own daysOnZillow)
+// to be trusted as a real lead rather than noise from the recommendation
+// carousel. A zpid that appears in the email's main body (before the
+// recommendations marker) is always trusted regardless of age — the email
+// is specifically about that listing (e.g. a price cut on a long-listed
+// property), so its own listing age says nothing about relevance.
+const RECOMMENDATION_MAX_AGE_DAYS = 10;
 
 /**
- * Extracts every real (non-recommended) zpid mentioned in an alert's body.
- * A single-listing alert repeats its one zpid 2-3x (thumbnail/address/
+ * Splits every zpid mentioned in an alert's body into "trusted" (appears
+ * before any recommendations-section marker, or the email has no such
+ * section at all) and "recommended" (appears only after one). A
+ * single-listing alert repeats its one zpid 2-3x (thumbnail/address/
  * button links to the same property) — deduping with a Set collapses
  * that back to one. A "<N> Result(s) for" digest genuinely contains N
  * different real results — verified against two real emails ("2 Results
  * for 'Newest Luxury Listings in Eugene'" → 2 unique zpids, "1 Result for
- * 'New Douglas Listings'" → 1) — so all of them are extracted, not just
- * the first.
+ * 'New Douglas Listings'" → 1) — so all of them land in `trusted`, not
+ * just the first.
  */
-function extractLeadZpids(body: string): string[] {
+function splitLeadZpids(body: string): { trusted: string[]; recommended: string[] } {
   const cut = body.search(RECOMMENDATIONS_SECTION_RE);
-  const relevant = cut === -1 ? body : body.slice(0, cut);
-  const matches = [...relevant.matchAll(ZPID_RE)].map((m) => m[1]);
-  return [...new Set(matches)];
+  if (cut === -1) {
+    return { trusted: [...new Set([...body.matchAll(ZPID_RE)].map((m) => m[1]))], recommended: [] };
+  }
+  const trusted = [...new Set([...body.slice(0, cut).matchAll(ZPID_RE)].map((m) => m[1]))];
+  const trustedSet = new Set(trusted);
+  const recommended = [...new Set([...body.slice(cut).matchAll(ZPID_RE)].map((m) => m[1]))].filter(
+    (z) => !trustedSet.has(z)
+  );
+  return { trusted, recommended };
 }
 
 export async function POST(req: Request) {
@@ -136,9 +157,9 @@ async function handle(req: Request): Promise<Response> {
   }
 
   let body = (event.message?.html ?? "") + " " + (event.message?.text ?? "");
-  let zpids = extractLeadZpids(body);
+  let { trusted, recommended } = splitLeadZpids(body);
 
-  if (zpids.length === 0 && event.message?.message_id && event.message?.inbox_id) {
+  if (trusted.length === 0 && recommended.length === 0 && event.message?.message_id && event.message?.inbox_id) {
     // The webhook's inline body didn't contain a zpid — re-fetch the
     // message directly rather than trusting the inline copy, since a real
     // delivery has already been seen where the two disagreed (see
@@ -146,10 +167,11 @@ async function handle(req: Request): Promise<Response> {
     const full = await fetchAgentMailMessage(event.message.inbox_id, event.message.message_id);
     if (full) {
       body = (full.html ?? "") + " " + (full.text ?? "");
-      zpids = extractLeadZpids(body);
+      ({ trusted, recommended } = splitLeadZpids(body));
     }
   }
 
+  const zpids = [...trusted, ...recommended];
   if (zpids.length === 0) {
     console.log("agentmail webhook: no zpid found, subject:", subject);
     return new Response("No zpid found", { status: 200 });
@@ -157,14 +179,33 @@ async function handle(req: Request): Promise<Response> {
 
   const existingRows = await db.select({ zpid: listings.zpid }).from(listings).where(inArray(listings.zpid, zpids));
   const existingZpids = new Set(existingRows.map((r) => r.zpid));
+  const trustedSet = new Set(trusted);
   const newZpids = zpids.filter((z) => !existingZpids.has(z));
 
   const fetched = await Promise.all(newZpids.map((zpid) => fetchFullListing(zpid)));
+  const recommendationCutoff = new Date(Date.now() - RECOMMENDATION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
+  const staleRecommendations: string[] = [];
   const candidates = fetched
     .filter((l): l is NewListing => l !== null)
+    .filter((l) => {
+      if (trustedSet.has(l.zpid)) return true;
+      const recent = l.listedAt != null && l.listedAt >= recommendationCutoff;
+      if (!recent) staleRecommendations.push(l.zpid);
+      return recent;
+    })
     .map((l) => ({ ...l, sourceLabel: "Zillow email alert" }) satisfies NewListing);
 
   const inserted = await insertAndEnrichListings(candidates);
 
-  return Response.json({ zpids, alreadyExisted: existingZpids.size, fetchFailed: newZpids.length - candidates.length, inserted });
+  if (staleRecommendations.length > 0) {
+    console.log("agentmail webhook: skipped stale recommendations", staleRecommendations);
+  }
+
+  return Response.json({
+    zpids,
+    alreadyExisted: existingZpids.size,
+    skippedStaleRecommendations: staleRecommendations.length,
+    fetchFailed: newZpids.length - candidates.length - staleRecommendations.length,
+    inserted,
+  });
 }
