@@ -7,7 +7,6 @@ import { revalidatePath } from "next/cache";
 import { runSync, insertAndEnrichListings, type SyncResult } from "@/lib/sync";
 import { extractZpidFromUrl, fetchFullListing } from "@/lib/zillapi";
 import { findFirstAddressResultUrl } from "@/lib/tavily";
-import { normalizePhone, normalizeName } from "@/lib/normalize";
 import { resolveAgentId } from "@/lib/agentIdentity";
 
 export async function touchAgentContact(
@@ -54,13 +53,17 @@ export async function bumpAgentRelationshipOnMilestone(
   agentName: string | null,
   milestone: "replied" | "booked"
 ) {
-  if (!agentPhone) return;
-  const phone = normalizePhone(agentPhone);
+  // resolveAgentId rather than a phone lookup: this was the last place still
+  // finding an agent by phone alone, which meant a reply from someone who only
+  // existed as an email-only contact created a duplicate phone-keyed row
+  // instead of promoting the record that actually holds the relationship.
+  const agentId = await resolveAgentId(agentPhone, agentName);
+  if (!agentId) return;
 
   const [existing] = await db
-    .select({ id: agents.id, relationshipStatus: agents.relationshipStatus })
+    .select({ relationshipStatus: agents.relationshipStatus })
     .from(agents)
-    .where(eq(agents.phone, phone));
+    .where(eq(agents.id, agentId));
 
   const current = existing?.relationshipStatus ?? "cold";
   let target: AgentRelationshipStatus | null = null;
@@ -72,11 +75,7 @@ export async function bumpAgentRelationshipOnMilestone(
   }
   if (!target) return;
 
-  if (existing) {
-    await db.update(agents).set({ relationshipStatus: target }).where(eq(agents.id, existing.id));
-  } else {
-    await db.insert(agents).values({ phone, name: agentName ? normalizeName(agentName) : null, relationshipStatus: target });
-  }
+  await db.update(agents).set({ relationshipStatus: target }).where(eq(agents.id, agentId));
 }
 
 /**
