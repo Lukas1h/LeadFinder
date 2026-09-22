@@ -160,7 +160,7 @@ export async function attributeBookingToSend(
 
   const cutoff = new Date(bookedAt.getTime() - ATTRIBUTION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const [latest] = await db
-    .select({ id: messageSends.id })
+    .select({ id: messageSends.id, respondedAt: messageSends.respondedAt })
     .from(messageSends)
     .where(
       and(
@@ -173,10 +173,17 @@ export async function attributeBookingToSend(
     .limit(1);
 
   if (!latest) return null;
+  const sendRow = latest;
 
   await db.update(bookings).set({ messageSendId: latest.id }).where(eq(bookings.id, bookingId));
   // Booking is the strongest outcome a send can have, so it overwrites whatever
-  // the result was before.
-  await db.update(messageSends).set({ result: "booked" }).where(eq(messageSends.id, latest.id));
+  // the result was before. It also implies a response — nobody books without
+  // answering first — so a send credited with a job but still reading "no
+  // response" is self-contradictory. The exact reply time isn't knowable, so
+  // the booking date stands in for it.
+  await db
+    .update(messageSends)
+    .set({ result: "booked", ...(sendRow.respondedAt ? {} : { respondedAt: bookedAt }) })
+    .where(eq(messageSends.id, latest.id));
   return latest.id;
 }
