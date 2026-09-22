@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { and, desc, eq, ilike, inArray, isNotNull, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   agents,
@@ -13,7 +13,7 @@ import {
   type AgentRelationshipStatus,
 } from "@/db/schema";
 import { averageDaysBetweenListings } from "@/app/agents/stats";
-import { normalizeName } from "@/lib/normalize";
+import { normalizeEmail, normalizeName, normalizePhone } from "@/lib/normalize";
 import { text, errorText, normalizeContact } from "./shared";
 
 export function registerAgentTools(server: McpServer): void {
@@ -147,18 +147,37 @@ export function registerAgentTools(server: McpServer): void {
     {
       title: "Check whether an agent has already been contacted",
       description:
-        "Given an email or phone, reports whether this person is already a known agent and, if so, when they were last contacted and their send history — use this BEFORE send_agent_email to decide whether a duplicate-send warning is worth surfacing to the user.",
+        "Given an email, phone, and/or name, reports whether this person is already a known agent and, if so, when they were last contacted and their send history — use this BEFORE send_agent_email to decide whether a duplicate-send warning is worth surfacing to the user. Pass the name too whenever you have it: a contact first added from a cold-email list has an email and no phone, while one picked up from a listing has a phone and no email, so checking only the identifier in front of you can report 'never contacted' about someone mid-conversation.",
       inputSchema: {
         email: z.string().optional(),
         phone: z.string().optional(),
+        name: z.string().optional(),
       },
     },
-    async ({ email, phone }) => {
-      if (!email && !phone) return errorText("Provide an email or phone");
+    async ({ email, phone, name }) => {
+      if (!email && !phone && !name) return errorText("Provide an email, phone, or name");
 
-      const condition =
-        email && phone ? or(eq(agents.email, email), eq(agents.phone, phone)) : email ? eq(agents.email, email) : eq(agents.phone, phone!);
-      const [agent] = await db.select().from(agents).where(condition);
+      const identifiers = [
+        email ? eq(agents.email, normalizeEmail(email)) : null,
+        phone ? eq(agents.phone, normalizePhone(phone)) : null,
+      ].filter((c) => c !== null);
+
+      let agent = identifiers.length
+        ? (await db.select().from(agents).where(identifiers.length > 1 ? or(...identifiers) : identifiers[0]))[0]
+        : undefined;
+
+      // Name is a fallback, never an override: an exact identifier match is
+      // always the right answer, and a name that hits more than one row is
+      // ambiguous (two realtors can share a name in one market) so it reports
+      // nothing rather than guessing at the wrong person's history.
+      if (!agent && name?.trim()) {
+        const byName = await db
+          .select()
+          .from(agents)
+          .where(eq(sql`lower(trim(${agents.name}))`, normalizeName(name).trim().toLowerCase()));
+        if (byName.length === 1) agent = byName[0];
+      }
+
       if (!agent) return text({ knownAgent: false });
 
       const history = await db

@@ -24,7 +24,7 @@ import {
   DaysSinceContactBadge,
   FollowUpBadge,
 } from "../badges";
-import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { findAttachedAgent, findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { daysSince, isDue } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -47,17 +47,20 @@ function matchesSearch(lead: Listing, query: string): boolean {
 export function PipelineList({
   listings,
   agentByPhone,
+  agentByName,
   addressById,
   followUpAfterDays,
 }: {
   listings: Listing[];
   agentByPhone: Record<string, Agent>;
+  agentByName: Record<string, Agent>;
   addressById: Record<string, string | null>;
   followUpAfterDays: number;
 }) {
   const [search, setSearch] = useState("");
 
   const agentMap = useMemo(() => new Map(Object.entries(agentByPhone)), [agentByPhone]);
+  const nameMap = useMemo(() => new Map(Object.entries(agentByName)), [agentByName]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -70,7 +73,14 @@ export function PipelineList({
     // (non-terminal) status, and takes priority: pulled out of whichever
     // bucket it'd otherwise land in so it isn't shown twice.
     const manualFollowUp = filtered
-      .filter((l) => l.status !== "booked" && l.status !== "declined" && l.followUpAt != null && isDue(l.followUpAt))
+      .filter(
+        (l) =>
+          l.status !== "booked" &&
+          l.status !== "declined" &&
+          l.status !== "passed" &&
+          l.followUpAt != null &&
+          isDue(l.followUpAt)
+      )
       .sort((a, b) => a.followUpAt!.getTime() - b.followUpAt!.getTime());
     const manualFollowUpIds = new Set(manualFollowUp.map((l) => l.id));
     const rest = filtered.filter((l) => !manualFollowUpIds.has(l.id));
@@ -93,7 +103,7 @@ export function PipelineList({
       )
       .sort((a, b) => byOldest(a, b, "contactedAt"));
     const closed = rest
-      .filter((l) => l.status === "booked" || l.status === "declined")
+      .filter((l) => l.status === "booked" || l.status === "declined" || l.status === "passed")
       .sort((a, b) => -byOldest(a, b, "statusChangedAt"));
     return { manualFollowUp, replied, saved, followUpDue, quoted, waiting, closed };
   }, [filtered, followUpAfterDays]);
@@ -108,7 +118,10 @@ export function PipelineList({
     options?: { showDaysSinceContact?: boolean; showStatusBadge?: boolean; showFollowUp?: boolean }
   ) {
     const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentMap);
-    const attachedAgent = lead.agentPhone ? agentMap.get(lead.agentPhone) : undefined;
+    // Phone first, then name — a realtor first met through a cold-email
+    // import has an email and no phone, so a phone-only lookup showed them as
+    // a stranger and hid the fact they were already mid-conversation.
+    const attachedAgent = findAttachedAgent(lead, agentMap, nameMap);
     return (
       <LeadCard
         key={lead.id}

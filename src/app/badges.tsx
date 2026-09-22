@@ -20,7 +20,11 @@ const STATUS_STYLES: Record<LeadStatus, string> = {
   replied: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-400 dark:border-purple-900",
   quoted: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-400 dark:border-indigo-900",
   booked: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-400 dark:border-green-900",
-  declined: "bg-muted text-muted-foreground/70",
+  // Both dead ends read muted, but they stay visually distinct: "declined" is
+  // an answer from the agent and worth spotting, "passed" is Lukas's own
+  // housekeeping and should recede.
+  passed: "bg-muted text-muted-foreground/70",
+  declined: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900",
 };
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -30,6 +34,7 @@ export const STATUS_LABELS: Record<LeadStatus, string> = {
   replied: "Replied",
   quoted: "Quoted",
   booked: "Booked",
+  passed: "Passed",
   declined: "Declined",
 };
 

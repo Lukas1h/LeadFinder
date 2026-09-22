@@ -13,7 +13,7 @@ import {
   type PresetType,
   type MessageResult,
 } from "@/db/schema";
-import { eq, isNotNull, isNull, sql, desc, and, ne, or, ilike } from "drizzle-orm";
+import { eq, inArray, isNotNull, isNull, sql, desc, and, ne, or, ilike } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { findFirstResultUrl, findFirstNameMatchResultUrl } from "@/lib/tavily";
 import { normalizePhone, normalizeEmail, normalizeName, EMAIL_RE, hasValidPhoneDigitCount } from "@/lib/normalize";
@@ -65,11 +65,47 @@ export async function ensureAgentsBackfilled() {
 
   if (byPhone.size === 0) return;
 
-  const toInsert = [...byPhone.entries()].map(([phone, data]) => ({
-    phone,
-    name: data.name,
-    declinedAt: data.declinedAt,
-  }));
+  // Before inserting, hand any phone whose person is already on file under a
+  // name (a cold-email import, which carries an email and no phone) to that
+  // existing row instead. The LEFT JOIN above only knows about phones, so
+  // without this every listing by an already-emailed realtor minted a second,
+  // phone-only row for them — the split-identity bug that had Lukas emailing
+  // people he was already mid-conversation with. An ambiguous name (two rows)
+  // is left alone and inserted as its own row: a duplicate is fixable later,
+  // fusing two different realtors is not.
+  const candidateNames = [...byPhone.values()]
+    .map((d) => d.name?.trim().toLowerCase())
+    .filter((n): n is string => !!n);
+
+  const nameMatches = candidateNames.length
+    ? await db
+        .select({ id: agents.id, name: agents.name, phone: agents.phone })
+        .from(agents)
+        .where(inArray(sql`lower(trim(${agents.name}))`, candidateNames))
+    : [];
+
+  const byNormName = new Map<string, { id: string; phone: string | null }[]>();
+  for (const m of nameMatches) {
+    const key = m.name!.trim().toLowerCase();
+    if (!byNormName.has(key)) byNormName.set(key, []);
+    byNormName.get(key)!.push({ id: m.id, phone: m.phone });
+  }
+
+  const toInsert: { phone: string; name: string | null; declinedAt: Date | null }[] = [];
+  for (const [phone, data] of byPhone) {
+    const matches = data.name ? byNormName.get(data.name.trim().toLowerCase()) : undefined;
+    const soleMatch = matches?.length === 1 ? matches[0] : undefined;
+    if (soleMatch && !soleMatch.phone) {
+      await db
+        .update(agents)
+        .set({ phone, ...(data.declinedAt ? { declinedAt: data.declinedAt } : {}) })
+        .where(eq(agents.id, soleMatch.id));
+      continue;
+    }
+    toInsert.push({ phone, name: data.name, declinedAt: data.declinedAt });
+  }
+
+  if (toInsert.length === 0) return;
   await db.insert(agents).values(toInsert).onConflictDoNothing({ target: agents.phone });
 }
 

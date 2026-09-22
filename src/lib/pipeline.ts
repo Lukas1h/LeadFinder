@@ -97,6 +97,50 @@ export function isPhotoPriceUnlikelyMatch(lead: Pick<Listing, "score" | "price">
   );
 }
 
+/**
+ * Builds the phone and name lookups every page needs to answer "who is the
+ * agent on this listing, and have I already been talking to them?".
+ *
+ * Shared because the two pages had drifted: the Leads page keyed phones both
+ * raw and digits-only and passed a name map, while Pipeline keyed raw phones
+ * only and passed no name map at all — so the same realtor could show as a
+ * known contact on one page and a stranger on the other.
+ *
+ * The name map takes the richest row when a name is ambiguous. It used to be
+ * last-writer-wins over an unordered query, so where a person existed twice
+ * (email-only from an import, phone-only from a listing) it was a coin flip
+ * whether the row with the send history or the empty one won — and losing that
+ * flip is what showed a contacted realtor as never-contacted.
+ */
+export function buildAgentLookups(allAgents: Agent[]): {
+  byPhone: Map<string, Agent>;
+  byName: Map<string, Agent>;
+} {
+  const byPhone = new Map<string, Agent>();
+  for (const a of allAgents) {
+    if (!a.phone) continue;
+    byPhone.set(a.phone, a);
+    const digits = a.phone.replace(/\D/g, "").replace(/^1(\d{10})$/, "$1");
+    if (digits) byPhone.set(digits, a);
+  }
+
+  const richer = (a: Agent, b: Agent) => {
+    if (!!a.lastContactedAt !== !!b.lastContactedAt) return a.lastContactedAt ? a : b;
+    if (!!a.email !== !!b.email) return a.email ? a : b;
+    return a;
+  };
+
+  const byName = new Map<string, Agent>();
+  for (const a of allAgents) {
+    if (!a.name) continue;
+    const key = a.name.trim().toLowerCase();
+    const existing = byName.get(key);
+    byName.set(key, existing ? richer(existing, a) : a);
+  }
+
+  return { byPhone, byName };
+}
+
 export function findAttachedAgent(
   lead: Pick<Listing, "agentPhone" | "agentName">,
   agentByPhone: Map<string, Agent>,

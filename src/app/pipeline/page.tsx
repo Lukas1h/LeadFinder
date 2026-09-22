@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { listings, agents, type Agent } from "@/db/schema";
 import { ne, inArray } from "drizzle-orm";
 import { getFollowUpAfterDays } from "@/lib/settings";
+import { buildAgentLookups } from "@/lib/pipeline";
 import { PipelineList } from "./PipelineList";
 import { PipelineSkeleton } from "./loading";
 
@@ -35,8 +36,9 @@ async function PipelineContent() {
   // Maps aren't valid props across the server/client boundary — plain
   // objects instead, converted back to a Map inside PipelineList where
   // findDuplicateAgentContact needs one.
-  const agentByPhone: Record<string, Agent> = {};
-  for (const a of allAgents) if (a.phone) agentByPhone[a.phone] = a;
+  const lookups = buildAgentLookups(allAgents);
+  const agentByPhone: Record<string, Agent> = Object.fromEntries(lookups.byPhone);
+  const agentByName: Record<string, Agent> = Object.fromEntries(lookups.byName);
 
   const referencedIds = allAgents
     .map((a) => a.lastContactedListingId)
@@ -63,6 +65,7 @@ async function PipelineContent() {
       <PipelineList
         listings={all}
         agentByPhone={agentByPhone}
+        agentByName={agentByName}
         addressById={addressById}
         followUpAfterDays={followUpAfterDays}
       />

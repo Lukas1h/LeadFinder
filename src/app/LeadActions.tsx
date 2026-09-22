@@ -28,9 +28,11 @@ export function LeadActions({
     });
   };
 
+  // Triage, not rejection — nobody has been contacted at this point in the
+  // funnel, so this is purely Lukas deciding the property isn't for him.
   const handleNotInterested = () => {
     startTransition(() => {
-      updateListingStatus(listingId, "declined");
+      updateListingStatus(listingId, "passed");
     });
   };
 

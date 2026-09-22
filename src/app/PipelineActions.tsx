@@ -28,9 +28,19 @@ export function PipelineActions({
 
   const goTo = (next: LeadStatus) => startTransition(() => updateListingStatus(listingId, next));
 
-  const notInterested = (
+  // Two different dead ends that used to be one button. "I'm passing" is Lukas's
+  // call about the property; "They said no" is the agent's answer and is the only
+  // thing that marks the agent declined. Before the split, triaging a listing
+  // flagged its agent as a rejection, which buried warm contacts.
+  const passed = (
+    <Button variant="ghost" className="text-muted-foreground" onClick={() => goTo("passed")} disabled={isPending}>
+      I&apos;m passing
+    </Button>
+  );
+
+  const declined = (
     <Button variant="ghost" className="text-muted-foreground" onClick={() => goTo("declined")} disabled={isPending}>
-      Not interested
+      They said no
     </Button>
   );
 
@@ -51,7 +61,7 @@ export function PipelineActions({
             </Button>
           }
         />
-        {notInterested}
+        {passed}
       </div>
     );
   }
@@ -77,7 +87,8 @@ export function PipelineActions({
             </Button>
           }
         />
-        {notInterested}
+        {declined}
+        {passed}
       </div>
     );
   }
@@ -100,7 +111,8 @@ export function PipelineActions({
             </Button>
           }
         />
-        {notInterested}
+        {declined}
+        {passed}
       </div>
     );
   }
@@ -119,12 +131,13 @@ export function PipelineActions({
             </Button>
           }
         />
-        {notInterested}
+        {declined}
+        {passed}
       </div>
     );
   }
 
-  // booked / declined — closed states, just a correction valve.
+  // booked / passed / declined — closed states, just a correction valve.
   return (
     <Button variant="ghost" className="text-muted-foreground" onClick={() => goTo("saved")} disabled={isPending}>
       <RotateCcw />

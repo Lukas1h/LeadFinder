@@ -9,7 +9,7 @@ import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
 import { MarkAllNotInterestedButton } from "./MarkAllNotInterestedButton";
 import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge, AgentDeclinedBadge } from "./badges";
-import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isUnlikelyLeadMatch, findAttachedAgent } from "@/lib/pipeline";
+import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isUnlikelyLeadMatch, findAttachedAgent, buildAgentLookups } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
 import { Separator } from "@/components/ui/separator";
 import { LeadsSkeleton } from "./loading";
@@ -53,20 +53,7 @@ async function LeadsContent() {
       .orderBy(desc(listings.foundAt), listings.id),
     db.select().from(agents),
   ]);
-  const agentByPhone = new Map<string, (typeof allAgents)[number]>();
-  for (const a of allAgents) {
-    if (a.phone) {
-      agentByPhone.set(a.phone, a);
-      const digits = a.phone.replace(/\D/g, "").replace(/^1(\d{10})$/, "$1");
-      if (digits) agentByPhone.set(digits, a);
-    }
-  }
-  const agentByName = new Map<string, (typeof allAgents)[number]>();
-  for (const a of allAgents) {
-    if (a.name) {
-      agentByName.set(a.name.trim().toLowerCase(), a);
-    }
-  }
+  const { byPhone: agentByPhone, byName: agentByName } = buildAgentLookups(allAgents);
 
   // Every other listing referenced by an agent's last-contacted pointer —
   // used only to name the listing in the duplicate-agent warning below.

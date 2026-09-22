@@ -11,6 +11,16 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
+// "passed" and "declined" are both dead ends, but they mean opposite things and
+// conflating them cost real signal: until 2026-09-22 a single "declined" status
+// covered both "Lukas isn't shooting this property" (lead triage, which is the
+// overwhelming majority — 468 of the first 501 listings) and "the agent turned
+// Lukas down". Because touchAgentDeclined stamped agents.declinedAt off that one
+// status, triaging a listing silently marked its agent as a rejection, which is
+// how genuinely warm contacts ended up flagged as having said no. Keep them
+// distinct: "passed" is Lukas's own call about a property and says nothing about
+// the agent; "declined" is the agent's answer and is the only real rejection
+// signal in the system.
 export const LEAD_STATUSES = [
   "new",
   "saved",
@@ -18,6 +28,7 @@ export const LEAD_STATUSES = [
   "replied",
   "quoted",
   "booked",
+  "passed",
   "declined",
 ] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];

@@ -159,6 +159,7 @@ export function registerMessagingTools(server: McpServer): void {
             and(
               ne(listings.status, "booked"),
               ne(listings.status, "declined"),
+              ne(listings.status, "passed"),
               isNotNull(listings.followUpAt),
               lte(listings.followUpAt, now)
             )

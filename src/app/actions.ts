@@ -2,59 +2,97 @@
 
 import { db } from "@/db";
 import { listings, agents, messageSends, type LeadStatus, type AgentRelationshipStatus, type NewListing } from "@/db/schema";
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { runSync, insertAndEnrichListings, type SyncResult } from "@/lib/sync";
 import { extractZpidFromUrl, fetchFullListing } from "@/lib/zillapi";
 import { findFirstAddressResultUrl } from "@/lib/tavily";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
 
+/**
+ * Find-or-create for the agent behind a listing, matching on name as well as
+ * phone.
+ *
+ * Both of these used to upsert with `target: agents.phone` alone, which meant a
+ * contact that arrived email-first (a cold-email import, which has no phone)
+ * could never be matched by a listing, which only ever carries a phone. Every
+ * such collision inserted a second row, so the same realtor existed twice —
+ * once with an email and the whole send history, once with a phone and none of
+ * it — and the app, joining listings to agents on phone, saw only the empty
+ * one. That's how Lukas ended up emailing people he'd already been talking to:
+ * 24 split identities, 6 of them contacted twice, before this was fixed.
+ *
+ * Matching on a normalized name is only safe when it's unambiguous. Two real
+ * realtors sharing a name is entirely plausible in one market (there were two
+ * plausible-looking cases among those 24), so a name that hits more than one
+ * row falls back to creating a phone-keyed row rather than guessing and fusing
+ * two different people — a split identity is recoverable, a bad merge isn't.
+ */
+async function resolveAgentId(
+  agentPhone: string | null,
+  agentName: string | null,
+  patch: Partial<typeof agents.$inferInsert>
+): Promise<string | null> {
+  if (!agentPhone) return null;
+  const phone = normalizePhone(agentPhone);
+  const name = agentName ? normalizeName(agentName) : null;
+
+  const [byPhone] = await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, phone));
+  if (byPhone) {
+    await db
+      .update(agents)
+      .set({ ...patch, ...(name ? { name } : {}) })
+      .where(eq(agents.id, byPhone.id));
+    return byPhone.id;
+  }
+
+  if (name) {
+    const sameName = await db
+      .select({ id: agents.id, phone: agents.phone })
+      .from(agents)
+      .where(eq(sql`lower(trim(${agents.name}))`, name.trim().toLowerCase()));
+
+    if (sameName.length === 1) {
+      const existing = sameName[0];
+      await db
+        .update(agents)
+        .set({ ...patch, ...(existing.phone ? {} : { phone }) })
+        .where(eq(agents.id, existing.id));
+      return existing.id;
+    }
+  }
+
+  const [inserted] = await db
+    .insert(agents)
+    .values({ phone, name, ...patch })
+    .onConflictDoUpdate({ target: agents.phone, set: { ...patch, ...(name ? { name } : {}) } })
+    .returning({ id: agents.id });
+  return inserted?.id ?? null;
+}
+
 export async function touchAgentContact(
   listingId: string,
   agentPhone: string | null,
   agentName: string | null
 ): Promise<string | null> {
-  if (!agentPhone) return null;
-  const phone = normalizePhone(agentPhone);
-  const name = agentName ? normalizeName(agentName) : null;
-  const [row] = await db
-    .insert(agents)
-    .values({
-      phone,
-      name,
-      lastContactedAt: new Date(),
-      lastContactedListingId: listingId,
-    })
-    .onConflictDoUpdate({
-      target: agents.phone,
-      set: {
-        name,
-        lastContactedAt: new Date(),
-        lastContactedListingId: listingId,
-      },
-    })
-    .returning({ id: agents.id });
-  return row?.id ?? null;
+  return resolveAgentId(agentPhone, agentName, {
+    lastContactedAt: new Date(),
+    lastContactedListingId: listingId,
+  });
 }
 
 /**
- * Marks the agent's Agent-tab record declined the moment a listing of
- * theirs is — this is what starts the 30-day resurface clock on the
- * Agents page, so it needs to fire live rather than only at backfill time.
- * Upserts (rather than requiring touchAgentContact to have run first)
- * since a lead can be declined straight from "new"/"saved" without ever
- * having been texted.
+ * Marks the agent's Agent-tab record declined — this starts the 30-day
+ * resurface clock on the Agents page, so it fires live rather than only at
+ * backfill time.
+ *
+ * Only ever called for a listing moving to "declined" (the agent actually said
+ * no), never for "passed" (Lukas decided not to shoot the property). Passing on
+ * a property is a judgment about the property, not the person, and treating the
+ * two the same is what previously flagged warm contacts as rejections.
  */
 async function touchAgentDeclined(agentPhone: string | null, agentName: string | null) {
-  if (!agentPhone) return;
-  const now = new Date();
-  await db
-    .insert(agents)
-    .values({ phone: normalizePhone(agentPhone), name: agentName ? normalizeName(agentName) : null, declinedAt: now })
-    .onConflictDoUpdate({
-      target: agents.phone,
-      set: { declinedAt: now }, // don't touch name here — a decline shouldn't clobber a known name
-    });
+  await resolveAgentId(agentPhone, agentName, { declinedAt: new Date() });
 }
 
 /**
@@ -102,6 +140,12 @@ export async function bumpAgentRelationshipOnMilestone(
  * after an earlier "replied" correctly updates the same row instead of
  * being silently dropped. A no-op if nothing was ever logged (e.g. a
  * listing marked declined without ever being texted).
+ *
+ * "passed" deliberately isn't handled: Lukas dropping a property tells us
+ * nothing about how the message landed, so the send stays "pending" (unknown)
+ * rather than being recorded as a rejection the agent never made. Writing
+ * result="declined" off a pass is what made the messaging page's per-variant
+ * decline numbers meaningless.
  */
 export async function resolveSendOutcome(listingId: string, status: LeadStatus) {
   if (status !== "replied" && status !== "quoted" && status !== "booked" && status !== "declined") return;
@@ -158,29 +202,22 @@ export async function updateListingStatus(listingId: string, status: LeadStatus)
 }
 
 /**
- * Bulk marks listings as declined (used by "Not interested" on unlikely matches).
- * Updates status, records touched agent declines, resolves any sends, and revalidates paths.
+ * Bulk triage — "Not interested" on unlikely matches. These are Lukas's own
+ * calls about properties he doesn't want to shoot, so they mark the listings
+ * "passed" and deliberately touch neither the agents nor the send outcomes:
+ * dropping someone's listing from the queue is not that person rejecting him,
+ * and this bulk button firing touchAgentDeclined is exactly what stamped
+ * declinedAt across 285 agents who had never turned him down.
  */
-export async function markListingsDeclined(listingIds: string[]) {
+export async function markListingsPassed(listingIds: string[]) {
   if (listingIds.length === 0) return;
-  const now = new Date();
-  const updated = await db
+  await db
     .update(listings)
     .set({
-      status: "declined",
-      statusChangedAt: now,
+      status: "passed",
+      statusChangedAt: new Date(),
     })
-    .where(inArray(listings.id, listingIds))
-    .returning({ id: listings.id, agentPhone: listings.agentPhone, agentName: listings.agentName });
-
-  const seenPhones = new Set<string>();
-  for (const lead of updated) {
-    if (lead.agentPhone && !seenPhones.has(lead.agentPhone)) {
-      seenPhones.add(lead.agentPhone);
-      await touchAgentDeclined(lead.agentPhone, lead.agentName);
-    }
-    await resolveSendOutcome(lead.id, "declined");
-  }
+    .where(inArray(listings.id, listingIds));
 
   revalidatePath("/");
   revalidatePath("/pipeline");

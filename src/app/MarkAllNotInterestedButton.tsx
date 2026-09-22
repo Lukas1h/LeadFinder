@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
-import { markListingsDeclined } from "./actions";
+import { markListingsPassed } from "./actions";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -25,7 +25,7 @@ export function MarkAllNotInterestedButton({ listingIds }: { listingIds: string[
   const handleConfirm = () => {
     startTransition(async () => {
       try {
-        await markListingsDeclined(listingIds);
+        await markListingsPassed(listingIds);
         toast.success(
           `Marked ${listingIds.length} listing${listingIds.length === 1 ? "" : "s"} as not interested`
         );
