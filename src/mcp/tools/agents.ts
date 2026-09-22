@@ -70,23 +70,23 @@ export function registerAgentTools(server: McpServer): void {
       });
 
       const page = sorted.slice(0, limit);
-      const phones = page.map((a) => a.phone).filter((p): p is string => p != null);
-      const pageListings = phones.length
+      const ids = page.map((a) => a.id);
+      const pageListings = ids.length
         ? await db
-            .select({ agentPhone: listings.agentPhone, listedAt: listings.listedAt, foundAt: listings.foundAt })
+            .select({ agentId: listings.agentId, listedAt: listings.listedAt, foundAt: listings.foundAt })
             .from(listings)
-            .where(inArray(listings.agentPhone, phones))
+            .where(inArray(listings.agentId, ids))
         : [];
-      const listingsByPhone = new Map<string, typeof pageListings>();
+      const listingsByAgent = new Map<string, typeof pageListings>();
       for (const l of pageListings) {
-        if (!l.agentPhone) continue;
-        (listingsByPhone.get(l.agentPhone) ?? listingsByPhone.set(l.agentPhone, []).get(l.agentPhone)!).push(l);
+        if (!l.agentId) continue;
+        (listingsByAgent.get(l.agentId) ?? listingsByAgent.set(l.agentId, []).get(l.agentId)!).push(l);
       }
 
       return text(
         page.map((a) => ({
           ...a,
-          avgDaysBetweenListings: a.phone ? averageDaysBetweenListings(listingsByPhone.get(a.phone) ?? []) : null,
+          avgDaysBetweenListings: averageDaysBetweenListings(listingsByAgent.get(a.id) ?? []),
         }))
       );
     }
@@ -111,9 +111,7 @@ export function registerAgentTools(server: McpServer): void {
       const [agent] = await db.select().from(agents).where(condition);
       if (!agent) return errorText("No agent found matching that id/phone/email");
 
-      const agentListings = agent.phone
-        ? await db.select().from(listings).where(eq(listings.agentPhone, agent.phone))
-        : [];
+      const agentListings = await db.select().from(listings).where(eq(listings.agentId, agent.id));
 
       const history = await db
         .select({

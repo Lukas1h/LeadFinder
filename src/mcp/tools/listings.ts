@@ -85,7 +85,7 @@ export function registerListingTools(server: McpServer): void {
       const [listing] = await db.select().from(listings).where(eq(listings.id, id));
       if (!listing) return errorText("No listing with that id");
 
-      const [agent] = listing.agentPhone ? await db.select().from(agents).where(eq(agents.phone, listing.agentPhone)) : [];
+      const [agent] = listing.agentId ? await db.select().from(agents).where(eq(agents.id, listing.agentId)) : [];
       const [booking] = listing.bookingId ? await db.select().from(bookings).where(eq(bookings.id, listing.bookingId)) : [];
 
       return text({ listing, agent: agent ?? null, booking: booking ?? null });

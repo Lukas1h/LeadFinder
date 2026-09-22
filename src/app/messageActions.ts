@@ -352,17 +352,17 @@ async function buildAiDraftOption(
   let agent: { relationshipStatus: AgentRelationshipStatus; lastContactedAt: Date | null; notes: string | null } | null =
     null;
   let agentListingCount = 0;
-  if (listing.agentPhone) {
+  if (listing.agentId) {
     const [agentRow] = await db
       .select({ relationshipStatus: agents.relationshipStatus, lastContactedAt: agents.lastContactedAt, notes: agents.notes })
       .from(agents)
-      .where(eq(agents.phone, listing.agentPhone));
+      .where(eq(agents.id, listing.agentId));
     agent = agentRow ?? null;
 
     const [{ count: listingCount }] = await db
       .select({ count: count() })
       .from(listings)
-      .where(eq(listings.agentPhone, listing.agentPhone));
+      .where(eq(listings.agentId, listing.agentId));
     agentListingCount = listingCount;
   }
 

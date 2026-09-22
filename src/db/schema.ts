@@ -61,9 +61,26 @@ export const listings = pgTable("listings", {
   // a cache hit" claim didn't hold up). NOT the dedicated /agent
   // sub-resource, which also costs 1 credit and, verified against real
   // listings, never actually returns a phone number despite its docs
-  // claiming it does. Fetched once per newly-inserted lead.
+  // claiming it does. Fetched once per newly-inserted lead. This is a snapshot
+  // of what the source returned, NOT the link to the agent record — agentId
+  // below is that.
   agentName: text("agent_name"),
   agentPhone: text("agent_phone"),
+
+  // The authoritative listing -> agent link. Everything used to join these two
+  // tables by matching agentPhone against agents.phone, which is a string join
+  // on a mutable, optional field: a realtor who changes numbers silently
+  // detaches from their own history, 1,111 agents on file have no phone at all
+  // (they arrived email-first from a cold-email import) and so could never be
+  // reached from a listing, and exact-string matching drifted enough to need
+  // digits-only fallbacks in two places. It also made the duplicate-agent bug
+  // possible: a listing could not see an email-only contact, so a second row
+  // got created for someone already mid-conversation.
+  //
+  // message_sends.agentId exists for the same reason (see its comment) — this
+  // applies that fix to listings. agentName/agentPhone stay for display and as
+  // a record of what the source actually returned.
+  agentId: uuid("agent_id").references((): AnyPgColumn => agents.id, { onDelete: "set null" }),
 
   // Lead pipeline: new -> saved -> contacted -> replied -> quoted -> booked,
   // with declined reachable from anywhere (quoted is optional — replied can
@@ -125,15 +142,19 @@ export const listings = pgTable("listings", {
 export type Listing = typeof listings.$inferSelect;
 export type NewListing = typeof listings.$inferInsert;
 
-// Standalone agent profiles, keyed by phone (the one reliably-unique agent
-// identifier available) — both for warning when about to message an agent
-// already contacted about a different listing, and as the Agents tab's
-// core entity so a relationship can be tracked across multiple
+// Standalone agent profiles — both for warning when about to message an agent
+// already contacted about a different listing, and as the Agents tab's core
+// entity so a relationship can be tracked across multiple
 // listings/interactions over time, independent of any one listing.
 // Backfilled from every unique phone number seen in listings (see
-// ensureAgentsBackfilled in src/app/agents/actions.ts); also
-// created/updated lazily whenever a listing's status changes to
-// "contacted" or "declined".
+// ensureAgentsBackfilled in src/app/agents/actions.ts); also created/updated
+// lazily whenever a listing's status changes to "contacted" or "declined".
+//
+// Phone was long treated as the identity here, which it isn't: it's unique
+// where present but it's nullable (1,111 of these rows came from a cold-email
+// import and have only an email) and it changes. Identity is the id, which
+// listings.agentId and message_sends.agentId both point at. Phone and email
+// stay UNIQUE as contact details, not as the join key.
 export const AGENT_RELATIONSHIP_STATUSES = [
   "cold",
   "warm",
@@ -157,7 +178,7 @@ export const agents = pgTable("agents", {
   email: text("email").unique(),
   name: text("name"),
   lastContactedAt: timestamp("last_contacted_at", { withTimezone: true }),
-  lastContactedListingId: uuid("last_contacted_listing_id").references(() => listings.id),
+  lastContactedListingId: uuid("last_contacted_listing_id").references((): AnyPgColumn => listings.id),
 
   // Manually set/edited by Lukas on the Agents tab — not auto-calculated.
   relationshipStatus: agentRelationshipStatusEnum("relationship_status").notNull().default("cold"),
@@ -423,7 +444,7 @@ export const messageSends = pgTable("message_sends", {
   // through listingId -> listings.agentPhone, which breaks once listingId
   // can be null).
   listingId: uuid("listing_id").references(() => listings.id, { onDelete: "cascade" }),
-  agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  agentId: uuid("agent_id").references((): AnyPgColumn => agents.id, { onDelete: "set null" }),
   presetId: uuid("preset_id")
     .notNull()
     .references(() => messagePresets.id),

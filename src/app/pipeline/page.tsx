@@ -39,6 +39,7 @@ async function PipelineContent() {
   const lookups = buildAgentLookups(allAgents);
   const agentByPhone: Record<string, Agent> = Object.fromEntries(lookups.byPhone);
   const agentByName: Record<string, Agent> = Object.fromEntries(lookups.byName);
+  const agentById: Record<string, Agent> = Object.fromEntries(lookups.byId);
 
   const referencedIds = allAgents
     .map((a) => a.lastContactedListingId)
@@ -66,6 +67,7 @@ async function PipelineContent() {
         listings={all}
         agentByPhone={agentByPhone}
         agentByName={agentByName}
+        agentById={agentById}
         addressById={addressById}
         followUpAfterDays={followUpAfterDays}
       />

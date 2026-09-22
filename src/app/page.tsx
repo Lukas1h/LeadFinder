@@ -53,7 +53,7 @@ async function LeadsContent() {
       .orderBy(desc(listings.foundAt), listings.id),
     db.select().from(agents),
   ]);
-  const { byPhone: agentByPhone, byName: agentByName } = buildAgentLookups(allAgents);
+  const { byId: agentById, byPhone: agentByPhone, byName: agentByName } = buildAgentLookups(allAgents);
 
   // Every other listing referenced by an agent's last-contacted pointer —
   // used only to name the listing in the duplicate-agent warning below.
@@ -92,7 +92,7 @@ async function LeadsContent() {
 
   function card(lead: Listing) {
     const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentByPhone);
-    const attachedAgent = findAttachedAgent(lead, agentByPhone, agentByName);
+    const attachedAgent = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
     const agentDeclined = attachedAgent?.declinedAt != null;
 
     return (

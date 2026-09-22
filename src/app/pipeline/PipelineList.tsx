@@ -48,12 +48,14 @@ export function PipelineList({
   listings,
   agentByPhone,
   agentByName,
+  agentById,
   addressById,
   followUpAfterDays,
 }: {
   listings: Listing[];
   agentByPhone: Record<string, Agent>;
   agentByName: Record<string, Agent>;
+  agentById: Record<string, Agent>;
   addressById: Record<string, string | null>;
   followUpAfterDays: number;
 }) {
@@ -61,6 +63,7 @@ export function PipelineList({
 
   const agentMap = useMemo(() => new Map(Object.entries(agentByPhone)), [agentByPhone]);
   const nameMap = useMemo(() => new Map(Object.entries(agentByName)), [agentByName]);
+  const idMap = useMemo(() => new Map(Object.entries(agentById)), [agentById]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -121,7 +124,7 @@ export function PipelineList({
     // Phone first, then name — a realtor first met through a cold-email
     // import has an email and no phone, so a phone-only lookup showed them as
     // a stranger and hid the fact they were already mid-conversation.
-    const attachedAgent = findAttachedAgent(lead, agentMap, nameMap);
+    const attachedAgent = findAttachedAgent(lead, agentMap, nameMap, idMap);
     return (
       <LeadCard
         key={lead.id}

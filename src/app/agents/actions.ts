@@ -13,100 +13,54 @@ import {
   type PresetType,
   type MessageResult,
 } from "@/db/schema";
-import { eq, inArray, isNotNull, isNull, sql, desc, and, ne, or, ilike } from "drizzle-orm";
+import { eq, isNotNull, isNull, sql, desc, and, ne, or, ilike } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { findFirstResultUrl, findFirstNameMatchResultUrl } from "@/lib/tavily";
 import { normalizePhone, normalizeEmail, normalizeName, EMAIL_RE, hasValidPhoneDigitCount } from "@/lib/normalize";
+import { resolveAgentId } from "@/lib/agentIdentity";
 
 /**
- * Idempotent — inserts an Agent row for every unique agentPhone found
- * across all listings that doesn't already have one. Never overwrites an
- * existing row, so it's safe to call on every page load (existing manual
- * edits/imports are untouched). If a phone's listings include one that's
- * currently "declined", the new row is seeded already-declined (using that
- * listing's statusChangedAt) so it starts in the right section immediately
- * instead of waiting for the next status change to touch it.
+ * Idempotent self-heal: gives every listing that has agent details but no
+ * agentId a resolved agent record, creating one only when nobody on file
+ * matches. Safe on every page load — existing rows are never overwritten.
  *
- * Finds the missing phones with a LEFT JOIN rather than fetching every
- * listing plus every agent phone into JS and diffing there — with
- * thousands of agent rows on file, that second full-table fetch on every
- * single page load was real, wasted latency for a check that's a no-op
- * almost every time (there's nothing new to backfill).
+ * Driven off `listings.agentId IS NULL` rather than off missing phones. It used
+ * to LEFT JOIN agents on agentPhone and insert a row for every phone with no
+ * match, which meant a realtor already on file from a cold-email import (email,
+ * no phone) got a second, phone-only record every time one of their listings
+ * arrived — the split-identity bug. resolveAgentId matches by name as well as
+ * phone and fills in the missing field instead.
+ *
+ * Normally a no-op, since the sync/import path links listings as they arrive;
+ * this only catches rows that predate agentId or whose agent couldn't be
+ * resolved at the time.
  */
 export async function ensureAgentsBackfilled() {
-  const rows = await db
+  const unlinked = await db
     .select({
+      id: listings.id,
       agentPhone: listings.agentPhone,
       agentName: listings.agentName,
       status: listings.status,
       statusChangedAt: listings.statusChangedAt,
     })
     .from(listings)
-    .leftJoin(agents, eq(agents.phone, listings.agentPhone))
-    .where(and(isNotNull(listings.agentPhone), isNull(agents.id)));
+    .where(and(isNull(listings.agentId), or(isNotNull(listings.agentPhone), isNotNull(listings.agentName))));
 
-  const byPhone = new Map<string, { name: string | null; declinedAt: Date | null }>();
-  for (const r of rows) {
-    if (!r.agentPhone) continue;
-    // listings.agentPhone is normalized at import time (see fetchAgentInfo/
-    // fetchFullListing in src/lib/zillapi.ts), but the LEFT JOIN above
-    // matched on the raw column, so re-normalize here too in case any
-    // pre-existing row predates that.
-    const phone = normalizePhone(r.agentPhone);
-    const existing = byPhone.get(phone) ?? { name: null, declinedAt: null };
-    if (!existing.name && r.agentName) existing.name = normalizeName(r.agentName);
-    if (r.status === "declined" && r.statusChangedAt) {
-      if (!existing.declinedAt || r.statusChangedAt > existing.declinedAt) {
-        existing.declinedAt = r.statusChangedAt;
-      }
+  if (unlinked.length === 0) return;
+
+  for (const row of unlinked) {
+    // A listing the agent themselves declined seeds declinedAt, so the agent
+    // starts in the right Agents-tab section immediately. "passed" is Lukas's
+    // own call about the property and deliberately doesn't.
+    const declinedAt = row.status === "declined" ? (row.statusChangedAt ?? undefined) : undefined;
+    const agentId = await resolveAgentId(row.agentPhone, row.agentName, declinedAt ? { declinedAt } : {});
+    if (agentId) {
+      await db.update(listings).set({ agentId }).where(eq(listings.id, row.id));
     }
-    byPhone.set(phone, existing);
   }
 
-  if (byPhone.size === 0) return;
-
-  // Before inserting, hand any phone whose person is already on file under a
-  // name (a cold-email import, which carries an email and no phone) to that
-  // existing row instead. The LEFT JOIN above only knows about phones, so
-  // without this every listing by an already-emailed realtor minted a second,
-  // phone-only row for them — the split-identity bug that had Lukas emailing
-  // people he was already mid-conversation with. An ambiguous name (two rows)
-  // is left alone and inserted as its own row: a duplicate is fixable later,
-  // fusing two different realtors is not.
-  const candidateNames = [...byPhone.values()]
-    .map((d) => d.name?.trim().toLowerCase())
-    .filter((n): n is string => !!n);
-
-  const nameMatches = candidateNames.length
-    ? await db
-        .select({ id: agents.id, name: agents.name, phone: agents.phone })
-        .from(agents)
-        .where(inArray(sql`lower(trim(${agents.name}))`, candidateNames))
-    : [];
-
-  const byNormName = new Map<string, { id: string; phone: string | null }[]>();
-  for (const m of nameMatches) {
-    const key = m.name!.trim().toLowerCase();
-    if (!byNormName.has(key)) byNormName.set(key, []);
-    byNormName.get(key)!.push({ id: m.id, phone: m.phone });
-  }
-
-  const toInsert: { phone: string; name: string | null; declinedAt: Date | null }[] = [];
-  for (const [phone, data] of byPhone) {
-    const matches = data.name ? byNormName.get(data.name.trim().toLowerCase()) : undefined;
-    const soleMatch = matches?.length === 1 ? matches[0] : undefined;
-    if (soleMatch && !soleMatch.phone) {
-      await db
-        .update(agents)
-        .set({ phone, ...(data.declinedAt ? { declinedAt: data.declinedAt } : {}) })
-        .where(eq(agents.id, soleMatch.id));
-      continue;
-    }
-    toInsert.push({ phone, name: data.name, declinedAt: data.declinedAt });
-  }
-
-  if (toInsert.length === 0) return;
-  await db.insert(agents).values(toInsert).onConflictDoNothing({ target: agents.phone });
+  revalidatePath("/agents");
 }
 
 export async function updateAgentRelationshipStatus(id: string, status: AgentRelationshipStatus) {
@@ -338,7 +292,7 @@ export async function getOrCreateAgentByPhone(
   }
   if (!agent) return null;
 
-  const agentListings = await db.select().from(listings).where(eq(listings.agentPhone, normalizedPhone));
+  const agentListings = await db.select().from(listings).where(eq(listings.agentId, agent.id));
 
   return { agent, listings: agentListings };
 }

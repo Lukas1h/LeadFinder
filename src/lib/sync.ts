@@ -4,6 +4,7 @@ import { fetchNewListings, fetchAgentInfo } from "@/lib/zillapi";
 import { scorePhotos } from "@/lib/photoScore";
 import { notifyNewListings } from "@/lib/push";
 import { FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { linkListingToAgent } from "@/lib/agentIdentity";
 import { and, eq, gte, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -109,6 +110,9 @@ async function retryMissingAgentInfo(): Promise<number> {
         if (agent.brokerName) update.brokerName = agent.brokerName;
 
         await db.update(listings).set(update).where(eq(listings.id, row.id));
+        // Same as the insert path: the agent only just became known, so link
+        // the listing to a record now rather than leaving it phone-derived.
+        await linkListingToAgent(row.id, agent.agentPhone, agent.agentName);
         updated++;
       })
     );
@@ -192,6 +196,7 @@ export async function insertAndEnrichListings(
       zpid: listings.zpid,
       photos: listings.photos,
       agentPhone: listings.agentPhone,
+      agentName: listings.agentName,
     });
 
   for (let i = 0; i < insertedRows.length; i += ENRICHMENT_CONCURRENCY) {
@@ -219,6 +224,13 @@ export async function insertAndEnrichListings(
         if (Object.keys(update).length > 0) {
           await db.update(listings).set(update).where(eq(listings.id, row.id));
         }
+
+        // Attach the listing to an agent record at import time, so the link
+        // exists before anyone tries to message them. resolveAgentId matches an
+        // existing contact by name as well as phone, which is what stops a
+        // realtor already on file from an email-only import being duplicated
+        // here as a brand-new phone-only row.
+        await linkListingToAgent(row.id, agent?.agentPhone ?? row.agentPhone, agent?.agentName ?? row.agentName);
       })
     );
   }

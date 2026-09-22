@@ -2,83 +2,30 @@
 
 import { db } from "@/db";
 import { listings, agents, messageSends, type LeadStatus, type AgentRelationshipStatus, type NewListing } from "@/db/schema";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { runSync, insertAndEnrichListings, type SyncResult } from "@/lib/sync";
 import { extractZpidFromUrl, fetchFullListing } from "@/lib/zillapi";
 import { findFirstAddressResultUrl } from "@/lib/tavily";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
-
-/**
- * Find-or-create for the agent behind a listing, matching on name as well as
- * phone.
- *
- * Both of these used to upsert with `target: agents.phone` alone, which meant a
- * contact that arrived email-first (a cold-email import, which has no phone)
- * could never be matched by a listing, which only ever carries a phone. Every
- * such collision inserted a second row, so the same realtor existed twice —
- * once with an email and the whole send history, once with a phone and none of
- * it — and the app, joining listings to agents on phone, saw only the empty
- * one. That's how Lukas ended up emailing people he'd already been talking to:
- * 24 split identities, 6 of them contacted twice, before this was fixed.
- *
- * Matching on a normalized name is only safe when it's unambiguous. Two real
- * realtors sharing a name is entirely plausible in one market (there were two
- * plausible-looking cases among those 24), so a name that hits more than one
- * row falls back to creating a phone-keyed row rather than guessing and fusing
- * two different people — a split identity is recoverable, a bad merge isn't.
- */
-async function resolveAgentId(
-  agentPhone: string | null,
-  agentName: string | null,
-  patch: Partial<typeof agents.$inferInsert>
-): Promise<string | null> {
-  if (!agentPhone) return null;
-  const phone = normalizePhone(agentPhone);
-  const name = agentName ? normalizeName(agentName) : null;
-
-  const [byPhone] = await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, phone));
-  if (byPhone) {
-    await db
-      .update(agents)
-      .set({ ...patch, ...(name ? { name } : {}) })
-      .where(eq(agents.id, byPhone.id));
-    return byPhone.id;
-  }
-
-  if (name) {
-    const sameName = await db
-      .select({ id: agents.id, phone: agents.phone })
-      .from(agents)
-      .where(eq(sql`lower(trim(${agents.name}))`, name.trim().toLowerCase()));
-
-    if (sameName.length === 1) {
-      const existing = sameName[0];
-      await db
-        .update(agents)
-        .set({ ...patch, ...(existing.phone ? {} : { phone }) })
-        .where(eq(agents.id, existing.id));
-      return existing.id;
-    }
-  }
-
-  const [inserted] = await db
-    .insert(agents)
-    .values({ phone, name, ...patch })
-    .onConflictDoUpdate({ target: agents.phone, set: { ...patch, ...(name ? { name } : {}) } })
-    .returning({ id: agents.id });
-  return inserted?.id ?? null;
-}
+import { resolveAgentId } from "@/lib/agentIdentity";
 
 export async function touchAgentContact(
   listingId: string,
   agentPhone: string | null,
   agentName: string | null
 ): Promise<string | null> {
-  return resolveAgentId(agentPhone, agentName, {
+  const agentId = await resolveAgentId(agentPhone, agentName, {
     lastContactedAt: new Date(),
     lastContactedListingId: listingId,
   });
+  // Contacting a listing is the point where its agent is definitively known, so
+  // record the link rather than leaving later reads to re-derive it from the
+  // phone string.
+  if (agentId) {
+    await db.update(listings).set({ agentId }).where(eq(listings.id, listingId));
+  }
+  return agentId;
 }
 
 /**

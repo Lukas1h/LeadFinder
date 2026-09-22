@@ -98,8 +98,12 @@ export function isPhotoPriceUnlikelyMatch(lead: Pick<Listing, "score" | "price">
 }
 
 /**
- * Builds the phone and name lookups every page needs to answer "who is the
- * agent on this listing, and have I already been talking to them?".
+ * Builds the lookups every page needs to answer "who is the agent on this
+ * listing, and have I already been talking to them?".
+ *
+ * byId is the real answer, keyed on listings.agentId. The phone and name maps
+ * are fallbacks for rows imported before that column existed, or whose agent
+ * couldn't be resolved at import time.
  *
  * Shared because the two pages had drifted: the Leads page keyed phones both
  * raw and digits-only and passed a name map, while Pipeline keyed raw phones
@@ -113,9 +117,12 @@ export function isPhotoPriceUnlikelyMatch(lead: Pick<Listing, "score" | "price">
  * flip is what showed a contacted realtor as never-contacted.
  */
 export function buildAgentLookups(allAgents: Agent[]): {
+  byId: Map<string, Agent>;
   byPhone: Map<string, Agent>;
   byName: Map<string, Agent>;
 } {
+  const byId = new Map(allAgents.map((a) => [a.id, a]));
+
   const byPhone = new Map<string, Agent>();
   for (const a of allAgents) {
     if (!a.phone) continue;
@@ -138,14 +145,29 @@ export function buildAgentLookups(allAgents: Agent[]): {
     byName.set(key, existing ? richer(existing, a) : a);
   }
 
-  return { byPhone, byName };
+  return { byId, byPhone, byName };
 }
 
+/**
+ * Resolves a listing's agent, preferring the stored FK and falling back to the
+ * phone string and then an unambiguous name.
+ *
+ * The fallbacks are legacy paths, not equals: phone is mutable and optional, so
+ * matching on it missed every contact who arrived email-first and silently
+ * detached anyone who changed their number. agentId is set at import and on
+ * first contact, so it should be the answer for anything recent.
+ */
 export function findAttachedAgent(
-  lead: Pick<Listing, "agentPhone" | "agentName">,
+  lead: Pick<Listing, "agentPhone" | "agentName"> & { agentId?: string | null },
   agentByPhone: Map<string, Agent>,
-  agentByName?: Map<string, Agent>
+  agentByName?: Map<string, Agent>,
+  agentById?: Map<string, Agent>
 ): Agent | null {
+  if (lead.agentId && agentById) {
+    const byId = agentById.get(lead.agentId);
+    if (byId) return byId;
+  }
+
   if (lead.agentPhone) {
     const raw = agentByPhone.get(lead.agentPhone);
     if (raw) return raw;
