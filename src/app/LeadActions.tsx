@@ -30,7 +30,7 @@ export function LeadActions({
 
   // Triage, not rejection — nobody has been contacted at this point in the
   // funnel, so this is purely Lukas deciding the property isn't for him.
-  const handleNotInterested = () => {
+  const handlePass = () => {
     startTransition(() => {
       updateListingStatus(listingId, "passed");
     });
@@ -57,8 +57,8 @@ export function LeadActions({
         <Bookmark />
         Save
       </Button>
-      <Button variant="ghost" className="text-muted-foreground" onClick={handleNotInterested} disabled={isPending}>
-        Not interested
+      <Button variant="ghost" className="text-muted-foreground" onClick={handlePass} disabled={isPending}>
+        Pass
       </Button>
     </div>
   );
