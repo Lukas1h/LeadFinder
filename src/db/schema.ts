@@ -476,3 +476,71 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;
+
+// Every touch with an agent that isn't a templated send: calls either way,
+// texts and emails that happened outside the app, someone getting back to you.
+//
+// Deliberately separate from messageSends rather than folded into it.
+// messageSends requires presetId/variantId because its whole job is per-variant
+// A/B attribution; a "they called me" has no preset, so putting it there would
+// mean nullable attribution columns (weakening the stats) or inventing preset
+// rows. The two are merged at read time into one timeline instead — see
+// getAgentTimeline.
+export const INTERACTION_CHANNELS = ["call", "text", "email", "in_person", "other"] as const;
+export type InteractionChannel = (typeof INTERACTION_CHANNELS)[number];
+export const interactionChannelEnum = pgEnum("interaction_channel", INTERACTION_CHANNELS);
+
+export const INTERACTION_DIRECTIONS = ["outbound", "inbound"] as const;
+export type InteractionDirection = (typeof INTERACTION_DIRECTIONS)[number];
+export const interactionDirectionEnum = pgEnum("interaction_direction", INTERACTION_DIRECTIONS);
+
+// Stored as channel x direction x outcome rather than a flat list of a dozen
+// values ("called them, no answer"), so a question like "how many calls did I
+// make this month" is a filter instead of string-matching enum names. The UI
+// still offers the flat phrasing.
+export const INTERACTION_OUTCOMES = ["answered", "no_answer", "voicemail", "sent", "not_sent"] as const;
+export type InteractionOutcome = (typeof INTERACTION_OUTCOMES)[number];
+export const interactionOutcomeEnum = pgEnum("interaction_outcome", INTERACTION_OUTCOMES);
+
+export const agentInteractions = pgTable("agent_interactions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  // Which property the touch was about, when it was about one at all — a call
+  // out of the blue isn't tied to a listing.
+  listingId: uuid("listing_id").references((): AnyPgColumn => listings.id, { onDelete: "set null" }),
+
+  channel: interactionChannelEnum("channel").notNull(),
+  direction: interactionDirectionEnum("direction").notNull(),
+  // Null means unknown or not applicable — an email doesn't have an outcome the
+  // way a call does.
+  outcome: interactionOutcomeEnum("outcome"),
+  note: text("note"),
+
+  // When it actually happened, which is not necessarily when it was recorded:
+  // the Add-interaction form can backdate a call from yesterday.
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+
+  // Set when the app started this interaction but can't know how it went. The
+  // Call button hands off to the phone dialer and the text button to Messages,
+  // so at tap time there's no way to tell whether they picked up or whether the
+  // text was ever actually sent. Rather than assert an outcome that might be
+  // false, the row is parked here and the app asks on the way back in. Cleared
+  // once answered or skipped.
+  pendingSince: timestamp("pending_since", { withTimezone: true }),
+
+  // The optimistic send this interaction is asking about, so resolving a text
+  // as "didn't send" can remove a send that never happened instead of leaving
+  // it inflating the variant's numbers.
+  messageSendId: uuid("message_send_id").references(() => messageSends.id, { onDelete: "set null" }),
+
+  // "app" = recorded automatically from an action in the app, "manual" = typed
+  // in afterwards. Worth distinguishing: one is observed, the other remembered.
+  source: text("source").notNull().default("manual"),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AgentInteraction = typeof agentInteractions.$inferSelect;
+export type NewAgentInteraction = typeof agentInteractions.$inferInsert;

@@ -4,7 +4,9 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { UserPlus, Phone, MessageCircle, Mail, History, CalendarCheck, Pencil, Trash2 } from "lucide-react";
+import { UserPlus, Phone, PhoneIncoming, MessageCircle, Mail, History, CalendarCheck, Pencil, Trash2, Users } from "lucide-react";
+import { getAgentTimeline, type TimelineItem } from "./interactionActions";
+import { AddInteractionDialog } from "./AddInteractionDialog";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { formatDate, formatPrice } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
@@ -18,9 +20,7 @@ import {
   updateAgentContactInfo,
   updateAgentStats,
   deleteAgent,
-  getAgentSendHistory,
   findAgentProfileUrl,
-  type AgentSendHistoryItem,
 } from "./actions";
 import { averageDaysBetweenListings } from "./stats";
 import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
@@ -50,40 +50,96 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const RESULT_LABELS: Record<AgentSendHistoryItem["result"], string> = {
+const RESULT_LABELS: Record<string, string> = {
   pending: "Pending",
   quoted: "Quoted",
   booked: "Booked",
   declined: "Declined",
 };
 
-const TYPE_LABELS: Record<AgentSendHistoryItem["type"], string> = {
+const TYPE_LABELS: Record<string, string> = {
   initial_outreach: "Initial outreach",
   follow_up: "Follow-up",
 };
 
-function SendHistoryRow({ item }: { item: AgentSendHistoryItem }) {
+// The structured channel/direction/outcome read back as the plain phrasing it
+// was entered as.
+const OUTCOME_LABELS: Record<string, string> = {
+  answered: "answered",
+  no_answer: "no answer",
+  voicemail: "voicemail",
+  sent: "sent",
+  not_sent: "not sent",
+};
+
+function interactionLabel(item: Extract<TimelineItem, { kind: "interaction" }>): string {
+  const outbound = item.direction === "outbound";
+  if (item.channel === "call") {
+    const base = outbound ? "Called them" : "They called";
+    return item.outcome ? `${base} · ${OUTCOME_LABELS[item.outcome]}` : base;
+  }
+  if (item.channel === "text") {
+    const base = outbound ? "Texted them" : "They texted";
+    return item.outcome ? `${base} · ${OUTCOME_LABELS[item.outcome]}` : base;
+  }
+  if (item.channel === "email") return outbound ? "Emailed them" : "They emailed";
+  if (item.channel === "in_person") return "Met in person";
+  return "Other";
+}
+
+function InteractionIcon({ item }: { item: Extract<TimelineItem, { kind: "interaction" }> }) {
+  const className = "size-3.5 shrink-0 mt-0.5 text-muted-foreground";
+  if (item.channel === "call") {
+    return item.direction === "outbound" ? <Phone className={className} /> : <PhoneIncoming className={className} />;
+  }
+  if (item.channel === "text") return <MessageCircle className={className} />;
+  if (item.channel === "email") return <Mail className={className} />;
+  return <Users className={className} />;
+}
+
+function TimelineRow({ item }: { item: TimelineItem }) {
+  if (item.kind === "send") {
+    return (
+      <div className="flex items-start gap-2.5 py-1.5">
+        {item.channel === "email" ? (
+          <Mail className="size-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+        ) : (
+          <MessageCircle className="size-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-foreground">
+            {item.presetName} <span className="text-muted-foreground">· {TYPE_LABELS[item.type]}</span>
+          </p>
+          <p className="text-xs text-muted-foreground">{formatDate(item.at)}</p>
+        </div>
+        {item.result !== "pending" && (
+          <Badge variant="secondary" className="shrink-0">
+            {RESULT_LABELS[item.result]}
+          </Badge>
+        )}
+        {item.respondedAt && item.result === "pending" && (
+          <Badge variant="secondary" className="shrink-0">
+            Replied
+          </Badge>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-start gap-2.5 py-1.5">
-      {item.channel === "email" ? (
-        <Mail className="size-3.5 shrink-0 mt-0.5 text-muted-foreground" />
-      ) : (
-        <MessageCircle className="size-3.5 shrink-0 mt-0.5 text-muted-foreground" />
-      )}
+      <InteractionIcon item={item} />
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-foreground">
-          {item.presetName} <span className="text-muted-foreground">· {TYPE_LABELS[item.type]}</span>
+        <p className="text-sm text-foreground">{interactionLabel(item)}</p>
+        {item.note && <p className="text-xs text-muted-foreground mt-0.5">{item.note}</p>}
+        <p className="text-xs text-muted-foreground">
+          {formatDate(item.at)}
+          {item.listingAddress ? ` · ${item.listingAddress}` : ""}
         </p>
-        <p className="text-xs text-muted-foreground">{formatDate(item.sentAt)}</p>
       </div>
-      {item.result !== "pending" && (
+      {item.pending && (
         <Badge variant="secondary" className="shrink-0">
-          {RESULT_LABELS[item.result]}
-        </Badge>
-      )}
-      {item.respondedAt && item.result === "pending" && (
-        <Badge variant="secondary" className="shrink-0">
-          Replied
+          Unconfirmed
         </Badge>
       )}
     </div>
@@ -173,17 +229,19 @@ export function AgentDetailDialog({
     return (await findAgentProfileUrl(agent).catch(() => null)) ?? fallback;
   };
 
-  const [history, setHistory] = useState<AgentSendHistoryItem[]>([]);
+  const [history, setHistory] = useState<TimelineItem[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  // Bumped after logging an interaction so the timeline refetches in place.
+  const [historyVersion, setHistoryVersion] = useState(0);
 
   useEffect(() => {
     if (!open) return;
     setHistoryLoaded(false);
-    getAgentSendHistory(agent.id).then((items) => {
+    getAgentTimeline(agent.id).then((items) => {
       setHistory(items);
       setHistoryLoaded(true);
     });
-  }, [open, agent.id]);
+  }, [open, agent.id, historyVersion]);
 
   const [agentBookings, setAgentBookings] = useState<BookingWithDetails[]>([]);
   const [bookingsLoaded, setBookingsLoaded] = useState(false);
@@ -386,17 +444,24 @@ export function AgentDetailDialog({
           )}
         </div>
 
-        {historyLoaded && history.length > 0 && (
+        {historyLoaded && (
           <div className="flex flex-col gap-0.5 border-t pt-3">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1.5 mb-1">
-              <History className="size-3.5" />
-              Contact history
-            </Label>
-            <div className="max-h-40 overflow-y-auto -mx-1 px-1 divide-y divide-border/70">
-              {history.map((item) => (
-                <SendHistoryRow key={item.id} item={item} />
-              ))}
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <History className="size-3.5" />
+                Contact history
+              </Label>
+              <AddInteractionDialog agentId={agent.id} onLogged={() => setHistoryVersion((v) => v + 1)} />
             </div>
+            {history.length > 0 ? (
+              <div className="max-h-56 overflow-y-auto -mx-1 px-1 divide-y divide-border/70">
+                {history.map((item) => (
+                  <TimelineRow key={`${item.kind}-${item.id}`} item={item} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-1.5">Nothing logged yet.</p>
+            )}
           </div>
         )}
 

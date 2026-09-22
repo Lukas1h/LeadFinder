@@ -3,7 +3,7 @@ import { Plus, Users } from "lucide-react";
 import { db } from "@/db";
 import { agents, listings } from "@/db/schema";
 import { desc, isNotNull, isNull, eq, ne, or, and, sql } from "drizzle-orm";
-import { ensureAgentsBackfilled, listingCountsByPhone } from "./actions";
+import { ensureAgentsBackfilled, listingCountsByAgent } from "./actions";
 import { AgentsList } from "./AgentsList";
 import { COLD_INITIAL_LIMIT } from "./constants";
 import { ImportAgentForm } from "./ImportAgentForm";
@@ -43,19 +43,19 @@ async function AgentsContent() {
       .orderBy(desc(agents.createdAt)),
     db.select().from(agents).where(isColdAndFresh).orderBy(desc(agents.createdAt)).limit(COLD_INITIAL_LIMIT),
     db.select({ count: sql<number>`count(*)::int` }).from(agents).where(isColdAndFresh),
-    listingCountsByPhone(),
-    db.select().from(listings).where(isNotNull(listings.agentPhone)),
+    listingCountsByAgent(),
+    db.select().from(listings).where(isNotNull(listings.agentId)),
   ]);
 
   const all = [...nonColdFresh, ...coldFreshPage];
 
-  const listingsByPhone: Record<string, typeof agentListings> = {};
+  const listingsByAgent: Record<string, typeof agentListings> = {};
   for (const l of agentListings) {
-    if (!l.agentPhone) continue;
-    (listingsByPhone[l.agentPhone] ??= []).push(l);
+    if (!l.agentId) continue;
+    (listingsByAgent[l.agentId] ??= []).push(l);
   }
-  for (const phone in listingsByPhone) {
-    listingsByPhone[phone].sort((a, b) => {
+  for (const agentId in listingsByAgent) {
+    listingsByAgent[agentId].sort((a, b) => {
       const aTime = (a.listedAt ?? a.foundAt).getTime();
       const bTime = (b.listedAt ?? b.foundAt).getTime();
       return bTime - aTime;
@@ -91,7 +91,7 @@ async function AgentsContent() {
         <AgentsList
           agents={all}
           counts={counts}
-          listingsByPhone={listingsByPhone}
+          listingsByAgent={listingsByAgent}
           coldFreshTotal={coldFreshTotal[0].count}
         />
       )}

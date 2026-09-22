@@ -23,6 +23,7 @@ import {
   AI_DRAFT_VARIANT_SENTINEL,
 } from "@/lib/messageTemplate";
 import { draftMessage } from "@/lib/draftMessage";
+import { startPendingInteraction } from "@/app/agents/interactionActions";
 import { touchAgentContact } from "@/app/actions";
 
 const AI_DRAFT_PRESET_NAME = "AI Draft";
@@ -461,17 +462,38 @@ export async function sendMessage(
 
   const agentId = lead ? await touchAgentContact(listingId, lead.agentPhone, lead.agentName) : null;
 
-  await db.insert(messageSends).values({
-    listingId,
-    agentId,
-    presetId,
-    variantId: resolvedVariantId,
-    type,
-    channel: "sms",
-    sentAt: now,
-  });
+  const [send] = await db
+    .insert(messageSends)
+    .values({
+      listingId,
+      agentId,
+      presetId,
+      variantId: resolvedVariantId,
+      type,
+      channel: "sms",
+      sentAt: now,
+    })
+    .returning({ id: messageSends.id });
+
+  // This only ever means "the Messages composer was opened" — the app hands off
+  // via an sms: link and never learns whether the text was actually sent. The
+  // send is still recorded up front so nothing is lost, and a pending
+  // interaction asks on the way back in; answering "didn't send" removes it
+  // again (see resolvePendingInteraction) so unsent drafts stop counting toward
+  // a variant's stats.
+  let pendingInteractionId: string | null = null;
+  if (agentId) {
+    pendingInteractionId = await startPendingInteraction({
+      agentId,
+      listingId,
+      channel: "text",
+      messageSendId: send?.id ?? null,
+    });
+  }
 
   revalidatePath("/");
   revalidatePath("/pipeline");
   revalidatePath("/messaging");
+
+  return { pendingInteractionId };
 }

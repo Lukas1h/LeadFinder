@@ -339,16 +339,16 @@ export async function searchAllAgents(query: string): Promise<Agent[]> {
 }
 
 /** Total distinct listings sourced from each agent phone — shown on the agent card. */
-export async function listingCountsByPhone(): Promise<Record<string, number>> {
+export async function listingCountsByAgent(): Promise<Record<string, number>> {
   const rows = await db
-    .select({ phone: listings.agentPhone, count: sql<number>`count(*)::int` })
+    .select({ agentId: listings.agentId, count: sql<number>`count(*)::int` })
     .from(listings)
-    .where(isNotNull(listings.agentPhone))
-    .groupBy(listings.agentPhone);
+    .where(isNotNull(listings.agentId))
+    .groupBy(listings.agentId);
 
   const result: Record<string, number> = {};
   for (const r of rows) {
-    if (r.phone) result[r.phone] = r.count;
+    if (r.agentId) result[r.agentId] = r.count;
   }
   return result;
 }

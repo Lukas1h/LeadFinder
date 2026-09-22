@@ -2,6 +2,7 @@ import { AppSidebar } from "./AppSidebar";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { MobileHeader } from "./MobileHeader";
 import { BottomTabBar } from "./BottomTabBar";
+import { PendingInteractionPrompt } from "./PendingInteractionPrompt";
 
 /**
  * The internal app's nav chrome — sidebar, mobile header, bottom tab bar.
@@ -18,6 +19,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
         <MobileHeader />
         <div className="pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen">{children}</div>
         <BottomTabBar />
+        {/* App-wide: the trip out to the dialer or Messages can return to any page. */}
+        <PendingInteractionPrompt />
       </SidebarInset>
     </SidebarProvider>
   );

@@ -47,12 +47,12 @@ function isColdAndFresh(a: Agent): boolean {
 export function AgentsList({
   agents,
   counts,
-  listingsByPhone,
+  listingsByAgent,
   coldFreshTotal,
 }: {
   agents: Agent[];
   counts: Record<string, number>;
-  listingsByPhone: Record<string, Listing[]>;
+  listingsByAgent: Record<string, Listing[]>;
   // True count of the cold-and-never-contacted bucket — the `agents` prop
   // only carries COLD_INITIAL_LIMIT of them, so the section header and
   // "View all" button need this separately to show the real number.
@@ -155,7 +155,7 @@ export function AgentsList({
         key={agent.id}
         agent={agent}
         listingCount={agent.phone ? counts[agent.phone] ?? 0 : 0}
-        listings={agent.phone ? listingsByPhone[agent.phone] ?? [] : []}
+        listings={listingsByAgent[agent.id] ?? []}
       />
     );
   }
@@ -169,7 +169,7 @@ export function AgentsList({
         <AgentDetailDialog
           key={displayedAgent.id}
           agent={displayedAgent}
-          listings={displayedAgent.phone ? listingsByPhone[displayedAgent.phone] ?? [] : []}
+          listings={listingsByAgent[displayedAgent.id] ?? []}
           open={!!linkedAgent}
           onOpenChange={handleLinkedDialogOpenChange}
         />
