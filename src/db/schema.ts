@@ -161,6 +161,7 @@ export const AGENT_RELATIONSHIP_STATUSES = [
   "interested",
   "worked_once",
   "regular",
+  "declined",
 ] as const;
 export type AgentRelationshipStatus = (typeof AGENT_RELATIONSHIP_STATUSES)[number];
 export const agentRelationshipStatusEnum = pgEnum(

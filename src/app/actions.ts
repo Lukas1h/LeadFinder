@@ -28,9 +28,8 @@ export async function touchAgentContact(
 }
 
 /**
- * Marks the agent's Agent-tab record declined — this starts the 30-day
- * resurface clock on the Agents page, so it fires live rather than only at
- * backfill time.
+ * Marks the agent's Agent-tab record declined — sets their relationship status
+ * to "declined" so they appear in the appropriate section on the Agents page.
  *
  * Only ever called for a listing moving to "declined" (the agent actually said
  * no), never for "passed" (Lukas decided not to shoot the property). Passing on
@@ -38,7 +37,7 @@ export async function touchAgentContact(
  * two the same is what previously flagged warm contacts as rejections.
  */
 async function touchAgentDeclined(agentPhone: string | null, agentName: string | null) {
-  await resolveAgentId(agentPhone, agentName, { declinedAt: new Date() });
+  await resolveAgentId(agentPhone, agentName, { relationshipStatus: "declined" });
 }
 
 /**
