@@ -202,14 +202,21 @@ export const agents = pgTable("agents", {
   realtorProfileUrl: text("realtor_profile_url"),
 
   // Business-volume stats from outside our own data (public realtor
-  // history, MLS sites) — entered by hand from the agent edit form, or
-  // backfilled by a separate lookup process. Whole-dollar average, same
-  // convention as listings.price. Distinct from the average-days-between-
-  // listings stat, which IS derived from our own tracked listings and so
-  // isn't stored here at all — see averageDaysBetweenListings in
-  // src/app/agents/stats.ts.
+  // history, MLS sites) — entered by hand from the agent edit form, by an
+  // MCP call, or backfilled by a separate lookup process. Whole-dollar
+  // average, same convention as listings.price.
   avgListingsPerYear: integer("avg_listings_per_year"),
   avgListingPrice: integer("avg_listing_price"),
+
+  // An override for the days-between-listings figure, which is otherwise
+  // derived on the fly from our own tracked listings (see
+  // averageDaysBetweenListings in src/app/agents/stats.ts) and is null below
+  // three of them. Our tracked listings are only the ones a search happened to
+  // catch, so for an agent we've seen once or twice the computed number is
+  // either missing or misleading while their real cadence is a lookup away on
+  // their public profile. A value here is a deliberate statement and wins over
+  // the computed one; leave it null to keep using observed data.
+  avgDaysBetweenListings: integer("avg_days_between_listings"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

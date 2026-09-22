@@ -185,11 +185,19 @@ export async function updateAgentContactInfo(
  */
 export async function updateAgentStats(
   id: string,
-  input: { avgListingsPerYear: number | null; avgListingPrice: number | null }
+  input: {
+    avgListingsPerYear: number | null;
+    avgListingPrice: number | null;
+    avgDaysBetweenListings: number | null;
+  }
 ) {
   await db
     .update(agents)
-    .set({ avgListingsPerYear: input.avgListingsPerYear, avgListingPrice: input.avgListingPrice })
+    .set({
+      avgListingsPerYear: input.avgListingsPerYear,
+      avgListingPrice: input.avgListingPrice,
+      avgDaysBetweenListings: input.avgDaysBetweenListings,
+    })
     .where(eq(agents.id, id));
   revalidatePath("/agents");
 }

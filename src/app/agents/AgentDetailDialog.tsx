@@ -23,7 +23,7 @@ import {
   findAgentProfileUrl,
   getAgentListings,
 } from "./actions";
-import { averageDaysBetweenListings } from "./stats";
+import { resolveAvgDaysBetweenListings } from "./stats";
 import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -175,6 +175,7 @@ export function AgentDetailDialog({
   const [editStatus, setEditStatus] = useState<AgentRelationshipStatus>(agent.relationshipStatus);
   const [editAvgListingsPerYear, setEditAvgListingsPerYear] = useState(agent.avgListingsPerYear?.toString() ?? "");
   const [editAvgListingPrice, setEditAvgListingPrice] = useState(agent.avgListingPrice?.toString() ?? "");
+  const [editAvgDaysBetween, setEditAvgDaysBetween] = useState(agent.avgDaysBetweenListings?.toString() ?? "");
   const [contactError, setContactError] = useState<string | null>(null);
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -186,6 +187,7 @@ export function AgentDetailDialog({
     setEditStatus(agent.relationshipStatus);
     setEditAvgListingsPerYear(agent.avgListingsPerYear?.toString() ?? "");
     setEditAvgListingPrice(agent.avgListingPrice?.toString() ?? "");
+    setEditAvgDaysBetween(agent.avgDaysBetweenListings?.toString() ?? "");
     setContactError(null);
     setIsEditingContact(true);
   };
@@ -207,6 +209,7 @@ export function AgentDetailDialog({
     await updateAgentStats(agent.id, {
       avgListingsPerYear: editAvgListingsPerYear.trim() ? Number(editAvgListingsPerYear) : null,
       avgListingPrice: editAvgListingPrice.trim() ? Number(editAvgListingPrice) : null,
+      avgDaysBetweenListings: editAvgDaysBetween.trim() ? Number(editAvgDaysBetween) : null,
     });
     setIsSavingContact(false);
     toast.success("Agent updated");
@@ -285,7 +288,7 @@ export function AgentDetailDialog({
   };
 
   const callHref = telUrl(agent.phone);
-  const avgDaysBetweenListings = averageDaysBetweenListings(listings);
+  const avgDaysBetweenListings = resolveAvgDaysBetweenListings(agent, listings);
   const hasAnyStats = agent.avgListingsPerYear != null || agent.avgListingPrice != null || avgDaysBetweenListings != null;
 
   return (
@@ -335,6 +338,14 @@ export function AgentDetailDialog({
                 value={editAvgListingPrice}
                 onChange={(e) => setEditAvgListingPrice(e.target.value)}
                 placeholder="Avg listing price $"
+                type="number"
+                min="0"
+                className="flex-1"
+              />
+              <Input
+                value={editAvgDaysBetween}
+                onChange={(e) => setEditAvgDaysBetween(e.target.value)}
+                placeholder="Days between listings"
                 type="number"
                 min="0"
                 className="flex-1"

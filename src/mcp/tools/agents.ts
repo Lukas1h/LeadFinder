@@ -9,10 +9,11 @@ import {
   bookingLineItems,
   messagePresets,
   messageSends,
+  agentInteractions,
   AGENT_RELATIONSHIP_STATUSES,
   type AgentRelationshipStatus,
 } from "@/db/schema";
-import { averageDaysBetweenListings } from "@/app/agents/stats";
+import { resolveAvgDaysBetweenListings } from "@/app/agents/stats";
 import { normalizeEmail, normalizeName, normalizePhone } from "@/lib/normalize";
 import { text, errorText, normalizeContact } from "./shared";
 
@@ -86,7 +87,7 @@ export function registerAgentTools(server: McpServer): void {
       return text(
         page.map((a) => ({
           ...a,
-          avgDaysBetweenListings: averageDaysBetweenListings(listingsByAgent.get(a.id) ?? []),
+          avgDaysBetweenListings: resolveAvgDaysBetweenListings(a, listingsByAgent.get(a.id) ?? []),
         }))
       );
     }
@@ -97,7 +98,7 @@ export function registerAgentTools(server: McpServer): void {
     {
       title: "Get agent detail",
       description:
-        "Full detail for one agent by id, phone, or email — the agent row (including avgListingsPerYear/avgListingPrice, manually researched), every listing tied to their phone, avgDaysBetweenListings computed from those listings (null below 3 of them), and their send history. Exactly one of id/phone/email must be given.",
+        "Full detail for one agent by id, phone, or email — the agent row (including the researched avgListingsPerYear/avgListingPrice stats), their listings, avgDaysBetweenListings (researched value if set, otherwise computed from tracked listings and null below 3 of them), their templated send history, every logged interaction (calls, texts and emails that happened outside the app, in both directions), and their bookings. Exactly one of id/phone/email must be given.",
       inputSchema: {
         id: z.string().uuid().optional(),
         phone: z.string().optional(),
@@ -130,11 +131,30 @@ export function registerAgentTools(server: McpServer): void {
 
       const agentBookings = await db.select().from(bookings).where(eq(bookings.contactAgentId, agent.id));
 
+      // Sends and interactions are separate tables on purpose (see the comment
+      // on agentInteractions in schema.ts) but they're one story, so both come
+      // back here rather than making a caller know to ask twice.
+      const interactions = await db
+        .select({
+          id: agentInteractions.id,
+          occurredAt: agentInteractions.occurredAt,
+          channel: agentInteractions.channel,
+          direction: agentInteractions.direction,
+          outcome: agentInteractions.outcome,
+          note: agentInteractions.note,
+          unconfirmed: isNotNull(agentInteractions.pendingSince),
+          source: agentInteractions.source,
+        })
+        .from(agentInteractions)
+        .where(eq(agentInteractions.agentId, agent.id))
+        .orderBy(desc(agentInteractions.occurredAt));
+
       return text({
         agent,
-        avgDaysBetweenListings: averageDaysBetweenListings(agentListings),
+        avgDaysBetweenListings: resolveAvgDaysBetweenListings(agent, agentListings),
         listings: agentListings,
         sendHistory: history,
+        interactions,
         bookings: agentBookings,
       });
     }
@@ -145,7 +165,7 @@ export function registerAgentTools(server: McpServer): void {
     {
       title: "Check whether an agent has already been contacted",
       description:
-        "Given an email, phone, and/or name, reports whether this person is already a known agent and, if so, when they were last contacted and their send history — use this BEFORE send_agent_email to decide whether a duplicate-send warning is worth surfacing to the user. Pass the name too whenever you have it: a contact first added from a cold-email list has an email and no phone, while one picked up from a listing has a phone and no email, so checking only the identifier in front of you can report 'never contacted' about someone mid-conversation.",
+        "Given an email, phone, and/or name, reports whether this person is already a known agent and, if so, when they were last contacted, their send history, and every logged interaction (calls, texts and emails outside the app) — use this BEFORE send_agent_email to decide whether a duplicate-send warning is worth surfacing to the user. Pass the name too whenever you have it: a contact first added from a cold-email list has an email and no phone, while one picked up from a listing has a phone and no email, so checking only the identifier in front of you can report 'never contacted' about someone mid-conversation.",
       inputSchema: {
         email: z.string().optional(),
         phone: z.string().optional(),
@@ -190,6 +210,21 @@ export function registerAgentTools(server: McpServer): void {
         .where(eq(messageSends.agentId, agent.id))
         .orderBy(desc(messageSends.sentAt));
 
+      // A phone call or a text they sent counts as prior contact every bit as
+      // much as a templated send does, and reporting only sends here would
+      // answer "have I talked to this person" with a confident half-truth.
+      const priorInteractions = await db
+        .select({
+          occurredAt: agentInteractions.occurredAt,
+          channel: agentInteractions.channel,
+          direction: agentInteractions.direction,
+          outcome: agentInteractions.outcome,
+          note: agentInteractions.note,
+        })
+        .from(agentInteractions)
+        .where(eq(agentInteractions.agentId, agent.id))
+        .orderBy(desc(agentInteractions.occurredAt));
+
       return text({
         knownAgent: true,
         agent: {
@@ -201,6 +236,7 @@ export function registerAgentTools(server: McpServer): void {
           lastContactedAt: agent.lastContactedAt,
         },
         priorSends: history,
+        priorInteractions,
       });
     }
   );
@@ -250,7 +286,9 @@ export function registerAgentTools(server: McpServer): void {
     "update_agent",
     {
       title: "Update an agent",
-      description: "Edits an existing agent's name, phone, email, notes, or relationship status. Only provided fields change.",
+      description:
+        "Edits an existing agent's name, phone, email, notes, relationship status, or researched production stats. Only provided fields change; pass null to a stat to clear it. " +
+        "The three stats are all figures looked up from outside our own data (a public profile, MLS history) rather than anything the app observes. avgDaysBetweenListings in particular overrides a number normally computed from our tracked listings, which is null below 3 of them — set it when you've researched an agent's real cadence and our sample is too thin to show one.",
       inputSchema: {
         id: z.string().uuid(),
         name: z.string().optional(),
@@ -258,9 +296,18 @@ export function registerAgentTools(server: McpServer): void {
         email: z.string().optional(),
         notes: z.string().optional(),
         relationshipStatus: z.enum(AGENT_RELATIONSHIP_STATUSES).optional(),
+        avgListingsPerYear: z.number().int().min(0).nullable().optional().describe("Listings this agent takes in a typical year"),
+        avgListingPrice: z.number().int().min(0).nullable().optional().describe("Their typical listing price, whole dollars"),
+        avgDaysBetweenListings: z
+          .number()
+          .int()
+          .min(0)
+          .nullable()
+          .optional()
+          .describe("Researched days between their listings; overrides the value computed from our own tracked listings"),
       },
     },
-    async ({ id, name, phone, email, notes, relationshipStatus }) => {
+    async ({ id, name, phone, email, notes, relationshipStatus, avgListingsPerYear, avgListingPrice, avgDaysBetweenListings }) => {
       const [existing] = await db.select().from(agents).where(eq(agents.id, id));
       if (!existing) return errorText("No agent with that id");
 
@@ -268,12 +315,19 @@ export function registerAgentTools(server: McpServer): void {
       if (name !== undefined) patch.name = name.trim() ? normalizeName(name) : null;
       if (notes !== undefined) patch.notes = notes.trim() || null;
       if (relationshipStatus !== undefined) patch.relationshipStatus = relationshipStatus as AgentRelationshipStatus;
+      if (avgListingsPerYear !== undefined) patch.avgListingsPerYear = avgListingsPerYear;
+      if (avgListingPrice !== undefined) patch.avgListingPrice = avgListingPrice;
+      if (avgDaysBetweenListings !== undefined) patch.avgDaysBetweenListings = avgDaysBetweenListings;
       if (phone !== undefined || email !== undefined) {
         const parsed = normalizeContact(phone ?? existing.phone ?? undefined, email ?? existing.email ?? undefined);
         if (parsed.error) return errorText(parsed.error);
         patch.phone = parsed.phone;
         patch.email = parsed.email;
       }
+
+      // Drizzle rejects an empty set() outright, so a call that named only the
+      // id is answered with the row as-is rather than an error.
+      if (Object.keys(patch).length === 0) return text(existing);
 
       const [updated] = await db.update(agents).set(patch).where(eq(agents.id, id)).returning();
       return text(updated);
@@ -312,24 +366,25 @@ export function registerAgentTools(server: McpServer): void {
             relationshipStatus: agents.relationshipStatus,
             avgListingsPerYear: agents.avgListingsPerYear,
             avgListingPrice: agents.avgListingPrice,
+            avgDaysBetweenListings: agents.avgDaysBetweenListings,
             lastContactedAt: agents.lastContactedAt,
           })
           .from(agents),
         db.select().from(bookings),
         db.select().from(bookingLineItems),
         db
-          .select({ agentPhone: listings.agentPhone, listedAt: listings.listedAt, foundAt: listings.foundAt })
+          .select({ agentId: listings.agentId, listedAt: listings.listedAt, foundAt: listings.foundAt })
           .from(listings)
-          .where(isNotNull(listings.agentPhone)),
+          .where(isNotNull(listings.agentId)),
       ]);
 
       const revenueByBooking = new Map<string, number>();
       for (const li of allLineItems) revenueByBooking.set(li.bookingId, (revenueByBooking.get(li.bookingId) ?? 0) + li.amount);
 
-      const listingsByPhone = new Map<string, typeof agentListingDates>();
+      const listingsByAgentId = new Map<string, typeof agentListingDates>();
       for (const l of agentListingDates) {
-        if (!l.agentPhone) continue;
-        (listingsByPhone.get(l.agentPhone) ?? listingsByPhone.set(l.agentPhone, []).get(l.agentPhone)!).push(l);
+        if (!l.agentId) continue;
+        (listingsByAgentId.get(l.agentId) ?? listingsByAgentId.set(l.agentId, []).get(l.agentId)!).push(l);
       }
 
       const bookingsByAgent = new Map<string, typeof allBookings>();
@@ -347,7 +402,7 @@ export function registerAgentTools(server: McpServer): void {
           const d = b.jobDate ?? b.createdAt;
           return !latest || d > latest ? d : latest;
         }, null);
-        const agentListings = agent.phone ? listingsByPhone.get(agent.phone) ?? [] : [];
+        const agentListings = listingsByAgentId.get(agent.id) ?? [];
         return {
           id: agent.id,
           name: agent.name,
@@ -358,7 +413,7 @@ export function registerAgentTools(server: McpServer): void {
           totalRevenue,
           mostRecentBookingDate,
           listingCount: agentListings.length,
-          avgDaysBetweenListings: averageDaysBetweenListings(agentListings),
+          avgDaysBetweenListings: resolveAvgDaysBetweenListings(agent, agentListings),
           avgListingsPerYear: agent.avgListingsPerYear,
           avgListingPrice: agent.avgListingPrice,
           lastContactedAt: agent.lastContactedAt,

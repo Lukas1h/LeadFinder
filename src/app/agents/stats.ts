@@ -23,3 +23,20 @@ export function averageDaysBetweenListings(listings: { listedAt: Date | null; fo
   const avgMs = totalGapMs / (dates.length - 1);
   return Math.round(avgMs / (1000 * 60 * 60 * 24));
 }
+
+/**
+ * The days-between-listings figure to actually show for an agent: a researched
+ * override when one has been entered, otherwise the value computed from our own
+ * tracked listings.
+ *
+ * The override exists because the computed number is only as good as our
+ * sample. We track the listings our searches caught, so an agent we've seen
+ * twice gets null (below MIN_LISTINGS_FOR_AVG_GAP) even when their real cadence
+ * is public on their profile. Entering a number is a deliberate act, so it wins.
+ */
+export function resolveAvgDaysBetweenListings(
+  agent: { avgDaysBetweenListings: number | null },
+  trackedListings: { listedAt: Date | null; foundAt: Date }[]
+): number | null {
+  return agent.avgDaysBetweenListings ?? averageDaysBetweenListings(trackedListings);
+}
