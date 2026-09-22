@@ -543,7 +543,10 @@ export const agentInteractions = pgTable("agent_interactions", {
   messageSendId: uuid("message_send_id").references(() => messageSends.id, { onDelete: "set null" }),
 
   // "app" = recorded automatically from an action in the app, "manual" = typed
-  // in afterwards. Worth distinguishing: one is observed, the other remembered.
+  // in afterwards, "backfill" = reconstructed in bulk from older evidence
+  // (inbox replies, an agent's notes) by scripts/backfill-interactions.mjs.
+  // Worth distinguishing: one is observed, the others are remembered or
+  // inferred, and a backfilled row is the weakest of the three.
   source: text("source").notNull().default("manual"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
