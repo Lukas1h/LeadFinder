@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { MessageCircle, Mail, Phone, RefreshCw, Paperclip } from "lucide-react";
 import type { PresetType } from "@/db/schema";
 import { getMessageOptions, sendMessage, draftAiPresetOption, type PresetOption } from "@/app/messageActions";
-import { getComposeEmailOptions, sendListingEmail } from "@/app/composeEmailActions";
+import { getComposeEmailOptions, sendListingEmail, draftAiEmailPresetOption } from "@/app/composeEmailActions";
 import { startPendingCallForListing } from "@/app/agents/interactionActions";
 import { AI_DRAFT_VARIANT_SENTINEL } from "@/lib/messageTemplate";
 import { smsUrl, telUrl, firstName } from "@/lib/sms";
@@ -72,6 +72,8 @@ export function SendContactDialog({
   const [editedEmail, setEditedEmail] = useState("");
   const [editedSubject, setEditedSubject] = useState("");
   const [editedBody, setEditedBody] = useState("");
+  const [isDraftingEmailAi, setIsDraftingEmailAi] = useState(false);
+  const [emailAiInstruction, setEmailAiInstruction] = useState("");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const loadEmailOptions = () => {
@@ -81,6 +83,8 @@ export function SendContactDialog({
     setEditedEmail(agentEmail ?? "");
     setEditedSubject("");
     setEditedBody("");
+    setIsDraftingEmailAi(false);
+    setEmailAiInstruction("");
     getComposeEmailOptions({ type, agentName, address }).then(({ presets }) => {
       setEmailPresets(presets);
       const blank = presets.find((p) => p.blank);
@@ -105,6 +109,8 @@ export function SendContactDialog({
     setIsDraftingAi(false);
     setAiInstruction("");
     setEmailLoaded(false);
+    setIsDraftingEmailAi(false);
+    setEmailAiInstruction("");
     getMessageOptions(listingId, type).then(({ presets }) => {
       setSmsPresets(presets);
       const blank = presets.find((p) => p.blank);
@@ -182,11 +188,42 @@ export function SendContactDialog({
     setOpen(false);
   };
 
-  const handleSelectEmailPreset = (presetId: string) => {
+  const handleSelectEmailPreset = async (presetId: string) => {
     setEmailSelectedPresetId(presetId);
     const option = emailPresets.find((p) => p.presetId === presetId);
+
+    if (option?.variantId === AI_DRAFT_VARIANT_SENTINEL && !option.subject) {
+      setEditedSubject("");
+      setEditedBody("");
+      setIsDraftingEmailAi(true);
+      const drafted = await draftAiEmailPresetOption(listingId, type);
+      setIsDraftingEmailAi(false);
+      if (!drafted) {
+        toast.error("AI draft failed — pick another preset or try again.");
+        return;
+      }
+      setEmailPresets((prev) => prev.map((p) => (p.presetId === presetId ? drafted : p)));
+      setEditedSubject(drafted.subject ?? "");
+      setEditedBody(drafted.text ?? "");
+      return;
+    }
+
     setEditedSubject(option?.subject ?? "");
     setEditedBody(option?.text ?? "");
+  };
+
+  const handleRegenerateEmailAi = async () => {
+    if (!selectedEmail) return;
+    setIsDraftingEmailAi(true);
+    const drafted = await draftAiEmailPresetOption(listingId, type, emailAiInstruction.trim() || undefined);
+    setIsDraftingEmailAi(false);
+    if (!drafted) {
+      toast.error("AI draft failed — try again.");
+      return;
+    }
+    setEmailPresets((prev) => prev.map((p) => (p.presetId === selectedEmail.presetId ? drafted : p)));
+    setEditedSubject(drafted.subject ?? "");
+    setEditedBody(drafted.text ?? "");
   };
 
   const handleSendEmail = () => {
@@ -345,14 +382,48 @@ export function SendContactDialog({
                       <Label htmlFor="email-subject" className="text-xs text-muted-foreground">
                         Subject
                       </Label>
-                      <Input id="email-subject" value={editedSubject} onChange={(e) => setEditedSubject(e.target.value)} />
+                      {isDraftingEmailAi ? (
+                        <p className="text-sm text-muted-foreground py-2">Drafting…</p>
+                      ) : (
+                        <Input
+                          id="email-subject"
+                          value={editedSubject}
+                          onChange={(e) => setEditedSubject(e.target.value)}
+                        />
+                      )}
                     </div>
-                    <Textarea
-                      value={editedBody}
-                      onChange={(e) => setEditedBody(e.target.value)}
-                      rows={8}
-                      className="text-sm resize-none"
-                    />
+                    {isDraftingEmailAi ? (
+                      <p className="text-sm text-muted-foreground py-4">Drafting…</p>
+                    ) : (
+                      <Textarea
+                        value={editedBody}
+                        onChange={(e) => setEditedBody(e.target.value)}
+                        rows={8}
+                        className="text-sm resize-none"
+                      />
+                    )}
+
+                    {selectedEmail.variantId === AI_DRAFT_VARIANT_SENTINEL && !isDraftingEmailAi && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={emailAiInstruction}
+                          onChange={(e) => setEmailAiInstruction(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleRegenerateEmailAi();
+                            }
+                          }}
+                          placeholder="Don't like it? Tell it what to change…"
+                          className="text-sm flex-1"
+                        />
+                        <Button type="button" variant="outline" size="sm" onClick={handleRegenerateEmailAi}>
+                          <RefreshCw />
+                          Regenerate
+                        </Button>
+                      </div>
+                    )}
+
                     {selectedEmail.attachments && selectedEmail.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {selectedEmail.attachments.map((a) => (
@@ -392,7 +463,14 @@ export function SendContactDialog({
           ) : (
             <Button
               onClick={handleSendEmail}
-              disabled={!selectedEmail || !editedEmail.trim() || !editedSubject.trim() || !editedBody.trim() || isSendingEmail}
+              disabled={
+                !selectedEmail ||
+                !editedEmail.trim() ||
+                !editedSubject.trim() ||
+                !editedBody.trim() ||
+                isSendingEmail ||
+                isDraftingEmailAi
+              }
             >
               <Mail />
               {isSendingEmail ? "Sending…" : "Send email"}

@@ -43,6 +43,11 @@ export interface DraftMessageInput {
   instruction?: string | null;
 }
 
+export interface DraftEmailOutput {
+  subject: string;
+  body: string;
+}
+
 const RELATIONSHIP_GUIDANCE: Record<AgentRelationshipStatus, string> = {
   cold: "Never worked with this agent before — first impression.",
   warm: "Had some back-and-forth before, but no job yet — write like continuing a conversation, not starting cold.",
@@ -172,7 +177,65 @@ ${formatListingFacts(input)}
 Agent: ${input.agentName ?? "unknown"}, relationship: ${input.agentRelationshipStatus ?? "cold"} — ${RELATIONSHIP_GUIDANCE[input.agentRelationshipStatus ?? "cold"]}${input.agentNotes ? `\nLukas's own notes on this agent: ${input.agentNotes}` : ""}`;
 }
 
-function buildPrompt(input: DraftMessageInput): string {
+function buildInitialOutreachEmailPrompt(input: DraftMessageInput, street: string, skipIntro: boolean): string {
+  return `Write a short, personalized email to a real estate agent. Analyze the listing details AND the attached photos closely before deciding what to say — judge the photography yourself (composition, lighting, exposure, drone presence, etc.) rather than being handed a score.
+
+How to choose the email subject and approach — determine the strongest reason to contact, in priority order:
+1. If the listing is coming soon or has little/no photography, focus on quick turnaround and getting photos done.
+2. If the photos are poor quality, offer a professional refresh without insulting their current photographer.
+3. If the photos are good but there's no video or drone shot, offer the specific missing service.
+4. If the property is expensive, visually interesting, or architectural, emphasize how strong photography can showcase it.
+5. If the agent appears established and photos look professional, position Lukas as a backup for busy/last-minute situations.
+6. If none above applies, simply introduce Lukas as a local real estate photographer.
+
+Don't automatically criticize the photos — if they're already good, acknowledge that and use the backup approach.
+
+Listing — street (use for {{street}}): ${street}
+${formatListingFacts(input)}
+
+Agent (use first name for {{firstName}}, city for {{city}}):
+- Name: ${input.agentName ?? "unknown"}
+- City: ${input.city ?? "unknown"}
+- Relationship: ${input.agentRelationshipStatus ?? "cold"} — ${RELATIONSHIP_GUIDANCE[input.agentRelationshipStatus ?? "cold"]}
+- Listings we've seen: ${input.agentListingCount}
+${input.agentNotes ? `- Lukas's notes: ${input.agentNotes}\n` : ""}
+Writing style:
+- Casual, brief, personable — sounds like a real photographer, not automated marketing.
+- Email can be 2-3 short paragraphs, not multiple pages.
+- Start with a natural greeting and reference to the listing.
+- Keep offers simple and action-oriented.${skipIntro ? `\n- IMPORTANT: Do NOT say "I'm Lukas," "introduce myself," or name-drop Lukas. This agent knows who's emailing — write like an existing contact.` : ""}
+- Avoid corporate language like "take your listing to the next level," "elevate," "best-in-class."
+- No exaggerated sales pitch or pressure.
+
+Example tone (not templates to copy, just style guidance):
+- Casual: "Hey [name], I came across your listing on [street] and thought you might benefit from some fresh photos."
+- Direct: "I'm Lukas, a local photographer. I noticed [street] could use updated photos — happy to help if that's something you need."
+- Backup: "I specialize in real estate photos and video. I'm guessing you have someone, but I'm here if you ever need a quick turnaround."
+
+Final rules:
+- Reference the specific street naturally.
+- Don't pretend there's a problem that doesn't exist.
+- Keep the subject line short (under 50 chars if possible) — something that makes them want to open it.
+- The goal: make them think "this person actually looked at my listing, and it would be easy to work with them if I need photos."`;
+}
+
+function buildFollowUpEmailPrompt(input: DraftMessageInput, street: string, skipIntro: boolean): string {
+  return `Write a short email follow-up to a real estate agent — an initial email about this listing already went out and got no reply. From Lukas, a local real estate photographer.
+
+Rules for email follow-ups:
+- NEVER waste their time with "just checking in" or "following up" — that adds zero value.
+- DO ONE: add something genuinely new, lower the pressure ("no pressure if you've already got someone"), or signal this is the last touch.
+- Keep it 1-2 short paragraphs, much briefer than the first email.
+- ${skipIntro ? `Do NOT name-drop Lukas — this agent has your email in their history.` : ""}
+- Reference the street (${street}) naturally.
+
+Listing: ${street}
+${formatListingFacts(input)}
+
+Agent: ${input.agentName ?? "unknown"}, relationship: ${input.agentRelationshipStatus ?? "cold"}`;
+}
+
+function buildSmsPrompt(input: DraftMessageInput): string {
   const street = shortStreetName(input.address) ?? input.address ?? "the listing";
   const status = input.agentRelationshipStatus ?? "cold";
   const skipIntro = SKIP_INTRO_STATUSES.includes(status);
@@ -200,6 +263,39 @@ Additional writing rules (these override anything above if they conflict, except
 Respond with ONLY the message text — no quotes, no JSON, no explanation.`;
 }
 
+function buildEmailPrompt(input: DraftMessageInput): string {
+  const street = shortStreetName(input.address) ?? input.address ?? "the listing";
+  const status = input.agentRelationshipStatus ?? "cold";
+  const skipIntro = SKIP_INTRO_STATUSES.includes(status);
+
+  const scenarioPrompt =
+    input.type === "initial_outreach"
+      ? buildInitialOutreachEmailPrompt(input, street, skipIntro)
+      : buildFollowUpEmailPrompt(input, street, skipIntro);
+
+  const instructionBlock = input.instruction?.trim()
+    ? `\nLukas's own instruction for THIS email — follow over any conflicting guidance above: ${input.instruction.trim()}\n`
+    : "";
+
+  return `You are Lukas, writing an email to a real estate agent to offer photography services.
+${instructionBlock}
+${scenarioPrompt}
+
+Writing rules:
+- NEVER use em dashes (—) or en dashes (–). Use commas or periods instead.
+- Zero or one exclamation point total, prefer none. Emails are professional.
+- Avoid these AI giveaways: "I noticed," "I wanted to reach out," "I hope this finds you," "don't hesitate," "in case you," "showcase," "ensure," "delve," "take care of," "beautifully," "stunning," "reliable," "pivotal," "crucial."
+- No corporate jargon or sales-speak.
+- Natural, conversational tone but still professional — this is email, not a text.
+- Contractions are fine and help sound natural.
+
+Respond with ONLY JSON in this exact format, no other text:
+{
+  "subject": "subject line here",
+  "body": "email body here"
+}`;
+}
+
 // Belt-and-suspenders: the prompt bans em/en dashes outright, but the
 // model can still slip one through occasionally. Swap it for a period
 // (the safest universal stand-in for how these get used as a clause
@@ -221,7 +317,7 @@ function stripDashes(text: string): string {
 }
 
 /**
- * Drafts one message live for this exact listing+agent, judging the actual
+ * Drafts one SMS message live for this exact listing+agent, judging the actual
  * listing photos directly (Gemini vision, same provider as scorePhotos)
  * rather than being handed a pre-computed score — the writing guide calls
  * for judging composition/coverage/drone-presence/architectural interest
@@ -237,7 +333,7 @@ export async function draftMessage(input: DraftMessageInput): Promise<string | n
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const promptText = buildPrompt(input);
+  const promptText = buildSmsPrompt(input);
   const photos = (input.photos ?? []).slice(0, MAX_PHOTOS_FOR_DRAFT);
   const imageParts = (await Promise.all(photos.map(fetchImagePart))).filter((part) => part !== null);
 
@@ -261,4 +357,52 @@ export async function draftMessage(input: DraftMessageInput): Promise<string | n
     console.error("draftMessage: request failed", err);
     return null;
   }
+}
+
+/**
+ * Drafts one email (subject + body) live for this listing+agent, analyzing
+ * the actual listing photos with Gemini vision to judge photography quality
+ * and determine the best approach. Runs synchronously while the Send dialog
+ * is open, so a failure means "no AI option this time." Returns null on failure.
+ */
+export async function draftEmailMessage(input: DraftMessageInput): Promise<DraftEmailOutput | null> {
+  if (process.env.USE_MOCK_GEMINI === "true") {
+    return {
+      subject: "[Mock] Photography for your listing",
+      body: `Hi${input.agentName ? ` ${input.agentName.split(" ")[0]}` : ""}, saw your listing${input.address ? ` on ${input.address}` : ""}. Would love to help with professional photos if you need them.`,
+    };
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  const promptText = buildEmailPrompt(input);
+  const photos = (input.photos ?? []).slice(0, MAX_PHOTOS_FOR_DRAFT);
+  const imageParts = (await Promise.all(photos.map(fetchImagePart))).filter((part) => part !== null);
+
+  try {
+    const response = await callGemini({
+      model: MODEL,
+      apiKey,
+      parts: [{ text: promptText }, ...imageParts],
+      generationConfig: {
+        temperature: 0.9,
+      },
+      logLabel: "draftEmailMessage",
+    });
+
+    if (!response) return null;
+
+    const parsed = JSON.parse(response.trim());
+    if (parsed.subject && parsed.body) {
+      return {
+        subject: stripDashes(parsed.subject.trim()),
+        body: stripDashes(parsed.body.trim()),
+      };
+    }
+  } catch (err) {
+    console.error("draftEmailMessage: request failed", err);
+  }
+
+  return null;
 }

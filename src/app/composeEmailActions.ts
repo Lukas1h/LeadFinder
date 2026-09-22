@@ -1,8 +1,18 @@
 "use server";
 
 import { db } from "@/db";
-import { agents, listings, messagePresets, messagePresetVariants, messageSends, type PresetType } from "@/db/schema";
-import { and, count, eq } from "drizzle-orm";
+import {
+  agents,
+  listings,
+  messagePresets,
+  messagePresetVariants,
+  messageSends,
+  bookingLineItems,
+  type PresetType,
+  type AgentRelationshipStatus,
+  type Listing,
+} from "@/db/schema";
+import { and, count, eq, sum } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
   DEFAULT_COLD_EMAIL_SUBJECT,
@@ -11,8 +21,10 @@ import {
   BLANK_EMAIL_BODY,
   renderMessageBody,
   renderSubject,
+  AI_DRAFT_VARIANT_SENTINEL,
 } from "@/lib/messageTemplate";
 import { sendEmail } from "@/lib/mailer";
+import { draftEmailMessage } from "@/lib/draftMessage";
 import type { PresetOption, MessageOptions } from "@/app/messageActions";
 import { normalizeEmail, normalizeName, normalizePhone, EMAIL_RE } from "@/lib/normalize";
 
@@ -77,6 +89,23 @@ export async function ensureBlankEmailPreset() {
 }
 
 /**
+ * Idempotent — inserts the "AI Draft" system preset for email the first
+ * time it's needed, similar to SMS. Starts with zero variants since each
+ * email draft is one-off and materialized only when actually sent.
+ */
+export async function ensureAiDraftEmailPreset(type: PresetType) {
+  const [existing] = await db
+    .select({ id: messagePresets.id })
+    .from(messagePresets)
+    .where(and(eq(messagePresets.type, type), eq(messagePresets.channel, "email"), eq(messagePresets.aiGenerated, true)));
+  if (existing) return;
+
+  await db
+    .insert(messagePresets)
+    .values({ name: "AI Draft", type, channel: "email", aiGenerated: true });
+}
+
+/**
  * Like getMessageOptions but for the cold-compose flow: no listing, so no
  * criteria-matching, and no separate "type" argument by default — Compose
  * shows one Template dropdown spanning both initial_outreach and follow_up
@@ -99,6 +128,7 @@ export async function getComposeEmailOptions(listingContext?: {
 }): Promise<MessageOptions> {
   await ensureDefaultEmailPreset();
   await ensureBlankEmailPreset();
+  if (listingContext) await ensureAiDraftEmailPreset(listingContext.type);
 
   const conditions = [
     eq(messagePresets.channel, "email"),
@@ -170,7 +200,155 @@ export async function getComposeEmailOptions(listingContext?: {
     };
   });
 
+  // Add AI Draft preset for listing context (same pattern as SMS)
+  if (listingContext) {
+    const aiPreset = await getAiEmailPreset(listingContext.type);
+    if (aiPreset) {
+      presets.push({
+        presetId: aiPreset.id,
+        presetName: aiPreset.name,
+        variantId: AI_DRAFT_VARIANT_SENTINEL,
+        variantLabel: "AI",
+        text: "",
+        subject: "",
+        recommended: false,
+      });
+    }
+  }
+
   return { presets };
+}
+
+async function getAiEmailPreset(type: PresetType): Promise<{ id: string; name: string } | null> {
+  const [preset] = await db
+    .select({ id: messagePresets.id, name: messagePresets.name })
+    .from(messagePresets)
+    .where(
+      and(
+        eq(messagePresets.type, type),
+        eq(messagePresets.channel, "email"),
+        eq(messagePresets.aiGenerated, true),
+        eq(messagePresets.enabled, true)
+      )
+    );
+  return preset ?? null;
+}
+
+function listingAgeDays(listedAt: Date | null, foundAt: Date): number {
+  const reference = listedAt ?? foundAt;
+  return Math.floor((Date.now() - reference.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Drafts an AI email for a listing — called on demand when user selects
+ * "AI Draft" from the email preset dropdown in SendContactDialog.
+ */
+export async function draftAiEmailPresetOption(
+  listingId: string,
+  type: PresetType,
+  instruction?: string
+): Promise<PresetOption | null> {
+  const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
+  if (!listing) return null;
+  const ageDays = listingAgeDays(listing.listedAt, listing.foundAt);
+  return buildAiEmailDraftOption(listingId, type, listing, ageDays, instruction);
+}
+
+/**
+ * Drafts and returns the AI email option, or null on failure. Like the SMS
+ * counterpart, this is one-off content drafted when the user selects AI Draft,
+ * not eagerly on every dialog open.
+ */
+async function buildAiEmailDraftOption(
+  listingId: string,
+  type: PresetType,
+  listing: Listing,
+  ageDays: number,
+  instruction?: string
+): Promise<PresetOption | null> {
+  const [preset] = await db
+    .select({ id: messagePresets.id, name: messagePresets.name })
+    .from(messagePresets)
+    .where(
+      and(
+        eq(messagePresets.type, type),
+        eq(messagePresets.channel, "email"),
+        eq(messagePresets.aiGenerated, true),
+        eq(messagePresets.enabled, true)
+      )
+    );
+  if (!preset) return null;
+
+  let agent: { relationshipStatus: AgentRelationshipStatus; lastContactedAt: Date | null; notes: string | null } | null =
+    null;
+  let agentListingCount = 0;
+  if (listing.agentId) {
+    const [agentRow] = await db
+      .select({
+        relationshipStatus: agents.relationshipStatus,
+        lastContactedAt: agents.lastContactedAt,
+        notes: agents.notes,
+      })
+      .from(agents)
+      .where(eq(agents.id, listing.agentId));
+    agent = agentRow ?? null;
+
+    const [{ count: listingCount }] = await db
+      .select({ count: count() })
+      .from(listings)
+      .where(eq(listings.agentId, listing.agentId));
+    agentListingCount = listingCount;
+  }
+
+  let bookingValue: number | null = null;
+  if (listing.bookingId) {
+    const [row] = await db
+      .select({ total: sum(bookingLineItems.amount) })
+      .from(bookingLineItems)
+      .where(eq(bookingLineItems.bookingId, listing.bookingId));
+    bookingValue = row?.total != null ? Number(row.total) : null;
+  }
+
+  // Use draftEmailMessage like SMS does with draftMessage
+  const draftOutput = await draftEmailMessage({
+    type,
+    address: listing.address,
+    city: listing.city,
+    state: listing.state,
+    zipcode: listing.zipcode,
+    price: listing.price,
+    bedrooms: listing.bedrooms,
+    bathrooms: listing.bathrooms,
+    livingArea: listing.livingArea,
+    homeType: listing.homeType,
+    isComingSoon: listing.isComingSoon,
+    listingUrl: listing.listingUrl,
+    brokerName: listing.brokerName,
+    status: listing.status,
+    notes: listing.notes,
+    bookingValue,
+    photoCount: listing.photoCount,
+    photos: listing.photos,
+    ageDays,
+    agentName: listing.agentName,
+    agentRelationshipStatus: agent?.relationshipStatus ?? null,
+    agentListingCount,
+    agentLastContactedAt: agent?.lastContactedAt ?? null,
+    agentNotes: agent?.notes ?? null,
+    instruction,
+  });
+
+  if (!draftOutput) return null;
+
+  return {
+    presetId: preset.id,
+    presetName: preset.name,
+    variantId: AI_DRAFT_VARIANT_SENTINEL,
+    variantLabel: "AI",
+    text: draftOutput.body,
+    subject: draftOutput.subject,
+    recommended: false,
+  };
 }
 
 export interface SendListingEmailInput {
@@ -218,6 +396,22 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
   }
 
   const now = new Date();
+
+  // If this is an AI draft, materialize it as a variant now (same as SMS)
+  let resolvedVariantId = input.variantId;
+  if (input.variantId === AI_DRAFT_VARIANT_SENTINEL) {
+    const [variant] = await db
+      .insert(messagePresetVariants)
+      .values({
+        presetId: input.presetId,
+        label: `AI · ${now.toLocaleDateString()}`,
+        subject,
+        body,
+      })
+      .returning({ id: messagePresetVariants.id });
+    resolvedVariantId = variant.id;
+  }
+
   const [lead] = await db
     .update(listings)
     .set({
@@ -234,7 +428,7 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
     listingId: input.listingId,
     agentId,
     presetId: input.presetId,
-    variantId: input.variantId,
+    variantId: resolvedVariantId,
     type: input.type,
     channel: "email",
     sentAt: now,
