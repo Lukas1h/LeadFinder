@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import Link from "next/link";
 import { RotateCcw, Phone, MessageCircle, Mail, StickyNote } from "lucide-react";
-import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
+import type { Agent, AgentRelationshipStatus } from "@/db/schema";
 import { updateAgentRelationshipStatus, reconnectAgent, markAgentDeclined } from "./actions";
 import { averageDaysBetweenListings } from "./stats";
 import { AgentDetailDialog } from "./AgentDetailDialog";
@@ -18,11 +18,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export function AgentCard({
   agent,
   listingCount,
-  listings,
+  listingDates,
 }: {
   agent: Agent;
   listingCount: number;
-  listings: Listing[];
+  // Just the dates the "~Nd between listings" stat needs. The dialog fetches
+  // the agent's full listings itself when it opens.
+  listingDates: { listedAt: Date | null; foundAt: Date }[];
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -39,14 +41,13 @@ export function AgentCard({
   };
 
   const callHref = telUrl(agent.phone);
-  const avgDaysBetweenListings = averageDaysBetweenListings(listings);
+  const avgDaysBetweenListings = averageDaysBetweenListings(listingDates);
 
   return (
     <Card className="flex-row items-start justify-between gap-4 p-4 flex-wrap">
       <div className="min-w-0">
         <AgentDetailDialog
           agent={agent}
-          listings={listings}
           trigger={
             <button type="button" className="font-semibold text-foreground hover:underline text-left">
               {agent.name ?? "Unknown name"}

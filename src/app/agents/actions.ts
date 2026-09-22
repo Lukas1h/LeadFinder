@@ -59,8 +59,9 @@ export async function ensureAgentsBackfilled() {
       await db.update(listings).set({ agentId }).where(eq(listings.id, row.id));
     }
   }
-
-  revalidatePath("/agents");
+  // No revalidatePath here: this is called during the Agents page's own render,
+  // where Next forbids it — and it would be pointless anyway, since the render
+  // reading these rows is the one happening right now.
 }
 
 export async function updateAgentRelationshipStatus(id: string, status: AgentRelationshipStatus) {
@@ -263,11 +264,6 @@ export async function linkAgentToListing(
   return { error: null };
 }
 
-export interface AgentWithListings {
-  agent: Agent;
-  listings: Listing[];
-}
-
 /**
  * Looks up an agent by phone for the AgentRow component (the listing
  * detail modal's agent reference, and the booking detail dialog's contact
@@ -279,7 +275,7 @@ export interface AgentWithListings {
 export async function getOrCreateAgentByPhone(
   phone: string,
   name: string | null
-): Promise<AgentWithListings | null> {
+): Promise<Agent | null> {
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone) return null;
 
@@ -292,9 +288,7 @@ export async function getOrCreateAgentByPhone(
   }
   if (!agent) return null;
 
-  const agentListings = await db.select().from(listings).where(eq(listings.agentId, agent.id));
-
-  return { agent, listings: agentListings };
+  return agent;
 }
 
 /**
@@ -407,4 +401,41 @@ export async function findAgentProfileUrl(agent: { id: string; name: string | nu
   }
 
   return resolved;
+}
+
+/**
+ * Full listing rows for one agent, fetched when their detail dialog opens.
+ *
+ * The Agents page used to load every linked listing up front so each card
+ * could hand a full array down to its dialog. That pulled listings.photos —
+ * an array of image URLs per listing — for hundreds of listings on every page
+ * load, to render a list that shows only an address and a price, and only for
+ * the one agent whose dialog is actually open. Same shape of unbounded fetch
+ * that ran this app's database transfer quota out once already.
+ */
+export async function getAgentListings(agentId: string): Promise<Listing[]> {
+  return db
+    .select()
+    .from(listings)
+    .where(eq(listings.agentId, agentId))
+    .orderBy(desc(sql`coalesce(${listings.listedAt}, ${listings.foundAt})`));
+}
+
+/**
+ * Just the two dates every agent card needs for its "~Nd between listings"
+ * stat (see averageDaysBetweenListings), keyed by agent. Deliberately not the
+ * full rows — see getAgentListings above.
+ */
+export async function listingDatesByAgent(): Promise<Record<string, { listedAt: Date | null; foundAt: Date }[]>> {
+  const rows = await db
+    .select({ agentId: listings.agentId, listedAt: listings.listedAt, foundAt: listings.foundAt })
+    .from(listings)
+    .where(isNotNull(listings.agentId));
+
+  const byAgent: Record<string, { listedAt: Date | null; foundAt: Date }[]> = {};
+  for (const r of rows) {
+    if (!r.agentId) continue;
+    (byAgent[r.agentId] ??= []).push({ listedAt: r.listedAt, foundAt: r.foundAt });
+  }
+  return byAgent;
 }

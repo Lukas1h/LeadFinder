@@ -21,6 +21,7 @@ import {
   updateAgentStats,
   deleteAgent,
   findAgentProfileUrl,
+  getAgentListings,
 } from "./actions";
 import { averageDaysBetweenListings } from "./stats";
 import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
@@ -148,13 +149,11 @@ function TimelineRow({ item }: { item: TimelineItem }) {
 
 export function AgentDetailDialog({
   agent,
-  listings,
   trigger,
   open: openProp,
   onOpenChange: onOpenChangeProp,
 }: {
   agent: Agent;
-  listings: Listing[];
   /** Omit when driving open/onOpenChange from outside (see AgentsList's link-triggered open). */
   trigger?: React.ReactNode;
   open?: boolean;
@@ -242,6 +241,28 @@ export function AgentDetailDialog({
       setHistoryLoaded(true);
     });
   }, [open, agent.id, historyVersion]);
+
+  // Loaded here rather than handed down from the page: these rows carry the
+  // photos array, and prefetching them for every agent just so one dialog can
+  // open was the bulk of the Agents page's payload.
+  // Keyed by agent rather than paired with a separate loading flag: the flag
+  // version needed a synchronous reset on every open, and a slow response for a
+  // previously-opened agent could land after this one's and overwrite it.
+  const [loaded, setLoaded] = useState<{ agentId: string; items: Listing[] } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getAgentListings(agent.id).then((items) => {
+      if (!cancelled) setLoaded({ agentId: agent.id, items });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, agent.id]);
+
+  const listingsLoaded = loaded?.agentId === agent.id;
+  const listings = listingsLoaded ? loaded.items : [];
 
   const [agentBookings, setAgentBookings] = useState<BookingWithDetails[]>([]);
   const [bookingsLoaded, setBookingsLoaded] = useState(false);
@@ -480,7 +501,9 @@ export function AgentDetailDialog({
         )}
 
         <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto -mx-2 border-t pt-3">
-          {listings.length === 0 ? (
+          {!listingsLoaded ? (
+            <p className="text-sm text-muted-foreground py-4 px-2">Loading listings…</p>
+          ) : listings.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 px-2">No listings from this agent yet.</p>
           ) : (
             listings.map((l) => <ListingRow key={l.id} listing={l} />)

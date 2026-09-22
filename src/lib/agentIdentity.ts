@@ -38,10 +38,14 @@ export async function resolveAgentId(
   if (phone) {
     const [byPhone] = await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, phone));
     if (byPhone) {
-      await db
-        .update(agents)
-        .set({ ...patch, ...(name ? { name } : {}) })
-        .where(eq(agents.id, byPhone.id));
+      // Skipped entirely when there's nothing new to write. A caller that only
+      // wants the id (ensureAgentsBackfilled resolving a listing's agent, say)
+      // passes no patch and often no name, and Drizzle rejects an empty set()
+      // outright rather than treating it as the no-op it is.
+      const changes = { ...patch, ...(name ? { name } : {}) };
+      if (Object.keys(changes).length > 0) {
+        await db.update(agents).set(changes).where(eq(agents.id, byPhone.id));
+      }
       return byPhone.id;
     }
   }
@@ -54,20 +58,26 @@ export async function resolveAgentId(
 
     if (sameName.length === 1) {
       const existing = sameName[0];
-      await db
-        .update(agents)
-        .set({ ...patch, ...(!existing.phone && phone ? { phone } : {}) })
-        .where(eq(agents.id, existing.id));
+      const changes = { ...patch, ...(!existing.phone && phone ? { phone } : {}) };
+      if (Object.keys(changes).length > 0) {
+        await db.update(agents).set(changes).where(eq(agents.id, existing.id));
+      }
       return existing.id;
     }
   }
 
   if (!phone) return null;
 
+  const onConflict = { ...patch, ...(name ? { name } : {}) };
   const [inserted] = await db
     .insert(agents)
     .values({ phone, name, ...patch })
-    .onConflictDoUpdate({ target: agents.phone, set: { ...patch, ...(name ? { name } : {}) } })
+    // ON CONFLICT still has to set something even when there's nothing to
+    // change, so fall back to rewriting the phone with itself.
+    .onConflictDoUpdate({
+      target: agents.phone,
+      set: Object.keys(onConflict).length > 0 ? onConflict : { phone },
+    })
     .returning({ id: agents.id });
   return inserted?.id ?? null;
 }

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, RotateCcw, ChevronRight, Loader2 } from "lucide-react";
-import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
+import type { Agent, AgentRelationshipStatus } from "@/db/schema";
 import { daysSince } from "@/lib/format";
 import { AgentCard } from "./AgentCard";
 import { RELATIONSHIP_LABELS } from "./relationshipLabels";
@@ -47,12 +47,12 @@ function isColdAndFresh(a: Agent): boolean {
 export function AgentsList({
   agents,
   counts,
-  listingsByAgent,
+  listingDatesByAgent,
   coldFreshTotal,
 }: {
   agents: Agent[];
   counts: Record<string, number>;
-  listingsByAgent: Record<string, Listing[]>;
+  listingDatesByAgent: Record<string, { listedAt: Date | null; foundAt: Date }[]>;
   // True count of the cold-and-never-contacted bucket — the `agents` prop
   // only carries COLD_INITIAL_LIMIT of them, so the section header and
   // "View all" button need this separately to show the real number.
@@ -154,8 +154,8 @@ export function AgentsList({
       <AgentCard
         key={agent.id}
         agent={agent}
-        listingCount={agent.phone ? counts[agent.phone] ?? 0 : 0}
-        listings={listingsByAgent[agent.id] ?? []}
+        listingCount={counts[agent.id] ?? 0}
+        listingDates={listingDatesByAgent[agent.id] ?? []}
       />
     );
   }
@@ -169,7 +169,6 @@ export function AgentsList({
         <AgentDetailDialog
           key={displayedAgent.id}
           agent={displayedAgent}
-          listings={listingsByAgent[displayedAgent.id] ?? []}
           open={!!linkedAgent}
           onOpenChange={handleLinkedDialogOpenChange}
         />

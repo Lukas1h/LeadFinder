@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { User } from "lucide-react";
-import { getOrCreateAgentByPhone, type AgentWithListings } from "./agents/actions";
+import type { Agent } from "@/db/schema";
+import { getOrCreateAgentByPhone } from "./agents/actions";
 import { AgentDetailDialog } from "./agents/AgentDetailDialog";
 import { formatPhone } from "@/lib/format";
 
@@ -27,7 +28,7 @@ export function AgentRow({
   phone: string | null;
   subtitle?: string | null;
 }) {
-  const [data, setData] = useState<AgentWithListings | null>(null);
+  const [data, setData] = useState<Agent | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -73,7 +74,7 @@ export function AgentRow({
       >
         {content}
       </button>
-      {data && <AgentDetailDialog agent={data.agent} listings={data.listings} open={open} onOpenChange={setOpen} />}
+      {data && <AgentDetailDialog agent={data} open={open} onOpenChange={setOpen} />}
     </>
   );
 }
