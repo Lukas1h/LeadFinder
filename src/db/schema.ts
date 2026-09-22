@@ -241,6 +241,18 @@ export const bookings = pgTable("bookings", {
   city: text("city"),
   state: text("state"),
   contactAgentId: uuid("contact_agent_id").references(() => agents.id, { onDelete: "set null" }),
+
+  // The outreach this job traces back to, so a preset variant can be credited
+  // with the work it actually won.
+  //
+  // Revenue attribution previously ran listing -> booking, which only works for
+  // a job booked against a tracked property. Every booking so far has been
+  // booked directly with an agent and carries no listing, so none of them could
+  // be credited to anything — the messaging page's per-variant revenue was
+  // structurally always zero. Nullable because plenty of work arrives with no
+  // outreach behind it (a referral, a repeat client).
+  messageSendId: uuid("message_send_id").references((): AnyPgColumn => messageSends.id, { onDelete: "set null" }),
+
   jobDate: timestamp("job_date", { withTimezone: true }),
   lockboxCode: text("lockbox_code"),
   notes: text("notes"),

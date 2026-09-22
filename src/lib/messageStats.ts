@@ -2,6 +2,7 @@ import { db } from "@/db";
 import {
   listings,
   messageSends,
+  bookings,
   bookingLineItems,
   messagePresets,
   agents,
@@ -9,7 +10,7 @@ import {
   type MessageResult,
   type PresetType,
 } from "@/db/schema";
-import { inArray, desc, eq } from "drizzle-orm";
+import { desc, eq, isNotNull } from "drizzle-orm";
 
 export interface AgentBucketStats {
   sent: number;
@@ -52,8 +53,8 @@ function emptyStats(): VariantStats {
 export async function computeVariantStats(): Promise<Record<string, VariantStats>> {
   const sends = await db
     .select({
+      id: messageSends.id,
       variantId: messageSends.variantId,
-      listingId: messageSends.listingId,
       agentId: messageSends.agentId,
       respondedAt: messageSends.respondedAt,
       result: messageSends.result,
@@ -62,31 +63,21 @@ export async function computeVariantStats(): Promise<Record<string, VariantStats
 
   if (sends.length === 0) return {};
 
-  const listingIds = [...new Set(sends.map((s) => s.listingId).filter((id): id is string => id != null))];
-  const referencedListings =
-    listingIds.length > 0
-      ? await db
-          .select({ id: listings.id, bookingId: listings.bookingId })
-          .from(listings)
-          .where(inArray(listings.id, listingIds))
-      : [];
-  const listingById = new Map(referencedListings.map((l) => [l.id, l]));
+  // Revenue follows bookings.messageSendId, the booking's own pointer at the
+  // outreach that won it. It used to be derived send -> listing -> booking,
+  // which silently produced nothing for a job booked directly with an agent —
+  // and since every booking so far has had no listing, per-variant revenue was
+  // structurally always zero no matter how much work the outreach brought in.
+  const bookedRows = await db
+    .select({ messageSendId: bookings.messageSendId, amount: bookingLineItems.amount })
+    .from(bookings)
+    .innerJoin(bookingLineItems, eq(bookingLineItems.bookingId, bookings.id))
+    .where(isNotNull(bookings.messageSendId));
 
-  // Revenue now lives as line items on a booking, not a flat column on the
-  // listing — sum each referenced booking's line items once, up front.
-  const bookingIds = [
-    ...new Set(referencedListings.map((l) => l.bookingId).filter((id): id is string => id != null)),
-  ];
-  const lineItems =
-    bookingIds.length > 0
-      ? await db
-          .select({ bookingId: bookingLineItems.bookingId, amount: bookingLineItems.amount })
-          .from(bookingLineItems)
-          .where(inArray(bookingLineItems.bookingId, bookingIds))
-      : [];
-  const totalByBookingId = new Map<string, number>();
-  for (const item of lineItems) {
-    totalByBookingId.set(item.bookingId, (totalByBookingId.get(item.bookingId) ?? 0) + item.amount);
+  const revenueBySendId = new Map<string, number>();
+  for (const row of bookedRows) {
+    if (!row.messageSendId) continue;
+    revenueBySendId.set(row.messageSendId, (revenueBySendId.get(row.messageSendId) ?? 0) + row.amount);
   }
 
   const sendCountByAgent = new Map<string, number>();
@@ -104,9 +95,7 @@ export async function computeVariantStats(): Promise<Record<string, VariantStats
     if (s.result === "booked") bucket.booked += 1;
     if (s.result === "declined") bucket.declined += 1;
 
-    const listing = s.listingId ? listingById.get(s.listingId) : undefined;
-    const revenue = listing?.bookingId ? totalByBookingId.get(listing.bookingId) : undefined;
-    if (s.result === "booked" && revenue != null) bucket.revenue += revenue;
+    bucket.revenue += revenueBySendId.get(s.id) ?? 0;
 
     const isRepeat = !!s.agentId && (sendCountByAgent.get(s.agentId) ?? 0) > 1;
     const agentBucket = isRepeat ? bucket.repeatAgent : bucket.newAgent;

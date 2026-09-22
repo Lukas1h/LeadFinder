@@ -7,6 +7,7 @@ import { eq, inArray, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
 import { bumpAgentRelationshipOnMilestone, resolveSendOutcome } from "@/app/actions";
+import { attributeBookingToSend } from "@/lib/agentIdentity";
 import { estimateDriveTime } from "@/lib/driveTime";
 import type { BookingWithDetails } from "./BookedList";
 
@@ -113,6 +114,10 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     .returning({ id: bookings.id });
 
   if (!booking) return { error: "Couldn't create the booking — try again." };
+
+  // Credit the outreach that won the job, so a preset variant gets the revenue
+  // it actually produced — see attributeBookingToSend.
+  await attributeBookingToSend(booking.id, contactAgentId, input.jobDate ?? new Date());
 
   const validLineItems: NewBookingLineItem[] = input.lineItems
     .filter((li) => li.description.trim() && li.amount > 0)

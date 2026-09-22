@@ -13,6 +13,7 @@ import {
   type InteractionDirection,
   type InteractionOutcome,
 } from "@/db/schema";
+import { markLatestSendResponded } from "@/lib/agentIdentity";
 import { text, errorText } from "./shared";
 
 /**
@@ -88,13 +89,18 @@ export function registerInteractionTools(server: McpServer): void {
         })
         .returning();
 
-      // Reaching out counts as contact even when it happened elsewhere, so the
-      // agent stops reading as never-contacted after a phone call.
+      let markedSendResponded: string | null = null;
       if (direction === "outbound") {
+        // Reaching out counts as contact even when it happened elsewhere, so the
+        // agent stops reading as never-contacted after a phone call.
         await db.update(agents).set({ lastContactedAt: at }).where(eq(agents.id, agentId));
+      } else {
+        // They replied, which for a cold email sent to an agent directly is the
+        // only way respondedAt can ever be set — see markLatestSendResponded.
+        markedSendResponded = await markLatestSendResponded(agentId, at);
       }
 
-      return text(row);
+      return text({ ...row, markedSendResponded });
     }
   );
 

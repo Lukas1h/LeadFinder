@@ -16,6 +16,7 @@ import {
 } from "@/db/schema";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { markLatestSendResponded } from "@/lib/agentIdentity";
 
 /**
  * One agent's history as a single list, merging templated sends
@@ -117,13 +118,19 @@ export async function logInteraction(input: LogInteractionInput): Promise<{ erro
     source: "manual",
   });
 
-  // Reaching out counts as contact even when it happened outside the app, so
-  // the agent doesn't keep reading as never-contacted after a phone call.
+  const at = input.occurredAt ?? new Date();
   if (input.direction === "outbound") {
-    await db.update(agents).set({ lastContactedAt: input.occurredAt ?? new Date() }).where(eq(agents.id, input.agentId));
+    // Reaching out counts as contact even when it happened outside the app, so
+    // the agent doesn't keep reading as never-contacted after a phone call.
+    await db.update(agents).set({ lastContactedAt: at }).where(eq(agents.id, input.agentId));
+  } else {
+    // They got back to you, which is the one thing the agent-level send path
+    // had no way to record — see markLatestSendResponded.
+    await markLatestSendResponded(input.agentId, at);
   }
 
   revalidatePath("/agents");
+  revalidatePath("/messaging");
   return { error: null };
 }
 

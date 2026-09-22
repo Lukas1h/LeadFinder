@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { bookings, bookingLineItems, listings, agents, type NewBookingLineItem } from "@/db/schema";
 import { estimateDriveTime } from "@/lib/driveTime";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
+import { attributeBookingToSend } from "@/lib/agentIdentity";
 import { text, errorText } from "./shared";
 
 async function joinedBooking(bookingId: string) {
@@ -152,6 +153,9 @@ export function registerBookingTools(server: McpServer): void {
         })
         .returning({ id: bookings.id });
       if (!booking) return errorText("Couldn't create the booking");
+
+      // Credit the outreach that won the job — see attributeBookingToSend.
+      await attributeBookingToSend(booking.id, contactAgentId, jobDate ? new Date(jobDate) : new Date());
 
       const validLineItems: NewBookingLineItem[] = lineItems
         .filter((li) => li.description.trim())

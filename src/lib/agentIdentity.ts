@@ -1,6 +1,6 @@
-import { eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, listings } from "@/db/schema";
+import { agents, bookings, listings, messageSends } from "@/db/schema";
 import { normalizeName, normalizePhone } from "./normalize";
 
 /**
@@ -98,4 +98,85 @@ export async function linkListingToAgent(
     await db.update(listings).set({ agentId }).where(eq(listings.id, listingId));
   }
   return agentId;
+}
+
+/**
+ * Marks an agent's most recent prior send as having been replied to.
+ *
+ * respondedAt was previously only reachable through resolveSendOutcome, which
+ * finds sends by listingId and is driven off the listing pipeline. That works
+ * for the 71 sends attached to a property and cannot work at all for the 5,146
+ * cold emails sent to an agent directly, which carry no listing — so no
+ * agent-level send had ever been marked replied, and the messaging page's
+ * response rate was really measuring how often a listing got moved to
+ * "replied".
+ *
+ * An inbound interaction is exactly that signal for the agent path: they got
+ * back to you. Stamps the latest send that predates the reply, and only when
+ * it's still unset, since respondedAt records the first response and nothing
+ * after it. A reply with no prior send (someone reaching out cold) matches
+ * nothing and is a no-op.
+ */
+export async function markLatestSendResponded(agentId: string, respondedAt: Date): Promise<string | null> {
+  const [latest] = await db
+    .select({ id: messageSends.id })
+    .from(messageSends)
+    .where(
+      and(
+        eq(messageSends.agentId, agentId),
+        lte(messageSends.sentAt, respondedAt),
+        isNull(messageSends.respondedAt)
+      )
+    )
+    .orderBy(desc(messageSends.sentAt))
+    .limit(1);
+
+  if (!latest) return null;
+  await db.update(messageSends).set({ respondedAt }).where(eq(messageSends.id, latest.id));
+  return latest.id;
+}
+
+/**
+ * Credits a booking to the outreach that won it, and marks that send booked.
+ *
+ * Revenue attribution used to run listing -> booking, which needs the job to be
+ * tied to a tracked property. Every booking so far was arranged directly with
+ * an agent and carries no listing, so nothing could be credited and the
+ * messaging page's per-variant revenue was structurally zero.
+ *
+ * Picks the agent's most recent send before the job was booked. That's a
+ * judgment, not a fact — a repeat client might book with no outreach involved —
+ * so it only looks back a bounded window, and a booking with no send behind it
+ * in that window is left unattributed rather than credited to something stale.
+ */
+const ATTRIBUTION_WINDOW_DAYS = 120;
+
+export async function attributeBookingToSend(
+  bookingId: string,
+  agentId: string | null,
+  bookedAt: Date
+): Promise<string | null> {
+  if (!agentId) return null;
+
+  const cutoff = new Date(bookedAt.getTime() - ATTRIBUTION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const [latest] = await db
+    .select({ id: messageSends.id })
+    .from(messageSends)
+    .where(
+      and(
+        eq(messageSends.agentId, agentId),
+        lte(messageSends.sentAt, bookedAt),
+        gte(messageSends.sentAt, cutoff)
+      )
+    )
+    .orderBy(desc(messageSends.sentAt))
+    .limit(1);
+
+  if (!latest) return null;
+
+  await db.update(bookings).set({ messageSendId: latest.id }).where(eq(bookings.id, bookingId));
+  // Booking is the strongest outcome a send can have, so it overwrites whatever
+  // the result was before.
+  await db.update(messageSends).set({ result: "booked" }).where(eq(messageSends.id, latest.id));
+  return latest.id;
 }
