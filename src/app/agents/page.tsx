@@ -29,17 +29,17 @@ async function AgentsContent() {
   // from the lead scrapers) and is the entire reason this page used to be
   // slow — fetching and shipping every one of them just to render 15 was
   // the real cost, not the render itself. Every other bucket (any real
-  // relationship, or declined regardless of status) is small and fetched
-  // in full; "cold" gets only its most recent page, plus a count for the
-  // "View all" button — the rest loads on demand (see getAllColdAgents).
-  const isColdAndFresh = and(eq(agents.relationshipStatus, "cold"), isNull(agents.declinedAt));
+  // relationship, or declined) is small and fetched in full; "cold" gets only
+  // its most recent page, plus a count for the "View all" button — the rest
+  // loads on demand (see getAllColdAgents).
+  const isColdAndFresh = eq(agents.relationshipStatus, "cold");
 
   const [totalAgentCount, nonColdFresh, coldFreshPage, coldFreshTotal, counts, agentListings] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(agents),
     db
       .select()
       .from(agents)
-      .where(or(ne(agents.relationshipStatus, "cold"), isNotNull(agents.declinedAt)))
+      .where(ne(agents.relationshipStatus, "cold"))
       .orderBy(desc(agents.createdAt)),
     db.select().from(agents).where(isColdAndFresh).orderBy(desc(agents.createdAt)).limit(COLD_INITIAL_LIMIT),
     db.select({ count: sql<number>`count(*)::int` }).from(agents).where(isColdAndFresh),

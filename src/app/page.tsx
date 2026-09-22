@@ -93,7 +93,7 @@ async function LeadsContent() {
   function card(lead: Listing) {
     const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentByPhone);
     const attachedAgent = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
-    const agentDeclined = attachedAgent?.declinedAt != null;
+    const agentDeclined = attachedAgent?.relationshipStatus === "declined";
 
     return (
       <LeadCard

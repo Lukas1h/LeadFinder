@@ -2,17 +2,16 @@
 
 import { useTransition } from "react";
 import Link from "next/link";
-import { RotateCcw, Phone, MessageCircle, Mail, StickyNote } from "lucide-react";
+import { Phone, MessageCircle, Mail, StickyNote } from "lucide-react";
 import type { Agent, AgentRelationshipStatus } from "@/db/schema";
-import { updateAgentRelationshipStatus, reconnectAgent, markAgentDeclined } from "./actions";
+import { updateAgentRelationshipStatus } from "./actions";
 import { resolveAvgDaysBetweenListings } from "./stats";
 import { AgentDetailDialog } from "./AgentDetailDialog";
 import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
-import { formatDate, daysSince } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function AgentCard({
@@ -30,14 +29,6 @@ export function AgentCard({
 
   const handleStatusChange = (status: AgentRelationshipStatus) => {
     startTransition(() => updateAgentRelationshipStatus(agent.id, status));
-  };
-
-  const handleReconnect = () => {
-    startTransition(() => reconnectAgent(agent.id));
-  };
-
-  const handleMarkDeclined = () => {
-    startTransition(() => markAgentDeclined(agent.id));
   };
 
   const callHref = telUrl(agent.phone);
@@ -66,11 +57,6 @@ export function AgentCard({
           {avgDaysBetweenListings != null && <span>~{avgDaysBetweenListings}d between listings</span>}
         </div>
 
-        {agent.declinedAt && (
-          <Badge variant="secondary" className="mt-2">
-            Declined {daysSince(agent.declinedAt)}d ago
-          </Badge>
-        )}
 
         {agent.notes && (
           <p className="flex items-start gap-1.5 text-sm text-muted-foreground mt-2 max-w-md">
@@ -115,23 +101,6 @@ export function AgentCard({
             ))}
           </SelectContent>
         </Select>
-
-        {agent.declinedAt ? (
-          <Button variant="outline" size="sm" onClick={handleReconnect} disabled={isPending}>
-            <RotateCcw />
-            Reconnect
-          </Button>
-        ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={handleMarkDeclined}
-            disabled={isPending}
-          >
-            Mark declined
-          </Button>
-        )}
       </div>
     </Card>
   );

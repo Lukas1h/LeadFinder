@@ -166,8 +166,7 @@ export function AgentDeclinedBadge({
         </Badge>
       </TooltipTrigger>
       <TooltipContent>
-        {agent.name ?? "This agent"} was marked as declined
-        {agent.declinedAt ? ` (${daysSince(agent.declinedAt)}d ago)` : ""}
+        {agent.name ?? "This agent"} has marked their status as declined
         {duplicateAddress ? ` · previously on ${duplicateAddress}` : ""}
       </TooltipContent>
     </Tooltip>

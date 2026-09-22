@@ -49,11 +49,13 @@ const RELATIONSHIP_GUIDANCE: Record<AgentRelationshipStatus, string> = {
   interested: "This agent has said before they want to work together but nothing's happened yet — nudge that forward.",
   worked_once: "Done one job with this agent already — write casually, like texting someone who already knows the work.",
   regular: "Regular, established client — keep it brief and low-friction, like texting a colleague about a new listing.",
+  declined: "This agent has declined — typically not contacted unless reconnecting after 30+ days.",
 };
 
 // Confirmed with Lukas: he doesn't re-introduce himself to agents who
 // already know him. Only a genuinely cold contact (or a follow-up to one)
-// gets the "I'm Lukas, local real estate photographer" self-intro.
+// gets the "I'm Lukas, local real estate photographer" self-intro. A declined
+// agent is treated like a new contact if reconnecting.
 const SKIP_INTRO_STATUSES: AgentRelationshipStatus[] = ["warm", "interested", "worked_once", "regular"];
 
 const EXAMPLE_BANK = `1. Coming Soon / No Photos

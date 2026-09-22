@@ -2,18 +2,14 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, RotateCcw, ChevronRight, Loader2 } from "lucide-react";
+import { Search, ChevronRight, Loader2 } from "lucide-react";
 import type { Agent, AgentRelationshipStatus } from "@/db/schema";
-import { daysSince } from "@/lib/format";
 import { AgentCard } from "./AgentCard";
 import { RELATIONSHIP_LABELS } from "./relationshipLabels";
 import { AgentDetailDialog } from "./AgentDetailDialog";
 import { getAllColdAgents, searchAllAgents } from "./actions";
 import { COLD_INITIAL_LIMIT } from "./constants";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-
-const DECLINED_RESURFACE_AFTER_DAYS = 30;
 
 // Most-established relationship first — mirrors the natural progression
 // (see bumpAgentRelationshipOnMilestone in src/app/actions.ts).
@@ -22,6 +18,7 @@ const RELATIONSHIP_ORDER: AgentRelationshipStatus[] = [
   "worked_once",
   "interested",
   "warm",
+  "declined",
   "cold",
 ];
 
@@ -41,7 +38,7 @@ function byCreatedDesc(a: Agent, b: Agent) {
 }
 
 function isColdAndFresh(a: Agent): boolean {
-  return a.relationshipStatus === "cold" && !a.declinedAt;
+  return a.relationshipStatus === "cold";
 }
 
 export function AgentsList({
@@ -126,26 +123,20 @@ export function AgentsList({
     return [...agents.filter((a) => !isColdAndFresh(a)), ...coldFreshOverride];
   }, [agents, coldFreshOverride]);
 
-  const { byStatus, readyToReconnect, recentlyDeclined } = useMemo(() => {
-    const notDeclined = effectiveAgents.filter((a) => !a.declinedAt);
+  const { byStatus } = useMemo(() => {
     const groups: Record<AgentRelationshipStatus, Agent[]> = {
       cold: [],
       warm: [],
       interested: [],
       worked_once: [],
       regular: [],
+      declined: [],
     };
-    for (const a of notDeclined) groups[a.relationshipStatus].push(a);
+    for (const a of effectiveAgents) groups[a.relationshipStatus].push(a);
     for (const status of RELATIONSHIP_ORDER) groups[status].sort(status === "cold" ? byCreatedDesc : byRecency);
 
     return {
       byStatus: groups,
-      readyToReconnect: effectiveAgents
-        .filter((a) => a.declinedAt && daysSince(a.declinedAt) >= DECLINED_RESURFACE_AFTER_DAYS)
-        .sort((a, b) => daysSince(b.declinedAt!) - daysSince(a.declinedAt!)),
-      recentlyDeclined: effectiveAgents
-        .filter((a) => a.declinedAt && daysSince(a.declinedAt) < DECLINED_RESURFACE_AFTER_DAYS)
-        .sort((a, b) => a.declinedAt!.getTime() - b.declinedAt!.getTime()),
     };
   }, [effectiveAgents]);
 
@@ -232,32 +223,6 @@ export function AgentsList({
             )}
           </section>
 
-          {readyToReconnect.length > 0 && (
-            <section>
-              <Separator className="mb-8" />
-              <h2 className="flex items-center gap-1.5 text-sm font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide mb-3">
-                <RotateCcw className="size-3.5" />
-                Ready to reconnect
-              </h2>
-              <p className="text-xs text-muted-foreground mb-3 -mt-2">
-                Declined 30+ days ago — worth a check-in.
-              </p>
-              <div className="flex flex-col gap-4">{readyToReconnect.map(card)}</div>
-            </section>
-          )}
-
-          {recentlyDeclined.length > 0 && (
-            <section>
-              <Separator className="mb-8" />
-              <details className="group/details">
-                <summary className="flex items-center gap-1 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
-                  <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
-                  Declined ({recentlyDeclined.length})
-                </summary>
-                <div className="flex flex-col gap-4 mt-3">{recentlyDeclined.map(card)}</div>
-              </details>
-            </section>
-          )}
         </div>
       )}
     </div>

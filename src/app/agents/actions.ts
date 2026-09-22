@@ -50,11 +50,11 @@ export async function ensureAgentsBackfilled() {
   if (unlinked.length === 0) return;
 
   for (const row of unlinked) {
-    // A listing the agent themselves declined seeds declinedAt, so the agent
-    // starts in the right Agents-tab section immediately. "passed" is Lukas's
-    // own call about the property and deliberately doesn't.
-    const declinedAt = row.status === "declined" ? (row.statusChangedAt ?? undefined) : undefined;
-    const agentId = await resolveAgentId(row.agentPhone, row.agentName, declinedAt ? { declinedAt } : {});
+    // A listing the agent themselves declined sets relationshipStatus to "declined",
+    // so the agent starts in the right Agents-tab section immediately. "passed" is
+    // Lukas's own call about the property and deliberately doesn't.
+    const relationshipStatus = row.status === "declined" ? "declined" : undefined;
+    const agentId = await resolveAgentId(row.agentPhone, row.agentName, relationshipStatus ? { relationshipStatus } : {});
     if (agentId) {
       await db.update(listings).set({ agentId }).where(eq(listings.id, row.id));
     }
@@ -69,15 +69,9 @@ export async function updateAgentRelationshipStatus(id: string, status: AgentRel
   revalidatePath("/agents");
 }
 
-/** Clears declinedAt — moves an agent back out of the declined section. */
+/** Clears declined status — moves an agent back to cold. */
 export async function reconnectAgent(id: string) {
-  await db.update(agents).set({ declinedAt: null }).where(eq(agents.id, id));
-  revalidatePath("/agents");
-}
-
-/** Manually flag an agent declined, for imported agents with no listing to infer it from. */
-export async function markAgentDeclined(id: string) {
-  await db.update(agents).set({ declinedAt: new Date() }).where(eq(agents.id, id));
+  await db.update(agents).set({ relationshipStatus: "cold" }).where(eq(agents.id, id));
   revalidatePath("/agents");
 }
 

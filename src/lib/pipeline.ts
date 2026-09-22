@@ -193,7 +193,7 @@ export function isAgentDeclined(
   agentByName?: Map<string, Agent>
 ): boolean {
   const agent = findAttachedAgent(lead, agentByPhone, agentByName);
-  return agent?.declinedAt != null;
+  return agent?.relationshipStatus === "declined";
 }
 
 export function isUnlikelyLeadMatch(
