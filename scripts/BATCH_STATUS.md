@@ -14,19 +14,32 @@ Three batches prepared for Oregon real estate agent outreach.
 ## Queued Batches
 
 ### New-Since-Last Agents (82 agents)
-- **Status**: 📋 READY TO RUN
-- **File**: `scripts/newSinceLastBatch.ts`
+- **Status**: 🚀 IN PROGRESS / READY FOR COMPLETION
+- **File**: `scripts/newSinceLastAgents.ts` with `scripts/newSinceLastBatch.ts` or MCP tool
 - **Size**: 82 cleaned agents
 - **Deduplication**: 4 agents held due to phone number collisions (Jason Mann, Corbin Duncan, Eric M Smith, Miltina Scaife)
-- **How to Run**:
+- **Send Methods**:
+  
+  **Option 1: Local/Direct SMTP** (if ICLOUD_EMAIL/ICLOUD_APP_PASSWORD available):
   ```bash
   node --env-file=.env.local ./node_modules/.bin/tsx scripts/newSinceLastBatch.ts
   ```
-- **Requirements**:
-  - ICLOUD_EMAIL and ICLOUD_APP_PASSWORD must be set in environment
-  - Requires database access (DATABASE_URL)
-  - Pacing: 45 second delay between sends (~1 hour total duration)
-- **Expected Result**: ~82 emails sent, database updated with agent records and send logs
+  
+  **Option 2: MCP Tool** (recommended for cloud sessions):
+  ```bash
+  # Get template IDs first:
+  node --env-file=.env.local ./node_modules/.bin/tsx scripts/getTemplateIds.ts
+  
+  # Then use send_agent_email or send_bulk_agent_emails MCP tools
+  # Preset ID: 2750175f-970f-4c19-af3c-f12e51042134
+  # Variant ID: 52261a73-43df-4851-bb6c-df4f53499576
+  ```
+
+- **Status**: Mixed
+  - Some agents already contacted (date: 2026-09-23)
+  - Lynn Johnson & Colby Kielman: ✅ Sent via MCP tool
+  - Remaining: Ready to send
+- **Progress**: Started with MCP tool approach, successfully testing individual sends
 
 ## Saved for Later
 
