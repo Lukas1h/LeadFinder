@@ -11,35 +11,21 @@ Three batches prepared for Oregon real estate agent outreach.
 - **Result**: All 227 agents have been contacted and marked in database
 - **Notes**: Previous session container restart didn't cause data loss; script resumed from database state
 
-## Queued Batches
+## Completed Batches (cont'd)
 
 ### New-Since-Last Agents (82 agents)
-- **Status**: 🚀 IN PROGRESS / READY FOR COMPLETION
-- **File**: `scripts/newSinceLastAgents.ts` with `scripts/newSinceLastBatch.ts` or MCP tool
-- **Size**: 82 cleaned agents
-- **Deduplication**: 4 agents held due to phone number collisions (Jason Mann, Corbin Duncan, Eric M Smith, Miltina Scaife)
-- **Send Methods**:
-  
-  **Option 1: Local/Direct SMTP** (if ICLOUD_EMAIL/ICLOUD_APP_PASSWORD available):
-  ```bash
-  node --env-file=.env.local ./node_modules/.bin/tsx scripts/newSinceLastBatch.ts
-  ```
-  
-  **Option 2: MCP Tool** (recommended for cloud sessions):
-  ```bash
-  # Get template IDs first:
-  node --env-file=.env.local ./node_modules/.bin/tsx scripts/getTemplateIds.ts
-  
-  # Then use send_agent_email or send_bulk_agent_emails MCP tools
-  # Preset ID: 2750175f-970f-4c19-af3c-f12e51042134
-  # Variant ID: 52261a73-43df-4851-bb6c-df4f53499576
-  ```
-
-- **Status**: Mixed
-  - Some agents already contacted (date: 2026-09-23)
-  - Lynn Johnson & Colby Kielman: ✅ Sent via MCP tool
-  - Remaining: Ready to send
-- **Progress**: Started with MCP tool approach, successfully testing individual sends
+- **Status**: ✅ SENT
+- **File**: `scripts/newSinceLastAgents.ts`
+- **Size**: 82 cleaned agents (86 total minus 4 held for dedup)
+- **Deduplication**: 4 agents held due to phone number collisions (Jason Mann, Corbin Duncan, Eric M Smith, Miltina Scaife) — NOT sent, awaiting manual verification
+- **Result**: All 82 non-flagged agents contacted
+  - 17 were already contacted in a prior session (ivre.co, lanecountyrealtor.homes, bakerstreetrealestate.com domains)
+  - 65 sent this session via `send_agent_email` / `send_bulk_agent_emails` MCP tools (matinrealestate.com block, nedbaker.com, orop.com, and remaining independents)
+- **Send method used**: MCP tools (cloud session had no ICLOUD_EMAIL/ICLOUD_APP_PASSWORD, so `newSinceLastBatch.ts` direct-SMTP script couldn't run — used `send_agent_email`/`send_bulk_agent_emails` instead, same preset/variant/DB effect)
+- **Template IDs** (for future reference):
+  - Preset ID: `2750175f-970f-4c19-af3c-f12e51042134`
+  - Variant ID: `52261a73-43df-4851-bb6c-df4f53499576`
+  - Lookup script: `node --env-file=.env.local ./node_modules/.bin/tsx scripts/getTemplateIds.ts`
 
 ## Saved for Later
 
@@ -74,16 +60,16 @@ Fuzzy matching using Levenshtein distance for names + exact phone/email matching
 
 ## Next Actions
 
-1. **Send new-since-last batch**
-   - Run: `node --env-file=.env.local ./node_modules/.bin/tsx scripts/newSinceLastBatch.ts`
-   - Monitor progress
-   - Verify all 82 complete successfully
+1. **Review held-out duplicates** (4 agents, Oregon + new-since-last flagged sets)
+   - Jason Mann, Corbin Duncan, Eric M Smith, Miltina Scaife (phone-collision flags from new-since-last)
+   - Plus the 4 fuzzy-name flags from Oregon (emilygrovesrealty@gmail.com, lisa@smire.com, home@rebeccakaufmann.com, ryan.fischer@smire.com)
+   - Manually verify whether these are genuine duplicates or distinct agents, then send or discard
 
-2. **Luxury video preparation** (after new-since-last completes)
+2. **Luxury video preparation** (current batches now complete)
    - Brainstorm new email template for luxury video outreach
    - Create "Luxury Video" message preset in app
    - Create `scripts/luxuryBatch.ts` 
-   - Send 19+ luxury agents with new template
+   - Send 19 luxury agents with new template
    - Be ready for user to add more luxury agents
 
 ## Environment Setup
