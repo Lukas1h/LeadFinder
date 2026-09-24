@@ -163,15 +163,6 @@ export const luxuryVideoAgents: LuxuryAgent[] = [
     sourceUrl: "https://portlandorhome.com/",
   },
   {
-    name: "Brian Porter",
-    email: "laura@brianporter.com",
-    phone: null,
-    brokerage: "Brian Porter",
-    city: "Tigard",
-    state: "OR",
-    sourceUrl: "https://brianporter.com/about/contact",
-  },
-  {
     name: "Matt Tackett",
     email: "matt@mportlandhomes.com",
     phone: "503-385-5585",

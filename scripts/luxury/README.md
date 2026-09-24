@@ -1,21 +1,16 @@
 # Luxury Video Outreach
 
-This folder contains agents reserved for luxury video outreach campaigns.
+Agents reserved for the luxury video/photo campaign, sent with the "Luxury Video Outreach" email preset rather than the regular Cold Outreach one.
 
-## Status
-- **luxuryVideoAgents.ts**: 19 agents prepared (cleaned from new-since-last-2.csv, Elizabeth Davidson deduplicated)
-- **NOT to be sent yet**: Awaiting brainstorm of new email template specifically for luxury video outreach
-- **Next step**: After Oregon and new-since-last batches complete, create new "Luxury Video" message preset
+## Template
+- Preset: "Luxury Video Outreach" — `c196b7cb-2508-486e-9340-1973cb1bab3a`
+- Variant A — `ec7ff3b7-12e8-46f8-8690-82ce09315487`
+- Subject: "Video for your high-end listings"
+- Body links three Eugene Tour of Homes videos; attaches Hahn Media Portfolio.pdf and Hahn Media Pricing Sheet.pdf
 
-## Notes
-- Deduplicated one duplicate entry (Elizabeth Davidson, 503-939-2035)
-- Fixed one malformed email (removed "mailto:" prefix)
-- Fixed one URL-encoded email (removed %20 prefix)
-- Ready to add more agents if needed — just update this file
-
-## Possible cross-list duplicate to watch
-- **Brian Porter, Tigard** appears here as `laura@brianporter.com` (from new-since-last-2.csv)
-- The regular cold-outreach batch (`scripts/newSinceLast5Agents.ts`, from new-since-last-5.csv) also has **Brian Porter, Tigard** but as `brian@brianporter.com`
-- Same name/brokerage/city, different email — likely the same office (Brian's own address vs. an assistant/team inbox named Laura)
-- The regular batch already emailed `brian@brianporter.com` as a normal cold-outreach send
-- Before sending the luxury batch, decide whether to still email `laura@brianporter.com` (different inbox, arguably fine) or skip it as a likely duplicate contact
+## Agents
+- `luxuryVideoAgents.ts`: 18 agents (from new-since-last-2.csv)
+- Not sent yet
+- Cleanup: deduplicated Elizabeth Davidson, stripped a "mailto:" prefix and a "%20" prefix from two emails
+- Removed Brian Porter (`laura@brianporter.com`) — his office was already emailed at `brian@brianporter.com` in the new-since-last-5 cold batch
+- Add more agents to this file as they come in
