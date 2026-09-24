@@ -21,6 +21,22 @@ export function formatDateOnly(date: Date | null) {
 }
 
 /**
+ * The day of a real date+time value, without the time — for compact rows that
+ * only have space for a date.
+ *
+ * Distinct from formatDateOnly above, which reads in UTC because its input is
+ * a UTC-midnight date-only value. Applying that to a genuine timestamp shifts
+ * the day for anything stored at or after 5pm Pacific: bookings.jobDate rows
+ * sitting at UTC midnight rendered a day later in the list than on the card,
+ * so the same booking showed two different dates depending on where you
+ * looked at it.
+ */
+export function formatDay(date: Date | null) {
+  if (!date) return "—";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+/**
  * For a real date+time value (bookings.jobDate, from an
  * <input type="datetime-local">) — unlike the date-only picker above,
  * datetime-local values parse as local wall-clock time already, so normal

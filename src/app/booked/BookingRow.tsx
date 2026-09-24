@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CalendarCheck } from "lucide-react";
 import { getBookingWithDetails } from "./actions";
 import { BookingDetailDialog } from "./BookingDetailDialog";
-import { formatDateOnly, formatPrice } from "@/lib/format";
+import { formatDay, formatPrice } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import type { BookingWithDetails } from "./BookedList";
 
@@ -55,7 +55,7 @@ export function BookingRow({ bookingId, booking: preloaded }: { bookingId: strin
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground truncate">
-            {booking?.jobDate ? formatDateOnly(booking.jobDate) : loaded ? "No job date set" : "Booking"}
+            {booking?.jobDate ? formatDay(booking.jobDate) : loaded ? "No job date set" : "Booking"}
           </p>
           <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>

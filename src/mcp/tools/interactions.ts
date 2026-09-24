@@ -6,6 +6,8 @@ import {
   agentInteractions,
   agents,
   listings,
+  messagePresets,
+  messageSends,
   INTERACTION_CHANNELS,
   INTERACTION_DIRECTIONS,
   INTERACTION_OUTCOMES,
@@ -59,7 +61,7 @@ export function registerInteractionTools(server: McpServer): void {
         outcome: z.enum(INTERACTION_OUTCOMES).nullable().optional().describe("Calls only"),
         note: z.string().optional(),
         listingId: z.string().uuid().nullable().optional().describe("The property it was about, if any"),
-        occurredAt: z.string().datetime().optional().describe("ISO timestamp; defaults to now"),
+        occurredAt: z.string().datetime().optional().describe("When it happened; defaults to now. ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
       },
     },
     async ({ agentId, channel, direction, outcome, note, listingId, occurredAt }) => {
@@ -75,6 +77,30 @@ export function registerInteractionTools(server: McpServer): void {
       }
 
       const at = occurredAt ? new Date(occurredAt) : new Date();
+
+      // Nobody replies before they were first contacted, so a timestamp that
+      // early is a bad input rather than a real event — in practice a local
+      // wall-clock time written with a Z on the end. Left unchecked it doesn't
+      // error, it quietly credits the wrong send: a reply logged 7 hours early
+      // skips past the text it was answering and marks a week-old cold email
+      // as replied instead.
+      if (direction === "inbound" && occurredAt) {
+        const [earliest] = await db
+          .select({ sentAt: messageSends.sentAt })
+          .from(messageSends)
+          .where(eq(messageSends.agentId, agentId))
+          .orderBy(messageSends.sentAt)
+          .limit(1);
+        if (earliest && at < earliest.sentAt) {
+          return errorText(
+            `occurredAt is ${at.toISOString()}, which is before the first message ever sent to this agent ` +
+              `(${earliest.sentAt.toISOString()}). They can't have replied before being contacted. ` +
+              `This is almost always a timezone slip — a local time with "Z" appended. Pass the offset ` +
+              `instead, e.g. 2026-09-24T10:50:00-07:00 for Pacific.`
+          );
+        }
+      }
+
       const [row] = await db
         .insert(agentInteractions)
         .values({
@@ -100,7 +126,25 @@ export function registerInteractionTools(server: McpServer): void {
         markedSendResponded = await markLatestSendResponded(agentId, at);
       }
 
-      return text({ ...row, markedSendResponded });
+      // Name the send that got credited rather than just its id — the caller
+      // can then see at a glance that a text reply was booked against the text
+      // and not against some older email.
+      let markedSend: { id: string; preset: string; channel: string; sentAt: Date } | null = null;
+      if (markedSendResponded) {
+        const [m] = await db
+          .select({
+            id: messageSends.id,
+            preset: messagePresets.name,
+            channel: messageSends.channel,
+            sentAt: messageSends.sentAt,
+          })
+          .from(messageSends)
+          .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))
+          .where(eq(messageSends.id, markedSendResponded));
+        markedSend = m ?? null;
+      }
+
+      return text({ ...row, markedSendResponded, markedSend });
     }
   );
 
@@ -117,7 +161,7 @@ export function registerInteractionTools(server: McpServer): void {
         outcome: z.enum(INTERACTION_OUTCOMES).nullable().optional(),
         note: z.string().nullable().optional(),
         listingId: z.string().uuid().nullable().optional(),
-        occurredAt: z.string().datetime().optional(),
+        occurredAt: z.string().datetime().optional().describe("ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
       },
     },
     async ({ id, channel, direction, outcome, note, listingId, occurredAt }) => {
@@ -185,8 +229,8 @@ export function registerInteractionTools(server: McpServer): void {
           .boolean()
           .optional()
           .describe("Only interactions the app started but whose outcome was never confirmed"),
-        since: z.string().datetime().optional(),
-        until: z.string().datetime().optional(),
+        since: z.string().datetime().optional().describe("ISO 8601, read as UTC when no offset is given"),
+        until: z.string().datetime().optional().describe("ISO 8601, read as UTC when no offset is given"),
         limit: z.number().int().min(1).max(200).default(50),
       },
     },

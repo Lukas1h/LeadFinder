@@ -102,7 +102,7 @@ export function registerListingTools(server: McpServer): void {
         id: z.string().uuid(),
         status: z.enum(LEAD_STATUSES).optional(),
         notes: z.string().optional(),
-        followUpAt: z.string().datetime().nullable().optional().describe("ISO datetime, or null to clear"),
+        followUpAt: z.string().datetime().nullable().optional().describe("When to follow up, or null to clear. ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
         followUpNote: z.string().optional(),
       },
     },
