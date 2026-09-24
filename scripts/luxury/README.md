@@ -10,7 +10,7 @@ Agents reserved for the luxury video/photo campaign, sent with the "Luxury Video
 
 ## Agents
 - `luxuryVideoAgents.ts`: 18 agents (from new-since-last-2.csv)
-- Not sent yet
-- Cleanup: deduplicated Elizabeth Davidson, stripped a "mailto:" prefix and a "%20" prefix from two emails
+- Sent 2026-09-24 with the Luxury Video Outreach preset: 18 sent, 0 skipped, 0 failed
+- Cleanup: renamed "Love Oregon.House Ashley Jensen" to "Ashley Jensen", deduplicated Elizabeth Davidson, stripped a "mailto:" prefix and a "%20" prefix from two emails
 - Removed Brian Porter (`laura@brianporter.com`) — his office was already emailed at `brian@brianporter.com` in the new-since-last-5 cold batch
 - Add more agents to this file as they come in

@@ -10,7 +10,7 @@ export interface LuxuryAgent {
 
 export const luxuryVideoAgents: LuxuryAgent[] = [
   {
-    name: "Love Oregon.House Ashley Jensen",
+    name: "Ashley Jensen",
     email: "ashley@mind.net",
     phone: "541-324-2620",
     brokerage: "Ashley Jensen",
