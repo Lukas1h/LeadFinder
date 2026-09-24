@@ -12,3 +12,10 @@ This folder contains agents reserved for luxury video outreach campaigns.
 - Fixed one malformed email (removed "mailto:" prefix)
 - Fixed one URL-encoded email (removed %20 prefix)
 - Ready to add more agents if needed — just update this file
+
+## Possible cross-list duplicate to watch
+- **Brian Porter, Tigard** appears here as `laura@brianporter.com` (from new-since-last-2.csv)
+- The regular cold-outreach batch (`scripts/newSinceLast5Agents.ts`, from new-since-last-5.csv) also has **Brian Porter, Tigard** but as `brian@brianporter.com`
+- Same name/brokerage/city, different email — likely the same office (Brian's own address vs. an assistant/team inbox named Laura)
+- The regular batch already emailed `brian@brianporter.com` as a normal cold-outreach send
+- Before sending the luxury batch, decide whether to still email `laura@brianporter.com` (different inbox, arguably fine) or skip it as a likely duplicate contact
