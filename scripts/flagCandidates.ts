@@ -55,7 +55,9 @@ async function main() {
       .map((a) => a.phone!.toLowerCase().replace(/\D/g, ""))
       .filter(Boolean)
   );
-  const agentNames = allAgents.map((a) => a.name).filter(Boolean);
+  // filter(Boolean) doesn't narrow (string | null)[] to string[] — isSimilar
+  // takes a string, so the build fails on it. A type predicate does narrow.
+  const agentNames = allAgents.map((a) => a.name).filter((n): n is string => !!n);
 
   const flagged: { email: string; reason: string }[] = [];
 
