@@ -120,11 +120,11 @@ export function PipelineList({
     lead: Listing,
     options?: { showDaysSinceContact?: boolean; showStatusBadge?: boolean; showFollowUp?: boolean }
   ) {
-    const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentMap);
     // Phone first, then name — a realtor first met through a cold-email
     // import has an email and no phone, so a phone-only lookup showed them as
     // a stranger and hid the fact they were already mid-conversation.
     const attachedAgent = findAttachedAgent(lead, agentMap, nameMap, idMap);
+    const duplicateAgent = findDuplicateAgentContact(attachedAgent, lead.id);
     return (
       <LeadCard
         key={lead.id}
@@ -151,7 +151,11 @@ export function PipelineList({
             {duplicateAgent && (
               <DuplicateAgentBadge
                 duplicateAgent={duplicateAgent}
-                duplicateAddress={addressById[duplicateAgent.lastContactedListingId!]}
+                duplicateAddress={
+                  duplicateAgent.lastContactedListingId
+                    ? addressById[duplicateAgent.lastContactedListingId]
+                    : undefined
+                }
               />
             )}
           </Fragment>

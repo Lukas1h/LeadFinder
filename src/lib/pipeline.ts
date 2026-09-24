@@ -70,14 +70,27 @@ export function byLeadPriority(a: Listing, b: Listing): number {
   return leadPriorityScore(b) - leadPriorityScore(a);
 }
 
-export function findDuplicateAgentContact(
-  agentPhone: string | null,
-  currentListingId: string,
-  agentByPhone: Map<string, Agent>
-): Agent | null {
-  if (!agentPhone) return null;
-  const agent = agentByPhone.get(agentPhone);
-  if (!agent || !agent.lastContactedListingId) return null;
+/**
+ * Whether this listing's agent is someone you've already been in touch with.
+ *
+ * Takes the agent findAttachedAgent already resolved rather than re-deriving
+ * one from the phone string. It used to do its own phone-only lookup, which
+ * meant the badge and the rest of the card could disagree about who the agent
+ * even was — the card showed their email and declined state while the badge
+ * called them a stranger.
+ *
+ * Gated on lastContactedAt (contact happened at all), not on
+ * lastContactedListingId (which property it was about). Only the two
+ * listing-scoped paths — touchAgentContact and touchAgentEmailContact — ever
+ * set that pointer, so every cold email left it null and suppressed the badge
+ * for the exact people most worth warning about: 18 of the 20 contacted agents
+ * on live leads, all of them with a real send on file.
+ *
+ * The pointer still decides one thing: contacting someone about *this* listing
+ * isn't a duplicate, so that case stays unbadged.
+ */
+export function findDuplicateAgentContact(agent: Agent | null, currentListingId: string): Agent | null {
+  if (!agent?.lastContactedAt) return null;
   if (agent.lastContactedListingId === currentListingId) return null;
   return agent;
 }

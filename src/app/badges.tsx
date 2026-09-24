@@ -143,8 +143,12 @@ export function DuplicateAgentBadge({
         </Badge>
       </TooltipTrigger>
       <TooltipContent>
+        {/* Without a listing pointer the contact was a cold email or a logged
+            call, not a property conversation — naming "another listing" there
+            would invent one. */}
         Already contacted {duplicateAgent.name ?? "this agent"} on{" "}
-        {formatDate(duplicateAgent.lastContactedAt)} about {duplicateAddress ?? "another listing"}
+        {formatDate(duplicateAgent.lastContactedAt)}
+        {duplicateAddress ? ` about ${duplicateAddress}` : ""}
       </TooltipContent>
     </Tooltip>
   );

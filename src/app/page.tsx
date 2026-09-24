@@ -91,8 +91,8 @@ async function LeadsContent() {
   unlikelyMatches.sort(byLeadPriority);
 
   function card(lead: Listing) {
-    const duplicateAgent = findDuplicateAgentContact(lead.agentPhone, lead.id, agentByPhone);
     const attachedAgent = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
+    const duplicateAgent = findDuplicateAgentContact(attachedAgent, lead.id);
     const agentDeclined = attachedAgent?.relationshipStatus === "declined";
 
     return (
@@ -122,7 +122,11 @@ async function LeadsContent() {
               duplicateAgent && (
                 <DuplicateAgentBadge
                   duplicateAgent={duplicateAgent}
-                  duplicateAddress={addressById.get(duplicateAgent.lastContactedListingId!)}
+                  duplicateAddress={
+                    duplicateAgent.lastContactedListingId
+                      ? addressById.get(duplicateAgent.lastContactedListingId)
+                      : undefined
+                  }
                 />
               )
             )}
