@@ -1,11 +1,11 @@
 import { db } from "@/db";
-import { listings, searchSources, type NewListing } from "@/db/schema";
+import { listings, searchSources, agents, type NewListing } from "@/db/schema";
 import { fetchNewListings, fetchAgentInfo } from "@/lib/zillapi";
 import { scorePhotos } from "@/lib/photoScore";
-import { notifyNewListings } from "@/lib/push";
-import { FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { notifyNewListings, notifyWarmListings } from "@/lib/push";
+import { FEW_PHOTOS_THRESHOLD, WARM_AGENT_STATUSES } from "@/lib/pipeline";
 import { linkListingToAgent } from "@/lib/agentIdentity";
-import { and, eq, gte, isNull } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 const MAX_ITEMS_PER_SOURCE = 50;
@@ -197,7 +197,14 @@ export async function insertAndEnrichListings(
       photos: listings.photos,
       agentPhone: listings.agentPhone,
       agentName: listings.agentName,
+      address: listings.address,
+      city: listings.city,
     });
+
+  // Which inserted listing ended up attached to which agent record — the same
+  // link linkListingToAgent writes below, captured here so the warm-agent
+  // check right after is one agents lookup instead of one per listing.
+  const agentIdByListing = new Map<string, string>();
 
   for (let i = 0; i < insertedRows.length; i += ENRICHMENT_CONCURRENCY) {
     const batch = insertedRows.slice(i, i + ENRICHMENT_CONCURRENCY);
@@ -230,12 +237,51 @@ export async function insertAndEnrichListings(
         // existing contact by name as well as phone, which is what stops a
         // realtor already on file from an email-only import being duplicated
         // here as a brand-new phone-only row.
-        await linkListingToAgent(row.id, agent?.agentPhone ?? row.agentPhone, agent?.agentName ?? row.agentName);
+        const agentId = await linkListingToAgent(
+          row.id,
+          agent?.agentPhone ?? row.agentPhone,
+          agent?.agentName ?? row.agentName
+        );
+        if (agentId) agentIdByListing.set(row.id, agentId);
       })
     );
   }
 
-  await notifyNewListings(insertedRows.length, options?.notificationUrl);
+  // A new listing from an agent we already have a relationship with is the
+  // notification that actually matters (a warm agent just listed something) —
+  // push that specifically, and skip the generic "n new leads" count when this
+  // fires, since the warm one IS the "go look now" signal.
+  const warmNotices: Array<{ agentName: string; relationshipStatus: string; address: string; city: string; url?: string }> = [];
+  if (agentIdByListing.size > 0) {
+    const warmAgents = await db
+      .select({ id: agents.id, name: agents.name, relationshipStatus: agents.relationshipStatus })
+      .from(agents)
+      .where(
+        and(
+          inArray(agents.id, [...agentIdByListing.values()]),
+          inArray(agents.relationshipStatus, [...WARM_AGENT_STATUSES]),
+          isNull(agents.declinedAt)
+        )
+      );
+    const warmById = new Map(warmAgents.map((a) => [a.id, a]));
+    for (const row of insertedRows) {
+      const agent = warmById.get(agentIdByListing.get(row.id) ?? "");
+      if (!agent) continue;
+      warmNotices.push({
+        agentName: agent.name ?? row.agentName ?? "",
+        relationshipStatus: agent.relationshipStatus,
+        address: row.address ?? "",
+        city: row.city ?? "",
+        url: options?.notificationUrl,
+      });
+    }
+  }
+
+  if (warmNotices.length > 0) {
+    await notifyWarmListings(warmNotices);
+  } else {
+    await notifyNewListings(insertedRows.length, options?.notificationUrl);
+  }
 
   if (insertedRows.length > 0) {
     // The cron route and the AgentMail webhook both land here with no

@@ -37,18 +37,56 @@ interface PushPayload {
  */
 export async function notifyNewListings(count: number, url: string = "/"): Promise<void> {
   if (count === 0) return;
+  const payload: PushPayload = {
+    title: count === 1 ? "1 new lead" : `${count} new leads`,
+    body: "New listings just came in on LeadFinder.",
+    url,
+  };
+  await broadcast(payload);
+}
+
+/**
+ * A push notification specifically for new listings that came from an agent
+ * we already have a relationship with (warm/interested/worked_once/regular) —
+ * the listings worth looking at right away, as opposed to the generic count
+ * notification. When this fires instead of notifyNewListings (see
+ * insertAndEnrichListings), the "n new leads" summary is deliberately NOT sent
+ * too — the warm one IS the "there's something new worth acting on" signal.
+ */
+export interface WarmListingNotice {
+  agentName: string;
+  relationshipStatus: string;
+  address: string;
+  city: string;
+  url?: string;
+}
+
+export async function notifyWarmListings(notices: WarmListingNotice[]): Promise<void> {
+  if (notices.length === 0) return;
+  const payload: PushPayload =
+    notices.length === 1
+      ? {
+          title: "Warm agent just listed",
+          body: `${notices[0].agentName} (${notices[0].relationshipStatus}) listed ${notices[0].address}${
+            notices[0].city ? `, ${notices[0].city}` : ""
+          }`,
+          url: notices[0].url ?? "/",
+        }
+      : {
+          title: `${notices.length} warm-agent listings`,
+          body: notices.map((n) => `${n.agentName} — ${n.address}`).join(" · "),
+          url: "/",
+        };
+  await broadcast(payload);
+}
+
+async function broadcast(payload: PushPayload): Promise<void> {
   if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
 
   ensureConfigured();
 
   const subs = await db.select().from(pushSubscriptions);
   if (subs.length === 0) return;
-
-  const payload: PushPayload = {
-    title: count === 1 ? "1 new lead" : `${count} new leads`,
-    body: "New listings just came in on LeadFinder.",
-    url,
-  };
 
   await Promise.all(
     subs.map(async (sub) => {

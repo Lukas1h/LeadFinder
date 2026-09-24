@@ -1,8 +1,9 @@
-import { Sparkles, Clock, Camera, TriangleAlert, Bell } from "lucide-react";
-import type { Agent, LeadStatus } from "@/db/schema";
+import { Sparkles, Clock, Camera, TriangleAlert, Bell, Heart } from "lucide-react";
+import type { Agent, AgentRelationshipStatus, LeadStatus } from "@/db/schema";
 import { formatDate, formatDateOnly, daysSince } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { RELATIONSHIP_LABELS } from "./agents/relationshipLabels";
 
 export function NewBadge() {
   return (
@@ -172,6 +173,27 @@ export function AgentDeclinedBadge({
       <TooltipContent>
         {agent.name ?? "This agent"} has marked their status as declined
         {duplicateAddress ? ` · previously on ${duplicateAddress}` : ""}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// The warm-agent mark: shown on a listing card whenever the attached agent has
+// a relationship status that isn't cold or declined (see WARM_AGENT_STATUSES in
+// lib/pipeline.ts). Renders the same RELATIONSHIP_LABELS wording as the Agents
+// tab so the two never disagree about what each status means.
+export function WarmAgentBadge({ agent }: { agent: Agent }) {
+  const status: AgentRelationshipStatus = agent.relationshipStatus;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-900">
+          <Heart />
+          {RELATIONSHIP_LABELS[status]}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>
+        You already have a relationship with {agent.name ?? "this agent"} — {RELATIONSHIP_LABELS[status].toLowerCase()} status
       </TooltipContent>
     </Tooltip>
   );

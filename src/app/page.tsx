@@ -8,8 +8,8 @@ import { LeadCard } from "./LeadCard";
 import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
 import { MarkAllNotInterestedButton } from "./MarkAllNotInterestedButton";
-import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge, AgentDeclinedBadge } from "./badges";
-import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isUnlikelyLeadMatch, findAttachedAgent, buildAgentLookups } from "@/lib/pipeline";
+import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge, AgentDeclinedBadge, WarmAgentBadge } from "./badges";
+import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isUnlikelyLeadMatch, findAttachedAgent, buildAgentLookups, isWarmAgentStatus } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
 import { Separator } from "@/components/ui/separator";
 import { LeadsSkeleton } from "./loading";
@@ -103,6 +103,9 @@ async function LeadsContent() {
           <Fragment key={lead.id}>
             <NewBadge />
             {lead.isComingSoon && <ComingSoonBadge />}
+            {attachedAgent && isWarmAgentStatus(attachedAgent.relationshipStatus) && (
+              <WarmAgentBadge agent={attachedAgent} />
+            )}
             {lead.photoCount != null && lead.photoCount < FEW_PHOTOS_THRESHOLD && (
               <FewPhotosBadge count={lead.photoCount} />
             )}

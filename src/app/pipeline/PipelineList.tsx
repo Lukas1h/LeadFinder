@@ -23,8 +23,9 @@ import {
   FewPhotosBadge,
   DaysSinceContactBadge,
   FollowUpBadge,
+  WarmAgentBadge,
 } from "../badges";
-import { findAttachedAgent, findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { findAttachedAgent, findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isWarmAgentStatus } from "@/lib/pipeline";
 import { daysSince, isDue } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -142,6 +143,9 @@ export function PipelineList({
             )}
             {options?.showDaysSinceContact && lead.contactedAt && (
               <DaysSinceContactBadge contactedAt={lead.contactedAt} />
+            )}
+            {attachedAgent && isWarmAgentStatus(attachedAgent.relationshipStatus) && (
+              <WarmAgentBadge agent={attachedAgent} />
             )}
             {lead.isComingSoon && <ComingSoonBadge />}
             {lead.photoCount != null && lead.photoCount < FEW_PHOTOS_THRESHOLD && (

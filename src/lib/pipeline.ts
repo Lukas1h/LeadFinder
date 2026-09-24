@@ -1,5 +1,21 @@
-import type { Agent, Listing } from "@/db/schema";
+import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { daysSince } from "@/lib/format";
+
+// Statuses that mean "we already have a relationship" — the opposite of cold
+// (never in touch) and declined (said no). Everything warm from "warm" up to
+// "regular", since a proven client is simply a warmer case of the same thing.
+// Drives the warm-agent badge on listings and the warm-agent push notification
+// on new listings (see badges.tsx and push.ts).
+export const WARM_AGENT_STATUSES: ReadonlySet<AgentRelationshipStatus> = new Set([
+  "warm",
+  "interested",
+  "worked_once",
+  "regular",
+]);
+
+export function isWarmAgentStatus(status: AgentRelationshipStatus): boolean {
+  return WARM_AGENT_STATUSES.has(status);
+}
 
 // Fewer than this many photos on the listing itself is as strong a signal
 // as a bad photo-quality score — the agent likely hasn't hired anyone yet.
