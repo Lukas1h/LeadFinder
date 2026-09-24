@@ -98,6 +98,18 @@ function InteractionIcon({ item }: { item: Extract<TimelineItem, { kind: "intera
   return <Users className={className} />;
 }
 
+/**
+ * Reads as the thing that happened rather than as the template that was used
+ * — "Texted them about 37308 Highway 58" — with the preset, phase and date
+ * underneath. Same voice as the hand-logged rows below, which matters now
+ * that an app-sent text is one row instead of a send stacked on top of its
+ * own interaction.
+ */
+function sendLabel(item: Extract<TimelineItem, { kind: "send" }>): string {
+  const verb = item.channel === "email" ? "Emailed them" : "Texted them";
+  return item.listingAddress ? `${verb} about ${item.listingAddress}` : verb;
+}
+
 function TimelineRow({ item }: { item: TimelineItem }) {
   if (item.kind === "send") {
     return (
@@ -108,20 +120,26 @@ function TimelineRow({ item }: { item: TimelineItem }) {
           <MessageCircle className="size-3.5 shrink-0 mt-0.5 text-muted-foreground" />
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-foreground">
-            {item.presetName} <span className="text-muted-foreground">· {TYPE_LABELS[item.type]}</span>
+          <p className="text-sm text-foreground">{sendLabel(item)}</p>
+          {item.note && <p className="text-xs text-muted-foreground mt-0.5">{item.note}</p>}
+          <p className="text-xs text-muted-foreground">
+            {item.presetName} · {TYPE_LABELS[item.type]} · {formatDate(item.at)}
           </p>
-          <p className="text-xs text-muted-foreground">{formatDate(item.at)}</p>
         </div>
-        {item.result !== "pending" && (
+        {item.pending ? (
+          <Badge variant="secondary" className="shrink-0">
+            Unconfirmed
+          </Badge>
+        ) : item.result !== "pending" ? (
           <Badge variant="secondary" className="shrink-0">
             {RESULT_LABELS[item.result]}
           </Badge>
-        )}
-        {item.respondedAt && item.result === "pending" && (
-          <Badge variant="secondary" className="shrink-0">
-            Replied
-          </Badge>
+        ) : (
+          item.respondedAt && (
+            <Badge variant="secondary" className="shrink-0">
+              Replied
+            </Badge>
+          )
         )}
       </div>
     );

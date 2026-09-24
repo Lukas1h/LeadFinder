@@ -37,6 +37,14 @@ export type TimelineItem =
       type: PresetType;
       respondedAt: Date | null;
       result: MessageResult;
+      listingAddress: string | null;
+      // Folded in from the agentInteractions row the app logged for this same
+      // send — tapping Text writes both (a send for the A/B stats, an
+      // interaction so the "how did it go?" prompt has something to resolve),
+      // and they are one event, so they render as one row.
+      outcome: InteractionOutcome | null;
+      note: string | null;
+      pending: boolean;
     }
   | {
       kind: "interaction";
@@ -62,9 +70,11 @@ export async function getAgentTimeline(agentId: string): Promise<TimelineItem[]>
         type: messageSends.type,
         respondedAt: messageSends.respondedAt,
         result: messageSends.result,
+        listingAddress: listings.address,
       })
       .from(messageSends)
       .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))
+      .leftJoin(listings, eq(messageSends.listingId, listings.id))
       .where(eq(messageSends.agentId, agentId)),
     db
       .select({
@@ -76,6 +86,7 @@ export async function getAgentTimeline(agentId: string): Promise<TimelineItem[]>
         note: agentInteractions.note,
         pendingSince: agentInteractions.pendingSince,
         source: agentInteractions.source,
+        messageSendId: agentInteractions.messageSendId,
         listingAddress: listings.address,
       })
       .from(agentInteractions)
@@ -83,13 +94,42 @@ export async function getAgentTimeline(agentId: string): Promise<TimelineItem[]>
       .where(eq(agentInteractions.agentId, agentId)),
   ]);
 
+  // One text sent from the app produced a row in each table. Keyed on the link
+  // the app already stores between them, the pair collapses into the send,
+  // which is the row that carries the preset/variant attribution.
+  const sendIds = new Set(sends.map((s) => s.id));
+  const linkedBySendId = new Map(
+    interactions.filter((i) => i.messageSendId && sendIds.has(i.messageSendId)).map((i) => [i.messageSendId!, i])
+  );
+
   const items: TimelineItem[] = [
-    ...sends.map((s) => ({ kind: "send" as const, ...s })),
-    ...interactions.map(({ pendingSince, ...i }) => ({
-      kind: "interaction" as const,
-      ...i,
-      pending: pendingSince != null,
-    })),
+    ...sends.map((s) => {
+      const linked = linkedBySendId.get(s.id);
+      return {
+        kind: "send" as const,
+        ...s,
+        listingAddress: linked?.listingAddress ?? s.listingAddress,
+        outcome: linked?.outcome ?? null,
+        note: linked?.note ?? null,
+        pending: linked?.pendingSince != null,
+      };
+    }),
+    // An interaction pointing at a send that no longer exists stays on its own
+    // rather than disappearing with it.
+    ...interactions
+      .filter((i) => !i.messageSendId || !sendIds.has(i.messageSendId))
+      .map((i) => ({
+        kind: "interaction" as const,
+        id: i.id,
+        at: i.at,
+        channel: i.channel,
+        direction: i.direction,
+        outcome: i.outcome,
+        note: i.note,
+        source: i.source,
+        listingAddress: i.listingAddress,
+        pending: i.pendingSince != null,
+      })),
   ];
 
   return items.sort((a, b) => b.at.getTime() - a.at.getTime());
