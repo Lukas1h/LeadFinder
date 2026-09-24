@@ -273,6 +273,25 @@ export async function linkAgentToListing(
  * of those rows always opens something instead of erroring just because
  * the Agents tab hasn't been visited since this phone first showed up.
  */
+/**
+ * Read-only relationship lookup for AgentRow (the listing detail modal's
+ * agent reference) — so the row can show "Warm"/"Interested"/etc. at a
+ * glance without creating anything. Unlike getOrCreateAgentByPhone below,
+ * this deliberately does NOT upsert: just opening a listing's detail modal
+ * shouldn't mint an agent row for a phone we've never seen.
+ */
+export async function getAgentRelationshipByPhone(
+  phone: string
+): Promise<{ relationshipStatus: AgentRelationshipStatus } | null> {
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) return null;
+  const [agent] = await db
+    .select({ relationshipStatus: agents.relationshipStatus })
+    .from(agents)
+    .where(eq(agents.phone, normalizedPhone));
+  return agent ?? null;
+}
+
 export async function getOrCreateAgentByPhone(
   phone: string,
   name: string | null

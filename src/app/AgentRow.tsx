@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { User } from "lucide-react";
-import type { Agent } from "@/db/schema";
-import { getOrCreateAgentByPhone } from "./agents/actions";
+import type { Agent, AgentRelationshipStatus } from "@/db/schema";
+import { getOrCreateAgentByPhone, getAgentRelationshipByPhone } from "./agents/actions";
 import { AgentDetailDialog } from "./agents/AgentDetailDialog";
+import { RELATIONSHIP_LABELS } from "./agents/relationshipLabels";
 import { formatPhone } from "@/lib/format";
 
 /**
@@ -32,6 +33,21 @@ export function AgentRow({
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [relationship, setRelationship] = useState<AgentRelationshipStatus | null>(null);
+
+  // Read-only lookup on mount: show the relationship at a glance (Warm,
+  // Interested, …) without minting an agent row for a never-seen phone.
+  useEffect(() => {
+    if (!phone) return;
+    let cancelled = false;
+    getAgentRelationshipByPhone(phone).then((res) => {
+      if (cancelled) return;
+      setRelationship(res?.relationshipStatus ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [phone]);
 
   const content = (
     <>
@@ -39,7 +55,14 @@ export function AgentRow({
         <User className="size-5 text-muted-foreground" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground truncate">{name ?? "Unknown agent"}</p>
+        <p className="text-sm font-medium text-foreground truncate flex items-center gap-1.5">
+          {name ?? "Unknown agent"}
+          {relationship && relationship !== "cold" && (
+            <span className="text-xs font-medium text-rose-700 dark:text-rose-400 shrink-0">
+              {RELATIONSHIP_LABELS[relationship]}
+            </span>
+          )}
+        </p>
         {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
         {phone && (
           <p className="text-xs text-muted-foreground">{loading ? "Loading…" : formatPhone(phone)}</p>
