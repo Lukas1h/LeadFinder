@@ -276,7 +276,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       presetName: picked.presetName,
       variantId: picked.variantId,
       variantLabel: picked.label,
-      text: renderMessageBody(picked.body, listing.agentName, listing.address),
+      text: renderMessageBody(picked.body, listing.agentName, listing.address, listing.city),
       recommended: picked.presetId === recommendedPresetId,
       blank: picked.protected,
     };

@@ -173,6 +173,7 @@ export function PipelineList({
             agentPhone={lead.agentPhone}
             agentEmail={attachedAgent?.email}
             address={lead.address}
+            city={lead.city}
           />
         }
       />

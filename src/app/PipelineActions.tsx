@@ -16,6 +16,7 @@ export function PipelineActions({
   agentPhone,
   agentEmail,
   address,
+  city,
 }: {
   listingId: string;
   status: LeadStatus;
@@ -23,6 +24,7 @@ export function PipelineActions({
   agentPhone: string | null;
   agentEmail?: string | null;
   address?: string | null;
+  city?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -54,6 +56,7 @@ export function PipelineActions({
           agentEmail={agentEmail ?? null}
           agentName={agentName}
           address={address ?? null}
+          city={city ?? null}
           trigger={
             <Button disabled={isPending}>
               <MessageCircle />
@@ -80,6 +83,7 @@ export function PipelineActions({
           agentEmail={agentEmail ?? null}
           agentName={agentName}
           address={address ?? null}
+          city={city ?? null}
           trigger={
             <Button variant="outline" disabled={isPending}>
               <MessageCircle />

@@ -13,12 +13,14 @@ export function LeadActions({
   agentPhone,
   agentEmail,
   address,
+  city,
 }: {
   listingId: string;
   agentName: string | null;
   agentPhone: string | null;
   agentEmail?: string | null;
   address?: string | null;
+  city?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -45,6 +47,7 @@ export function LeadActions({
         agentEmail={agentEmail ?? null}
         agentName={agentName}
         address={address ?? null}
+        city={city ?? null}
         trigger={
           <Button disabled={isPending}>
             <MessageCircle />

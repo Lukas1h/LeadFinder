@@ -19,15 +19,17 @@
  * I'd love to be your backup" framing — which is also the voice of his own
  * best-sent SMS preset — and the booked-up / quick-turnaround trigger. The
  * per-property compliments in those drafts ("that lookout tower is awesome")
- * are deliberately dropped: a template only has {{firstName}} and {{street}}
- * to work with, and inventing a detail about a house is worse than omitting
- * one.
+ * are deliberately dropped: a template only has {{firstName}}, {{street}} and
+ * {{city}} to work with, and inventing a detail about a house is worse than
+ * omitting one.
  *
  * The first version of this ran 332 characters — longer than anything else
  * in the set — and stacked three hedges ("probably already have", "just
  * putting myself", "if they're ever") while saying both "here in Eugene" and
- * "a local backup". This one keeps one hedge, states the location once, and
- * comes in at 273, between the two hand-written drafts it's based on.
+ * "a local backup". This one keeps one hedge, states the location once (as
+ * the listing's own city via {{city}}, so it stays correct wherever the
+ * listing is), and comes in at 273, between the two hand-written drafts it's
+ * based on.
  *
  * Re-runnable: creates the preset if it's missing, otherwise rewrites
  * variant A's body to whatever BODY says here, so this file stays the
@@ -42,7 +44,7 @@ const sql = neon(process.env.DATABASE_URL);
 
 const NAME = "Backup Option";
 const BODY =
-  "Hey {{firstName}}, I'm Lukas, a real estate photographer here in Eugene. I saw your listing on {{street}}. " +
+  "Hey {{firstName}}, I'm Lukas, a real estate photographer here in {{city}}. I saw your listing on {{street}}. " +
   "You probably have a photographer you like already, but I'd love to be your backup if they're ever booked " +
   "or you need a quick turnaround. I do photo, drone, and video.";
 
@@ -62,7 +64,7 @@ if (current?.body === BODY) {
 console.log(existing ? `will rewrite "${NAME}" variant A` : `will create SMS preset "${NAME}" (no targeting criteria)`);
 if (current) console.log(`\nreplacing (${current.body.length} chars):\n${current.body}`);
 console.log(`\nwith (${BODY.length} chars):\n${BODY}`);
-console.log(`\nrendered:\n${BODY.replaceAll("{{firstName}}", "Kelly").replaceAll("{{street}}", "Barrett")}`);
+console.log(`\nrendered:\n${BODY.replaceAll("{{firstName}}", "Kelly").replaceAll("{{street}}", "Barrett").replaceAll("{{city}}", "Springfield")}`);
 
 if (!APPLY) {
   console.log("\ndry run — nothing written. re-run with --apply");

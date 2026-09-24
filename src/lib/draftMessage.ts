@@ -63,6 +63,36 @@ const RELATIONSHIP_GUIDANCE: Record<AgentRelationshipStatus, string> = {
 // agent is treated like a new contact if reconnecting.
 const SKIP_INTRO_STATUSES: AgentRelationshipStatus[] = ["warm", "interested", "worked_once", "regular"];
 
+// Cities Lukas actually works out of — based in Roseburg, OR, and actively
+// serving the Roseburg / Eugene / Medford areas. For a listing in any of
+// these (or "cities near" them, listed below), it's accurate to call him a
+// local photographer. Anywhere else and a "local"/"based in" claim would be
+// a lie, so the prompt tells the model to fall back on his 24-hour
+// turnaround and quick delivery instead.
+const LOCAL_AREA_CITIES = new Set([
+  "roseburg", "winston", "sutherlin", "myrtle creek", "canyonville", "oakland",
+  "drain", "elkton", "reedsport", "glide", "tenmile", "green", "lookingglass",
+  "days creek", "riddle", "winchester", "umpqua",
+  "eugene", "springfield", "cottage grove", "creswell", "pleasant hill",
+  "junction city", "coburg", "veneta", "lowell", "oakridge", "marcola",
+  "medford", "ashland", "central point", "phoenix", "talent", "white city",
+  "eagle point", "jacksonville", "gold hill", "rogue river", "shady cove",
+  "butte falls", "grants pass",
+]);
+
+function isLocalArea(city: string | null | undefined): boolean {
+  if (!city) return false;
+  return LOCAL_AREA_CITIES.has(city.trim().toLowerCase());
+}
+
+/** One conditional nudge shared by the SMS and email prompts — keep locality claims honest, and lean on the 24-hour turnaround for anywhere outside his home area. Soft guidance, not a hard rule. */
+function localityNudge(input: DraftMessageInput): string {
+  if (isLocalArea(input.city)) {
+    return `Lukas is based in Roseburg, OR and this listing is in his home area, so it's fine to call him a local photographer here.`;
+  }
+  return `Lukas is based in Roseburg, OR, not ${input.city ?? "the listing's city"} — it reads wrong to claim he's local or "based in" that city. Better to lean on his 24-hour turnaround and that he can get it done quickly.`;
+}
+
 const EXAMPLE_BANK = `1. Coming Soon / No Photos
 Hey {{firstName}}, I'm Lukas. I just saw your coming-soon listing on {{street}}. Do you have photos lined up yet? If not, I'd be happy to get you taken care of this week. I'm local and shoot photo + drone.
 
@@ -253,6 +283,8 @@ function buildSmsPrompt(input: DraftMessageInput): string {
 ${instructionBlock}
 ${scenarioPrompt}
 
+A gentle nudge on location: ${localityNudge(input)} The 24-hour turnaround is worth including when it fits naturally — he can have photos done within a day.
+
 Additional writing rules (these override anything above if they conflict, except Lukas's own instruction above, which wins over everything):
 - NEVER use an em dash (—) or en dash (–), anywhere. Use a period or comma instead.
 - Zero or one exclamation point in the whole message, never more. Prefer a period.
@@ -280,6 +312,8 @@ function buildEmailPrompt(input: DraftMessageInput): string {
   return `You are Lukas, writing an email to a real estate agent to offer photography services.
 ${instructionBlock}
 ${scenarioPrompt}
+
+A gentle nudge on location: ${localityNudge(input)} The 24-hour turnaround is worth including when it fits naturally — he can have photos done within a day.
 
 Writing rules:
 - NEVER use em dashes (—) or en dashes (–). Use commas or periods instead.

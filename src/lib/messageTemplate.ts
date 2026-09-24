@@ -8,15 +8,20 @@ import { firstName, shortStreetName } from "@/lib/sms";
 // functions.
 export const AI_DRAFT_VARIANT_SENTINEL = "draft";
 
-/** Renders a preset variant body, substituting {{firstName}} and {{street}}. */
+/** Renders a preset variant body, substituting {{firstName}}, {{street}} and {{city}}. */
 export function renderMessageBody(
   body: string,
   agentName: string | null,
-  address: string | null
+  address: string | null,
+  city: string | null = null
 ): string {
   const name = firstName(agentName);
   const street = shortStreetName(address) ?? "your property";
-  return body.replaceAll("{{firstName}}", name ?? "there").replaceAll("{{street}}", street);
+  const cityName = city?.trim() ? city.trim() : "your area";
+  return body
+    .replaceAll("{{firstName}}", name ?? "there")
+    .replaceAll("{{street}}", street)
+    .replaceAll("{{city}}", cityName);
 }
 
 /**

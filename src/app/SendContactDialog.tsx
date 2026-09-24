@@ -42,6 +42,7 @@ export function SendContactDialog({
   agentEmail,
   agentName,
   address,
+  city,
   trigger,
 }: {
   listingId: string;
@@ -50,6 +51,7 @@ export function SendContactDialog({
   agentEmail: string | null;
   agentName: string | null;
   address: string | null;
+  city: string | null;
   trigger: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -85,7 +87,7 @@ export function SendContactDialog({
     setEditedBody("");
     setIsDraftingEmailAi(false);
     setEmailAiInstruction("");
-    getComposeEmailOptions({ type, agentName, address }).then(({ presets }) => {
+    getComposeEmailOptions({ type, agentName, address, city }).then(({ presets }) => {
       setEmailPresets(presets);
       const blank = presets.find((p) => p.blank);
       const recommended = presets.find((p) => p.recommended);

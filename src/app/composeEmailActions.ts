@@ -125,6 +125,7 @@ export async function getComposeEmailOptions(listingContext?: {
   type: PresetType;
   agentName: string | null;
   address: string | null;
+  city: string | null;
 }): Promise<MessageOptions> {
   await ensureDefaultEmailPreset();
   await ensureBlankEmailPreset();
@@ -191,7 +192,7 @@ export async function getComposeEmailOptions(listingContext?: {
       // changes instead. With listingContext, render against the actual
       // agent/listing now, same as getMessageOptions' SMS path.
       text: listingContext
-        ? renderMessageBody(picked.body, listingContext.agentName, listingContext.address)
+        ? renderMessageBody(picked.body, listingContext.agentName, listingContext.address, listingContext.city)
         : picked.body,
       subject: listingContext ? renderSubject(picked.subject ?? "", listingContext.agentName) : picked.subject ?? "",
       attachments: picked.attachments,
