@@ -1,0 +1,101 @@
+[
+  {
+    "name": "Lance Weinard",
+    "email": "lancebyreferral@gmail.com",
+    "phone": "503-545-2090",
+    "tier": "A",
+    "score": 85,
+    "brokerage": "LUXE FORBES GLOBAL PROPERTIES",
+    "city": "LAKE OSWEGO"
+  },
+  {
+    "name": "Trudi Schmidt",
+    "email": "trudiu@msn.com",
+    "phone": "503-884-5050",
+    "tier": "A",
+    "score": 85,
+    "brokerage": "OREGON PREMIER REALTY",
+    "city": "SILVERTON"
+  },
+  {
+    "name": "Lacey Sprague",
+    "email": "lacey@laceysprague.com",
+    "phone": "503-807-4348",
+    "tier": "B",
+    "score": 50,
+    "brokerage": "REALTY ONE GROUP PRESTIGE",
+    "city": "BEAVERTON"
+  },
+  {
+    "name": "Steve Odermann",
+    "email": "sodermann@luxeoregon.com",
+    "phone": "971-275-5657",
+    "tier": "B",
+    "score": 50,
+    "brokerage": "LUXE FORBES GLOBAL PROPERTIES",
+    "city": "LAKE OSWEGO"
+  },
+  {
+    "name": "Ralph Amador",
+    "email": "rhamador@msn.com",
+    "phone": "503-779-3766",
+    "tier": "B",
+    "score": 45,
+    "brokerage": "PREMIER REALTY GROUP",
+    "city": "SALEM"
+  },
+  {
+    "name": "Joshua Hackenjos",
+    "email": "josh@luxeoregon.com",
+    "phone": "503-460-7713",
+    "tier": "B",
+    "score": 40,
+    "brokerage": "LUXE FORBES GLOBAL PROPERTIES",
+    "city": "LAKE OSWEGO"
+  },
+  {
+    "name": "Kendra Ratcliff",
+    "email": "kendraratcliff@gmail.com",
+    "phone": "503-330-6677",
+    "tier": "B",
+    "score": 40,
+    "brokerage": "LUXE FORBES GLOBAL PROPERTIES",
+    "city": "LAKE OSWEGO"
+  },
+  {
+    "name": "Mike Roth",
+    "email": "rothhomes@gmail.com",
+    "phone": "503-930-0817",
+    "tier": "B",
+    "score": 40,
+    "brokerage": "OREGON PREMIER REALTY",
+    "city": "SILVERTON"
+  },
+  {
+    "name": "Marcus Brown",
+    "email": "marcus@rogprestige.com",
+    "phone": "503-957-1179",
+    "tier": "C",
+    "score": 10,
+    "brokerage": "REALTY ONE GROUP PRESTIGE",
+    "city": "BEAVERTON"
+  },
+  {
+    "name": "Greg Pace",
+    "email": "greg@sellingportland.com",
+    "phone": "503-349-7585",
+    "tier": "C",
+    "score": 5,
+    "brokerage": "REALTY ONE GROUP PRESTIGE",
+    "city": "BEAVERTON"
+  },
+  {
+    "name": "Kenneth R. Terhaar II",
+    "email": "ken@terhaarteam.com",
+    "phone": "503-381-7416",
+    "tier": "C",
+    "score": 5,
+    "brokerage": "REALTY ONE GROUP PRESTIGE",
+    "city": "BEAVERTON"
+  }
+]
