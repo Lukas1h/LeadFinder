@@ -1,0 +1,14 @@
+name,email,phone,brokerage,city,state,source_url,lead_score,tier,signals,segment
+JORDAN MATIN,lc@matinrealestate.com,503-447-3599,MATIN REAL ESTATE,PORTLAND,OR,https://members.wvmls.com/member_details.asp?member_id=9745,15,C,principal;solo_brokerage,luxury
+WESTLEY COLEBANK,westley@matinrealestate.com,805-416-4224,MATIN REAL ESTATE,PORTLAND,OR,https://members.wvmls.com/member_details.asp?member_id=13086,55,B,rbn_12m;solo_brokerage,luxury
+GREG PACE,greg@sellingportland.com,503-349-7585,REALTY ONE GROUP PRESTIGE,BEAVERTON,OR,https://members.wvmls.com/member_details.asp?member_id=14833,5,C,small_brokerage,luxury
+JOSHUA HACKENJOS,josh@luxeoregon.com,503-460-7713,LUXE FORBES GLOBAL PROPERTIES,LAKE OSWEGO,OR,https://members.wvmls.com/member_details.asp?member_id=14486,40,B,rbn_24m;principal;small_brokerage,luxury
+KENDRA RATCLIFF,kendraratcliff@gmail.com,503-330-6677,LUXE FORBES GLOBAL PROPERTIES,LAKE OSWEGO,OR,https://members.wvmls.com/member_details.asp?member_id=7782,40,B,free_email;principal;small_brokerage,luxury
+KENNETH R. TERHAAR II,ken@terhaarteam.com,503-381-7416,REALTY ONE GROUP PRESTIGE,BEAVERTON,OR,https://members.wvmls.com/member_details.asp?member_id=14232,5,C,small_brokerage,luxury
+LACEY SPRAGUE,lacey@laceysprague.com,503-807-4348,REALTY ONE GROUP PRESTIGE,BEAVERTON,OR,https://members.wvmls.com/member_details.asp?member_id=13818,50,B,rbn_12m;small_brokerage,luxury
+LANCE WEINARD,lancebyreferral@gmail.com,503-545-2090,LUXE FORBES GLOBAL PROPERTIES,LAKE OSWEGO,OR,https://members.wvmls.com/member_details.asp?member_id=11647,85,A,free_email;rbn_12m;principal;small_brokerage,luxury
+MARCUS BROWN,marcus@rogprestige.com,503-957-1179,REALTY ONE GROUP PRESTIGE,BEAVERTON,OR,https://members.wvmls.com/member_details.asp?member_id=8333,10,C,principal;small_brokerage,luxury
+MIKE ROTH,rothhomes@gmail.com,503-930-0817,OREGON PREMIER REALTY,SILVERTON,OR,https://members.wvmls.com/member_details.asp?member_id=5019,40,B,free_email;solo_brokerage,luxury
+RALPH AMADOR,rhamador@msn.com,503-779-3766,PREMIER REALTY GROUP,SALEM,OR,https://members.wvmls.com/member_details.asp?member_id=3015,45,B,free_email;principal;solo_brokerage,luxury
+STEVE ODERMANN,sodermann@luxeoregon.com,971-275-5657,LUXE FORBES GLOBAL PROPERTIES,LAKE OSWEGO,OR,https://members.wvmls.com/member_details.asp?member_id=14739,50,B,rbn_12m;small_brokerage,luxury
+TRUDI SCHMIDT,trudiu@msn.com,503-884-5050,OREGON PREMIER REALTY,SILVERTON,OR,https://members.wvmls.com/member_details.asp?member_id=6408,85,A,free_email;rbn_12m;solo_brokerage,luxury
