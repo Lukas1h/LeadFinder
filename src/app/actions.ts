@@ -28,19 +28,6 @@ export async function touchAgentContact(
 }
 
 /**
- * Marks the agent's Agent-tab record declined — sets their relationship status
- * to "declined" so they appear in the appropriate section on the Agents page.
- *
- * Only ever called for a listing moving to "declined" (the agent actually said
- * no), never for "passed" (Lukas decided not to shoot the property). Passing on
- * a property is a judgment about the property, not the person, and treating the
- * two the same is what previously flagged warm contacts as rejections.
- */
-async function touchAgentDeclined(agentPhone: string | null, agentName: string | null) {
-  await resolveAgentId(agentPhone, agentName, { relationshipStatus: "declined" });
-}
-
-/**
  * Bumps an agent's relationship status forward the moment one of their
  * listings hits a milestone — a reply or a booking — so the Agents tab
  * reflects real pipeline activity instead of drifting from whatever was
@@ -131,9 +118,15 @@ export async function updateListingStatus(listingId: string, status: LeadStatus)
   if (status === "contacted" && lead) {
     await touchAgentContact(listingId, lead.agentPhone, lead.agentName);
   }
-  if (status === "declined" && lead) {
-    await touchAgentDeclined(lead.agentPhone, lead.agentName);
-  }
+  // Declining a listing deliberately does NOT mark the agent declined. Someone
+  // saying no to one property — they already had a photographer booked for it,
+  // the seller chose otherwise — is a fact about that job, not a rejection of
+  // Lukas. Jada Whited turned down 720 Southside and asked for pricing in the
+  // same conversation. Rolling a per-listing no up to the person buried warm
+  // contacts in the Agents tab's declined section and, because "declined"
+  // outranks "warm", downgraded relationships that were actually progressing.
+  // The agent's relationship status is Lukas's own call now (plus the forward
+  // bumps below, which only ever move it up).
   if ((status === "replied" || status === "booked") && lead) {
     await bumpAgentRelationshipOnMilestone(lead.agentPhone, lead.agentName, status);
   }

@@ -41,8 +41,6 @@ export async function ensureAgentsBackfilled() {
       id: listings.id,
       agentPhone: listings.agentPhone,
       agentName: listings.agentName,
-      status: listings.status,
-      statusChangedAt: listings.statusChangedAt,
     })
     .from(listings)
     .where(and(isNull(listings.agentId), or(isNotNull(listings.agentPhone), isNotNull(listings.agentName))));
@@ -50,11 +48,12 @@ export async function ensureAgentsBackfilled() {
   if (unlinked.length === 0) return;
 
   for (const row of unlinked) {
-    // A listing the agent themselves declined sets relationshipStatus to "declined",
-    // so the agent starts in the right Agents-tab section immediately. "passed" is
-    // Lukas's own call about the property and deliberately doesn't.
-    const relationshipStatus = row.status === "declined" ? "declined" : undefined;
-    const agentId = await resolveAgentId(row.agentPhone, row.agentName, relationshipStatus ? { relationshipStatus } : {});
+    // Links the listing to its agent and nothing else. This used to also stamp
+    // relationshipStatus "declined" off a declined listing, which is the same
+    // per-listing-no-means-person-said-no conflation removed from
+    // updateListingStatus — and worse here, since a backfill pass would re-apply
+    // it to agents whose status had since been corrected by hand.
+    const agentId = await resolveAgentId(row.agentPhone, row.agentName);
     if (agentId) {
       await db.update(listings).set({ agentId }).where(eq(listings.id, row.id));
     }
