@@ -288,7 +288,6 @@ export const candidates = [
   {"name": "Melanee Woodman", "email": "melanee@oceandunesrealty.com", "phone": "541-290-6431"},
   {"name": "Michelle Woster", "email": "michelle@pexrealtygroup.com", "phone": "503-343-4014"},
   {"name": "Molly Charley", "email": "molly@crookedriverrealty.com", "phone": null},
-  {"name": "North Carolina", "email": "carolinasonlinesales@tollbrothers.com", "phone": null},
   {"name": "Peggy Hill", "email": "peggy@peggyhill.com", "phone": null},
   {"name": "Ross Seligman", "email": "ross@ownitnorthwest.com", "phone": "503-449-4022"},
   {"name": "Tiffany Stoffer", "email": "tiffany@vanguardproperties.net", "phone": "541-740-1800"},
