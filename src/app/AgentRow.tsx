@@ -57,7 +57,7 @@ export function AgentRow({
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-foreground truncate flex items-center gap-1.5">
           {name ?? "Unknown agent"}
-          {relationship && relationship !== "cold" && (
+          {relationship && (
             <span className="text-xs font-medium text-rose-700 dark:text-rose-400 shrink-0">
               {RELATIONSHIP_LABELS[relationship]}
             </span>
