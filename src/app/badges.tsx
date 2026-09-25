@@ -3,6 +3,8 @@ import type { Agent, AgentRelationshipStatus, LeadStatus } from "@/db/schema";
 import { formatDate, formatDateOnly, daysSince } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { isWarmAgentStatus } from "@/lib/pipeline";
+import { cn } from "@/lib/utils";
 import { RELATIONSHIP_LABELS } from "./agents/relationshipLabels";
 
 export function NewBadge() {
@@ -178,23 +180,66 @@ export function AgentDeclinedBadge({
   );
 }
 
-// The warm-agent mark: shown on a listing card whenever the attached agent has
-// a relationship status that isn't cold or declined (see WARM_AGENT_STATUSES in
-// lib/pipeline.ts). Renders the same RELATIONSHIP_LABELS wording as the Agents
-// tab so the two never disagree about what each status means.
-export function WarmAgentBadge({ agent }: { agent: Agent }) {
-  const status: AgentRelationshipStatus = agent.relationshipStatus;
+const RELATIONSHIP_BADGE_ROSE =
+  "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-900";
+
+// The one place an agent's relationship status turns into a badge. Every surface
+// that shows one renders this, so they can't drift apart on wording or colour
+// again — the agent row inside a listing/booking detail and the agent detail
+// dialog had each grown their own hand-rolled version of this same label.
+//
+// Warm reads rose because that's the "we already have a relationship" signal the
+// warm-agent badge and the warm-agent push notification have always used. Cold
+// and declined are dead ends, so they stay muted rather than borrowing a warm
+// colour: the same split STATUS_STYLES already makes between the "passed" and
+// "declined" lead statuses, with declined kept a shade fainter than cold
+// because it's the agent's answer, not Lukas's own housekeeping.
+const RELATIONSHIP_BADGE_STYLES: Record<AgentRelationshipStatus, string> = {
+  warm: RELATIONSHIP_BADGE_ROSE,
+  interested: RELATIONSHIP_BADGE_ROSE,
+  worked_once: RELATIONSHIP_BADGE_ROSE,
+  regular: RELATIONSHIP_BADGE_ROSE,
+  cold: "bg-muted text-muted-foreground",
+  declined: "bg-muted text-muted-foreground/70",
+};
+
+function relationshipHint(status: AgentRelationshipStatus, agentName: string | null | undefined): string {
+  const who = agentName ?? "this agent";
+  if (isWarmAgentStatus(status)) {
+    return `You already have a relationship with ${who} — ${RELATIONSHIP_LABELS[status].toLowerCase()} status`;
+  }
+  if (status === "declined") return `${who} has marked their status as declined`;
+  return `${who} hasn't been contacted yet — cold status`;
+}
+
+export function RelationshipBadge({
+  status,
+  agentName,
+  className,
+}: {
+  status: AgentRelationshipStatus;
+  agentName?: string | null;
+  className?: string;
+}) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-900">
+        <Badge className={cn(RELATIONSHIP_BADGE_STYLES[status], className)}>
           <Heart />
           {RELATIONSHIP_LABELS[status]}
         </Badge>
       </TooltipTrigger>
-      <TooltipContent>
-        You already have a relationship with {agent.name ?? "this agent"} — {RELATIONSHIP_LABELS[status].toLowerCase()} status
-      </TooltipContent>
+      <TooltipContent>{relationshipHint(status, agentName)}</TooltipContent>
     </Tooltip>
   );
+}
+
+// The warm-agent mark: shown on a listing card whenever the attached agent has
+// a relationship status that isn't cold or declined (see WARM_AGENT_STATUSES in
+// lib/pipeline.ts). Routed through RelationshipBadge so the listing cards can't
+// drift from the agent row or the agent dialog. Renders the same
+// RELATIONSHIP_LABELS wording as the Agents tab so the two never disagree about
+// what each status means.
+export function WarmAgentBadge({ agent }: { agent: Agent }) {
+  return <RelationshipBadge status={agent.relationshipStatus} agentName={agent.name} />;
 }

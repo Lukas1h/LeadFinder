@@ -12,6 +12,7 @@ import { formatDate, formatPrice } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { ListingRow } from "@/app/ListingRow";
 import { FindLinkButton } from "@/app/FindLinkButton";
+import { RelationshipBadge } from "@/app/badges";
 import { getAgentBookings } from "@/app/booked/actions";
 import { BookingRow } from "@/app/booked/BookingRow";
 import type { BookingWithDetails } from "@/app/booked/BookedList";
@@ -24,7 +25,7 @@ import {
   getAgentListings,
 } from "./actions";
 import { resolveAvgDaysBetweenListings } from "./stats";
-import { RELATIONSHIP_OPTIONS, RELATIONSHIP_LABELS } from "./relationshipLabels";
+import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -316,9 +317,7 @@ export function AgentDetailDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {agent.name ?? "Unknown name"}
-            <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-900 shrink-0">
-              {RELATIONSHIP_LABELS[agent.relationshipStatus]}
-            </Badge>
+            <RelationshipBadge status={agent.relationshipStatus} agentName={agent.name} className="shrink-0" />
           </DialogTitle>
           <DialogDescription className="flex flex-col font-mono">
             {agent.phone && <span>{agent.phone}</span>}

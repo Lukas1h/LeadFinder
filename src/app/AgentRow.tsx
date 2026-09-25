@@ -5,7 +5,7 @@ import { User } from "lucide-react";
 import type { Agent, AgentRelationshipStatus } from "@/db/schema";
 import { getOrCreateAgentByPhone, getAgentRelationshipByPhone } from "./agents/actions";
 import { AgentDetailDialog } from "./agents/AgentDetailDialog";
-import { RELATIONSHIP_LABELS } from "./agents/relationshipLabels";
+import { RelationshipBadge } from "./badges";
 import { formatPhone } from "@/lib/format";
 
 /**
@@ -58,9 +58,7 @@ export function AgentRow({
         <p className="text-sm font-medium text-foreground truncate flex items-center gap-1.5">
           {name ?? "Unknown agent"}
           {relationship && (
-            <span className="text-xs font-medium text-rose-700 dark:text-rose-400 shrink-0">
-              {RELATIONSHIP_LABELS[relationship]}
-            </span>
+            <RelationshipBadge status={relationship} agentName={name} className="shrink-0" />
           )}
         </p>
         {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
