@@ -5,7 +5,23 @@ import { StickyNote } from "lucide-react";
 import type { Listing } from "@/db/schema";
 import { formatPrice, formatDate } from "@/lib/format";
 import { ListingModal } from "./ListingModal";
+import { PhotoCarousel } from "./PhotoCarousel";
 import { Card } from "@/components/ui/card";
+
+// Cards show at most this many photos — spread evenly through the set so
+// you get a feel for the whole property (hero exterior, a bedroom, the
+// kitchen, a bathroom, the yard…) rather than just the first few, which are
+// almost always the same three exterior shots.
+const MAX_CARD_PHOTOS = 5;
+
+function sampleCardPhotos(photos: string[]): string[] {
+  if (photos.length <= MAX_CARD_PHOTOS) return photos;
+  const indexes: number[] = [];
+  for (let i = 0; i < MAX_CARD_PHOTOS; i++) {
+    indexes.push(Math.round((i * (photos.length - 1)) / (MAX_CARD_PHOTOS - 1)));
+  }
+  return [...new Set(indexes)].map((i) => photos[i]);
+}
 
 export function LeadCard({
   lead,
@@ -20,22 +36,14 @@ export function LeadCard({
 
   return (
     <Card className="flex-col sm:flex-row gap-4 p-4">
-      <button
-        type="button"
-        onClick={() => setModalOpen(true)}
-        className="shrink-0 w-full sm:w-40 h-40 sm:h-32 rounded-lg overflow-hidden bg-muted flex items-center justify-center"
-      >
-        {lead.photos && lead.photos.length > 0 ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={lead.photos[0]}
-            alt={lead.address ?? "Listing photo"}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <span className="text-muted-foreground text-sm">No photo</span>
-        )}
-      </button>
+      <div className="shrink-0 w-full sm:w-40 sm:self-center">
+        <PhotoCarousel
+          photos={sampleCardPhotos(lead.photos ?? [])}
+          alt={lead.address ?? "Listing photo"}
+          onTap={() => setModalOpen(true)}
+          sizeClassName="w-full h-40 sm:h-32 sm:w-40"
+        />
+      </div>
 
       <div className="flex-1 min-w-0 flex flex-col justify-between gap-3">
         <div>

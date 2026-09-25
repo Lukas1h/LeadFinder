@@ -24,7 +24,7 @@ import {
   getAgentListings,
 } from "./actions";
 import { resolveAvgDaysBetweenListings } from "./stats";
-import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
+import { RELATIONSHIP_OPTIONS, RELATIONSHIP_LABELS } from "./relationshipLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -314,7 +314,12 @@ export function AgentDetailDialog({
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{agent.name ?? "Unknown name"}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {agent.name ?? "Unknown name"}
+            <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-900 shrink-0">
+              {RELATIONSHIP_LABELS[agent.relationshipStatus]}
+            </Badge>
+          </DialogTitle>
           <DialogDescription className="flex flex-col font-mono">
             {agent.phone && <span>{agent.phone}</span>}
             {agent.email && <span>{agent.email}</span>}
