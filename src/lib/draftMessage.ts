@@ -127,7 +127,10 @@ Hey {{firstName}}, I'm Lukas. I'm a local real estate photographer and wanted to
 Hey {{firstName}}, I'm Lukas. I've seen your listings around {{city}} and it looks like you stay pretty busy. I'm a local real estate photographer and wanted to introduce myself. I do photo + drone and would be happy to help whenever you need someone.
 
 12. Simple Listing Introduction
-Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}} and wanted to reach out. I'm a local real estate photographer and shoot photo + drone. If you still need someone for the property, I'd be happy to get you taken care of.`;
+Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}} and wanted to reach out. I'm a local real estate photographer and shoot photo + drone. If you still need someone for the property, I'd be happy to get you taken care of.
+
+13. Professional Photos / Short & Clean (preferred for poor photography — this is THE pattern; do not say "refresh")
+Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}}. If you want to get some professional photos taken for it, I'm local here in {{city}} and have a 24-hour turnaround.`;
 
 /** Only non-null fields render — keeps the prompt from padding out with a wall of "unknown"s. */
 function formatListingFacts(input: DraftMessageInput): string {
