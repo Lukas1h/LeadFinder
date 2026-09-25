@@ -245,17 +245,47 @@ export async function resolvePendingInteraction(
   note?: string
 ): Promise<void> {
   const [row] = await db
-    .select({ messageSendId: agentInteractions.messageSendId, agentId: agentInteractions.agentId })
+    .select({
+      messageSendId: agentInteractions.messageSendId,
+      agentId: agentInteractions.agentId,
+      listingId: agentInteractions.listingId,
+    })
     .from(agentInteractions)
     .where(eq(agentInteractions.id, id));
   if (!row) return;
 
   if (outcome === "not_sent") {
+    // Read the send's type before deleting it — it's the only thing that
+    // distinguishes "this tap is what marked the listing contacted" from "this
+    // tap was a follow-up that just refreshed the clock".
+    let sendType: PresetType | null = null;
     if (row.messageSendId) {
+      const [send] = await db
+        .select({ type: messageSends.type })
+        .from(messageSends)
+        .where(eq(messageSends.id, row.messageSendId));
+      sendType = send?.type ?? null;
       await db.delete(messageSends).where(eq(messageSends.id, row.messageSendId));
     }
     // Nothing reached them, so there's no interaction worth keeping either.
     await db.delete(agentInteractions).where(eq(agentInteractions.id, id));
+
+    // The text button marks the listing "contacted" the instant it's tapped,
+    // because the sms: handoff leaves the app no way to wait and see. When that
+    // optimistic mark turns out to be wrong, the listing has to go back —
+    // otherwise deciding not to text someone leaves a lead that reads as
+    // contacted forever, silently out of the queue and off the follow-up radar.
+    //
+    // Only an initial_outreach can have set the status (a follow-up just bumps
+    // contactedAt, see sendMessage), and only while the listing is still
+    // sitting in the state this tap put it in — if it's moved on to quoted or
+    // booked since, that later fact is the truer one and wins.
+    if (row.listingId && sendType === "initial_outreach") {
+      await db
+        .update(listings)
+        .set({ status: "new", statusChangedAt: new Date(), contactedAt: null })
+        .where(and(eq(listings.id, row.listingId), eq(listings.status, "contacted")));
+    }
   } else {
     await db
       .update(agentInteractions)
@@ -265,6 +295,11 @@ export async function resolvePendingInteraction(
     await db.update(agents).set({ lastContactedAt: new Date() }).where(eq(agents.id, row.agentId));
   }
 
+  // The leads page and pipeline both render listing status, and the not_sent
+  // branch above can move a listing straight back to "new" — without these the
+  // row stays gone from the queue until a manual refresh.
+  revalidatePath("/");
+  revalidatePath("/pipeline");
   revalidatePath("/agents");
   revalidatePath("/messaging");
 }

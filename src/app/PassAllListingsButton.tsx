@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-export function MarkAllNotInterestedButton({ listingIds }: { listingIds: string[] }) {
+export function PassAllListingsButton({ listingIds }: { listingIds: string[] }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -26,11 +26,9 @@ export function MarkAllNotInterestedButton({ listingIds }: { listingIds: string[
     startTransition(async () => {
       try {
         await markListingsPassed(listingIds);
-        toast.success(
-          `Marked ${listingIds.length} listing${listingIds.length === 1 ? "" : "s"} as not interested`
-        );
+        toast.success(`Passed on ${listingIds.length} listing${listingIds.length === 1 ? "" : "s"}`);
       } catch {
-        toast.error("Something went wrong marking listings as not interested");
+        toast.error("Something went wrong passing on those listings");
       } finally {
         setOpen(false);
       }
@@ -51,7 +49,7 @@ export function MarkAllNotInterestedButton({ listingIds }: { listingIds: string[
         onKeyDown={(e) => e.stopPropagation()}
       >
         <X />
-        Not interested
+        Pass all
       </Button>
       <AlertDialogContent
         onClick={(e) => e.stopPropagation()}
@@ -59,11 +57,12 @@ export function MarkAllNotInterestedButton({ listingIds }: { listingIds: string[
       >
         <AlertDialogHeader>
           <AlertDialogTitle>
-            Mark {listingIds.length} listing{listingIds.length === 1 ? "" : "s"} as not interested?
+            Pass on {listingIds.length} listing{listingIds.length === 1 ? "" : "s"}?
           </AlertDialogTitle>
           <AlertDialogDescription>
-            This will move {listingIds.length === 1 ? "this listing" : "these listings"} to declined and
-            out of your new leads.
+            This moves {listingIds.length === 1 ? "this listing" : "these listings"} to passed and out of
+            your new leads. Passing is about the property, not the agent &mdash; it won&rsquo;t mark
+            anyone as declining you.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -75,7 +74,7 @@ export function MarkAllNotInterestedButton({ listingIds }: { listingIds: string[
             }}
             disabled={isPending}
           >
-            {isPending ? "Marking…" : "Yes, mark not interested"}
+            {isPending ? "Passing…" : "Yes, pass on these"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

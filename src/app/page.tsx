@@ -7,7 +7,7 @@ import { LeadActions } from "./LeadActions";
 import { LeadCard } from "./LeadCard";
 import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
-import { MarkAllNotInterestedButton } from "./MarkAllNotInterestedButton";
+import { PassAllListingsButton } from "./PassAllListingsButton";
 import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge, AgentDeclinedBadge, WarmAgentBadge } from "./badges";
 import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isUnlikelyLeadMatch, findAttachedAgent, buildAgentLookups, isWarmAgentStatus } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
@@ -204,7 +204,7 @@ async function LeadsContent() {
                     <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
                     Unlikely matches ({unlikelyMatches.length})
                   </span>
-                  <MarkAllNotInterestedButton listingIds={unlikelyMatches.map((l) => l.id)} />
+                  <PassAllListingsButton listingIds={unlikelyMatches.map((l) => l.id)} />
                 </summary>
                 <div className="flex flex-col gap-4 mt-3">{unlikelyMatches.map(card)}</div>
               </details>
