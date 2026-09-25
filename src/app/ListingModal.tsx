@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ExternalLink, X, UserPlus } from "lucide-react";
+import { ExternalLink, X, UserPlus, Car } from "lucide-react";
 import { LEAD_STATUSES, type Listing, type LeadStatus } from "@/db/schema";
 import { updateListingNotes, updateListingStatus, updateListingFollowUp, findListingSourceUrl } from "./actions";
 import { PhotoCarousel } from "./PhotoCarousel";
@@ -14,6 +14,7 @@ import { AgentRow } from "./AgentRow";
 import { LinkAgentForm } from "./LinkAgentForm";
 import { FindLinkButton } from "./FindLinkButton";
 import { formatPrice, formatDate } from "@/lib/format";
+import { estimateDriveTime } from "@/lib/driveTime";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -112,8 +113,14 @@ export function ListingModal({
             <h2 className="text-xl font-semibold text-foreground">
               {lead.address ?? "Unknown address"}
             </h2>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-muted-foreground flex items-center gap-1.5">
               {[lead.city, lead.state, lead.zipcode].filter(Boolean).join(", ")}
+              {lead.city && estimateDriveTime(lead.city) && (
+                <span className="flex items-center gap-1">
+                  <Car className="size-3.5" />
+                  {estimateDriveTime(lead.city)}
+                </span>
+              )}
             </div>
           </div>
 
