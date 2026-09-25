@@ -6,6 +6,7 @@ import {
   listings,
   messageSends,
   messagePresets,
+  agentInteractions,
   type Agent,
   type Listing,
   type AgentRelationshipStatus,
@@ -13,7 +14,7 @@ import {
   type PresetType,
   type MessageResult,
 } from "@/db/schema";
-import { eq, isNotNull, isNull, sql, desc, and, ne, or, ilike, asc, lt, inArray } from "drizzle-orm";
+import { eq, isNotNull, isNull, sql, desc, and, ne, or, ilike, inArray, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { findFirstResultUrl, findFirstNameMatchResultUrl } from "@/lib/tavily";
 import { normalizePhone, normalizeEmail, normalizeName, EMAIL_RE, hasValidPhoneDigitCount } from "@/lib/normalize";
@@ -314,40 +315,77 @@ export async function getOrCreateAgentByPhone(
 /**
  * The "Follow up" queue for the top of the Agents tab.
  *
- * Eligibility: a warm or interested relationship, and no real contact in
- * the last 28 days (lastContactedAt older than 28 days — or never), and
- * not dismissed by Lukas in the last 28 days (followUpDismissedAt — the
- * "snooze" from the Dismiss button, which is deliberately tracked
- * separately from the real contact facts so dismissing doesn't lie about
- * when they were actually contacted).
+ * Eligibility: a warm or interested relationship, and no *interaction* in
+ * the last 28 days, and not dismissed by Lukas in the last 28 days
+ * (followUpDismissedAt — the "snooze" from the Dismiss button, which is
+ * deliberately tracked separately from the real interaction facts so
+ * dismissing doesn't lie about when the last touch was).
  *
- * Order: interested first, then warm; within each, longest-untouched
- * first (the still-contactable-but-pretty-old reasoning that makes an
- * overstretched warm lead worth nudging the most). Never-contacted sorts
- * ahead of the merely long-overdue.
+ * "Interaction" means either direction: lastContactedAt (your own touches —
+ * every outbound path stamps it), messageSends.respondedAt (their reply to a
+ * send), or an inbound agent_interactions row (they reached you first).
+ * Without the latter two, an agent who got back to you twice in the last
+ * month but who you've never re-contacted would read as 28+ days stale when
+ * you two just talked.
+ *
+ * The warm/interested set is small (double digits), so the cross-table
+ * "last interaction" is resolved in JS rather than kept denormalized on the
+ * agent row — mirrors getAgentTimeline's merge-at-read-time philosophy.
+ *
+ * Order: interested first, then warm; within each, longest-untouched first
+ * (the still-contactable-but-pretty-old reasoning that makes an overstretched
+ * warm lead worth nudging the most). Never-interacted sorts ahead of the
+ * merely long-overdue.
  */
 export async function getFollowUpAgents(): Promise<Agent[]> {
-  return db
+  const candidates = await db
     .select()
     .from(agents)
-    .where(
-      and(
-        inArray(agents.relationshipStatus, ["interested", "warm"]),
-        or(
-          isNull(agents.lastContactedAt),
-          lt(agents.lastContactedAt, sql`now() - interval '28 days'`)
-        ),
-        or(
-          isNull(agents.followUpDismissedAt),
-          lt(agents.followUpDismissedAt, sql`now() - interval '28 days'`)
-        )
-      )
-    )
-    .orderBy(
-      sql`case ${agents.relationshipStatus} when 'interested' then 0 else 1 end`,
-      desc(sql`${agents.lastContactedAt} is null`),
-      asc(agents.lastContactedAt)
+    .where(inArray(agents.relationshipStatus, ["interested", "warm"]));
+
+  if (candidates.length === 0) return [];
+
+  const candidateIds = candidates.map((a) => a.id);
+
+  const [latestReplies, latestInbound] = await Promise.all([
+    db
+      .select({ agentId: messageSends.agentId, at: max(messageSends.respondedAt) })
+      .from(messageSends)
+      .where(and(inArray(messageSends.agentId, candidateIds), isNotNull(messageSends.respondedAt)))
+      .groupBy(messageSends.agentId),
+    db
+      .select({ agentId: agentInteractions.agentId, at: max(agentInteractions.occurredAt) })
+      .from(agentInteractions)
+      .where(and(inArray(agentInteractions.agentId, candidateIds), eq(agentInteractions.direction, "inbound")))
+      .groupBy(agentInteractions.agentId),
+  ]);
+
+  const replyByAgent = new Map(latestReplies.map((r) => [r.agentId, r.at]));
+  const inboundByAgent = new Map(latestInbound.map((r) => [r.agentId, r.at]));
+
+  const lastInteractionAt = (agent: Agent): Date | null => {
+    const stamps = [agent.lastContactedAt, replyByAgent.get(agent.id), inboundByAgent.get(agent.id)].filter(
+      (d): d is Date => d != null
     );
+    if (stamps.length === 0) return null;
+    return new Date(Math.max(...stamps.map((d) => d.getTime())));
+  };
+
+  const cutoff = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
+
+  return candidates
+    .filter((agent) => {
+      if (agent.followUpDismissedAt && agent.followUpDismissedAt.getTime() > cutoff.getTime()) return false;
+      const at = lastInteractionAt(agent);
+      return !at || at.getTime() < cutoff.getTime();
+    })
+    .sort((a, b) => {
+      const statusDiff = a.relationshipStatus === b.relationshipStatus ? 0 : a.relationshipStatus === "interested" ? -1 : 1;
+      if (statusDiff !== 0) return statusDiff;
+      const aAt = lastInteractionAt(a)?.getTime() ?? -Infinity;
+      const bAt = lastInteractionAt(b)?.getTime() ?? -Infinity;
+      return aAt - bAt;
+    });
 }
 
 /**
