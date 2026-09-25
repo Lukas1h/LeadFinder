@@ -212,7 +212,7 @@ export function AgentsList({
           {followUpAgents.length > 0 && (
             <section>
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Follow up ({followUpAgents.length}) — warm &amp; interested, no contact in 28+ days
+                Follow up ({followUpAgents.length})
               </h2>
               <div className="flex flex-col gap-4">{followUpAgents.map(followUpCard)}</div>
             </section>
