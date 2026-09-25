@@ -8,6 +8,13 @@
       "when": 1790097368071,
       "tag": "0000_add_declined_status",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790307701164,
+      "tag": "0001_follow_up_dismissed",
+      "breakpoints": true
     }
   ]
 }

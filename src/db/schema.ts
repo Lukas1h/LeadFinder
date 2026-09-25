@@ -190,6 +190,12 @@ export const agents = pgTable("agents", {
   // means the agent isn't currently in that bucket.
   declinedAt: timestamp("declined_at", { withTimezone: true }),
 
+  // Set when Lukas dismisses an agent from the Agents tab's "Follow up"
+  // section — resurfacing them there only after ~28 days, independent of
+  // the real contact facts. Null means never dismissed / always eligible
+  // based on the rest of the criteria.
+  followUpDismissedAt: timestamp("follow_up_dismissed_at", { withTimezone: true }),
+
   // Free-text, edited from the agent detail dialog — same pattern as
   // listings.notes above.
   notes: text("notes"),

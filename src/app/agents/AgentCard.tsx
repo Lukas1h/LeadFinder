@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import Link from "next/link";
-import { Phone, MessageCircle, Mail, StickyNote } from "lucide-react";
+import { Phone, MessageCircle, Mail, StickyNote, BellOff } from "lucide-react";
 import type { Agent, AgentRelationshipStatus } from "@/db/schema";
 import { updateAgentRelationshipStatus } from "./actions";
 import { resolveAvgDaysBetweenListings } from "./stats";
@@ -18,12 +18,16 @@ export function AgentCard({
   agent,
   listingCount,
   listingDates,
+  followUpDismiss,
 }: {
   agent: Agent;
   listingCount: number;
   // Just the dates the "~Nd between listings" stat needs. The dialog fetches
   // the agent's full listings itself when it opens.
   listingDates: { listedAt: Date | null; foundAt: Date }[];
+  // When set, shows a "Not now" snooze button (the Follow up section's
+  // dismiss — hides this agent from that list for another 28 days).
+  followUpDismiss?: (agentId: string) => void;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -67,6 +71,18 @@ export function AgentCard({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        {followUpDismiss && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => followUpDismiss(agent.id)}
+            disabled={isPending}
+            title="Hide from Follow up for another 28 days"
+            aria-label={`Dismiss ${agent.name ?? agent.phone} from follow up for 28 days`}
+          >
+            <BellOff />
+          </Button>
+        )}
         {callHref && (
           <Button variant="outline" size="icon" asChild>
             <a href={callHref} aria-label={`Call ${agent.name ?? agent.phone}`}>

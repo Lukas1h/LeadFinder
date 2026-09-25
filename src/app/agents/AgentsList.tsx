@@ -7,7 +7,7 @@ import type { Agent, AgentRelationshipStatus } from "@/db/schema";
 import { AgentCard } from "./AgentCard";
 import { RELATIONSHIP_LABELS } from "./relationshipLabels";
 import { AgentDetailDialog } from "./AgentDetailDialog";
-import { getAllColdAgents, searchAllAgents } from "./actions";
+import { getAllColdAgents, searchAllAgents, dismissFollowUpAgent } from "./actions";
 import { COLD_INITIAL_LIMIT } from "./constants";
 import { Input } from "@/components/ui/input";
 
@@ -46,6 +46,7 @@ export function AgentsList({
   counts,
   listingDatesByAgent,
   coldFreshTotal,
+  followUpAgents,
 }: {
   agents: Agent[];
   counts: Record<string, number>;
@@ -54,6 +55,10 @@ export function AgentsList({
   // only carries COLD_INITIAL_LIMIT of them, so the section header and
   // "View all" button need this separately to show the real number.
   coldFreshTotal: number;
+  // Warm/interested agents overdue for contact (see getFollowUpAgents) —
+  // rendered as its own section at the top, once (revalidation does the
+  // updating; the list doesn't need to juggle local removal).
+  followUpAgents: Agent[];
 }) {
   const [search, setSearch] = useState("");
   // null = no results known yet for the current query (still debouncing or
@@ -115,6 +120,10 @@ export function AgentsList({
     });
   };
 
+  const handleFollowUpDismiss = (agentId: string) => {
+    startSearchTransition(() => dismissFollowUpAgent(agentId));
+  };
+
   // Once "View all" has loaded the full cold bucket, it replaces (not
   // appends to) the initial capped slice already in `agents` — otherwise
   // the first COLD_INITIAL_LIMIT would render twice.
@@ -147,6 +156,18 @@ export function AgentsList({
         agent={agent}
         listingCount={counts[agent.id] ?? 0}
         listingDates={listingDatesByAgent[agent.id] ?? []}
+      />
+    );
+  }
+
+  function followUpCard(agent: Agent) {
+    return (
+      <AgentCard
+        key={agent.id}
+        agent={agent}
+        listingCount={counts[agent.id] ?? 0}
+        listingDates={listingDatesByAgent[agent.id] ?? []}
+        followUpDismiss={handleFollowUpDismiss}
       />
     );
   }
@@ -188,6 +209,15 @@ export function AgentsList({
         )
       ) : (
         <div className="flex flex-col gap-8">
+          {followUpAgents.length > 0 && (
+            <section>
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Follow up ({followUpAgents.length}) — warm &amp; interested, no contact in 28+ days
+              </h2>
+              <div className="flex flex-col gap-4">{followUpAgents.map(followUpCard)}</div>
+            </section>
+          )}
+
           <section>
             {RELATIONSHIP_ORDER.every((status) => byStatus[status].length === 0) ? (
               <p className="text-muted-foreground/70 text-sm">No active agents right now.</p>

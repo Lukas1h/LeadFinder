@@ -13,7 +13,7 @@ import {
   type PresetType,
   type MessageResult,
 } from "@/db/schema";
-import { eq, isNotNull, isNull, sql, desc, and, ne, or, ilike } from "drizzle-orm";
+import { eq, isNotNull, isNull, sql, desc, and, ne, or, ilike, asc, lt, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { findFirstResultUrl, findFirstNameMatchResultUrl } from "@/lib/tavily";
 import { normalizePhone, normalizeEmail, normalizeName, EMAIL_RE, hasValidPhoneDigitCount } from "@/lib/normalize";
@@ -309,6 +309,57 @@ export async function getOrCreateAgentByPhone(
   if (!agent) return null;
 
   return agent;
+}
+
+/**
+ * The "Follow up" queue for the top of the Agents tab.
+ *
+ * Eligibility: a warm or interested relationship, and no real contact in
+ * the last 28 days (lastContactedAt older than 28 days — or never), and
+ * not dismissed by Lukas in the last 28 days (followUpDismissedAt — the
+ * "snooze" from the Dismiss button, which is deliberately tracked
+ * separately from the real contact facts so dismissing doesn't lie about
+ * when they were actually contacted).
+ *
+ * Order: interested first, then warm; within each, longest-untouched
+ * first (the still-contactable-but-pretty-old reasoning that makes an
+ * overstretched warm lead worth nudging the most). Never-contacted sorts
+ * ahead of the merely long-overdue.
+ */
+export async function getFollowUpAgents(): Promise<Agent[]> {
+  return db
+    .select()
+    .from(agents)
+    .where(
+      and(
+        inArray(agents.relationshipStatus, ["interested", "warm"]),
+        or(
+          isNull(agents.lastContactedAt),
+          lt(agents.lastContactedAt, sql`now() - interval '28 days'`)
+        ),
+        or(
+          isNull(agents.followUpDismissedAt),
+          lt(agents.followUpDismissedAt, sql`now() - interval '28 days'`)
+        )
+      )
+    )
+    .orderBy(
+      sql`case ${agents.relationshipStatus} when 'interested' then 0 else 1 end`,
+      desc(sql`${agents.lastContactedAt} is null`),
+      asc(agents.lastContactedAt)
+    );
+}
+
+/**
+ * "Snooze" an agent out of the Follow up queue for the next 28 days — sets
+ * followUpDismissedAt, which stays separate from lastContactedAt so the
+ * "Last contacted" date on the card keeps telling the truth about when
+ * they were actually reached. Re-appears once this timestamp is itself
+ * over 28 days old and the other criteria still hold.
+ */
+export async function dismissFollowUpAgent(id: string) {
+  await db.update(agents).set({ followUpDismissedAt: new Date() }).where(eq(agents.id, id));
+  revalidatePath("/agents");
 }
 
 /**

@@ -3,7 +3,7 @@ import { Plus, Users } from "lucide-react";
 import { db } from "@/db";
 import { agents } from "@/db/schema";
 import { desc, isNotNull, isNull, eq, ne, or, and, sql } from "drizzle-orm";
-import { ensureAgentsBackfilled, listingCountsByAgent, listingDatesByAgent } from "./actions";
+import { ensureAgentsBackfilled, listingCountsByAgent, listingDatesByAgent, getFollowUpAgents } from "./actions";
 import { AgentsList } from "./AgentsList";
 import { COLD_INITIAL_LIMIT } from "./constants";
 import { ImportAgentForm } from "./ImportAgentForm";
@@ -34,7 +34,7 @@ async function AgentsContent() {
   // loads on demand (see getAllColdAgents).
   const isColdAndFresh = eq(agents.relationshipStatus, "cold");
 
-  const [totalAgentCount, nonColdFresh, coldFreshPage, coldFreshTotal, counts, agentListings] = await Promise.all([
+  const [totalAgentCount, nonColdFresh, coldFreshPage, coldFreshTotal, counts, agentListings, followUp] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(agents),
     db
       .select()
@@ -45,6 +45,7 @@ async function AgentsContent() {
     db.select({ count: sql<number>`count(*)::int` }).from(agents).where(isColdAndFresh),
     listingCountsByAgent(),
     listingDatesByAgent(),
+    getFollowUpAgents(),
   ]);
 
   const all = [...nonColdFresh, ...coldFreshPage];
@@ -80,6 +81,7 @@ async function AgentsContent() {
           counts={counts}
           listingDatesByAgent={agentListings}
           coldFreshTotal={coldFreshTotal[0].count}
+          followUpAgents={followUp}
         />
       )}
     </>
