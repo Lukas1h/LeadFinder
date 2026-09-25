@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { UserPlus, Phone, PhoneIncoming, MessageCircle, Mail, History, CalendarCheck, Pencil, Trash2, Users } from "lucide-react";
-import { getAgentTimeline, type TimelineItem } from "./interactionActions";
+import { getAgentTimeline, startPendingInteraction, type TimelineItem } from "./interactionActions";
 import { AddInteractionDialog } from "./AddInteractionDialog";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { formatDate, formatPrice } from "@/lib/format";
@@ -307,6 +307,12 @@ export function AgentDetailDialog({
   };
 
   const callHref = telUrl(agent.phone);
+  // Same handoff problem as the Contact dialog's buttons: tapping Call opens the
+  // dialer and Text opens Messages, and neither tells the app how it went. Park
+  // the attempt and let PendingInteractionPrompt ask on the return trip.
+  const logHandoff = (channel: "call" | "text") => {
+    startPendingInteraction({ agentId: agent.id, channel }).catch(() => {});
+  };
   const avgDaysBetweenListings = resolveAvgDaysBetweenListings(agent, listings);
   const hasAnyStats = agent.avgListingsPerYear != null || agent.avgListingPrice != null || avgDaysBetweenListings != null;
 
@@ -420,7 +426,7 @@ export function AgentDetailDialog({
               <div className="flex gap-2">
                 {callHref && (
                   <Button variant="outline" size="sm" asChild className="flex-1">
-                    <a href={callHref}>
+                    <a href={callHref} onClick={() => logHandoff("call")}>
                       <Phone />
                       Call
                     </a>
@@ -428,7 +434,7 @@ export function AgentDetailDialog({
                 )}
                 {agent.phone && (
                   <Button variant="outline" size="sm" asChild className="flex-1">
-                    <a href={smsUrl(agent.phone, "")}>
+                    <a href={smsUrl(agent.phone, "")} onClick={() => logHandoff("text")}>
                       <MessageCircle />
                       Text
                     </a>

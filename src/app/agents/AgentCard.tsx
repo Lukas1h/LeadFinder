@@ -5,6 +5,7 @@ import { Phone, MessageCircle, Mail, StickyNote, BellOff } from "lucide-react";
 import type { Agent } from "@/db/schema";
 import { resolveAvgDaysBetweenListings } from "./stats";
 import { AgentDetailDialog } from "./AgentDetailDialog";
+import { startPendingInteraction } from "./interactionActions";
 import { RelationshipBadge } from "@/app/badges";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
@@ -33,6 +34,15 @@ export function AgentCard({
   // badge is what this row actually needs to say — who this person is.
   const callHref = telUrl(agent.phone);
   const avgDaysBetweenListings = resolveAvgDaysBetweenListings(agent, listingDates);
+
+  // Call and Text hand off to the dialer or Messages, so the app can't observe
+  // whether they picked up or whether anything was sent. Park the attempt as
+  // unresolved and let the app-wide prompt ask on the way back, the same as the
+  // Contact dialog's buttons do. Email needs none of this — it routes into
+  // /messaging, and the send only gets written once it's actually sent.
+  const logHandoff = (channel: "call" | "text") => {
+    startPendingInteraction({ agentId: agent.id, channel }).catch(() => {});
+  };
 
   return (
     <Card className="flex-row items-start justify-between gap-4 p-4 flex-wrap">
@@ -83,14 +93,22 @@ export function AgentCard({
         )}
         {callHref && (
           <Button variant="outline" size="icon" asChild>
-            <a href={callHref} aria-label={`Call ${agent.name ?? agent.phone}`}>
+            <a
+              href={callHref}
+              onClick={() => logHandoff("call")}
+              aria-label={`Call ${agent.name ?? agent.phone}`}
+            >
               <Phone />
             </a>
           </Button>
         )}
         {agent.phone && (
           <Button variant="outline" size="icon" asChild>
-            <a href={smsUrl(agent.phone, "")} aria-label={`Text ${agent.name ?? agent.phone}`}>
+            <a
+              href={smsUrl(agent.phone, "")}
+              onClick={() => logHandoff("text")}
+              aria-label={`Text ${agent.name ?? agent.phone}`}
+            >
               <MessageCircle />
             </a>
           </Button>
