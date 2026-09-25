@@ -1,18 +1,15 @@
 "use client";
 
-import { useTransition } from "react";
 import Link from "next/link";
 import { Phone, MessageCircle, Mail, StickyNote, BellOff } from "lucide-react";
-import type { Agent, AgentRelationshipStatus } from "@/db/schema";
-import { updateAgentRelationshipStatus } from "./actions";
+import type { Agent } from "@/db/schema";
 import { resolveAvgDaysBetweenListings } from "./stats";
 import { AgentDetailDialog } from "./AgentDetailDialog";
-import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
+import { RelationshipBadge } from "@/app/badges";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function AgentCard({
   agent,
@@ -29,26 +26,28 @@ export function AgentCard({
   // dismiss — hides this agent from that list for another 28 days).
   followUpDismiss?: (agentId: string) => void;
 }) {
-  const [isPending, startTransition] = useTransition();
-
-  const handleStatusChange = (status: AgentRelationshipStatus) => {
-    startTransition(() => updateAgentRelationshipStatus(agent.id, status));
-  };
-
+  // Relationship status is shown as a read-only badge, not edited here: the
+  // agent's name is right next to it and opens the detail dialog, which is
+  // where the status dropdown lives. Two ways to set the same value on one card
+  // meant the card's version could quietly disagree with the dialog's, and the
+  // badge is what this row actually needs to say — who this person is.
   const callHref = telUrl(agent.phone);
   const avgDaysBetweenListings = resolveAvgDaysBetweenListings(agent, listingDates);
 
   return (
     <Card className="flex-row items-start justify-between gap-4 p-4 flex-wrap">
       <div className="min-w-0">
-        <AgentDetailDialog
-          agent={agent}
-          trigger={
-            <button type="button" className="font-semibold text-foreground hover:underline text-left">
-              {agent.name ?? "Unknown name"}
-            </button>
-          }
-        />
+        <div className="flex items-center gap-2 flex-wrap">
+          <AgentDetailDialog
+            agent={agent}
+            trigger={
+              <button type="button" className="font-semibold text-foreground hover:underline text-left">
+                {agent.name ?? "Unknown name"}
+              </button>
+            }
+          />
+          <RelationshipBadge status={agent.relationshipStatus} agentName={agent.name} className="shrink-0" />
+        </div>
         <div className="flex flex-wrap items-baseline gap-x-2">
           {agent.phone && <p className="text-xs text-muted-foreground font-mono mt-0.5">{agent.phone}</p>}
           {agent.email && <p className="text-xs text-muted-foreground font-mono mt-0.5">{agent.email}</p>}
@@ -76,7 +75,6 @@ export function AgentCard({
             variant="outline"
             size="icon"
             onClick={() => followUpDismiss(agent.id)}
-            disabled={isPending}
             title="Hide from Follow up for another 28 days"
             aria-label={`Dismiss ${agent.name ?? agent.phone} from follow up for 28 days`}
           >
@@ -104,19 +102,6 @@ export function AgentCard({
             </Link>
           </Button>
         )}
-
-        <Select value={agent.relationshipStatus} onValueChange={handleStatusChange} disabled={isPending}>
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {RELATIONSHIP_OPTIONS.map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
     </Card>
   );
