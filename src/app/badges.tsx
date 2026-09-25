@@ -203,6 +203,22 @@ const RELATIONSHIP_BADGE_STYLES: Record<AgentRelationshipStatus, string> = {
   declined: "bg-muted text-muted-foreground/70",
 };
 
+// The icon has to earn its place per status, the same way the colour does. The
+// heart is the "we already have a relationship" mark and belongs only on the warm
+// statuses — on Cold it read as an endorsement of an agent we've never spoken
+// to, and on Declined it read as affection for someone who said no. Declined
+// takes the same TriangleAlert that AgentDeclinedBadge uses, since it's the
+// agent declining rather than us being warm. Cold gets no icon at all: it's the
+// baseline state, it's the overwhelming majority of agents, and it should recede.
+const RELATIONSHIP_BADGE_ICONS: Record<AgentRelationshipStatus, typeof Heart | null> = {
+  warm: Heart,
+  interested: Heart,
+  worked_once: Heart,
+  regular: Heart,
+  cold: null,
+  declined: TriangleAlert,
+};
+
 function relationshipHint(status: AgentRelationshipStatus, agentName: string | null | undefined): string {
   const who = agentName ?? "this agent";
   if (isWarmAgentStatus(status)) {
@@ -221,11 +237,12 @@ export function RelationshipBadge({
   agentName?: string | null;
   className?: string;
 }) {
+  const Icon = RELATIONSHIP_BADGE_ICONS[status];
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Badge className={cn(RELATIONSHIP_BADGE_STYLES[status], className)}>
-          <Heart />
+          {Icon && <Icon />}
           {RELATIONSHIP_LABELS[status]}
         </Badge>
       </TooltipTrigger>
