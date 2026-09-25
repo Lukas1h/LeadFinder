@@ -100,13 +100,13 @@ Hey {{firstName}}, I'm Lukas. I just saw your coming-soon listing on {{street}}.
 Hey {{firstName}}, I'm Lukas. Just saw your coming-soon listing on {{street}}. Do you already have photography handled? If not, I can take care of the photos + drone and get everything turned around quickly.
 
 3. Poor Photography
-Hey {{firstName}}, I'm Lukas. I came across {{street}} and noticed the listing could probably benefit from some updated photography. If you're looking to give it a refresh, I'd be happy to help. I do photo + drone locally.
+Hey {{firstName}}, I'm Lukas. I came across {{street}} and the current photos honestly don't do the property justice. If you want professional photos taken, I'd be happy to do photo + drone locally.
 
 4. Poor Photography / More Direct
-Hey {{firstName}}, I'm Lukas. I just saw {{street}} and noticed the current photos aren't really showing the property at its best. If you'd like to refresh the listing with professional photo + drone, I'd be happy to take care of it.
+Hey {{firstName}}, I'm Lukas. I just saw {{street}} and the current photos aren't really showing the property at its best. If you'd like professional photos taken, I'd be happy to come shoot photo + drone.
 
 5. Poor Photography / Don't Criticize
-Hey {{firstName}}, I'm Lukas. I came across {{street}} and had a few ideas for how I'd photograph the property differently. If you're considering updating the listing photos, I'd be happy to help.
+Hey {{firstName}}, I'm Lukas. I came across {{street}} and had a few ideas for how I'd photograph the property differently. If you're looking to get professional photos taken, I'd be happy to help.
 
 6. Video Opportunity
 Hey {{firstName}}, I'm Lukas. I came across {{street}} and noticed there's no video on the listing. If you're looking to add video to help showcase the property, I'd be happy to shoot one for you. I also do photo + drone.
@@ -155,7 +155,7 @@ Analyze the listing details AND the attached photos closely before deciding what
 
 How to choose the approach — determine the strongest reason to contact this agent, in this priority order:
 1. If the listing is coming soon or has little/no photography, focus on helping them get the listing photographed quickly.
-2. If the photos are poor, amateur, cellphone-quality, outdated, poorly composed, or fail to showcase the property, offer a professional refresh without insulting the agent or their current photographer.
+2. If the photos are poor, amateur, cellphone-quality, outdated, poorly composed, or fail to showcase the property, offer to take professional photos for them (get them photographed properly) without insulting the agent or their current photographer.
 3. If the photos are good but there's no video or no aerial/drone shot among them, offer the specific missing service.
 4. If the property is unusually expensive, attractive, architectural, unique, or visually interesting, emphasize that strong photography could showcase it particularly well.
 5. If the agent appears high-volume or established (see "Listings we've seen from this agent" below) and the photos already look professional, do not try to convince them to replace that photographer — position Lukas as another local option or backup for busy/last-minute/quick-turnaround situations.
@@ -212,7 +212,7 @@ function buildInitialOutreachEmailPrompt(input: DraftMessageInput, street: strin
 
 How to choose the email subject and approach — determine the strongest reason to contact, in priority order:
 1. If the listing is coming soon or has little/no photography, focus on quick turnaround and getting photos done.
-2. If the photos are poor quality, offer a professional refresh without insulting their current photographer.
+2. If the photos are poor quality, offer to take professional photos for them (get them photographed properly) without insulting their current photographer.
 3. If the photos are good but there's no video or drone shot, offer the specific missing service.
 4. If the property is expensive, visually interesting, or architectural, emphasize how strong photography can showcase it.
 5. If the agent appears established and photos look professional, position Lukas as a backup for busy/last-minute situations.
@@ -238,8 +238,8 @@ Writing style:
 - No exaggerated sales pitch or pressure.
 
 Example tone (not templates to copy, just style guidance):
-- Casual: "Hey [name], I came across your listing on [street] and thought you might benefit from some fresh photos."
-- Direct: "I'm Lukas, a local photographer. I noticed [street] could use updated photos — happy to help if that's something you need."
+- Casual: "Hey [name], I came across your listing on [street] and thought you might want professional photos taken."
+- Direct: "I'm Lukas, a local photographer. [street] could use professional photos. Happy to help if that's something you need."
 - Backup: "I specialize in real estate photos and video. I'm guessing you have someone, but I'm here if you ever need a quick turnaround."
 
 Final rules:
@@ -289,6 +289,7 @@ Additional writing rules (these override anything above if they conflict, except
 - NEVER use an em dash (—) or en dash (–), anywhere. Use a period or comma instead.
 - Zero or one exclamation point in the whole message, never more. Prefer a period.
 - Never use these words/phrases — dead giveaways of AI writing: "I noticed," "I wanted to reach out," "I hope this finds you," "don't hesitate," "in case you," "showcase"/"showcasing," "ensure," "delve," "reach out," "take care of," "beautifully," "stunning," "reliable," "pivotal," "crucial."
+- Never use the word "refresh" or "updated photography" when the photos are bad — instead offer to take professional photos for the listing (frame it as getting the place photographed properly, not as sprucing up old photos).
 - Don't write in a symmetric "not just X, but Y" or rule-of-three pattern.
 - Contractions and plain, slightly imperfect phrasing over polished sentences — this is a text message typed on a phone, not an email.
 
@@ -319,6 +320,7 @@ Writing rules:
 - NEVER use em dashes (—) or en dashes (–). Use commas or periods instead.
 - Zero or one exclamation point total, prefer none. Emails are professional.
 - Avoid these AI giveaways: "I noticed," "I wanted to reach out," "I hope this finds you," "don't hesitate," "in case you," "showcase," "ensure," "delve," "take care of," "beautifully," "stunning," "reliable," "pivotal," "crucial."
+- Never use the word "refresh" or "updated photography" when the photos are bad — instead offer to take professional photos for the listing (frame it as getting the place photographed properly, not as sprucing up old photos).
 - No corporate jargon or sales-speak.
 - Natural, conversational tone but still professional — this is email, not a text.
 - Contractions are fine and help sound natural.
