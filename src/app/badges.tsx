@@ -1,4 +1,4 @@
-import { Sparkles, Clock, Camera, TriangleAlert, Bell, Heart } from "lucide-react";
+import { Sparkles, Clock, Camera, TriangleAlert, Bell } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, LeadStatus } from "@/db/schema";
 import { formatDate, formatDateOnly, daysSince } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -188,35 +188,21 @@ const RELATIONSHIP_BADGE_ROSE =
 // again — the agent row inside a listing/booking detail and the agent detail
 // dialog had each grown their own hand-rolled version of this same label.
 //
-// Warm reads rose because that's the "we already have a relationship" signal the
-// warm-agent badge and the warm-agent push notification have always used. Cold
-// and declined are dead ends, so they stay muted rather than borrowing a warm
-// colour: the same split STATUS_STYLES already makes between the "passed" and
-// "declined" lead statuses, with declined kept a shade fainter than cold
-// because it's the agent's answer, not Lukas's own housekeeping.
+// One hue per status, so the six read apart at a glance instead of all being
+// "a badge with a word in it". The four established relationships climb a
+// warmth ramp — rose for warm, amber as they get interested, violet once
+// there's history, emerald for a regular — while the two ends stay out of the
+// ramp: slate for cold, which is the neutral baseline and the overwhelming
+// majority of agents, and red for declined, the one genuinely negative state.
+// Every one follows the bg-{hue}-50 / text-{hue}-700 / border-{hue}-200 plus
+// dark:-950 / -400 / -900 shape the rest of this file uses.
 const RELATIONSHIP_BADGE_STYLES: Record<AgentRelationshipStatus, string> = {
+  cold: "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-950 dark:text-slate-400 dark:border-slate-900",
   warm: RELATIONSHIP_BADGE_ROSE,
-  interested: RELATIONSHIP_BADGE_ROSE,
-  worked_once: RELATIONSHIP_BADGE_ROSE,
-  regular: RELATIONSHIP_BADGE_ROSE,
-  cold: "bg-muted text-muted-foreground",
-  declined: "bg-muted text-muted-foreground/70",
-};
-
-// The icon has to earn its place per status, the same way the colour does. The
-// heart is the "we already have a relationship" mark and belongs only on the warm
-// statuses — on Cold it read as an endorsement of an agent we've never spoken
-// to, and on Declined it read as affection for someone who said no. Declined
-// takes the same TriangleAlert that AgentDeclinedBadge uses, since it's the
-// agent declining rather than us being warm. Cold gets no icon at all: it's the
-// baseline state, it's the overwhelming majority of agents, and it should recede.
-const RELATIONSHIP_BADGE_ICONS: Record<AgentRelationshipStatus, typeof Heart | null> = {
-  warm: Heart,
-  interested: Heart,
-  worked_once: Heart,
-  regular: Heart,
-  cold: null,
-  declined: TriangleAlert,
+  interested: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900",
+  worked_once: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950 dark:text-violet-400 dark:border-violet-900",
+  regular: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-900",
+  declined: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900",
 };
 
 function relationshipHint(status: AgentRelationshipStatus, agentName: string | null | undefined): string {
@@ -237,12 +223,10 @@ export function RelationshipBadge({
   agentName?: string | null;
   className?: string;
 }) {
-  const Icon = RELATIONSHIP_BADGE_ICONS[status];
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Badge className={cn(RELATIONSHIP_BADGE_STYLES[status], className)}>
-          {Icon && <Icon />}
           {RELATIONSHIP_LABELS[status]}
         </Badge>
       </TooltipTrigger>
