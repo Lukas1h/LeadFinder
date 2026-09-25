@@ -3,15 +3,13 @@
  * sibling of the "Backup Option" SMS preset. Same unconditional "not trying
  * to replace your team, just be the backup for the premium listings" angle,
  * but pitched at high-end homes and leading with the cinematic video tour
- * (the service a luxury listing is most likely to be missing), then photo
- * and drone.
+ * (the service a luxury listing is most likely to be missing), then drone
+ * and architectural photography.
  *
- * Copy mirrors the backup preset's three-beat skeleton (intro, listing,
- * offer) and the "you probably have someone, but I'd love to be your backup"
- * framing, swapping the generic close for the luxury angle: "cinematic video
- * tours, drone, and photography" is lifted straight from the flagship "Luxury
- * Video Outreach" email's positioning. One hedge, no invented listing
- * details, about the same length as the backup preset.
+ * The copy was written by Gemini (gemini-3.5-flash via our own API key),
+ * not by hand — see scripts/gemini-luxury-sms-copy.mjs for the prompt and
+ * the live-generation path. Prints the draft before this script re-uses it
+ * as the source of truth so the two scripts never drift.
  *
  * No targeting criteria — eligible on every listing, manual pick, same as
  * "Backup Option".
@@ -29,9 +27,9 @@ const sql = neon(process.env.DATABASE_URL);
 
 const NAME = "Luxury Video & Photo";
 const BODY =
-  "Hey {{firstName}}, I'm Lukas, a videographer and photographer here in {{city}}. I saw your listing on {{street}}. " +
-  "For a high-end listing like this, a cinematic video tour can really make it stand out. If your usual team is ever " +
-  "booked or you need a quick turnaround, I'd love to be their backup. I do cinematic video, drone, and photo.";
+  "Hey {{firstName}}, I'm Lukas, a real estate videographer in {{city}}. I saw your listing on {{street}}. " +
+  "You likely have a go-to photographer, but I specialize in cinematic video tours for premium properties. " +
+  "I'd love to be your backup option if you ever need high-end video, drone, or architectural photos.";
 
 const [existing] = await sql`
   SELECT id FROM message_presets
