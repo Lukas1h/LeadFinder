@@ -165,7 +165,7 @@ export function registerAgentTools(server: McpServer): void {
     {
       title: "Check whether an agent has already been contacted",
       description:
-        "Given an email, phone, and/or name, reports whether this person is already a known agent and, if so, when they were last contacted, their send history, and every logged interaction (calls, texts and emails outside the app) — use this BEFORE send_agent_email to decide whether a duplicate-send warning is worth surfacing to the user. Pass the name too whenever you have it: a contact first added from a cold-email list has an email and no phone, while one picked up from a listing has a phone and no email, so checking only the identifier in front of you can report 'never contacted' about someone mid-conversation.",
+        "Given an email, phone, and/or name, reports whether this person is already a known agent and, if so, when they were last contacted, their send history, and every logged interaction (calls, texts and emails outside the app) — use this BEFORE send_agent_email to decide whether a duplicate-send warning is worth surfacing to the user. Pass the name too whenever you have it: a contact first added from a cold-email list has an email and no phone, while one picked up from a listing has a phone and no email, so checking only the identifier in front of you can report 'never contacted' about someone mid-conversation. Each priorSends row separates two things: respondedAt is when they FIRST replied, stamped automatically the instant an inbound interaction is logged, and result is the commercial outcome (pending/quoted/booked/declined). Judge whether someone answered by respondedAt, never by result — result \"pending\" only means no quote, booking or decline has been recorded yet, so an agent who replied and is still talking is correctly respondedAt-set with result \"pending\", and that is not a stat that needs correcting.",
       inputSchema: {
         email: z.string().optional(),
         phone: z.string().optional(),
@@ -198,11 +198,18 @@ export function registerAgentTools(server: McpServer): void {
 
       if (!agent) return text({ knownAgent: false });
 
+      // respondedAt rides along because result alone reads as a false alarm:
+      // "pending" here means no *commercial* outcome recorded yet, not that the
+      // agent never wrote back. An agent who replied and is still negotiating
+      // is legitimately respondedAt-set + result "pending", and a caller seeing
+      // only "pending" will conclude the reply was never recorded and go looking
+      // for a way to "fix" a stat that is already correct.
       const history = await db
         .select({
           presetName: messagePresets.name,
           channel: messageSends.channel,
           sentAt: messageSends.sentAt,
+          respondedAt: messageSends.respondedAt,
           result: messageSends.result,
         })
         .from(messageSends)
