@@ -37,6 +37,8 @@ Requirements:
 - More video-forward than the backup preset: a cinematic video tour should lead the offer (that's the service a luxurious listing is most likely missing), then drone and photography.
 - Keep the same non-pushy "not trying to replace their team, happy to be the backup" attitude — luxury agents have a go-to media person and won't respond to someone trying to steal the account.
 - 2-4 sentences, short and natural, like a real text typed on a phone. No sales-speak, no flattery, no "elevate", no em dashes, no exclamation points.
+- Slightly MORE casual than the backup preset — a little looser and more conversational, the way Lukas actually texts agents.
+- NEVER use the phrase "You likely have a go-to" or anything close (e.g. "you likely have", "go-to photographer"). It reads stiff and weird.
 - Use the placeholders literally: {{firstName}} for their first name, {{street}} for the listing street, {{city}} for the listing city.
 - Write ONE draft that fits the same rough length (250-340 characters) as the backup preset above.
 
