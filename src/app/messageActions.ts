@@ -9,6 +9,7 @@ import {
   messageSends,
   bookingLineItems,
   type PresetType,
+  type LeadStatus,
   type AgentRelationshipStatus,
   type Listing,
   type PresetAttachment,
@@ -450,6 +451,21 @@ export async function sendMessage(
     resolvedVariantId = variant.id;
   }
 
+  // Captured before the optimistic mark below overwrites it, so a later "no, I
+  // didn't send it" can put the listing back where it actually came from. An
+  // initial_outreach goes out from the leads page ("new") or from the
+  // pipeline's saved row ("saved"), and both are reachable from the same
+  // button — reading the status back off the row at revert time can't tell
+  // them apart, by then it's been overwritten to "contacted" either way.
+  let statusBefore: LeadStatus | null = null;
+  if (type === "initial_outreach") {
+    const [prior] = await db
+      .select({ status: listings.status })
+      .from(listings)
+      .where(eq(listings.id, listingId));
+    statusBefore = prior?.status ?? null;
+  }
+
   const [lead] = await db
     .update(listings)
     .set({
@@ -488,6 +504,7 @@ export async function sendMessage(
       listingId,
       channel: "text",
       messageSendId: send?.id ?? null,
+      listingStatusBefore: statusBefore,
     });
   }
 

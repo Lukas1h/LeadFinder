@@ -561,6 +561,14 @@ export const agentInteractions = pgTable("agent_interactions", {
   // it inflating the variant's numbers.
   messageSendId: uuid("message_send_id").references(() => messageSends.id, { onDelete: "set null" }),
 
+  // The listing status at the moment this interaction was started, captured
+  // before the app optimistically advanced it. A "no, I didn't send it" answer
+  // has to put the listing back exactly where it came from: an
+  // initial_outreach can be sent from "new" (the leads page) or "saved" (the
+  // pipeline's saved row), and restoring a hardcoded "new" dropped a triaged
+  // lead back onto the leads queue as if it had never been touched.
+  listingStatusBefore: text("listing_status_before"),
+
   // "app" = recorded automatically from an action in the app, "manual" = typed
   // in afterwards, "backfill" = reconstructed in bulk from older evidence
   // (inbox replies, an agent's notes) by scripts/backfill-interactions.mjs.

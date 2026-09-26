@@ -13,6 +13,7 @@ import {
   type MessageChannel,
   type MessageResult,
   type PresetType,
+  type LeadStatus,
 } from "@/db/schema";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -189,6 +190,7 @@ export async function startPendingInteraction(input: {
   listingId?: string | null;
   channel: "call" | "text";
   messageSendId?: string | null;
+  listingStatusBefore?: LeadStatus | null;
 }): Promise<string | null> {
   const [row] = await db
     .insert(agentInteractions)
@@ -199,6 +201,7 @@ export async function startPendingInteraction(input: {
       direction: "outbound",
       pendingSince: new Date(),
       messageSendId: input.messageSendId ?? null,
+      listingStatusBefore: input.listingStatusBefore ?? null,
       source: "app",
     })
     .returning({ id: agentInteractions.id });
@@ -249,6 +252,7 @@ export async function resolvePendingInteraction(
       messageSendId: agentInteractions.messageSendId,
       agentId: agentInteractions.agentId,
       listingId: agentInteractions.listingId,
+      listingStatusBefore: agentInteractions.listingStatusBefore,
     })
     .from(agentInteractions)
     .where(eq(agentInteractions.id, id));
@@ -276,6 +280,14 @@ export async function resolvePendingInteraction(
     // otherwise deciding not to text someone leaves a lead that reads as
     // contacted forever, silently out of the queue and off the follow-up radar.
     //
+    // Restore the status the listing actually held, captured when the
+    // interaction was parked. It is NOT always "new": an initial_outreach also
+    // goes out from the pipeline's "saved" row, and putting that back to "new"
+    // returned a triaged lead to the leads queue as if it had never been
+    // touched. Older rows parked before the column existed have nothing to
+    // restore, and "new" is the right guess for those — they predate the
+    // pipeline's contact button being reachable from "saved".
+    //
     // Only an initial_outreach can have set the status (a follow-up just bumps
     // contactedAt, see sendMessage), and only while the listing is still
     // sitting in the state this tap put it in — if it's moved on to quoted or
@@ -283,7 +295,11 @@ export async function resolvePendingInteraction(
     if (row.listingId && sendType === "initial_outreach") {
       await db
         .update(listings)
-        .set({ status: "new", statusChangedAt: new Date(), contactedAt: null })
+        .set({
+          status: (row.listingStatusBefore ?? "new") as LeadStatus,
+          statusChangedAt: new Date(),
+          contactedAt: null,
+        })
         .where(and(eq(listings.id, row.listingId), eq(listings.status, "contacted")));
     }
   } else {
@@ -296,8 +312,9 @@ export async function resolvePendingInteraction(
   }
 
   // The leads page and pipeline both render listing status, and the not_sent
-  // branch above can move a listing straight back to "new" — without these the
-  // row stays gone from the queue until a manual refresh.
+  // branch above can move a listing back to the state it was triaged into —
+  // without these the row stays gone from wherever it lands until a manual
+  // refresh.
   revalidatePath("/");
   revalidatePath("/pipeline");
   revalidatePath("/agents");
