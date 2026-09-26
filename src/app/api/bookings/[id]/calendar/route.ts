@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { bookings, listings, agents, bookingLineItems } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { formatPhone, formatPrice } from "@/lib/format";
+import { estimateDriveMinutes } from "@/lib/driveTime";
 
 // Used when no shooting hours have been recorded yet.
 const DEFAULT_DURATION_HOURS = 2;
@@ -58,6 +59,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const start = booking.jobDate;
   const durationHours = booking.shootingHours ?? DEFAULT_DURATION_HOURS;
   const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
+  const travelMinutes = city ? estimateDriveMinutes(city) : null;
 
   const description = [
     contact?.name || contact?.phone
@@ -79,7 +81,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     `DTSTAMP:${toIcsDate(new Date())}`,
     `DTSTART:${toIcsDate(start)}`,
     `DTEND:${toIcsDate(end)}`,
-    `SUMMARY:${escapeIcsText(`Shoot — ${address || city || "Booking"}`)}`,
+    `SUMMARY:${escapeIcsText(city ? `Shoot in ${city}` : "Shoot")}`,
+    // Not part of RFC 5545 — Apple's own extension, which is what iOS/macOS
+    // Calendar read as the event's "Travel time" (one-way drive from home,
+    // see src/lib/driveTime.ts). Other calendar apps ignore it.
+    travelMinutes ? `X-APPLE-TRAVEL-DURATION;VALUE=DURATION:PT${travelMinutes}M` : null,
     location ? `LOCATION:${escapeIcsText(location)}` : null,
     description ? `DESCRIPTION:${escapeIcsText(description)}` : null,
     "END:VEVENT",

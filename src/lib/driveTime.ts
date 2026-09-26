@@ -102,3 +102,12 @@ function normalizeCity(city: string): string {
 export function estimateDriveTime(city: string): string | null {
   return DRIVE_TIME_FROM_WINSTON[normalizeCity(city)] ?? null;
 }
+
+/** The same one-way estimate as whole minutes (e.g. "~1h 15m drive" → 75), or null if the city isn't in the table. */
+export function estimateDriveMinutes(city: string): number | null {
+  const label = estimateDriveTime(city);
+  if (!label) return null;
+  const hours = Number(label.match(/(\d+)h/)?.[1] ?? 0);
+  const minutes = Number(label.match(/(\d+)\s*min|(\d+)m\b/)?.slice(1).find(Boolean) ?? 0);
+  return hours * 60 + minutes || null;
+}
