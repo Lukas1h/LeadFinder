@@ -58,9 +58,9 @@ export function registerBookingTools(server: McpServer): void {
     "search_bookings",
     {
       title: "Search/filter bookings",
-      description: "Filters bookings by completion status, city, and job-date range. Sorted by job date.",
+      description: "Filters bookings by completion status (completed = paid; an invoice-sent booking still counts as not completed), city, and job-date range. Sorted by job date.",
       inputSchema: {
-        completed: z.boolean().optional().describe("true = only completed, false = only upcoming/active"),
+        completed: z.boolean().optional().describe("true = only completed (paid), false = only not yet completed (upcoming or waiting for payment)"),
         city: z.string().optional(),
         fromDate: z.string().datetime().optional().describe("Only bookings with jobDate on/after this. ISO 8601, read as UTC when no offset is given"),
         toDate: z.string().datetime().optional().describe("Only bookings with jobDate on/before this. ISO 8601, read as UTC when no offset is given"),
@@ -231,7 +231,7 @@ export function registerBookingTools(server: McpServer): void {
     "complete_booking",
     {
       title: "Mark a booking completed",
-      description: "Sets completedAt to now.",
+      description: "Sets completedAt to now — the final state, meaning the job is done and paid.",
       inputSchema: { id: z.string().uuid() },
     },
     async ({ id }) => {
@@ -245,12 +245,17 @@ export function registerBookingTools(server: McpServer): void {
     "reopen_booking",
     {
       title: "Reopen a completed booking",
-      description: "Clears completedAt, moving it back to upcoming/active.",
+      description: "Steps a booking back one state: completed → waiting for payment (if an invoice was sent, else upcoming/active), or waiting for payment → upcoming/active.",
       inputSchema: { id: z.string().uuid() },
     },
     async ({ id }) => {
-      const [updated] = await db.update(bookings).set({ completedAt: null }).where(eq(bookings.id, id)).returning();
-      if (!updated) return errorText("No booking with that id");
+      const [existing] = await db.select().from(bookings).where(eq(bookings.id, id));
+      if (!existing) return errorText("No booking with that id");
+      const [updated] = await db
+        .update(bookings)
+        .set(existing.completedAt ? { completedAt: null } : { invoiceSentAt: null })
+        .where(eq(bookings.id, id))
+        .returning();
       return text(updated);
     }
   );

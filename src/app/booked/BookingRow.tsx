@@ -5,7 +5,7 @@ import { CalendarCheck } from "lucide-react";
 import { getBookingWithDetails } from "./actions";
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import { formatDay, formatPrice } from "@/lib/format";
-import { Badge } from "@/components/ui/badge";
+import { BookingStatusBadge } from "./BookingStatusBadge";
 import type { BookingWithDetails } from "./BookedList";
 
 /**
@@ -59,7 +59,7 @@ export function BookingRow({ bookingId, booking: preloaded }: { bookingId: strin
           </p>
           <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
-        {booking?.completedAt && <Badge variant="secondary">Completed</Badge>}
+        {booking && <BookingStatusBadge booking={booking} />}
       </button>
       {booking && <BookingDetailDialog booking={booking} open={open} onOpenChange={setOpen} />}
     </>

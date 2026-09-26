@@ -21,6 +21,8 @@ export interface BookingWithDetails {
   lockboxCode: string | null;
   notes: string | null;
   completedAt: Date | null;
+  // Set once the invoice has been sent to the client (implies completedAt).
+  invoiceSentAt: Date | null;
   createdAt: Date;
   contactName: string | null;
   contactPhone: string | null;
@@ -42,9 +44,9 @@ export interface BookingWithDetails {
 }
 
 export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
-  const { upcoming, completed } = useMemo(() => {
+  const { upcoming, waiting, completed } = useMemo(() => {
     const upcoming = bookings
-      .filter((b) => !b.completedAt)
+      .filter((b) => !b.completedAt && !b.invoiceSentAt)
       .sort((a, b) => {
         // No job date yet sinks to the bottom rather than sorting first.
         if (!a.jobDate && !b.jobDate) return b.createdAt.getTime() - a.createdAt.getTime();
@@ -52,10 +54,15 @@ export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
         if (!b.jobDate) return -1;
         return a.jobDate.getTime() - b.jobDate.getTime();
       });
+    // Invoice sent but not yet paid — longest-waiting first, so the one to
+    // chase is on top.
+    const waiting = bookings
+      .filter((b) => !b.completedAt && b.invoiceSentAt)
+      .sort((a, b) => a.invoiceSentAt!.getTime() - b.invoiceSentAt!.getTime());
     const completed = bookings
       .filter((b) => b.completedAt)
       .sort((a, b) => b.completedAt!.getTime() - a.completedAt!.getTime());
-    return { upcoming, completed };
+    return { upcoming, waiting, completed };
   }, [bookings]);
 
   if (bookings.length === 0) {
@@ -96,9 +103,23 @@ export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
         </div>
       )}
 
-      {completed.length > 0 && (
+      {waiting.length > 0 && (
         <>
           {upcoming.length > 0 && <Separator />}
+          <div className="flex flex-col gap-3">
+            <h2 className="text-xs font-medium text-muted-foreground">Waiting for payment ({waiting.length})</h2>
+            <div className="flex flex-col gap-4">
+              {waiting.map((booking) => (
+                <BookingCard key={booking.id} booking={booking} />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {completed.length > 0 && (
+        <>
+          {(upcoming.length > 0 || waiting.length > 0) && <Separator />}
           <details className="group/details">
             <summary className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-2 cursor-pointer select-none list-none">
               <ChevronRight className="size-3.5 transition-transform group-open/details:rotate-90" />

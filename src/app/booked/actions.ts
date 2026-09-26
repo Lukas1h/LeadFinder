@@ -235,6 +235,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     lockboxCode: booking.lockboxCode,
     notes: booking.notes,
     completedAt: booking.completedAt,
+    invoiceSentAt: booking.invoiceSentAt,
     createdAt: booking.createdAt,
     contactName: contact?.name ?? null,
     contactPhone: contact?.phone ?? null,
@@ -303,6 +304,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       lockboxCode: b.lockboxCode,
       notes: b.notes,
       completedAt: b.completedAt,
+      invoiceSentAt: b.invoiceSentAt,
       createdAt: b.createdAt,
       contactName: agent?.name ?? null,
       contactPhone: agent?.phone ?? null,
@@ -354,8 +356,20 @@ export async function markBookingCompleted(bookingId: string) {
   revalidatePath("/agents");
 }
 
+/** Moves a booking into "Waiting for payment" — it isn't completed until it's paid. */
+export async function markInvoiceSent(bookingId: string) {
+  await db.update(bookings).set({ invoiceSentAt: new Date() }).where(eq(bookings.id, bookingId));
+  revalidatePath("/booked");
+  revalidatePath("/agents");
+}
+
+/** Steps a booking back one state: Completed → Waiting for payment (or In progress if no invoice was sent), Waiting for payment → In progress. */
 export async function reopenBooking(bookingId: string) {
-  await db.update(bookings).set({ completedAt: null }).where(eq(bookings.id, bookingId));
+  const [existing] = await db.select({ completedAt: bookings.completedAt }).from(bookings).where(eq(bookings.id, bookingId));
+  await db
+    .update(bookings)
+    .set(existing?.completedAt ? { completedAt: null } : { invoiceSentAt: null })
+    .where(eq(bookings.id, bookingId));
   revalidatePath("/booked");
   revalidatePath("/agents");
 }

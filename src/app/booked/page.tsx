@@ -72,6 +72,7 @@ async function BookedContent() {
       lockboxCode: b.lockboxCode,
       notes: b.notes,
       completedAt: b.completedAt,
+      invoiceSentAt: b.invoiceSentAt,
       createdAt: b.createdAt,
       contactName: contact?.name ?? null,
       contactPhone: contact?.phone ?? null,

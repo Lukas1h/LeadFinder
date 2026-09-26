@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt } from "lucide-react";
-import { markBookingCompleted, reopenBooking } from "./actions";
+import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send } from "lucide-react";
+import { markBookingCompleted, markInvoiceSent, reopenBooking } from "./actions";
+import { BookingStatusBadge } from "./BookingStatusBadge";
 import { BookingForm } from "./BookingForm";
 import { GalleryLinkButton } from "./GallerySection";
 import { ListingRow } from "@/app/ListingRow";
@@ -42,6 +43,14 @@ export function BookingDetailDialog({
     });
   };
 
+  const handleInvoiceSent = () => {
+    startTransition(async () => {
+      await markInvoiceSent(booking.id);
+      toast.success("Marked invoice sent");
+      router.refresh();
+    });
+  };
+
   const handleReopen = () => {
     startTransition(async () => {
       await reopenBooking(booking.id);
@@ -57,7 +66,10 @@ export function BookingDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{location}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            {location}
+            <BookingStatusBadge booking={booking} />
+          </DialogTitle>
           <DialogDescription className="flex flex-col gap-0.5">
             <span className="flex items-center gap-1.5">
               <CalendarDays className="size-3.5" />
@@ -73,15 +85,27 @@ export function BookingDetailDialog({
         </DialogHeader>
 
         <div className="flex flex-wrap gap-2">
-          {booking.completedAt ? (
+          {!booking.completedAt && !booking.invoiceSentAt && (
+            <Button size="sm" onClick={handleInvoiceSent} disabled={isPending}>
+              <Send />
+              Mark invoice sent
+            </Button>
+          )}
+          {!booking.completedAt && (
+            <Button
+              size="sm"
+              variant={booking.invoiceSentAt ? "default" : "outline"}
+              onClick={handleComplete}
+              disabled={isPending}
+            >
+              <CheckCircle2 />
+              Mark completed
+            </Button>
+          )}
+          {(booking.completedAt || booking.invoiceSentAt) && (
             <Button variant="outline" size="sm" onClick={handleReopen} disabled={isPending}>
               <RotateCcw />
               Reopen
-            </Button>
-          ) : (
-            <Button size="sm" onClick={handleComplete} disabled={isPending}>
-              <CheckCircle2 />
-              Mark completed
             </Button>
           )}
           <Button

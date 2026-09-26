@@ -263,9 +263,15 @@ export const bookings = pgTable("bookings", {
   jobDate: timestamp("job_date", { withTimezone: true }),
   lockboxCode: text("lockbox_code"),
   notes: text("notes"),
-  // Null = upcoming/active, shown on the Booked page's Upcoming section.
-  // Set via a "Mark completed" action.
+  // The final state — the job is done AND paid. Null = still open (either
+  // upcoming or waiting for payment, see invoiceSentAt). Set via a "Mark
+  // completed" action.
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  // Set via a "Mark invoice sent" action once the invoice has actually gone
+  // out to the client — the booking then sits in "Waiting for payment" until
+  // completedAt is set. Distinct from invoicedAt below, which only records
+  // that the invoice was generated/viewed in the app, not that it was sent.
+  invoiceSentAt: timestamp("invoice_sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
   // Assigned once, the first time "Create invoice" is clicked (see

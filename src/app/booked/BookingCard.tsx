@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Phone, Car } from "lucide-react";
-import { markBookingCompleted, reopenBooking } from "./actions";
+import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Phone, Car, Send } from "lucide-react";
+import { markBookingCompleted, markInvoiceSent, reopenBooking } from "./actions";
 import { BookingDetailDialog } from "./BookingDetailDialog";
+import { BookingStatusBadge } from "./BookingStatusBadge";
 import { formatPrice, formatDateTime, formatPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,7 @@ import type { BookingWithDetails } from "./BookedList";
  * BookingDetailDialog, so it deliberately has no nested links (an address
  * link to /pipeline used to live here and was too easy to fat-finger by
  * accident instead of opening the card). The only other interactive
- * element is Mark completed/Reopen, which stops propagation so it doesn't
+ * elements are the Mark completed/Mark invoice sent/Reopen buttons, which stop propagation so it doesn't
  * also open the dialog.
  */
 export function BookingCard({ booking }: { booking: BookingWithDetails }) {
@@ -29,6 +30,15 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
     startTransition(async () => {
       await markBookingCompleted(booking.id);
       toast.success("Marked completed");
+      router.refresh();
+    });
+  };
+
+  const handleInvoiceSent = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    startTransition(async () => {
+      await markInvoiceSent(booking.id);
+      toast.success("Marked invoice sent");
       router.refresh();
     });
   };
@@ -53,7 +63,10 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
       >
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <div className="font-semibold text-foreground">{location}</div>
+            <div className="font-semibold text-foreground flex items-center gap-2 flex-wrap">
+              {location}
+              <BookingStatusBadge booking={booking} />
+            </div>
             <div className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
               <CalendarDays className="size-3.5" />
               {booking.jobDate ? formatDateTime(booking.jobDate) : "No job date set"}
@@ -94,8 +107,25 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
           </div>
         )}
 
-        <div>
-          {booking.completedAt ? (
+        <div className="flex flex-wrap gap-2">
+          {!booking.completedAt && !booking.invoiceSentAt && (
+            <Button size="sm" onClick={handleInvoiceSent} disabled={isPending}>
+              <Send />
+              Mark invoice sent
+            </Button>
+          )}
+          {!booking.completedAt && (
+            <Button
+              size="sm"
+              variant={booking.invoiceSentAt ? "default" : "outline"}
+              onClick={handleComplete}
+              disabled={isPending}
+            >
+              <CheckCircle2 />
+              Mark completed
+            </Button>
+          )}
+          {(booking.completedAt || booking.invoiceSentAt) && (
             <Button
               variant="ghost"
               size="sm"
@@ -105,11 +135,6 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
             >
               <RotateCcw />
               Reopen
-            </Button>
-          ) : (
-            <Button size="sm" onClick={handleComplete} disabled={isPending}>
-              <CheckCircle2 />
-              Mark completed
             </Button>
           )}
         </div>
