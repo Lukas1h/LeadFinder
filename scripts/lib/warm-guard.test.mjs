@@ -135,11 +135,12 @@ test("a phonetic-only similarity is held, never blocked", () => {
 test("a possible typo in either name half is held", () => {
   for (const [a, b] of [
     ["Maria Garcia", "Marie Garcia"],       // one-letter given name
-    ["Robert Smith", "Robert Smythe"],      // possible misspelled surname
     ["Kristopher Smith", "Christopher Smith"],
-    ["Recibecca Rhoda", "Rebecca Rhoda"],
+    ["Corrie Coffey", "Carrie Coffin"],
     ["Rebecca Rhod", "Rebecca Rhoda"],
     ["Rebecca Rhoda", "Rebecca Rhoad"],
+    ["Robert Smith", "Robert Smythe"],      // same first name, Soundex surname
+    ["Jenna Hasson", "Kenna Higson"],
   ]) {
     assert.notEqual(v({ name: a }, b), "clear", `${a} vs ${b} cleared — must be held`);
   }
@@ -149,6 +150,12 @@ test("a shared surname with an unrelated given name clears", () => {
   for (const [a, b] of [
     ["Sarah Johnson", "Michael Johnson"], ["David Miller", "Karen Miller"],
     ["Bob Smith", "Robert Jones"], ["Tom Nguyen", "Thomas Newton"],
+    ["Lisa Lang", "Gina Bany"],
+    // Short surnames that Soundex alone used to hold. Both released: two
+    // coincidences is not a person, and holding them is how a guard gets
+    // ignored. "hasson" also has to survive looksLikeOrg — Cascade Hasson is
+    // a firm but Jenna and Tracy Hasson are agents.
+    ["Shelley Hasson", "Shawn Higson"], ["Tracy Hasson", "Tricia Hansen"],
     ["Patrick Young", "Patricia Young"], ["Alexis Chen", "Alexander Chen"],
     ["Teresa Villa", "Terrence Villa"], ["Ronald Bush", "Veronica Bush"],
     ["Craig Cole", "Grace Cole"], ["Dora Miller", "Dorothy Miller"],
@@ -168,6 +175,11 @@ test("nickname aliases never collapse two distinct adults into one person", () =
 });
 
 test("empty and junk input can't crash and never blocks", () => {
+  // A surname-less DB row ("Cindy", "Andre") must not hold a candidate on a
+  // shared first name alone — half the agents in Oregon are named Cindy.
+  assert.equal(v({ name: "Cindy Somsanith" }, "Cindy"), "clear");
+  assert.equal(v({ name: "Andre Broadous" }, "Andre"), "clear");
+
   for (const n of ["", "   ", "-", "N/A", "Unknown", "0", "noreply", "!!!"]) {
     const r = m({ name: n }, "Rebecca Rhoda");
     assert.ok(["clear", "review"].includes(r.verdict), `${JSON.stringify(n)} -> ${r.verdict}`);
@@ -194,7 +206,8 @@ test("real people are not mislabeled as orgs", () => {
   for (const n of [
     "Aaliyah McPhee", "Rebecca Rhoda", "Kenneth Terhaar", "Ashley Jensen",
     "Jose Molinar", "Cynthia Moneymaker", "Sean Peters", "Anna Smith-Jones",
-    "Seamus O'Brien", "Deb Harris", "Pat Young",
+    "Seamus O'Brien", "Deb Harris", "Pat Young", "Jenna Hasson",
+    "Tracy Hasson", "Eugene Petrusha",
   ]) {
     assert.equal(looksLikeOrg(n).org, false, `${n} should read as a person`);
   }

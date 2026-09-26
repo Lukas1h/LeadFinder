@@ -156,10 +156,13 @@ const FIRM_NON_SURNAME = new Set([
   "properties", "radio", "pmi", "statement", "accessibility", "privacy",
   "terms", "unsubscribe", "donotreply", "noreply", "webmaster", "postmaster",
   "coldwell", "banker", "homesmart", "remax", "compass", "windermere",
-  "sotheby", "keller", "williams", "hasson", "stellar", "knipe", "century",
+  "sotheby", "keller", "williams", "stellar", "knipe", "century",
   "hss", "kw", "kwc", "toll", "tollbrothers", "collect", "collective",
   "homes", "mortgage", "lending", "escrow", "leasing", "rentals", "directory",
-  "listing", "listings", "rokr", "rokerage", "eXp".toLowerCase(),
+  "listing", "listings", "rokr", "rokerage", "exp",
+  // NOT here: "hasson". Cascade Hasson is a brokerage, but Hasson is also the
+  // surname of real agents (Jenna Hasson, Tracy Hasson), and listing the firm
+  // name here held two genuine people as "reads as an organization".
 ]);
 
 // A lone token from this set is an organization, not a person.
@@ -175,9 +178,13 @@ const SINGLE_BAD = new Set([
 const PLACE_WORDS = new Set([
   "downtown", "uptown", "midtown", "north", "south", "east", "west", "northeast",
   "northwest", "southeast", "southwest", "nw", "ne", "sw", "se", "central",
-  "oregon", "washington", "idaho", "portland", "bend", "eugene", "salem",
-  "corvallis", "beaverton", "hillsboro", "gresham", "tigard", "medford",
-  "ashland", "roseburg", "mcminnville", "newberg", "the", "ninebark",
+  // States and cities that are never a given name.
+  // NOT here: "eugene", "salem", "bend", "medford", "ashland", "sandy" — all
+  // real Oregon cities AND real first names. "eugene" flagged Eugene Petrusha,
+  // a real agent in Springfield, as if the row were a place name.
+  "oregon", "washington", "idaho", "portland", "gresham", "tigard",
+  "beaverton", "hillsboro", "corvallis", "roseburg", "mcminnville", "newberg",
+  "the", "ninebark",
 ]);
 
 // Words stripped from the FRONT of a name when a brokerage/geo string has
@@ -377,9 +384,16 @@ function atWeakTier(x, y) {
   const minLen = Math.min(x.length, y.length);
   if (minLen < 5) return false;
   if (editDistance(x, y, 2) > 2) return false;
+  // Long enough that two edits are a small fraction of the name.
   if (minLen >= 8) return true;
-  if (commonPrefixLen(x, y) >= 2) return true;
-  return soundex(x) === soundex(y);
+  // A visible shared stem: "andersen"/"anderson", "mikkelsen"/"mikkleson".
+  if (commonPrefixLen(x, y) >= 3 && minLen >= 6) return true;
+  // Soundex alone, and only on names long enough for the code to mean
+  // something. Below 7 characters Soundex is close to a coin flip, and
+  // trusting it held Jenna Hasson against "Kenna Higson" and Tracy Hasson
+  // against "Tricia Hansen" — two real agents, two coincidences.
+  if (soundex(x) === soundex(y) && minLen >= 7) return true;
+  return false;
 }
 
 /**
@@ -558,8 +572,14 @@ export function matchPrepared(cand, prot) {
   }
 
   if (!prot.hasLast) {
+    // The known agent has no surname on file — three rows in the database are
+    // bare first names ("Cindy", "Andre", "Ilya"), the residue of a send where
+    // the contact only ever gave a first name. Matching a candidate on a
+    // shared first name and nothing else is not evidence: half the agents in
+    // this state are named Cindy. Clearing here, and naming the incomplete rows
+    // in the run report, is better than holding every Cindy in Oregon.
     if (bestAcross(cand.firsts, prot.firsts, firstNameMatch, FIRST_ORDER) === "exact") {
-      return { verdict: "review", score: 55, tier: "first_only", why: `same first name as known agent ${prot.name}` };
+      return { verdict: "clear", score: 0, tier: "first_only", why: `shared first name with a surname-less record (${prot.name}) — not treated as the same person` };
     }
     return { verdict: "clear", score: 0, tier: "none", why: "known agent has no surname on file" };
   }
