@@ -25,13 +25,26 @@
 // blocks until (count + buffer) is back under DAILY_LIMIT, polling every
 // RATE_CHECK_INTERVAL_SECONDS (default 60). This can pause for hours if the
 // provider's rolling daily cap is already near full — that's the point.
+// WARM_GUARD (default on): before the first send, the whole candidate list is
+// re-screened against every agent we already have a relationship with —
+// non-cold status, declined, contacted, booked, or interacted (6,949 rows as
+// of Sep 2026). The screen is the same one scripts/warmGuard.ts applies when a
+// CSV is cleaned: a shared email or phone blocks, a confident name match
+// (including nickname forms, so "Jim Letsinger" is caught against a known
+// "James Letsinger") blocks, and a merely-possible match holds.
+//
+// This is deliberately a gate here and not just a documented step. A list can
+// reach this runner by a dozen routes — a stale candidates module, a hand
+// edit, an export nobody ran through cleanExport — and a stale list is exactly
+// how a warm agent gets cold-emailed. Re-screening costs a minute at startup
+// against an hours-long run. Set SKIP_WARM_GUARD=1 to bypass, which then logs
+// a loud warning; the only reason that exists is a DB outage.
+//
+// Set WARM_GUARD_BLOCK=review to also refuse to start when candidates merely
+// need review (the default is to hold those rows out of the run but continue
+// with the rest).
 import fs from "fs";
-
-interface Candidate {
-  name: string;
-  email: string;
-  phone: string | null;
-}
+import type { Candidate } from "./lib/warmGuardScreen";
 
 const apiUrl = process.env.COMPOSE_API_URL;
 const apiSecret = process.env.COMPOSE_API_SECRET;
@@ -94,11 +107,54 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
+/**
+ * Re-screen the candidate list against every protected agent and drop the ones
+ * that match. Aborts the whole run on a single `block` — a warm agent in the
+ * list is a stop-the-line event, not something to send 900 emails around.
+ */
+async function applyWarmGuard(candidates: Candidate[]): Promise<Candidate[]> {
+  if (process.env.SKIP_WARM_GUARD === "1") {
+    console.log("*** SKIP_WARM_GUARD=1 — NOT screening against known agents. Do not do this by accident. ***");
+    return candidates;
+  }
+  console.log("Screening candidates against known agents (warm-guard)...");
+  const { loadProtected, prepareAll, screenCandidate } = await import("./lib/warmGuardScreen");
+  const protectedAgents = await loadProtected();
+  const prepared = prepareAll(protectedAgents);
+  console.log(`  ${protectedAgents.length} protected agents loaded`);
+
+  const blocks: string[] = [];
+  const reviews: string[] = [];
+  const kept: Candidate[] = [];
+  for (const c of candidates) {
+    const h = screenCandidate(c, prepared);
+    if (!h) { kept.push(c); continue; }
+    const line = `${c.name} <${c.email}> — ${h.why}`;
+    if (h.verdict === "block") blocks.push(line);
+    else reviews.push(line);
+  }
+
+  for (const r of reviews) console.log(`  HOLD  ${r}`);
+  if (blocks.length) {
+    console.error(`\nABORT — ${blocks.length} candidate(s) match an agent we already have a relationship with:`);
+    for (const b of blocks) console.error(`  BLOCK ${b}`);
+    console.error("\nRemove them from the candidates module (warmGuard.ts --out writes a clean list) and re-run.");
+    process.exit(1);
+  }
+  if (process.env.WARM_GUARD_BLOCK === "review" && reviews.length) {
+    console.error(`\nABORT — ${reviews.length} candidate(s) need review and WARM_GUARD_BLOCK=review.`);
+    process.exit(1);
+  }
+  console.log(`  guard clean: ${kept.length} to send, ${reviews.length} held for review, 0 blocks`);
+  return kept;
+}
+
 async function main() {
   const { candidates: orderedCandidates }: { candidates: Candidate[] } = await import(candidatesModule);
   // Spreadsheet order is alphabetical by name — shuffle so a run doesn't
   // read as an A-to-Z sweep to anyone comparing notes with a coworker.
-  const candidates = shuffle(orderedCandidates);
+  const guardCleaned = await applyWarmGuard(orderedCandidates);
+  const candidates = shuffle(guardCleaned);
 
   let flaggedEmails = new Set<string>();
   if (process.env.FLAGGED_FILE) {
