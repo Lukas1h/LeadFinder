@@ -16,6 +16,7 @@ import {
 import { resolveAvgDaysBetweenListings } from "@/app/agents/stats";
 import { normalizeEmail, normalizeName, normalizePhone } from "@/lib/normalize";
 import { text, errorText, normalizeContact } from "./shared";
+import { setAgentRelationshipStatus } from "@/lib/agentIdentity";
 
 export function registerAgentTools(server: McpServer): void {
   server.registerTool(
@@ -321,7 +322,6 @@ export function registerAgentTools(server: McpServer): void {
       const patch: Partial<typeof agents.$inferInsert> = {};
       if (name !== undefined) patch.name = name.trim() ? normalizeName(name) : null;
       if (notes !== undefined) patch.notes = notes.trim() || null;
-      if (relationshipStatus !== undefined) patch.relationshipStatus = relationshipStatus as AgentRelationshipStatus;
       if (avgListingsPerYear !== undefined) patch.avgListingsPerYear = avgListingsPerYear;
       if (avgListingPrice !== undefined) patch.avgListingPrice = avgListingPrice;
       if (avgDaysBetweenListings !== undefined) patch.avgDaysBetweenListings = avgDaysBetweenListings;
@@ -334,9 +334,20 @@ export function registerAgentTools(server: McpServer): void {
 
       // Drizzle rejects an empty set() outright, so a call that named only the
       // id is answered with the row as-is rather than an error.
-      if (Object.keys(patch).length === 0) return text(existing);
+      if (Object.keys(patch).length === 0 && relationshipStatus === undefined) return text(existing);
 
-      const [updated] = await db.update(agents).set(patch).where(eq(agents.id, id)).returning();
+      // Applied after the patch rather than inside it, so the declinedAt
+      // bookkeeping lives in exactly one place. Setting relationshipStatus here
+      // directly is what let an agent be marked declined with no declinedAt —
+      // invisible to declinedOnly and to the 30-day resurface.
+      if (Object.keys(patch).length > 0) {
+        await db.update(agents).set(patch).where(eq(agents.id, id));
+      }
+      if (relationshipStatus !== undefined) {
+        await setAgentRelationshipStatus(id, relationshipStatus as AgentRelationshipStatus);
+      }
+
+      const [updated] = await db.select().from(agents).where(eq(agents.id, id));
       return text(updated);
     }
   );

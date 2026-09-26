@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, bookings, listings, messageSends } from "@/db/schema";
+import { agents, bookings, listings, messageSends, type AgentRelationshipStatus } from "@/db/schema";
 import { normalizeName, normalizePhone } from "./normalize";
 
 /**
@@ -134,6 +134,39 @@ export async function markLatestSendResponded(agentId: string, respondedAt: Date
   if (!latest) return null;
   await db.update(messageSends).set({ respondedAt }).where(eq(messageSends.id, latest.id));
   return latest.id;
+}
+
+/**
+ * Sets an agent's relationship status and keeps declinedAt in step with it.
+ *
+ * declinedAt is not a mirror of the status — it's what puts someone in the
+ * Agents tab's declined section, what search_agents(declinedOnly) matches on,
+ * and what the 30-day resurface keys its timer off. Every writer used to set
+ * relationshipStatus on its own and never touch declinedAt, so an agent marked
+ * declined through the detail dialog or an MCP update_agent call was declined
+ * in name only: absent from every query that looks for declined agents, and
+ * from the 30-day bring-back. The backfill that used to write the column got
+ * its values from touchAgentDeclined, which no longer exists, so nothing was
+ * stamping it at all.
+ *
+ * One helper rather than a rule repeated per call site, because that repetition
+ * is what let the two drift apart in the first place.
+ *
+ * Stamped on the way in and only when unset, so re-saving an already-declined
+ * agent doesn't restart the resurface clock; cleared on the way out, because
+ * someone you've un-declined shouldn't still be sitting in the declined bucket.
+ */
+export async function setAgentRelationshipStatus(
+  agentId: string,
+  status: AgentRelationshipStatus
+): Promise<void> {
+  await db
+    .update(agents)
+    .set({
+      relationshipStatus: status,
+      declinedAt: status === "declined" ? sql`COALESCE(${agents.declinedAt}, now())` : null,
+    })
+    .where(eq(agents.id, agentId));
 }
 
 /**
