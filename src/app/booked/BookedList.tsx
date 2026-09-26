@@ -142,13 +142,15 @@ function BookingSection({
 
 /**
  * Counts only completed (paid) bookings — money that's actually in hand.
- * "Last 30 days" goes by when each booking was completed.
+ * "Last 30 days" goes by the job date, not when it was marked completed —
+ * older jobs entered after the fact were all completed on the day they
+ * were backfilled. Falls back to completedAt for a booking with no job date.
  */
 function BookingStats({ completed }: { completed: BookingWithDetails[] }) {
   const stats = useMemo(() => {
     // eslint-disable-next-line react-hooks/purity -- a render-time "now" is fine for a rolling window
     const cutoff = Date.now() - 30 * DAY_MS;
-    const recent = completed.filter((b) => b.completedAt!.getTime() >= cutoff);
+    const recent = completed.filter((b) => (b.jobDate ?? b.completedAt!).getTime() >= cutoff);
     const allTimeProfit = sumProfit(completed);
     return {
       recentCount: recent.length,
