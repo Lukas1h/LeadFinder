@@ -15,7 +15,7 @@ import {
   type PresetType,
   type LeadStatus,
 } from "@/db/schema";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { markLatestSendResponded } from "@/lib/agentIdentity";
 
@@ -301,6 +301,41 @@ export async function resolvePendingInteraction(
           contactedAt: null,
         })
         .where(and(eq(listings.id, row.listingId), eq(listings.status, "contacted")));
+    }
+
+    // sendMessage stamps the agent's last-contacted pointer at tap time too, for
+    // follow-ups as well as first outreach, so calling the send off has to undo
+    // that as well. Skipping it is what left a "Already contacted" badge
+    // asserting a conversation that no longer existed — the same bug this branch
+    // exists to undo, one table over.
+    //
+    // Two guards, both from the rule that the interaction table is the source of
+    // truth. The pointer only clears if it still aims at this listing, so a
+    // genuine later contact isn't wiped by an earlier call-off; and only when
+    // the agent has no timeline rows at all, because if they do, their
+    // lastContactedAt reflects a real earlier contact that deserves to stand
+    // even though this particular attempt didn't happen.
+    if (row.listingId) {
+      const [interactionCount] = await db
+        .select({ c: count() })
+        .from(agentInteractions)
+        .where(eq(agentInteractions.agentId, row.agentId));
+      const [sendCount] = await db
+        .select({ c: count() })
+        .from(messageSends)
+        .where(eq(messageSends.agentId, row.agentId));
+
+      if ((interactionCount?.c ?? 0) === 0 && (sendCount?.c ?? 0) === 0) {
+        await db
+          .update(agents)
+          .set({ lastContactedAt: null, lastContactedListingId: null })
+          .where(
+            and(
+              eq(agents.id, row.agentId),
+              eq(agents.lastContactedListingId, row.listingId)
+            )
+          );
+      }
     }
   } else {
     await db
