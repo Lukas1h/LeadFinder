@@ -7,6 +7,8 @@ import { Plus, Trash2, CheckCircle2, Receipt } from "lucide-react";
 import { createBooking, updateBooking, deleteBooking, deleteBookingInvoice } from "./actions";
 import { searchAgentsByName, type AgentMatchSummary } from "@/app/agents/matchActions";
 import type { BookingWithDetails } from "./BookedList";
+import { CompletionFields } from "./CompletionFields";
+import { fromCompletionDraft, toCompletionDraft } from "./bookingMath";
 import { formatPhone } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,6 +112,7 @@ export function BookingForm({
   const [notes, setNotes] = useState(booking?.notes ?? "");
   const [dropboxFolderLink, setDropboxFolderLink] = useState(booking?.dropboxFolderLink ?? "");
   const [lineItems, setLineItems] = useState<LineItemRow[]>(toLineItemRows(booking?.lineItems ?? []));
+  const [completion, setCompletion] = useState(() => toCompletionDraft(booking));
 
   const [nameSuggestions, setNameSuggestions] = useState<AgentMatchSummary[]>([]);
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
@@ -161,6 +164,7 @@ export function BookingForm({
     setNotes(booking?.notes ?? "");
     setDropboxFolderLink(booking?.dropboxFolderLink ?? "");
     setLineItems(toLineItemRows(booking?.lineItems ?? []));
+    setCompletion(toCompletionDraft(booking));
     setError(null);
     setNameSuggestions([]);
     setShowNameSuggestions(false);
@@ -187,7 +191,7 @@ export function BookingForm({
     };
 
     const result = booking
-      ? await updateBooking(booking.id, { ...sharedInput, dropboxFolderLink })
+      ? await updateBooking(booking.id, { ...sharedInput, dropboxFolderLink, completion: fromCompletionDraft(completion) })
       : await createBooking({ listingId: listingId ?? null, ...sharedInput });
 
     setIsSubmitting(false);
@@ -371,6 +375,13 @@ export function BookingForm({
                   onChange={(e) => setDropboxFolderLink(e.target.value)}
                   placeholder="https://www.dropbox.com/scl/fo/…"
                 />
+              </div>
+            )}
+
+            {isEditing && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Time &amp; costs</Label>
+                <CompletionFields value={completion} onChange={setCompletion} />
               </div>
             )}
 

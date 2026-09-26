@@ -5,6 +5,7 @@ import {
   text,
   integer,
   numeric,
+  real,
   timestamp,
   boolean,
   jsonb,
@@ -272,6 +273,17 @@ export const bookings = pgTable("bookings", {
   // completedAt is set. Distinct from invoicedAt below, which only records
   // that the invoice was generated/viewed in the app, not that it was sent.
   invoiceSentAt: timestamp("invoice_sent_at", { withTimezone: true }),
+
+  // Recorded when a booking is marked completed (see CompleteBookingDialog),
+  // so each job's real cost in time and money is on file for later pricing
+  // decisions. All null until then. Hours are decimals; additionalCosts is
+  // whole dollars like line-item amounts, and is subtracted from the
+  // line-item total to get the booking's profit (see bookingProfit).
+  driveHours: real("drive_hours"),
+  editingHours: real("editing_hours"),
+  shootingHours: real("shooting_hours"),
+  logisticsHours: real("logistics_hours"),
+  additionalCosts: integer("additional_costs"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
   // Assigned once, the first time "Create invoice" is clicked (see

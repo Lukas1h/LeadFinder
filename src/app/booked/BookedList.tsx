@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { ChevronRight, Plus, CalendarCheck } from "lucide-react";
 import type { Listing } from "@/db/schema";
 import { BookingCard } from "./BookingCard";
 import { BookingForm } from "./BookingForm";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Card } from "@/components/ui/card";
+import { formatPrice } from "@/lib/format";
+import { sumProfit } from "./bookingMath";
 
 export interface BookingWithDetails {
   id: string;
@@ -23,6 +25,12 @@ export interface BookingWithDetails {
   completedAt: Date | null;
   // Set once the invoice has been sent to the client (implies completedAt).
   invoiceSentAt: Date | null;
+  // Recorded on completion — see CompleteBookingDialog.
+  driveHours: number | null;
+  editingHours: number | null;
+  shootingHours: number | null;
+  logisticsHours: number | null;
+  additionalCosts: number | null;
   createdAt: Date;
   contactName: string | null;
   contactPhone: string | null;
@@ -42,6 +50,8 @@ export interface BookingWithDetails {
   dropboxFolderLink: string | null;
   galleryToken: string | null;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
   const { upcoming, waiting, completed } = useMemo(() => {
@@ -95,44 +105,87 @@ export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
         />
       </div>
 
-      {upcoming.length > 0 && (
-        <div className="flex flex-col gap-4">
-          {upcoming.map((booking) => (
-            <BookingCard key={booking.id} booking={booking} />
-          ))}
-        </div>
-      )}
+      <BookingStats completed={completed} />
 
-      {waiting.length > 0 && (
-        <>
-          {upcoming.length > 0 && <Separator />}
-          <div className="flex flex-col gap-3">
-            <h2 className="text-xs font-medium text-muted-foreground">Waiting for payment ({waiting.length})</h2>
-            <div className="flex flex-col gap-4">
-              {waiting.map((booking) => (
-                <BookingCard key={booking.id} booking={booking} />
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-
-      {completed.length > 0 && (
-        <>
-          {(upcoming.length > 0 || waiting.length > 0) && <Separator />}
-          <details className="group/details">
-            <summary className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-2 cursor-pointer select-none list-none">
-              <ChevronRight className="size-3.5 transition-transform group-open/details:rotate-90" />
-              Completed ({completed.length})
-            </summary>
-            <div className="flex flex-col gap-4 mt-3">
-              {completed.map((booking) => (
-                <BookingCard key={booking.id} booking={booking} />
-              ))}
-            </div>
-          </details>
-        </>
-      )}
+      <BookingSection title="In progress" bookings={upcoming} defaultOpen />
+      <BookingSection title="Invoice sent" bookings={waiting} />
+      <BookingSection title="Completed" bookings={completed} />
     </div>
   );
+}
+
+function BookingSection({
+  title,
+  bookings,
+  defaultOpen = false,
+}: {
+  title: string;
+  bookings: BookingWithDetails[];
+  defaultOpen?: boolean;
+}) {
+  if (bookings.length === 0) return null;
+  return (
+    <details className="group/details" open={defaultOpen}>
+      <summary className="flex items-center gap-1 text-xs font-medium text-muted-foreground cursor-pointer select-none list-none">
+        <ChevronRight className="size-3.5 transition-transform group-open/details:rotate-90" />
+        {title} ({bookings.length})
+        <span className="ml-auto text-foreground">{formatPrice(sumProfit(bookings))}</span>
+      </summary>
+      <div className="flex flex-col gap-4 mt-3">
+        {bookings.map((booking) => (
+          <BookingCard key={booking.id} booking={booking} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+/**
+ * Counts only completed (paid) bookings — money that's actually in hand.
+ * "Last 30 days" goes by when each booking was completed.
+ */
+function BookingStats({ completed }: { completed: BookingWithDetails[] }) {
+  const stats = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity -- a render-time "now" is fine for a rolling window
+    const cutoff = Date.now() - 30 * DAY_MS;
+    const recent = completed.filter((b) => b.completedAt!.getTime() >= cutoff);
+    const allTimeProfit = sumProfit(completed);
+    return {
+      recentCount: recent.length,
+      recentProfit: sumProfit(recent),
+      allTimeCount: completed.length,
+      allTimeProfit,
+      average: completed.length > 0 ? allTimeProfit / completed.length : null,
+    };
+  }, [completed]);
+
+  return (
+    <Card className="grid grid-cols-3 gap-4 p-4">
+      <Stat label="Last 30 days">
+        {formatPrice(stats.recentProfit)}
+        <Sub>{stats.recentCount} {stats.recentCount === 1 ? "booking" : "bookings"}</Sub>
+      </Stat>
+      <Stat label="All time">
+        {formatPrice(stats.allTimeProfit)}
+        <Sub>{stats.allTimeCount} {stats.allTimeCount === 1 ? "booking" : "bookings"}</Sub>
+      </Stat>
+      <Stat label="Avg per booking">
+        {formatPrice(stats.average)}
+        <Sub>profit</Sub>
+      </Stat>
+    </Card>
+  );
+}
+
+function Stat({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-lg font-semibold text-foreground flex flex-col">{children}</span>
+    </div>
+  );
+}
+
+function Sub({ children }: { children: ReactNode }) {
+  return <span className="text-xs font-normal text-muted-foreground">{children}</span>;
 }

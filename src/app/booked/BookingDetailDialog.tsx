@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send } from "lucide-react";
-import { markBookingCompleted, markInvoiceSent, reopenBooking } from "./actions";
-import { BookingStatusBadge } from "./BookingStatusBadge";
+import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, Clock } from "lucide-react";
+import { markInvoiceSent, reopenBooking } from "./actions";
+import { CompleteBookingDialog } from "./CompleteBookingDialog";
+import { COMPLETION_FIELDS, bookingProfit } from "./bookingMath";
 import { BookingForm } from "./BookingForm";
 import { GalleryLinkButton } from "./GallerySection";
 import { ListingRow } from "@/app/ListingRow";
@@ -34,14 +35,9 @@ export function BookingDetailDialog({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
+  const [completeOpen, setCompleteOpen] = useState(false);
 
-  const handleComplete = () => {
-    startTransition(async () => {
-      await markBookingCompleted(booking.id);
-      toast.success("Marked completed");
-      router.refresh();
-    });
-  };
+  const handleComplete = () => setCompleteOpen(true);
 
   const handleInvoiceSent = () => {
     startTransition(async () => {
@@ -60,16 +56,14 @@ export function BookingDetailDialog({
   };
 
   const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
+  const recordedCompletion = COMPLETION_FIELDS.filter(({ key }) => booking[key] != null);
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 flex-wrap">
-            {location}
-            <BookingStatusBadge booking={booking} />
-          </DialogTitle>
+          <DialogTitle>{location}</DialogTitle>
           <DialogDescription className="flex flex-col gap-0.5">
             <span className="flex items-center gap-1.5">
               <CalendarDays className="size-3.5" />
@@ -150,6 +144,31 @@ export function BookingDetailDialog({
           </div>
         )}
 
+        {recordedCompletion.length > 0 && (
+          <div className="border-t pt-3">
+            <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1.5">
+              <Clock className="size-3.5" />
+              Time &amp; costs
+            </p>
+            <div className="flex flex-col gap-1">
+              {recordedCompletion.map(({ key, label, unit }) => (
+                <div key={key} className="flex items-center justify-between text-sm gap-3">
+                  <span className="text-foreground/90">{label}</span>
+                  <span className="text-foreground">
+                    {unit === "hours" ? `${booking[key]} h` : formatPrice(booking[key])}
+                  </span>
+                </div>
+              ))}
+              {booking.additionalCosts != null && (
+                <div className="flex items-center justify-between text-sm font-semibold border-t pt-1 mt-1">
+                  <span>Profit</span>
+                  <span>{formatPrice(bookingProfit(booking))}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {booking.lockboxCode && (
           <div className="text-sm text-muted-foreground flex items-center gap-1.5 border-t pt-3">
             <KeyRound className="size-3.5" />
@@ -178,6 +197,7 @@ export function BookingDetailDialog({
       </DialogContent>
 
       <BookingForm booking={booking} open={editOpen} onOpenChange={setEditOpen} />
+      <CompleteBookingDialog booking={booking} open={completeOpen} onOpenChange={setCompleteOpen} />
     </Dialog>
   );
 }

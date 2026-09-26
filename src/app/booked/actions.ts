@@ -57,6 +57,16 @@ export interface UpdateBookingInput {
   // client-facing gallery. Doesn't touch galleryToken; see
   // getOrAssignGalleryToken below.
   dropboxFolderLink: string;
+  completion: CompletionInfo;
+}
+
+/** Time and cost info recorded when a booking is completed. Null = not recorded. */
+export interface CompletionInfo {
+  driveHours: number | null;
+  editingHours: number | null;
+  shootingHours: number | null;
+  logisticsHours: number | null;
+  additionalCosts: number | null;
 }
 
 /**
@@ -175,6 +185,7 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
       lockboxCode: input.lockboxCode?.trim() || null,
       notes: input.notes?.trim() || null,
       dropboxFolderLink: input.dropboxFolderLink.trim() || null,
+      ...input.completion,
     })
     .where(eq(bookings.id, bookingId));
 
@@ -236,6 +247,11 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     notes: booking.notes,
     completedAt: booking.completedAt,
     invoiceSentAt: booking.invoiceSentAt,
+    driveHours: booking.driveHours,
+    editingHours: booking.editingHours,
+    shootingHours: booking.shootingHours,
+    logisticsHours: booking.logisticsHours,
+    additionalCosts: booking.additionalCosts,
     createdAt: booking.createdAt,
     contactName: contact?.name ?? null,
     contactPhone: contact?.phone ?? null,
@@ -305,6 +321,11 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       notes: b.notes,
       completedAt: b.completedAt,
       invoiceSentAt: b.invoiceSentAt,
+      driveHours: b.driveHours,
+      editingHours: b.editingHours,
+      shootingHours: b.shootingHours,
+      logisticsHours: b.logisticsHours,
+      additionalCosts: b.additionalCosts,
       createdAt: b.createdAt,
       contactName: agent?.name ?? null,
       contactPhone: agent?.phone ?? null,
@@ -350,8 +371,8 @@ export async function deleteBookingInvoice(bookingId: string) {
   revalidatePath("/booked");
 }
 
-export async function markBookingCompleted(bookingId: string) {
-  await db.update(bookings).set({ completedAt: new Date() }).where(eq(bookings.id, bookingId));
+export async function markBookingCompleted(bookingId: string, completion: CompletionInfo) {
+  await db.update(bookings).set({ completedAt: new Date(), ...completion }).where(eq(bookings.id, bookingId));
   revalidatePath("/booked");
   revalidatePath("/agents");
 }

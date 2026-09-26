@@ -1,56 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Phone, Car, Send } from "lucide-react";
-import { markBookingCompleted, markInvoiceSent, reopenBooking } from "./actions";
+import { useState } from "react";
+import { CalendarDays, KeyRound, StickyNote, Phone, Car } from "lucide-react";
 import { BookingDetailDialog } from "./BookingDetailDialog";
-import { BookingStatusBadge } from "./BookingStatusBadge";
 import { formatPrice, formatDateTime, formatPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import type { BookingWithDetails } from "./BookedList";
 
 /**
  * Summary card — the whole card is one click target that opens
- * BookingDetailDialog, so it deliberately has no nested links (an address
- * link to /pipeline used to live here and was too easy to fat-finger by
- * accident instead of opening the card). The only other interactive
- * elements are the Mark completed/Mark invoice sent/Reopen buttons, which stop propagation so it doesn't
- * also open the dialog.
+ * BookingDetailDialog, which is where every status action lives. It
+ * deliberately has no nested links or buttons, so a tap anywhere opens
+ * the booking.
  */
 export function BookingCard({ booking }: { booking: BookingWithDetails }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [detailOpen, setDetailOpen] = useState(false);
-
-  const handleComplete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    startTransition(async () => {
-      await markBookingCompleted(booking.id);
-      toast.success("Marked completed");
-      router.refresh();
-    });
-  };
-
-  const handleInvoiceSent = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    startTransition(async () => {
-      await markInvoiceSent(booking.id);
-      toast.success("Marked invoice sent");
-      router.refresh();
-    });
-  };
-
-  const handleReopen = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    startTransition(async () => {
-      await reopenBooking(booking.id);
-      toast.success("Reopened");
-      router.refresh();
-    });
-  };
 
   const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
@@ -63,10 +27,7 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
       >
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <div className="font-semibold text-foreground flex items-center gap-2 flex-wrap">
-              {location}
-              <BookingStatusBadge booking={booking} />
-            </div>
+            <div className="font-semibold text-foreground">{location}</div>
             <div className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
               <CalendarDays className="size-3.5" />
               {booking.jobDate ? formatDateTime(booking.jobDate) : "No job date set"}
@@ -107,37 +68,6 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          {!booking.completedAt && !booking.invoiceSentAt && (
-            <Button size="sm" onClick={handleInvoiceSent} disabled={isPending}>
-              <Send />
-              Mark invoice sent
-            </Button>
-          )}
-          {!booking.completedAt && (
-            <Button
-              size="sm"
-              variant={booking.invoiceSentAt ? "default" : "outline"}
-              onClick={handleComplete}
-              disabled={isPending}
-            >
-              <CheckCircle2 />
-              Mark completed
-            </Button>
-          )}
-          {(booking.completedAt || booking.invoiceSentAt) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={handleReopen}
-              disabled={isPending}
-            >
-              <RotateCcw />
-              Reopen
-            </Button>
-          )}
-        </div>
       </Card>
 
       <BookingDetailDialog booking={booking} open={detailOpen} onOpenChange={setDetailOpen} />

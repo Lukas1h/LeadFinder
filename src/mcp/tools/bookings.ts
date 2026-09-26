@@ -231,11 +231,19 @@ export function registerBookingTools(server: McpServer): void {
     "complete_booking",
     {
       title: "Mark a booking completed",
-      description: "Sets completedAt to now — the final state, meaning the job is done and paid.",
-      inputSchema: { id: z.string().uuid() },
+      description:
+        "Sets completedAt to now — the final state, meaning the job is done and paid. Optionally records the job's drive/editing/shooting/logistics hours and additional costs (whole dollars, subtracted from the line-item total as profit).",
+      inputSchema: {
+        id: z.string().uuid(),
+        driveHours: z.number().min(0).optional(),
+        editingHours: z.number().min(0).optional(),
+        shootingHours: z.number().min(0).optional(),
+        logisticsHours: z.number().min(0).optional(),
+        additionalCosts: z.number().int().min(0).optional(),
+      },
     },
-    async ({ id }) => {
-      const [updated] = await db.update(bookings).set({ completedAt: new Date() }).where(eq(bookings.id, id)).returning();
+    async ({ id, ...completion }) => {
+      const [updated] = await db.update(bookings).set({ completedAt: new Date(), ...completion }).where(eq(bookings.id, id)).returning();
       if (!updated) return errorText("No booking with that id");
       return text(updated);
     }
