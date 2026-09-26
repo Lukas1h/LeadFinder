@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, Clock } from "lucide-react";
+import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, Clock, CalendarPlus } from "lucide-react";
 import { markInvoiceSent, reopenBooking } from "./actions";
 import { CompleteBookingDialog } from "./CompleteBookingDialog";
 import { COMPLETION_FIELDS, bookingProfit } from "./bookingMath";
@@ -119,6 +119,14 @@ export function BookingDetailDialog({
               {booking.invoiceNumber ? `Invoice #${booking.invoiceNumber}` : "Create invoice"}
             </a>
           </Button>
+          {booking.jobDate && (
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/api/bookings/${booking.id}/calendar`}>
+                <CalendarPlus />
+                Add to calendar
+              </a>
+            </Button>
+          )}
           <GalleryLinkButton booking={booking} onAddGallery={() => setEditOpen(true)} />
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             <Pencil />
