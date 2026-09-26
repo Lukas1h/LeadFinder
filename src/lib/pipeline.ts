@@ -114,6 +114,7 @@ export function findDuplicateAgentContact(agent: Agent | null, currentListingId:
 // Criteria for listings unlikely to be a good fit (grouped at the bottom of the leads page):
 // 1. High photo score (> 7, pro photography) on lower-priced homes (< $650,000) that likely don't need video.
 // 2. The attached agent was marked as declined.
+// 3. No agent attached at all — no name, no phone, no linked row.
 export const UNLIKELY_MATCH_MIN_PHOTO_SCORE = 7;
 export const UNLIKELY_MATCH_MAX_PRICE = 650_000;
 
@@ -225,10 +226,35 @@ export function isAgentDeclined(
   return agent?.relationshipStatus === "declined";
 }
 
+/**
+ * A listing nobody can be pitched to. Deliberately a pure test of the listing's
+ * own fields rather than a findAttachedAgent miss: "we have no agent row for
+ * this" is a gap in our data, while "this listing names no agent at all" is a
+ * fact about the lead, and conflating them would let a cold cache demote real
+ * leads on the way in.
+ *
+ * The listing's broker is not enough to count — plenty of listings name a
+ * brokerage with no agent behind it, and the brokerage's phone is not the
+ * agent's to text.
+ */
+export function isAgentUnattached(
+  lead: Pick<Listing, "agentId" | "agentPhone" | "agentName">
+): boolean {
+  return (
+    lead.agentId == null &&
+    (lead.agentPhone == null || lead.agentPhone.trim() === "") &&
+    (lead.agentName == null || lead.agentName.trim() === "")
+  );
+}
+
 export function isUnlikelyLeadMatch(
   lead: Listing,
   agentByPhone: Map<string, Agent>,
   agentByName?: Map<string, Agent>
 ): boolean {
-  return isPhotoPriceUnlikelyMatch(lead) || isAgentDeclined(lead, agentByPhone, agentByName);
+  return (
+    isPhotoPriceUnlikelyMatch(lead) ||
+    isAgentDeclined(lead, agentByPhone, agentByName) ||
+    isAgentUnattached(lead)
+  );
 }
