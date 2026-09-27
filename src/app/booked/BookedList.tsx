@@ -8,7 +8,7 @@ import { BookingForm } from "./BookingForm";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatPrice } from "@/lib/format";
-import { sumProfit } from "./bookingMath";
+import { averageProfitPerHour, sumProfit } from "./bookingMath";
 
 export interface BookingWithDetails {
   id: string;
@@ -158,11 +158,12 @@ function BookingStats({ completed }: { completed: BookingWithDetails[] }) {
       allTimeCount: completed.length,
       allTimeProfit,
       average: completed.length > 0 ? allTimeProfit / completed.length : null,
+      perHour: averageProfitPerHour(completed),
     };
   }, [completed]);
 
   return (
-    <Card className="grid grid-cols-3 gap-4 p-4">
+    <Card className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4">
       <Stat label="Last 30 days">
         {formatPrice(stats.recentProfit)}
         <Sub>{stats.recentCount} {stats.recentCount === 1 ? "booking" : "bookings"}</Sub>
@@ -174,6 +175,10 @@ function BookingStats({ completed }: { completed: BookingWithDetails[] }) {
       <Stat label="Avg per booking">
         {formatPrice(stats.average)}
         <Sub>profit</Sub>
+      </Stat>
+      <Stat label="Avg per hour">
+        {stats.perHour != null ? `${formatPrice(stats.perHour)}/hr` : "—"}
+        <Sub>{stats.perHour != null ? "profit" : "no hours recorded"}</Sub>
       </Stat>
     </Card>
   );
