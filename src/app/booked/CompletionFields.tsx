@@ -21,7 +21,7 @@ export function CompletionFields({
             id={`completion-${key}`}
             type="number"
             min="0"
-            step={unit === "hours" ? "0.25" : "1"}
+            step={unit === "hours" ? "any" : "1"}
             inputMode="decimal"
             value={value[key]}
             onChange={(e) => onChange({ ...value, [key]: e.target.value })}
