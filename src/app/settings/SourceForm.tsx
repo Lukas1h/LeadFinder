@@ -48,6 +48,8 @@ export function SourceForm({
   const [priceMin, setPriceMin] = useState(source?.priceMin?.toString() ?? "");
   const [priceMax, setPriceMax] = useState(source?.priceMax?.toString() ?? "");
   const [homeTypes, setHomeTypes] = useState<Set<string>>(parseHomeTypes(source?.homeTypes ?? null));
+  const [comingSoonOnly, setComingSoonOnly] = useState(source?.comingSoonOnly ?? false);
+  const [keywords, setKeywords] = useState(source?.keywords ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!source;
@@ -72,6 +74,8 @@ export function SourceForm({
       priceMin: priceMin.trim() ? Number(priceMin) : null,
       priceMax: priceMax.trim() ? Number(priceMax) : null,
       homeTypes: homeTypes.size > 0 ? Array.from(homeTypes).join(",") : null,
+      comingSoonOnly,
+      keywords: keywords.trim() || null,
     };
 
     const result = isEditing ? await updateSource(source.id, input) : await createSource(input);
@@ -160,6 +164,33 @@ export function SourceForm({
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={comingSoonOnly}
+                  onCheckedChange={(v) => setComingSoonOnly(v === true)}
+                />
+                Coming soon only
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Only listings Zillow marks Coming soon — usually not photographed yet.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="source-keywords">Description keywords</Label>
+              <Input
+                id="source-keywords"
+                value={keywords}
+                onChange={(e) => setKeywords(e.target.value)}
+                placeholder="e.g. photos coming; more photos"
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional. Separate phrases with semicolons — each is its own search, and every word
+                in a phrase must appear in the listing description.
+              </p>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}

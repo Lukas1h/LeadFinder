@@ -3,6 +3,7 @@ import mockListings from "../../data/mock-listings.json";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
 
 const ZILLAPI_LISTINGS_URL = "https://api.zillapi.com/v1/listings";
+const ZILLAPI_SEARCH_URL = "https://api.zillapi.com/v1/search";
 const ZILLAPI_PROPERTIES_URL = "https://api.zillapi.com/v1/properties";
 const ZILLAPI_ME_URL = "https://api.zillapi.com/v1/me";
 
@@ -31,6 +32,7 @@ interface RawZillapiListing {
   listingPhotos?: { url?: string }[];
   photoCount?: number;
   broker?: { name?: string };
+  has3DModel?: boolean;
   [key: string]: unknown;
 }
 
@@ -91,6 +93,7 @@ export function normalizeListing(raw: RawZillapiListing): NewListing | null {
     photos: raw.listingPhotos?.map((p) => p.url).filter((u): u is string => !!u) ?? null,
     photoCount: raw.photoCount ?? null,
     isComingSoon: raw.listingType?.isComingSoon ?? false,
+    has3dTour: raw.has3DModel ?? null,
     brokerName: raw.broker?.name ?? null,
   };
 }
@@ -132,6 +135,76 @@ export interface SearchSourceFilter {
   priceMin?: number | null;
   priceMax?: number | null;
   homeTypes?: string | null;
+  comingSoonOnly?: boolean;
+  keywords?: string | null;
+}
+
+// Zillapi home_types values -> zillow.com searchQueryState filter keys.
+const ZILLOW_HOME_TYPE_KEYS: Record<string, string> = {
+  house: "sf",
+  condo: "con",
+  townhouse: "tow",
+  multi_family: "mf",
+  manufactured: "manu",
+  lot: "land",
+  apartment: "apa",
+};
+
+/**
+ * Builds zillow.com search URLs (one per keyword phrase, or one if none) for
+ * the filters Zillapi's own params don't expose — "Coming soon" only and the
+ * description-keyword search. Zillapi's POST /v1/search accepts these as
+ * searchUrls and applies them as-is. Keys verified 2026-09-27 against real
+ * searches: cmsn with the other listing types off returned only coming-soon
+ * rows; att with a nonsense word returned 0 and requires every word of the
+ * phrase; doz/price/home-type keys matched the equivalent Zillapi params.
+ */
+export function buildZillowSearchUrls(filter: SearchSourceFilter): string[] {
+  const [west, south, east, north] = filter.bbox.split(",").map(Number);
+  const on = (value: unknown) => ({ value });
+
+  const filterState: Record<string, unknown> = {
+    sort: on("days"),
+    doz: on("1"),
+    fsbo: on(false),
+  };
+  if (filter.priceMin != null || filter.priceMax != null) {
+    filterState.price = {
+      ...(filter.priceMin != null && { min: filter.priceMin }),
+      ...(filter.priceMax != null && { max: filter.priceMax }),
+    };
+  }
+  if (filter.homeTypes) {
+    const wanted = new Set(filter.homeTypes.split(","));
+    for (const [type, key] of Object.entries(ZILLOW_HOME_TYPE_KEYS)) {
+      if (!wanted.has(type)) filterState[key] = on(false);
+    }
+  }
+  if (filter.comingSoonOnly) {
+    Object.assign(filterState, {
+      fsba: on(false),
+      nc: on(false),
+      auc: on(false),
+      fore: on(false),
+      cmsn: on(true),
+    });
+  }
+
+  const phrases = (filter.keywords ?? "")
+    .split(";")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  return (phrases.length > 0 ? phrases : [null]).map((phrase) => {
+    const state = {
+      pagination: {},
+      isMapVisible: true,
+      isListVisible: true,
+      mapBounds: { west, south, east, north },
+      filterState: phrase ? { ...filterState, att: on(phrase) } : filterState,
+    };
+    return `https://www.zillow.com/homes/for_sale/?searchQueryState=${encodeURIComponent(JSON.stringify(state))}`;
+  });
 }
 
 interface FetchNewListingsOptions extends SearchSourceFilter {
@@ -140,7 +213,10 @@ interface FetchNewListingsOptions extends SearchSourceFilter {
 
 /**
  * Pulls listings posted in roughly the last day within the given source's
- * bbox/filters, excluding for-sale-by-owner listings. One call per search
+ * bbox/filters, excluding for-sale-by-owner listings. Plain sources use the
+ * GET /v1/listings params; coming-soon-only and keyword sources go through
+ * built zillow.com URLs instead (see buildZillowSearchUrls), same 1 credit
+ * per row returned. One call per search
  * source (see runSync in src/lib/sync.ts) — each source is its own bbox,
  * its own Zillapi credits.
  *
@@ -156,6 +232,42 @@ export async function fetchNewListings(options: FetchNewListingsOptions): Promis
 
   if (process.env.USE_MOCK_ZILLAPI === "true") {
     raw = (mockListings as RawZillapiListing[]).slice(0, maxItems);
+  } else if (options.comingSoonOnly || options.keywords?.trim()) {
+    const apiKey = process.env.ZILLAPI_KEY;
+    if (!apiKey) {
+      throw new Error("ZILLAPI_KEY is not set");
+    }
+
+    // One call per URL rather than one call with several searchUrls, so
+    // maxItems caps each keyword phrase on its own instead of the whole set.
+    const batches = await Promise.all(
+      buildZillowSearchUrls(options).map(async (url) => {
+        const res = await fetch(ZILLAPI_SEARCH_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ searchUrls: [{ url }], maxItems }),
+        });
+
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(`Zillapi search request failed: ${res.status} ${body}`);
+        }
+
+        const parsed = (await res.json()) as ZillapiListResponse;
+        return parsed.data ?? [];
+      })
+    );
+
+    const seen = new Set<string>();
+    raw = batches.flat().filter((item) => {
+      const zpid = String(item.zpid);
+      if (seen.has(zpid)) return false;
+      seen.add(zpid);
+      return true;
+    });
   } else {
     const apiKey = process.env.ZILLAPI_KEY;
     if (!apiKey) {

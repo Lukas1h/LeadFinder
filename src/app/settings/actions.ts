@@ -11,6 +11,8 @@ export interface SourceInput {
   priceMin: number | null;
   priceMax: number | null;
   homeTypes: string | null;
+  comingSoonOnly: boolean;
+  keywords: string | null;
 }
 
 function validateBbox(bbox: string): string | null {
@@ -31,6 +33,8 @@ export async function createSource(input: SourceInput) {
     priceMin: input.priceMin,
     priceMax: input.priceMax,
     homeTypes: input.homeTypes,
+    comingSoonOnly: input.comingSoonOnly,
+    keywords: input.keywords,
   });
 
   revalidatePath("/settings");
@@ -49,6 +53,8 @@ export async function updateSource(id: string, input: SourceInput) {
       priceMin: input.priceMin,
       priceMax: input.priceMax,
       homeTypes: input.homeTypes,
+      comingSoonOnly: input.comingSoonOnly,
+      keywords: input.keywords,
     })
     .where(eq(searchSources.id, id));
 

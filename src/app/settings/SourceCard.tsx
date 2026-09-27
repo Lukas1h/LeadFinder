@@ -70,7 +70,11 @@ export function SourceCard({ source }: { source: SearchSource }) {
         <div className="text-sm text-muted-foreground mt-1 flex flex-wrap gap-x-3">
           {priceRange && <span>{priceRange}</span>}
           {homeTypes && <span>{homeTypes}</span>}
-          {!priceRange && !homeTypes && <span>No filters</span>}
+          {source.comingSoonOnly && <span>Coming soon only</span>}
+          {source.keywords && <span>Keywords: {source.keywords}</span>}
+          {!priceRange && !homeTypes && !source.comingSoonOnly && !source.keywords && (
+            <span>No filters</span>
+          )}
         </div>
       </div>
 

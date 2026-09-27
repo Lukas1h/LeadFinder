@@ -69,6 +69,8 @@ export async function runSync(): Promise<SyncResult> {
         priceMin: source.priceMin,
         priceMax: source.priceMax,
         homeTypes: source.homeTypes,
+        comingSoonOnly: source.comingSoonOnly,
+        keywords: source.keywords,
         maxItems: MAX_ITEMS_PER_SOURCE,
       });
       return results.map((l) => ({ ...l, sourceLabel: source.name }));

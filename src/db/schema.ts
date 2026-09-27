@@ -54,6 +54,12 @@ export const listings = pgTable("listings", {
   photos: text("photos").array(),
   photoCount: integer("photo_count"),
   isComingSoon: boolean("is_coming_soon").notNull().default(false),
+  // Zillow search results' has3DModel — an agent with a 3D tour already paid
+  // for a media package. Null for rows from before this was captured and for
+  // email/manual imports (the /properties detail shape doesn't carry it).
+  // Zillow's matching hasVideo flag isn't stored: it came back false on all
+  // 20 $2.5M+ Portland listings checked 2026-09-27, so it can't be trusted.
+  has3dTour: boolean("has_3d_tour"),
   brokerName: text("broker_name"),
 
   // From Zillapi's GET /v1/properties/{zpid} full details — 1 credit per
@@ -350,6 +356,15 @@ export const searchSources = pgTable("search_sources", {
   // Comma-separated Zillapi home_types values (house,condo,townhouse,
   // multi_family,manufactured,lot,apartment), null = no filter.
   homeTypes: text("home_types"),
+  // Only Zillow "Coming soon" listings — not a Zillapi filter, so a source
+  // with this (or keywords) is fetched through a built zillow.com search URL
+  // instead; see fetchNewListings. Lets a far/busy market like Portland be
+  // searched just for the listings that haven't been photographed yet.
+  comingSoonOnly: boolean("coming_soon_only").notNull().default(false),
+  // Zillow's listing-description keyword filter. Semicolon-separated phrases,
+  // each its own search (e.g. "photos coming; more photos"); within a phrase
+  // every word must appear, anywhere in the description.
+  keywords: text("keywords"),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
