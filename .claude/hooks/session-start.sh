@@ -17,3 +17,10 @@ npm install
 # interactive `vercel link` step — it just needs the CLI to be
 # authenticated, which this environment provides.
 npx vercel env pull .env.local --yes
+
+# OpenCode CLI for free subagents (see .claude/skills/delegate-opencode). The
+# free opencode/*-free models need no login. Best-effort: a failed install
+# shouldn't block the session — scripts/delegate.sh retries it on first use.
+if ! command -v opencode >/dev/null 2>&1 && [ ! -x "$HOME/.opencode/bin/opencode" ]; then
+  curl -fsSL https://opencode.ai/install | bash >/dev/null 2>&1 || true
+fi

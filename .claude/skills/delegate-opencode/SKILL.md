@@ -1,0 +1,71 @@
+---
+name: delegate-opencode
+description: Hand bounded coding/research/scraping work to free OpenCode subagents (Space Bunny etc.) instead of doing it all yourself. Use whenever a task has parallelizable or mechanical parts — multi-file edits to a clear spec, writing a script, per-item lookups/scraping, running tests and summarizing, first drafts — so Claude usage is spent on planning and review, not grunt work.
+---
+
+# Delegating to free OpenCode subagents
+
+Lukas pays for Claude usage; OpenCode Zen's free models cost nothing. **You are the
+orchestrator**: split the work, write precise task specs, launch cheap workers, then
+verify their output yourself. Default to delegating anything bounded and checkable.
+
+## What to delegate vs keep
+
+Delegate: mechanical edits across files to a spec, new scripts/components from a clear
+spec, per-item research or scraping, test/lint runs + summaries, codebase lookups,
+boilerplate, first drafts you will review.
+
+Keep for yourself: architecture and API design, DB schema/migrations (`db:push`),
+anything that sends email/SMS or writes to the production DB, final review, commits,
+pushes and deploys.
+
+## How to launch
+
+**Model:** `opencode/space-bunny-free` (fast, strongest of the free set, 1M context).
+Alternates if it's unavailable: `opencode/nemotron-3.5-lightning-free`,
+`opencode/mimo-v2.6-flash-free`, `opencode/muse-spark-1.3-contributor-free`.
+
+**A. Paseo available** (tools named `mcp__paseo__*` exist — Lukas's machine / Paseo app):
+`mcp__paseo__create_agent` with
+`provider: "opencode/opencode/space-bunny-free"`,
+`settings: { modeId: "build", thinkingOptionId: "medium", features: { auto_accept: true } }`.
+You get a notification when it finishes — don't poll.
+
+**B. No Paseo** (Claude Code cloud/web, plain terminal): the CLI works anywhere and
+installs OpenCode on first use, no login needed:
+```bash
+scripts/delegate.sh "task prompt"                          # blocking, prints the reply
+scripts/delegate.sh -d ../wt-feature-x "task prompt" > /tmp/w1.log 2>&1 &   # parallel
+```
+Run parallel workers as background Bash commands and read their logs when they exit.
+
+## Writing the task (weak models need this)
+
+- One worker = one clearly bounded scope. **Give parallel workers disjoint files**, or
+  a separate git worktree each (`git worktree add ../wt-<name> -b <branch>`); you merge.
+- Say exactly which files to touch, what "done" means, and how to check it
+  (`npm run lint`, `npx tsc --noEmit`, a script to run).
+- Put shared rules in a file the workers read (e.g. `WORKER.md`) instead of repeating
+  them — and **never send follow-up messages to a running OpenCode agent**: it aborts the
+  turn and leaves the session broken. Coordinate in the initial prompt.
+- Have workers write results to files incrementally, not only in the final reply.
+- Always state the hard limits: no commits/pushes, no DB writes, no emails/SMS, and **no
+  LeadFinder MCP tools** (the local OpenCode config has the LeadFinder MCP, which includes
+  send-email tools).
+
+## Verify everything
+
+Cheap models are fast but sloppy. Review diffs yourself, run lint/typecheck/tests, and
+re-check any data they return with a deterministic script (see `scripts/lux/verify.mjs`
+for the pattern). Prefer turning a repeated worker task into a script once you see the
+pattern — scripts out-produced the LLM swarm several-fold in past runs.
+
+## Limits learned the hard way
+
+- Locally, all OpenCode sessions share one `opencode serve` process; ~25 concurrent
+  sessions ran this 4-core/7.8 GB box out of memory and killed every worker. Stay at
+  **≤ 8–10 concurrent**; archive finished Paseo agents.
+- Many workers share one IP: search engines (DuckDuckGo, Brave, Bing, Exa's free tier)
+  rate-limit within minutes. Pre-run searches centrally and cache them.
+- Two workers given overlapping scope will duplicate the same hard work (e.g. both
+  reverse-engineering one site) — split by distinct target up front.
