@@ -8,6 +8,18 @@ export function bookingProfit(booking: ProfitInputs): number {
   return total - (booking.additionalCosts ?? 0);
 }
 
+/**
+ * Profit per hour worked across all recorded hours (drive, shooting,
+ * editing, logistics), or null if no hours have been recorded.
+ */
+export function profitPerHour(booking: ProfitInputs & Pick<BookingWithDetails, "driveHours" | "shootingHours" | "editingHours" | "logisticsHours">): number | null {
+  const hours = [booking.driveHours, booking.shootingHours, booking.editingHours, booking.logisticsHours].reduce<number>(
+    (sum, h) => sum + (h ?? 0),
+    0
+  );
+  return hours > 0 ? bookingProfit(booking) / hours : null;
+}
+
 export function sumProfit(bookings: ProfitInputs[]): number {
   return bookings.reduce((sum, b) => sum + bookingProfit(b), 0);
 }

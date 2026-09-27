@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CalendarDays, KeyRound, StickyNote, Phone, Car } from "lucide-react";
 import { BookingDetailDialog } from "./BookingDetailDialog";
+import { bookingProfit } from "./bookingMath";
 import { formatPrice, formatDateTime, formatPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import type { BookingWithDetails } from "./BookedList";
@@ -16,7 +17,7 @@ import type { BookingWithDetails } from "./BookedList";
 export function BookingCard({ booking }: { booking: BookingWithDetails }) {
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
+  const profit = bookingProfit(booking);
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
 
   return (
@@ -39,7 +40,7 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
               </div>
             )}
           </div>
-          {total > 0 && <div className="text-lg font-semibold text-foreground">{formatPrice(total)}</div>}
+          {profit !== 0 && <div className="text-lg font-semibold text-foreground">{formatPrice(profit)}</div>}
         </div>
 
         {(booking.contactName || booking.contactPhone) && (

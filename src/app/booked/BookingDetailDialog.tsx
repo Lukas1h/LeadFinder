@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, Clock, CalendarPlus } from "lucide-react";
 import { markInvoiceSent, reopenBooking } from "./actions";
 import { CompleteBookingDialog } from "./CompleteBookingDialog";
-import { COMPLETION_FIELDS, bookingProfit } from "./bookingMath";
+import { COMPLETION_FIELDS, bookingProfit, profitPerHour } from "./bookingMath";
 import { BookingForm } from "./BookingForm";
 import { GalleryLinkButton } from "./GallerySection";
 import { ListingRow } from "@/app/ListingRow";
@@ -56,6 +56,7 @@ export function BookingDetailDialog({
   };
 
   const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
+  const hourlyRate = profitPerHour(booking);
   const recordedCompletion = COMPLETION_FIELDS.filter(({ key }) => booking[key] != null);
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
 
@@ -171,6 +172,12 @@ export function BookingDetailDialog({
                 <div className="flex items-center justify-between text-sm font-semibold border-t pt-1 mt-1">
                   <span>Profit</span>
                   <span>{formatPrice(bookingProfit(booking))}</span>
+                </div>
+              )}
+              {hourlyRate != null && (
+                <div className="flex items-center justify-between text-sm font-semibold">
+                  <span>Est. per hour</span>
+                  <span>{formatPrice(hourlyRate)}/hr</span>
                 </div>
               )}
             </div>
