@@ -46,8 +46,13 @@ Run parallel workers as background Bash commands and read their logs when they e
 - Say exactly which files to touch, what "done" means, and how to check it
   (`npm run lint`, `npx tsc --noEmit`, a script to run).
 - Put shared rules in a file the workers read (e.g. `WORKER.md`) instead of repeating
-  them — and **never send follow-up messages to a running OpenCode agent**: it aborts the
-  turn and leaves the session broken. Coordinate in the initial prompt.
+  them, and put everything in the initial prompt. **Don't message a running OpenCode
+  agent**: the message is received, but it cuts the current turn short and the worker
+  stops partway (tested 2026-09-27: applied the new instruction, then quit after 1 of 9
+  files). Wait for it to finish, then send the follow-up; the session keeps working.
+- Free models often end a turn early ("Continuing with the next file." and stop). For
+  multi-item work, list the items explicitly, have them write results to a file as they
+  go, and re-prompt "continue" until the file is complete.
 - Have workers write results to files incrementally, not only in the final reply.
 - Always state the hard limits: no commits/pushes, no DB writes, no emails/SMS, and **no
   LeadFinder MCP tools** (the local OpenCode config has the LeadFinder MCP, which includes
@@ -61,6 +66,12 @@ for the pattern). Prefer turning a repeated worker task into a script once you s
 pattern — scripts out-produced the LLM swarm several-fold in past runs.
 
 ## Limits learned the hard way
+
+- If every Paseo OpenCode agent comes back empty (no reply, 0 tokens, OpenCode logs
+  `MessageAbortedError` ~0.1s in; `~/.paseo/daemon.log` shows "OpenCode event stream
+  ... first-record watchdog expired"), the Paseo daemon is wedged — typically after an
+  OpenCode crash. Ask Lukas to restart it (`paseo daemon restart`; restarting it
+  yourself kills your own session) and use `scripts/delegate.sh` meanwhile.
 
 - Locally, all OpenCode sessions share one `opencode serve` process; ~25 concurrent
   sessions ran this 4-core/7.8 GB box out of memory and killed every worker. Stay at
