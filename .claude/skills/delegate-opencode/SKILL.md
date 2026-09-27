@@ -21,13 +21,28 @@ pushes and deploys.
 
 ## How to launch
 
-**Model:** `opencode/space-bunny-free` (fast, strongest of the free set, 1M context).
-Alternates if it's unavailable: `opencode/nemotron-3.5-lightning-free`,
-`opencode/mimo-v2.6-flash-free`, `opencode/muse-spark-1.3-contributor-free`.
+**Model:** default `opencode/big-pickle`. Benchmarked 2026-09-27 (3 runs each: a
+spec'd multi-file edit with a planted bug + rules to follow, and a 12-item batch job):
+every free model scored 100% on well-specified work, so pick on speed, reliability and
+how long it stays free, not "smarts" — you do the reasoning, the worker executes.
+
+| Model | Avg time | Notes |
+|---|---|---|
+| `opencode/big-pickle` | ~37s | **Default.** Consistent; free since Oct 2025 (believed GLM-4.6), so least likely to vanish. 200K context. May log prompts. |
+| `opencode/ling-3.0-flash-fin-free` | ~29s | Fastest and consistent. Use when speed matters. 262K context. |
+| `opencode/space-bunny-free` | ~42s | Strong, 1M context, multimodal (screenshots), zero data retention. **Free-week promo from 2026-09-23** — expect it to disappear. |
+| `opencode/mimo-v2.6-flash-free` | ~50s | Fine but variable. |
+| `opencode/longcat-2.5-preview-free` / `nemotron-3-ultra-free` | ~65s | Slower; 1M context for huge inputs. |
+| `opencode/nemotron-3.5-lightning-free` | 44s–6 min | Stalls for minutes on some runs. Avoid. |
+| `opencode/muse-spark-1.3-contributor-free` | ~20s | Once tried to read `/`, got blocked and quit with nothing done. Avoid. |
+
+Use Space Bunny when the worker needs to look at images or hold a huge context, and
+avoid sending contact data (names/emails/phones) to Big Pickle when a zero-retention
+model will do. Re-check `opencode models` now and then — the free lineup rotates.
 
 **A. Paseo available** (tools named `mcp__paseo__*` exist — Lukas's machine / Paseo app):
 `mcp__paseo__create_agent` with
-`provider: "opencode/opencode/space-bunny-free"`,
+`provider: "opencode/opencode/big-pickle"`,
 `settings: { modeId: "build", thinkingOptionId: "medium", features: { auto_accept: true } }`.
 You get a notification when it finishes — don't poll.
 

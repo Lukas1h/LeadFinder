@@ -12,7 +12,7 @@
 # See .claude/skills/delegate-opencode/SKILL.md for when and how to delegate.
 set -euo pipefail
 
-MODEL="opencode/space-bunny-free"
+MODEL="opencode/big-pickle"
 DIR="$PWD"
 while getopts "m:d:" opt; do
   case "$opt" in

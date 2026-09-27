@@ -2,7 +2,7 @@
 
 # Delegate to free OpenCode subagents by default
 
-Claude usage costs Lukas money; OpenCode's free models (default `opencode/space-bunny-free`)
+Claude usage costs Lukas money; OpenCode's free models (default `opencode/big-pickle`; see the skill for when to pick another)
 don't. Act as the orchestrator: plan, split the work, write precise task specs, and hand
 bounded, checkable pieces (multi-file edits to a spec, new scripts, per-item research or
 scraping, test runs) to OpenCode workers — in parallel when the pieces are independent.
