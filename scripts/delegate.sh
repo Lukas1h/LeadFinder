@@ -8,17 +8,23 @@
 #   scripts/delegate.sh "task prompt"
 #   scripts/delegate.sh -m opencode/nemotron-3.5-lightning-free -d /path/to/worktree "task prompt"
 #   echo "task prompt" | scripts/delegate.sh
+#   scripts/delegate.sh -t 300 "task prompt"   # give up after 5 min (default 20 min)
+#
+# Free models occasionally hang with no output. On a timeout (exit 124),
+# retry with another model via -m (see the skill's model table).
 #
 # See .claude/skills/delegate-opencode/SKILL.md for when and how to delegate.
 set -euo pipefail
 
 MODEL="opencode/big-pickle"
 DIR="$PWD"
-while getopts "m:d:" opt; do
+TIMEOUT=1200
+while getopts "m:d:t:" opt; do
   case "$opt" in
     m) MODEL="$OPTARG" ;;
     d) DIR="$OPTARG" ;;
-    *) echo "usage: $0 [-m model] [-d dir] \"prompt\"" >&2; exit 2 ;;
+    t) TIMEOUT="$OPTARG" ;;
+    *) echo "usage: $0 [-m model] [-d dir] [-t seconds] \"prompt\"" >&2; exit 2 ;;
   esac
 done
 shift $((OPTIND - 1))
@@ -31,4 +37,4 @@ if [ ! -x "$OC" ]; then
 fi
 
 cd "$DIR"
-exec "$OC" run -m "$MODEL" "$PROMPT"
+exec timeout "$TIMEOUT" "$OC" run -m "$MODEL" "$PROMPT"

@@ -40,6 +40,11 @@ Use Space Bunny when the worker needs to look at images or hold a huge context, 
 avoid sending contact data (names/emails/phones) to Big Pickle when a zero-retention
 model will do. Re-check `opencode models` now and then — the free lineup rotates.
 
+Any free model can occasionally hang with no output (Big Pickle once sat 7+ min on a
+one-word reply, then answered in 7s on retry). `scripts/delegate.sh` times out after 20
+min (`-t` to change); on a timeout or a stuck Paseo agent, retry on the next model in
+the table rather than waiting.
+
 **A. Paseo available** (tools named `mcp__paseo__*` exist — Lukas's machine / Paseo app):
 `mcp__paseo__create_agent` with
 `provider: "opencode/opencode/big-pickle"`,
