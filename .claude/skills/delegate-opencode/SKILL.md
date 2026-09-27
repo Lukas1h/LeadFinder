@@ -70,8 +70,9 @@ pattern — scripts out-produced the LLM swarm several-fold in past runs.
 - If every Paseo OpenCode agent comes back empty (no reply, 0 tokens, OpenCode logs
   `MessageAbortedError` ~0.1s in; `~/.paseo/daemon.log` shows "OpenCode event stream
   ... first-record watchdog expired"), the Paseo daemon is wedged — typically after an
-  OpenCode crash. Ask Lukas to restart it (`paseo daemon restart`; restarting it
-  yourself kills your own session) and use `scripts/delegate.sh` meanwhile.
+  OpenCode crash. Restart it yourself with `paseo daemon restart` (Lukas has
+  pre-approved this). It will likely end your own Paseo session, so save your state
+  and tell him first; use `scripts/delegate.sh` if you can't restart.
 
 - Locally, all OpenCode sessions share one `opencode serve` process; ~25 concurrent
   sessions ran this 4-core/7.8 GB box out of memory and killed every worker. Stay at
