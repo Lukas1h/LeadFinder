@@ -13,6 +13,17 @@ How: the `delegate-opencode` skill (`.claude/skills/delegate-opencode/SKILL.md`)
 `create_agent` when Paseo tools are available, otherwise `scripts/delegate.sh "<task>"`,
 which works in cloud containers too. Verify every worker's output before relying on it.
 
+# NEVER contact a real estate agent without express permission
+
+Lukas's app talks to real people: every email, SMS, or other outreach reaches a real
+agent and is his reputation. Never send, schedule, or trigger one — via the app, the
+LeadFinder MCP (`send_agent_email`, `send_bulk_agent_emails`, …), scripts, or a worker
+— unless Lukas has explicitly asked for that specific send in this session. Before
+sending, double-check the recipients, the content, and `check_contact_history` (no
+repeat or cold outreach to someone he already works with), and confirm with him. A
+general "ship it" or "go ahead" on a feature is not permission to contact anyone.
+Delegated workers must never have this ability (see the delegate-opencode skill).
+
 # Shipping: straight to prod, no asking
 
 When Lukas asks for a feature or fix, finish it and ship it — don't stop to ask, and
@@ -20,9 +31,12 @@ don't leave it on a branch or in a PR.
 
 1. **Work on `main`.** No feature branches or PRs unless he asks for one.
 2. **Schema changed?** Run `npm run db:push` yourself (drizzle-kit against the Neon DB
-   in `.env.local`). If it reports *data-loss statements* (dropping columns/tables),
-   stop — that means `src/db/schema.ts` is missing columns the live DB has (usually from
-   unmerged work). Fix the schema or ask; never accept drops.
+   in `.env.local`) — that's pre-approved. Be smart about what it wants to do: if it
+   reports *data-loss statements* (dropping columns/tables), don't accept them blind.
+   Usually `src/db/schema.ts` is just missing columns the live DB has (from work merged
+   elsewhere or not yet merged) — find where they came from (`git log --all -S`) and add
+   them back to the schema so the push becomes a no-op for them. Only drop real data if
+   it's clearly meant to go.
 3. **Build-check before pushing:** `npx next build`. Vercel runs `next build`, which
    type-checks `scripts/` too, so a committed file that imports an uncommitted one
    fails in prod while passing locally (this broke a deploy once — `scripts/lib/csv.mjs`).
