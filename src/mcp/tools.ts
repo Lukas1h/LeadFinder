@@ -2,7 +2,7 @@
  * LeadFinder's MCP tools, registered against a fresh McpServer per request
  * by src/app/api/mcp/route.ts. See src/mcp/tools/*.ts for the actual tool
  * implementations, grouped by area (agents, listings, bookings, messaging,
- * interactions).
+ * interactions, schedule).
  *
  * Deliberately does NOT import from any "use server" file
  * (composeEmailActions.ts, agents/actions.ts, booked/actions.ts, etc.)
@@ -19,6 +19,7 @@ import { registerListingTools } from "./tools/listings";
 import { registerBookingTools } from "./tools/bookings";
 import { registerMessagingTools } from "./tools/messaging";
 import { registerInteractionTools } from "./tools/interactions";
+import { registerScheduleTools } from "./tools/schedule";
 
 export function registerLeadFinderTools(server: McpServer): void {
   registerAgentTools(server);
@@ -26,4 +27,5 @@ export function registerLeadFinderTools(server: McpServer): void {
   registerBookingTools(server);
   registerMessagingTools(server);
   registerInteractionTools(server);
+  registerScheduleTools(server);
 }
