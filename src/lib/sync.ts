@@ -48,6 +48,9 @@ const AGENT_RETRY_LIMIT = 20;
 export interface SyncResult {
   fetched: number;
   inserted: number;
+  // Sources whose Zillapi call failed this run (name + error) — the rest of
+  // the sync still ran; see runSync.
+  failedSources: { name: string; error: string }[];
 }
 
 /**
@@ -62,7 +65,10 @@ export interface SyncResult {
 export async function runSync(): Promise<SyncResult> {
   const sources = await db.select().from(searchSources).where(eq(searchSources.enabled, true));
 
-  const fetchedPerSource = await Promise.all(
+  // allSettled, not all: with ~10 sources, one bad call (a Zillapi 5xx, a
+  // malformed filter, running out of credits mid-run) used to reject the
+  // whole Promise.all and throw away every other source's results too.
+  const settled = await Promise.allSettled(
     sources.map(async (source) => {
       const results = await fetchNewListings({
         bbox: source.bbox,
@@ -76,11 +82,19 @@ export async function runSync(): Promise<SyncResult> {
       return results.map((l) => ({ ...l, sourceLabel: source.name }));
     })
   );
-  const fetched = fetchedPerSource.flat();
+
+  const failedSources: SyncResult["failedSources"] = [];
+  const fetched = settled.flatMap((result, i) => {
+    if (result.status === "fulfilled") return result.value;
+    const error = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    console.error(`runSync: source "${sources[i].name}" failed:`, error);
+    failedSources.push({ name: sources[i].name, error });
+    return [];
+  });
 
   const inserted = await insertAndEnrichListings(fetched);
   await Promise.all([retryMissingAgentInfo(), retryMissingPhotoScores()]);
-  return { fetched: fetched.length, inserted };
+  return { fetched: fetched.length, inserted, failedSources };
 }
 
 /**

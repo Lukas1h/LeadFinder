@@ -25,6 +25,9 @@ export function RefreshButton() {
       try {
         const result = await triggerManualSync();
         toast.success(`Found ${result.fetched}, added ${result.inserted} new`);
+        if (result.failedSources.length > 0) {
+          toast.warning(`Couldn't check ${result.failedSources.map((s) => s.name).join(", ")}`);
+        }
       } catch {
         toast.error("Something went wrong checking for new listings");
       } finally {
