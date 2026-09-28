@@ -2,9 +2,11 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Bell, Camera, Phone, Plus } from "lucide-react";
-import { setReminderDone } from "./actions";
+import { toast } from "sonner";
+import { AlertCircle, Bell, Camera, Phone, Plus, X } from "lucide-react";
+import { dismissListingFollowUp, restoreListingFollowUp, setReminderDone } from "./actions";
 import { ReminderDialog } from "./ReminderDialog";
+import { ListingModal } from "../ListingModal";
 import { formatScheduleDay, formatScheduleTime, type ScheduleItem } from "@/lib/schedule";
 import { formatPhone } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -32,6 +34,8 @@ export function ScheduleList({ items, today }: { items: ScheduleItem[]; today: s
     open: false,
     version: 0,
   });
+  // The follow-up whose listing is open in ListingModal, if any.
+  const [openListing, setOpenListing] = useState<ScheduleItem["listing"]>(null);
   const openDialog = (editing?: ScheduleItem) =>
     setDialog((prev) => ({ open: true, editing, version: prev.version + 1 }));
 
@@ -56,6 +60,10 @@ export function ScheduleList({ items, today }: { items: ScheduleItem[]; today: s
       openDialog(item);
       return;
     }
+    if (item.kind === "followUp" && item.listing) {
+      setOpenListing(item.listing);
+      return;
+    }
     if (item.href) router.push(item.href);
   };
 
@@ -63,6 +71,24 @@ export function ScheduleList({ items, today }: { items: ScheduleItem[]; today: s
     startTransition(async () => {
       await setReminderDone(item.reminderId!, done);
       router.refresh();
+    });
+  };
+
+  // Follow-ups can't be checked off like reminders — dismissing clears the
+  // listing's follow-up date, with an Undo that puts it back.
+  const handleDismissFollowUp = (item: ScheduleItem) => {
+    startTransition(async () => {
+      const cleared = await dismissListingFollowUp(item.listingId!);
+      router.refresh();
+      toast.success("Follow-up dismissed", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            await restoreListingFollowUp(item.listingId!, cleared.followUpAt, cleared.followUpNote);
+            router.refresh();
+          },
+        },
+      });
     });
   };
 
@@ -121,9 +147,26 @@ export function ScheduleList({ items, today }: { items: ScheduleItem[]; today: s
         </div>
 
         {item.kind !== "reminder" && (
-          <span className="text-[11px] text-muted-foreground uppercase tracking-wide shrink-0">
-            {item.kind === "booking" ? "Booking" : "Follow-up"}
-          </span>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wide">
+              {item.kind === "booking" ? "Booking" : "Follow-up"}
+            </span>
+            {item.kind === "followUp" && item.listingId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                disabled={isPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDismissFollowUp(item);
+                }}
+              >
+                <X className="size-3.5" />
+                Dismiss
+              </Button>
+            )}
+          </div>
         )}
       </Card>
     );
@@ -164,6 +207,21 @@ export function ScheduleList({ items, today }: { items: ScheduleItem[]; today: s
             </div>
           ))}
         </div>
+      )}
+
+      {openListing && (
+        <ListingModal
+          key={openListing.id}
+          lead={openListing}
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setOpenListing(null);
+              // The modal can change the follow-up date/status — pick that up.
+              router.refresh();
+            }
+          }}
+        />
       )}
 
       <ReminderDialog

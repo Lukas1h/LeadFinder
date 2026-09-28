@@ -4,6 +4,8 @@
 // the page renders on a UTC server and hydrates on a Pacific phone, so
 // anything derived from a Date's local fields would disagree between the two.
 
+import type { Listing } from "@/db/schema";
+
 export const SCHEDULE_TIMEZONE = "America/Los_Angeles";
 
 export type ScheduleItemKind = "reminder" | "booking" | "followUp";
@@ -31,6 +33,10 @@ export interface ScheduleItem {
   // Only reminders can be checked off here.
   done: boolean;
   reminderId: string | null;
+  // Follow-ups only — the listing whose followUpAt a dismiss clears, and the
+  // full row so tapping the item opens its ListingModal right here.
+  listingId: string | null;
+  listing: Listing | null;
 }
 
 /** An instant's calendar day and time in Lukas's timezone. */

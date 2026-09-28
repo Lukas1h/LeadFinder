@@ -193,6 +193,7 @@ export async function updateListingFollowUp(
 
   revalidatePath("/");
   revalidatePath("/pipeline");
+  revalidatePath("/schedule");
 }
 
 /**

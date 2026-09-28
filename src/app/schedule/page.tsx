@@ -45,19 +45,8 @@ async function ScheduleContent() {
       .select()
       .from(bookings)
       .where(and(isNotNull(bookings.jobDate), gte(bookings.jobDate, bookingCutoff))),
-    db
-      .select({
-        id: listings.id,
-        address: listings.address,
-        city: listings.city,
-        followUpAt: listings.followUpAt,
-        followUpNote: listings.followUpNote,
-        agentId: listings.agentId,
-        agentName: listings.agentName,
-        agentPhone: listings.agentPhone,
-      })
-      .from(listings)
-      .where(isNotNull(listings.followUpAt)),
+    // Full rows: tapping a follow-up opens the listing's ListingModal.
+    db.select().from(listings).where(isNotNull(listings.followUpAt)),
   ]);
 
   const bookingListingIds = bookingRows.map((b) => b.listingId).filter((id): id is string => id != null);
@@ -100,6 +89,8 @@ async function ScheduleContent() {
       href: null,
       done: r.completedAt != null,
       reminderId: r.id,
+      listingId: null,
+      listing: null,
     });
   }
 
@@ -121,6 +112,8 @@ async function ScheduleContent() {
       href: "/booked",
       done: b.completedAt != null,
       reminderId: null,
+      listingId: null,
+      listing: null,
     });
   }
 
@@ -143,6 +136,8 @@ async function ScheduleContent() {
       href: "/pipeline",
       done: false,
       reminderId: null,
+      listingId: l.id,
+      listing: l,
     });
   }
 
