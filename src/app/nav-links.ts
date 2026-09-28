@@ -1,11 +1,14 @@
-import { Inbox, KanbanSquare, CalendarCheck, Settings, Send, Users, Wrench } from "lucide-react";
+import { Inbox, KanbanSquare, CalendarCheck, CalendarDays, Settings, Send, Users, Wrench } from "lucide-react";
 
 export const NAV_LINKS = [
   { href: "/", label: "Leads", icon: Inbox },
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
+  { href: "/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/booked", label: "Booked", icon: CalendarCheck },
   { href: "/agents", label: "Agents", icon: Users },
-  { href: "/messaging", label: "Messaging", icon: Send },
+  // Desktop sidebar only — Schedule took its mobile tab slot (the bar holds
+  // five comfortably); still reachable by URL on mobile.
+  { href: "/messaging", label: "Messaging", icon: Send, hideOnMobile: true },
   // Still reachable by URL on mobile — just skips the bottom tab bar (see
   // BottomTabBar's hideOnMobile filter) since it's the least-used tab day
   // to day and the bar is already tight on space at six items.

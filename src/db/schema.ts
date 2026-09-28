@@ -7,6 +7,7 @@ import {
   numeric,
   real,
   timestamp,
+  date,
   boolean,
   jsonb,
   type AnyPgColumn,
@@ -351,6 +352,27 @@ export const bookingLineItems = pgTable("booking_line_items", {
 
 export type BookingLineItem = typeof bookingLineItems.$inferSelect;
 export type NewBookingLineItem = typeof bookingLineItems.$inferInsert;
+
+// Things for Lukas to do on a given day — "they said call Tuesday" — shown
+// on the Schedule page alongside bookings (jobDate) and listing follow-ups
+// (listings.followUpAt). date/time are plain wall-clock Pacific values
+// ("2026-09-30", "14:30"), not timestamps: a reminder is "Tuesday", not an
+// instant, so storing it as a calendar day keeps it from sliding a day when
+// rendered on a UTC server. time null = an all-day item.
+export const reminders = pgTable("reminders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull(),
+  date: date("date", { mode: "string" }).notNull(),
+  time: text("time"),
+  durationMinutes: integer("duration_minutes"),
+  notes: text("notes"),
+  agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Reminder = typeof reminders.$inferSelect;
+export type NewReminder = typeof reminders.$inferInsert;
 
 // One row per search area — each is fetched independently on every
 // sync/refresh (its own Zillapi call, its own bbox/filters). Lets Lukas
