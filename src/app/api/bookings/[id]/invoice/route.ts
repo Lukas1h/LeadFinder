@@ -130,6 +130,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     display: flex;
     flex-direction: column;
     color: #181A1C;
+    /* A letter-size sheet is wider than a phone — --fit (set by fitToScreen
+       below) scales the whole sheet down like a PDF preview instead of letting
+       it run off the side. zoom rather than transform so the scaled page
+       takes up its scaled size in the layout (no blank space below it). */
+    zoom: var(--fit, 1);
   }
   .print-bar {
     position: sticky;
@@ -153,7 +158,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   @media print {
     body { background: #ffffff; }
     .print-bar { display: none; }
-    .page { margin: 0; box-shadow: none; }
+    .page { margin: 0; box-shadow: none; zoom: 1; }
     @page { size: letter; margin: 0; }
   }
 </style>
@@ -257,11 +262,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       extra = Math.max(Math.min(extra, 24), 0);
       sub.style.letterSpacing = extra + 'px';
     }
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(matchWidths);
+    // Scales the sheet to the screen width on phones (see .page's zoom).
+    // matchWidths measures at full size first, since its letter-spacing is
+    // in unscaled px.
+    function fitToScreen() {
+      var page = document.querySelector('.page');
+      if (!page) return;
+      page.style.setProperty('--fit', '1');
+      matchWidths();
+      var available = document.documentElement.clientWidth - 16;
+      var fit = Math.min(1, available / page.offsetWidth);
+      page.style.setProperty('--fit', String(fit));
     }
-    window.addEventListener('resize', matchWidths);
-    matchWidths();
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(fitToScreen);
+    }
+    window.addEventListener('resize', fitToScreen);
+    fitToScreen();
   </script>
 </body>
 </html>`;
