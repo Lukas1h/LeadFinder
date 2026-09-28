@@ -1,6 +1,10 @@
 import nodemailer from "nodemailer";
 import MailComposer from "nodemailer/lib/mail-composer";
 import { ImapFlow } from "imapflow";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { db } from "@/db";
+import { agents } from "@/db/schema";
+import { UnsubscribedError, listUnsubscribeHeaders } from "@/lib/unsubscribe";
 
 let transporter: ReturnType<typeof nodemailer.createTransport> | undefined;
 
@@ -87,6 +91,14 @@ async function appendToSentFolder(raw: Buffer): Promise<void> {
  * Sends via iCloud SMTP. Throws on any failure — callers must not write a
  * messageSends row or touch the agents table unless this resolves, since
  * (unlike an sms: deep link) this is a real network call that can fail.
+ *
+ * Also the single enforcement point for List-Unsubscribes. Every outbound
+ * email in the app funnels through here — MCP tools, the Compose page, the
+ * cold-outreach cron — so checking in one place means a new send path can't be
+ * added later that quietly ignores opt-outs. Throws UnsubscribedError rather
+ * than returning quietly, because every caller writes a messageSends row after
+ * this resolves, and a silent skip would record a send that never happened and
+ * inflate that variant's numbers.
  */
 export async function sendEmail(input: SendEmailInput): Promise<void> {
   if (process.env.USE_MOCK_SMTP === "true") {
@@ -94,12 +106,21 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     return;
   }
 
+  const recipient = input.to.trim().toLowerCase();
+  const [optedOut] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(and(eq(sql`lower(trim(${agents.email}))`, recipient), isNotNull(agents.emailUnsubscribedAt)))
+    .limit(1);
+  if (optedOut) throw new UnsubscribedError(input.to);
+
   const from = process.env.ICLOUD_EMAIL;
   const mailOptions = {
     from,
     to: input.toName ? `"${input.toName.replace(/"/g, "")}" <${input.to}>` : input.to,
     subject: input.subject,
     text: input.text,
+    headers: listUnsubscribeHeaders(input.to),
     attachments: input.attachments?.map((a) => ({ filename: a.filename, content: a.content, encoding: "base64" as const })),
   };
 

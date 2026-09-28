@@ -211,6 +211,14 @@ export const agents = pgTable("agents", {
   // means the agent isn't currently in that bucket.
   declinedAt: timestamp("declined_at", { withTimezone: true }),
 
+  // Set when the agent used the List-Unsubscribe link in a cold email. Kept
+  // deliberately separate from relationshipStatus: declining a listing is a
+  // fact about one property, whereas this is "stop emailing me", and folding
+  // the two together would let a single no-suppress a contact Lukas still
+  // wants to text. Enforced in sendEmail itself rather than at each send site,
+  // so no future caller can forget to check it.
+  emailUnsubscribedAt: timestamp("email_unsubscribed_at", { withTimezone: true }),
+
   // Set when Lukas dismisses an agent from the Agents tab's "Follow up"
   // section — resurfacing them there only after ~28 days, independent of
   // the real contact facts. Null means never dismissed / always eligible
