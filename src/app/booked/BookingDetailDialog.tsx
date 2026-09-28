@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, Clock, CalendarPlus } from "lucide-react";
+import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, Clock, CalendarPlus, MapPin } from "lucide-react";
 import { markInvoiceSent, reopenBooking } from "./actions";
 import { CompleteBookingDialog } from "./CompleteBookingDialog";
 import { COMPLETION_FIELDS, bookingProfit, profitPerHour } from "./bookingMath";
@@ -59,6 +59,13 @@ export function BookingDetailDialog({
   const hourlyRate = profitPerHour(booking);
   const recordedCompletion = COMPLETION_FIELDS.filter(({ key }) => booking[key] != null);
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
+  // Apple Maps geocodes the query string, so address + city + state is what it
+  // gets — bookings carry no zip or lat/lng. The https form rather than the
+  // maps:// scheme so the button still resolves on a desktop browser instead of
+  // erroring on an unhandled protocol.
+  const appleMapsHref = booking.address
+    ? `https://maps.apple.com/?q=${encodeURIComponent(location)}`
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -133,6 +140,14 @@ export function BookingDetailDialog({
             <Pencil />
             Edit
           </Button>
+          {appleMapsHref && (
+            <Button variant="outline" size="sm" asChild>
+              <a href={appleMapsHref} target="_blank" rel="noopener noreferrer">
+                <MapPin />
+                Apple Maps
+              </a>
+            </Button>
+          )}
         </div>
 
         {booking.lineItems.length > 0 && (
