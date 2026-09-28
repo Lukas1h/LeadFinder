@@ -80,6 +80,36 @@ export async function notifyWarmListings(notices: WarmListingNotice[]): Promise<
   await broadcast(payload);
 }
 
+/**
+ * A price cut on a listing with weak photos — the "relaunch with new photos"
+ * moment, which puts the listing back in the leads queue (see
+ * src/lib/priceCuts.ts). Sent separately from the new-leads count because
+ * nothing new was inserted; an existing lead just became worth a look again.
+ */
+export interface PriceCutNotice {
+  address: string;
+  city: string;
+  amount: number | null;
+}
+
+export async function notifyPriceCutRelaunch(notices: PriceCutNotice[]): Promise<void> {
+  if (notices.length === 0) return;
+  const cut = (n: PriceCutNotice) => (n.amount != null ? ` −$${+(n.amount / 1000).toFixed(1)}K` : "");
+  const payload: PushPayload =
+    notices.length === 1
+      ? {
+          title: "Price cut on a weak-photo listing",
+          body: `${notices[0].address}${notices[0].city ? `, ${notices[0].city}` : ""}${cut(notices[0])} — relaunch pitch`,
+          url: "/",
+        }
+      : {
+          title: `${notices.length} price cuts on weak-photo listings`,
+          body: notices.map((n) => `${n.address}${cut(n)}`).join(" · "),
+          url: "/",
+        };
+  await broadcast(payload);
+}
+
 async function broadcast(payload: PushPayload): Promise<void> {
   if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
 

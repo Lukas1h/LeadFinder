@@ -1,6 +1,6 @@
-import { Sparkles, Clock, Camera, TriangleAlert, Bell } from "lucide-react";
-import type { Agent, AgentRelationshipStatus, LeadStatus } from "@/db/schema";
-import { formatDate, formatDateOnly, daysSince } from "@/lib/format";
+import { Sparkles, Clock, Camera, TriangleAlert, Bell, TrendingDown } from "lucide-react";
+import type { Agent, AgentRelationshipStatus, LeadStatus, Listing } from "@/db/schema";
+import { formatDate, formatDateOnly, daysSince, formatPrice } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { isWarmAgentStatus } from "@/lib/pipeline";
@@ -78,6 +78,52 @@ export function ComingSoonBadge() {
       <Clock />
       Coming soon
     </Badge>
+  );
+}
+
+// Compact money for badge text, where there's room for at most one decimal.
+// The unary + drops a trailing ".0" so a clean $10,000 reads "$10K" rather
+// than "$10.0K".
+function shortMoney(n: number) {
+  if (n >= 1_000_000) return `$${+(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1000) return `$${+(n / 1000).toFixed(1)}K`;
+  return `$${n}`;
+}
+
+export function PriceCutBadge({
+  lead,
+}: {
+  lead: Pick<Listing, "priceCutAt" | "priceCutAmount" | "priceCutCount" | "originalPrice" | "price" | "listedAt">;
+}) {
+  if (!lead.priceCutAt) return null;
+
+  const { priceCutAt, priceCutAmount, priceCutCount, originalPrice, price, listedAt } = lead;
+
+  // Each part is optional: a cut we've only just detected may not have a
+  // count or a prior price yet, and an agent can cut before the listing has
+  // been on the market long enough for us to know its listed date.
+  const details: string[] = [];
+  if (priceCutCount != null && priceCutCount > 0) {
+    details.push(`${priceCutCount} price cut${priceCutCount === 1 ? "" : "s"}`);
+  }
+  if (originalPrice != null && price != null && originalPrice > price) {
+    details.push(`${formatPrice(originalPrice)} → ${formatPrice(price)}`);
+  }
+  if (listedAt) {
+    details.push(`on market ${daysSince(listedAt)} days`);
+  }
+  details.push(`cut ${formatDateOnly(priceCutAt)}`);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-400 dark:border-orange-900">
+          <TrendingDown />
+          Price cut{priceCutAmount != null ? ` −${shortMoney(priceCutAmount)}` : ""}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{details.join(" · ")}</TooltipContent>
+    </Tooltip>
   );
 }
 

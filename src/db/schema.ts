@@ -60,6 +60,19 @@ export const listings = pgTable("listings", {
   // Zillow's matching hasVideo flag isn't stored: it came back false on all
   // 20 $2.5M+ Portland listings checked 2026-09-27, so it can't be trusted.
   has3dTour: boolean("has_3d_tour"),
+  // Price-cut history for the current time on market — from Zillow price-cut
+  // alert emails (free, and the only source for listings already in the DB)
+  // and from the /properties priceHistory fetched for new email listings.
+  // A cut on a weak-photo listing is the "relaunch with new photos" pitch, so
+  // src/lib/priceCuts.ts can put a passed listing back in the leads queue
+  // (resurfacedAt) when one arrives. originalPrice is the price at the
+  // latest "Listed for sale" event; priceCutCount counts cuts since then
+  // (a lower bound when only emails have been seen).
+  priceCutAt: timestamp("price_cut_at", { withTimezone: true }),
+  priceCutAmount: integer("price_cut_amount"),
+  priceCutCount: integer("price_cut_count"),
+  originalPrice: integer("original_price"),
+  resurfacedAt: timestamp("resurfaced_at", { withTimezone: true }),
   brokerName: text("broker_name"),
 
   // From Zillapi's GET /v1/properties/{zpid} full details — 1 credit per

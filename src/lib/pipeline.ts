@@ -21,6 +21,25 @@ export function isWarmAgentStatus(status: AgentRelationshipStatus): boolean {
 // as a bad photo-quality score — the agent likely hasn't hired anyone yet.
 export const FEW_PHOTOS_THRESHOLD = 5;
 
+// A price cut on a listing whose photos are this weak (or that has fewer than
+// FEW_PHOTOS_THRESHOLD photos) is the "relaunch with new photos" pitch, so it
+// goes back in the leads queue even if it was passed on — see
+// src/lib/priceCuts.ts. 4 because scores 2-3 were pursued at 16% vs ~1% for
+// 4-6 (Sep 2026 data), and 4 keeps a little margin on a noisy vision score.
+export const PRICE_CUT_RESURFACE_MAX_SCORE = 4;
+
+export function isWeakPhotoListing(lead: Pick<Listing, "score" | "photoCount">): boolean {
+  return (
+    (lead.score != null && lead.score <= PRICE_CUT_RESURFACE_MAX_SCORE) ||
+    (lead.photoCount != null && lead.photoCount < FEW_PHOTOS_THRESHOLD)
+  );
+}
+
+// How long a price cut counts as fresh news — during this window the
+// listing-age penalty below is skipped, since the cut is a relaunch moment
+// regardless of how long the listing has been up.
+const PRICE_CUT_FRESH_DAYS = 7;
+
 // Photo scores run 0 (worst) to 10 (best) — see PhotoScoreBadge's tiers.
 const MAX_PHOTO_SCORE = 10;
 
@@ -59,7 +78,7 @@ function clamp(n: number, min: number, max: number): number {
  *    cheap one with terrible photos, since the job itself pays more.
  *  - Listing age: the longer it's been live, the more likely the agent
  *    already found a photographer (or gave up caring), so priority decays
- *    gently the older a listing gets.
+ *    gently the older a listing gets — unless it just had a price cut.
  * Listings with neither a score nor a photo count (not yet scored) get no
  * photo-opportunity boost either way — they rank on coming-soon/age alone
  * until scoring catches up.
@@ -75,7 +94,8 @@ export function leadPriorityScore(lead: Listing): number {
     lead.price != null ? clamp(lead.price / PRICE_WEIGHT_BASELINE, PRICE_WEIGHT_MIN, PRICE_WEIGHT_MAX) : 1;
   score += photoOpportunity * priceWeight;
 
-  if (lead.listedAt) {
+  const freshPriceCut = lead.priceCutAt != null && daysSince(lead.priceCutAt) < PRICE_CUT_FRESH_DAYS;
+  if (lead.listedAt && !freshPriceCut) {
     score -= Math.min(daysSince(lead.listedAt) * AGE_PENALTY_PER_DAY, AGE_PENALTY_MAX);
   }
 

@@ -426,7 +426,60 @@ interface RawZillapiProperty {
   photoCount?: number;
   agent?: { name?: string; phoneNumber?: string };
   broker?: { name?: string };
+  priceHistory?: RawPriceHistoryEvent[];
   [key: string]: unknown;
+}
+
+// Verified 2026-09-27 against a real /properties response (1144 Juniper St,
+// Junction City): newest first, e.g. {date:"2026-09-28", event:"Price change",
+// price:395000, priceChangeRate:-0.0122}, back through "Listed for sale" and
+// the property's earlier sales/rentals (postingIsRental).
+interface RawPriceHistoryEvent {
+  date?: string;
+  event?: string;
+  price?: number;
+  priceChangeRate?: number;
+  postingIsRental?: boolean;
+}
+
+export interface PriceCutSummary {
+  originalPrice: number | null;
+  priceCutCount: number;
+  priceCutAt: Date | null;
+  priceCutAmount: number | null;
+}
+
+/**
+ * Price cuts since the latest "Listed for sale" — i.e. during the current
+ * time on market, not a previous sale's history. Null when there's no
+ * for-sale listing event to anchor on.
+ */
+export function summarizePriceHistory(history: RawPriceHistoryEvent[] | undefined): PriceCutSummary | null {
+  const events = (history ?? [])
+    .filter((e) => !e.postingIsRental && e.date)
+    .sort((a, b) => b.date!.localeCompare(a.date!));
+  const listedIdx = events.findIndex((e) => /listed for sale/i.test(e.event ?? ""));
+  if (listedIdx === -1) return null;
+
+  const cutIdxs = events
+    .slice(0, listedIdx)
+    .map((e, i) => ({ e, i }))
+    .filter(({ e }) => /price change/i.test(e.event ?? "") && (e.priceChangeRate ?? 0) < 0)
+    .map(({ i }) => i);
+
+  const latestIdx = cutIdxs[0];
+  const latest = latestIdx != null ? events[latestIdx] : null;
+  const before = latestIdx != null ? events[latestIdx + 1] : null;
+
+  return {
+    originalPrice: events[listedIdx].price ?? null,
+    priceCutCount: cutIdxs.length,
+    priceCutAt: latest ? new Date(`${latest.date}T12:00:00Z`) : null,
+    priceCutAmount:
+      latest?.price != null && before?.price != null && before.price > latest.price
+        ? Math.round(before.price - latest.price)
+        : null,
+  };
 }
 
 /**
@@ -477,5 +530,16 @@ export async function fetchFullListing(zpid: string): Promise<NewListing | null>
     brokerName: raw.broker?.name ?? null,
     agentName: raw.agent?.name ? normalizeName(raw.agent.name) : null,
     agentPhone: raw.agent?.phoneNumber ? normalizePhone(raw.agent.phoneNumber) : null,
+    ...priceCutColumns(summarizePriceHistory(raw.priceHistory)),
+  };
+}
+
+function priceCutColumns(summary: PriceCutSummary | null) {
+  if (!summary) return {};
+  return {
+    originalPrice: summary.originalPrice,
+    priceCutCount: summary.priceCutCount,
+    priceCutAt: summary.priceCutAt,
+    priceCutAmount: summary.priceCutAmount,
   };
 }

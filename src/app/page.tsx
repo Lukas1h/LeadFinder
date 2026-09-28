@@ -8,7 +8,7 @@ import { LeadCard } from "./LeadCard";
 import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
-import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, FewPhotosBadge, AgentDeclinedBadge, WarmAgentBadge } from "./badges";
+import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, WarmAgentBadge } from "./badges";
 import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isUnlikelyLeadMatch, findAttachedAgent, buildAgentLookups, isWarmAgentStatus } from "@/lib/pipeline";
 import { daysSince } from "@/lib/format";
 import { Separator } from "@/components/ui/separator";
@@ -85,9 +85,13 @@ async function LeadsContent() {
   // batch" — everything else is backlog from a day (or several) you
   // haven't gotten to yet. Within each, priority order combines coming-soon
   // status, price-weighted photo opportunity, and listing age (see
-  // leadPriorityScore in lib/pipeline.ts).
-  const newToday = likelyLeads.filter((l) => daysSince(l.foundAt) < 1).sort(byLeadPriority);
-  const earlier = likelyLeads.filter((l) => daysSince(l.foundAt) >= 1).sort(byLeadPriority);
+  // leadPriorityScore in lib/pipeline.ts). A listing a price cut
+  // resurfaced counts as today's batch too, so measure age from whichever of
+  // foundAt/resurfacedAt is more recent rather than foundAt alone.
+  const freshAt = (l: Listing) =>
+    l.resurfacedAt && l.resurfacedAt > l.foundAt ? l.resurfacedAt : l.foundAt;
+  const newToday = likelyLeads.filter((l) => daysSince(freshAt(l)) < 1).sort(byLeadPriority);
+  const earlier = likelyLeads.filter((l) => daysSince(freshAt(l)) >= 1).sort(byLeadPriority);
   unlikelyMatches.sort(byLeadPriority);
 
   function card(lead: Listing) {
@@ -103,6 +107,7 @@ async function LeadsContent() {
           <Fragment key={lead.id}>
             <NewBadge />
             {lead.isComingSoon && <ComingSoonBadge />}
+            <PriceCutBadge lead={lead} />
             {attachedAgent && isWarmAgentStatus(attachedAgent.relationshipStatus) && (
               <WarmAgentBadge agent={attachedAgent} />
             )}

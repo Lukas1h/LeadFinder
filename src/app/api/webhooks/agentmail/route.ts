@@ -5,6 +5,7 @@ import { inArray } from "drizzle-orm";
 import { fetchFullListing } from "@/lib/zillapi";
 import { insertAndEnrichListings } from "@/lib/sync";
 import { fetchAgentMailMessage } from "@/lib/agentmail";
+import { applyPriceCutsToExisting, parseEmailPriceCuts } from "@/lib/priceCuts";
 import type { NewListing } from "@/db/schema";
 
 // See matching comment in src/app/page.tsx — Hobby plan's real ceiling is
@@ -156,7 +157,9 @@ async function handle(req: Request): Promise<Response> {
     return new Response("Ignored: not an outreach opportunity", { status: 200 });
   }
 
-  let body = (event.message?.html ?? "") + " " + (event.message?.text ?? "");
+  let html = event.message?.html ?? "";
+  let text = event.message?.text ?? "";
+  let body = html + " " + text;
   let { trusted, recommended } = splitLeadZpids(body);
 
   if (trusted.length === 0 && recommended.length === 0 && event.message?.message_id && event.message?.inbox_id) {
@@ -166,7 +169,9 @@ async function handle(req: Request): Promise<Response> {
     // fetchAgentMailMessage's doc comment).
     const full = await fetchAgentMailMessage(event.message.inbox_id, event.message.message_id);
     if (full) {
-      body = (full.html ?? "") + " " + (full.text ?? "");
+      html = full.html ?? "";
+      text = full.text ?? "";
+      body = html + " " + text;
       ({ trusted, recommended } = splitLeadZpids(body));
     }
   }
@@ -182,6 +187,14 @@ async function handle(req: Request): Promise<Response> {
   const trustedSet = new Set(trusted);
   const newZpids = zpids.filter((z) => !existingZpids.has(z));
 
+  // Price cuts announced in the email (only for the email's own results, not
+  // the recommendation carousel). Cuts on listings we already have were
+  // previously dropped along with the rest of the alert — now they're
+  // recorded, and a weak-photo one goes back in the leads queue.
+  const priceCuts = parseEmailPriceCuts(text, html).filter((c) => trustedSet.has(c.zpid));
+  const priceCutByZpid = new Map(priceCuts.map((c) => [c.zpid, c]));
+  const priceCutsApplied = await applyPriceCutsToExisting(priceCuts.filter((c) => existingZpids.has(c.zpid)));
+
   const fetched = await Promise.all(newZpids.map((zpid) => fetchFullListing(zpid)));
   const recommendationCutoff = new Date(Date.now() - RECOMMENDATION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
   const staleRecommendations: string[] = [];
@@ -193,7 +206,16 @@ async function handle(req: Request): Promise<Response> {
       if (!recent) staleRecommendations.push(l.zpid);
       return recent;
     })
-    .map((l) => ({ ...l, sourceLabel: "Zillow email alert" }) satisfies NewListing);
+    .map((l) => {
+      // The fetched price history usually already has this cut; the email's
+      // copy only fills in when the history didn't (or wasn't returned).
+      const cut = priceCutByZpid.get(l.zpid);
+      const fromEmail =
+        cut && !l.priceCutAt
+          ? { priceCutAt: cut.cutAt, priceCutAmount: cut.amount, priceCutCount: Math.max(l.priceCutCount ?? 0, 1) }
+          : {};
+      return { ...l, ...fromEmail, sourceLabel: "Zillow email alert" } satisfies NewListing;
+    });
 
   const inserted = await insertAndEnrichListings(candidates);
 
@@ -207,5 +229,6 @@ async function handle(req: Request): Promise<Response> {
     skippedStaleRecommendations: staleRecommendations.length,
     fetchFailed: newZpids.length - candidates.length - staleRecommendations.length,
     inserted,
+    priceCutsApplied,
   });
 }
