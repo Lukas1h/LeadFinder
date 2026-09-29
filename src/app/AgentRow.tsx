@@ -23,10 +23,13 @@ import { formatPhone } from "@/lib/format";
 export function AgentRow({
   name,
   phone,
+  agentId,
   subtitle,
 }: {
   name: string | null;
   phone: string | null;
+  /** The listing's linked agent (listings.agentId), used before any phone lookup. */
+  agentId?: string | null;
   subtitle?: string | null;
 }) {
   const [data, setData] = useState<Agent | null>(null);
@@ -40,14 +43,14 @@ export function AgentRow({
   useEffect(() => {
     if (!phone) return;
     let cancelled = false;
-    getAgentRelationshipByPhone(phone).then((res) => {
+    getAgentRelationshipByPhone(phone, agentId).then((res) => {
       if (cancelled) return;
       setRelationship(res?.relationshipStatus ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [phone]);
+  }, [phone, agentId]);
 
   const content = (
     <>
@@ -76,7 +79,7 @@ export function AgentRow({
   const handleClick = async () => {
     if (!loaded) {
       setLoading(true);
-      const result = await getOrCreateAgentByPhone(phone, name);
+      const result = await getOrCreateAgentByPhone(phone, name, agentId);
       setData(result);
       setLoaded(true);
       setLoading(false);

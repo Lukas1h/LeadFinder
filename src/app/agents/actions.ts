@@ -287,8 +287,16 @@ export async function linkAgentToListing(
  * shouldn't mint an agent row for a phone we've never seen.
  */
 export async function getAgentRelationshipByPhone(
-  phone: string
+  phone: string,
+  agentId?: string | null
 ): Promise<{ relationshipStatus: AgentRelationshipStatus } | null> {
+  if (agentId) {
+    const [byId] = await db
+      .select({ relationshipStatus: agents.relationshipStatus })
+      .from(agents)
+      .where(eq(agents.id, agentId));
+    if (byId) return byId;
+  }
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone) return null;
   const [agent] = await db
@@ -300,8 +308,19 @@ export async function getAgentRelationshipByPhone(
 
 export async function getOrCreateAgentByPhone(
   phone: string,
-  name: string | null
+  name: string | null,
+  agentId?: string | null
 ): Promise<Agent | null> {
+  // The listing's own agent link wins. Looking up by phone alone missed
+  // anyone whose record holds a different number (e.g. an office line from
+  // a cold-email import), and then minted an empty duplicate, so the detail
+  // view showed no contact history for an agent the badge knew was
+  // contacted (Jake Buckendorf, 2026-09-29).
+  if (agentId) {
+    const [byId] = await db.select().from(agents).where(eq(agents.id, agentId));
+    if (byId) return byId;
+  }
+
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone) return null;
 

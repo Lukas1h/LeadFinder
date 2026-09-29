@@ -157,7 +157,7 @@ export function ListingModal({
 
           <div className="border-t pt-2">
             {lead.agentName || lead.brokerName || lead.agentPhone ? (
-              <AgentRow name={lead.agentName} phone={lead.agentPhone} subtitle={lead.brokerName} />
+              <AgentRow name={lead.agentName} phone={lead.agentPhone} agentId={lead.agentId} subtitle={lead.brokerName} />
             ) : (
               <LinkAgentForm
                 listingId={lead.id}
