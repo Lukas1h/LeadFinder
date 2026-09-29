@@ -10,9 +10,9 @@ import {
   bookingLineItems,
   type PresetType,
   type LeadStatus,
-  type AgentRelationshipStatus,
   type Listing,
   type PresetAttachment,
+  type Agent,
 } from "@/db/schema";
 import { and, count, eq, sum } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -351,12 +351,11 @@ async function buildAiDraftOption(
     .where(and(eq(messagePresets.type, type), eq(messagePresets.aiGenerated, true), eq(messagePresets.enabled, true)));
   if (!preset) return null;
 
-  let agent: { relationshipStatus: AgentRelationshipStatus; lastContactedAt: Date | null; notes: string | null } | null =
-    null;
+  let agent: Agent | null = null;
   let agentListingCount = 0;
   if (listing.agentId) {
     const [agentRow] = await db
-      .select({ relationshipStatus: agents.relationshipStatus, lastContactedAt: agents.lastContactedAt, notes: agents.notes })
+      .select()
       .from(agents)
       .where(eq(agents.id, listing.agentId));
     agent = agentRow ?? null;
@@ -407,6 +406,8 @@ async function buildAiDraftOption(
     agentListingCount,
     agentLastContactedAt: agent?.lastContactedAt ?? null,
     agentNotes: agent?.notes ?? null,
+    listing,
+    agent,
     instruction,
   });
   if (!text) return null;

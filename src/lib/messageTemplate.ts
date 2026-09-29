@@ -1,4 +1,4 @@
-import { firstName, shortStreetName } from "@/lib/sms";
+import { firstName, naturalStreetName } from "@/lib/sms";
 
 // sendMessage's variantId sentinel for an AI-drafted send — that variant
 // doesn't exist yet (each AI draft is one-off), so sendMessage creates it
@@ -16,7 +16,7 @@ export function renderMessageBody(
   city: string | null = null
 ): string {
   const name = firstName(agentName);
-  const street = shortStreetName(address) ?? "your property";
+  const street = naturalStreetName(address) ?? "your property";
   const cityName = city?.trim() ? city.trim() : "your area";
   return body
     .replaceAll("{{firstName}}", name ?? "there")

@@ -1,5 +1,5 @@
-import type { AgentRelationshipStatus, PresetType, LeadStatus } from "@/db/schema";
-import { shortStreetName } from "@/lib/sms";
+import type { AgentRelationshipStatus, PresetType, LeadStatus, Listing, Agent } from "@/db/schema";
+import { naturalStreetName } from "@/lib/sms";
 import { fetchImagePart, callGemini } from "@/lib/gemini";
 
 // Gemini 3.5 Flash (not Lite) — this is a low-volume, synchronous,
@@ -39,6 +39,14 @@ export interface DraftMessageInput {
   agentListingCount: number;
   agentLastContactedAt: Date | null;
   agentNotes: string | null;
+  /**
+   * The full listing and agent rows, so the prompt gets everything we know
+   * (list date, original price, price cuts, back-on-market date, our own
+   * photo score, the agent's listing history) — the model decides what's
+   * worth using. See formatListingFacts / formatAgentFacts.
+   */
+  listing?: Listing | null;
+  agent?: Agent | null;
   /** Lukas's own steering for this specific draft — see buildPrompt. Set when re-drafting after "I don't like this, try again with X." */
   instruction?: string | null;
 }
@@ -85,12 +93,18 @@ function isLocalArea(city: string | null | undefined): boolean {
   return LOCAL_AREA_CITIES.has(city.trim().toLowerCase());
 }
 
-/** One conditional nudge shared by the SMS and email prompts — keep locality claims honest, and lean on the 24-hour turnaround for anywhere outside his home area. Soft guidance, not a hard rule. */
+/** Shared by the SMS and email prompts — keep locality claims honest. */
 function localityNudge(input: DraftMessageInput): string {
-  if (isLocalArea(input.city)) {
-    return `Lukas is based in Roseburg, OR and this listing is in his home area, so it's fine to call him a local photographer here.`;
-  }
-  return `Lukas is based in Roseburg, OR, not ${input.city ?? "the listing's city"} — it reads wrong to claim he's local or "based in" that city. Better to lean on his 24-hour turnaround and that he can get it done quickly.`;
+  const city = input.city ?? "the listing's city";
+  const where = isLocalArea(input.city)
+    ? `This listing is in his home area, so "I'm local" or "I'm local to the ${city} area" is accurate.`
+    : `This listing is outside his home area, so don't call him local there. "I do work in ${city}" or "I shoot in the ${city} area" is fine, or lean on his 24-hour turnaround.`;
+  return `Lukas lives in the Roseburg, OR area. NEVER say he's "from" a city, "based in" a city, or a photographer "here in" a city, anywhere in the message, including Roseburg's neighbors: it reads like a false claim to live there. ${where}`;
+}
+
+/** Shared street-naming rule — the street is the one detail every message references. */
+function streetNudge(input: DraftMessageInput, street: string): string {
+  return `How to say the street: say it the way a person would in a casual text. The suggested form is "${street}" (full address: ${input.address ?? "unknown"}). Spell out directions ("South Bank road", never "S Bank"). Drop the street type when the name stands on its own ("your listing on Burntwood"), keep it when the bare name would sound odd ("Main street", "Oak lane", "5th street", "South Bank road"). When you do include the street type, write it in lowercase ("road", "street", "avenue", never "Road"/"Rd"). Never use abbreviations like Rd, St, Ave, Dr, S, NW.`;
 }
 
 const EXAMPLE_BANK = `1. Coming Soon / No Photos
@@ -130,25 +144,58 @@ Hey {{firstName}}, I'm Lukas. I've seen your listings around {{city}} and it loo
 Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}} and wanted to reach out. I'm a local real estate photographer and shoot photo + drone. If you still need someone for the property, I'd be happy to get you taken care of.
 
 13. Professional Photos / Short & Clean (preferred for poor photography — this is THE pattern; do not say "refresh")
-Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}}. If you want to get some professional photos taken for it, I'm local here in {{city}} and have a 24-hour turnaround.`;
+Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}}. If you want to get some professional photos taken for it, I'm local to the {{city}} area and have a 24-hour turnaround.`;
 
-/** Only non-null fields render — keeps the prompt from padding out with a wall of "unknown"s. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+const daysAgo = (d: Date) => Math.max(0, Math.floor((Date.now() - d.getTime()) / DAY_MS));
+const onDate = (d: Date) => `${d.toISOString().slice(0, 10)} (${daysAgo(d)} days ago)`;
+const money = (n: number) => `$${n.toLocaleString()}`;
+
+/** Everything we know about the listing. Only non-null fields render, so the prompt doesn't pad out with "unknown"s. */
 function formatListingFacts(input: DraftMessageInput): string {
+  const l = input.listing;
   const lines: string[] = [];
-  if (input.price != null) lines.push(`Price: $${input.price.toLocaleString()}`);
+  if (input.address) lines.push(`Full address: ${[input.address, input.city, input.state, input.zipcode].filter(Boolean).join(", ")}`);
+  if (input.price != null) lines.push(`Current price: ${money(input.price)}`);
+  if (l?.originalPrice != null && input.price != null && l.originalPrice !== input.price) {
+    lines.push(`Original list price: ${money(l.originalPrice)}`);
+  }
+  if (l?.priceCutAmount != null) {
+    const count = l.priceCutCount != null && l.priceCutCount > 1 ? ` (${l.priceCutCount} price cuts so far)` : "";
+    lines.push(`Most recent price cut: ${money(l.priceCutAmount)}${l.priceCutAt ? ` on ${onDate(l.priceCutAt)}` : ""}${count}`);
+  }
   if (input.homeType) lines.push(`Type: ${input.homeType}`);
   if (input.bedrooms || input.bathrooms) lines.push(`${input.bedrooms ?? "?"} bd / ${input.bathrooms ?? "?"} ba`);
   if (input.livingArea != null) lines.push(`${input.livingArea.toLocaleString()} sqft`);
-  if (input.zipcode) lines.push(`Zip: ${input.zipcode}`);
   if (input.isComingSoon) lines.push("Status: coming soon, not actively listed yet");
-  else lines.push(`Pipeline status: ${input.status}`);
+  if (l?.listedAt) lines.push(`Listed on the market: ${onDate(l.listedAt)}`);
+  else lines.push(`Days on market (or since we found it): ${input.ageDays}`);
+  if (l?.resurfacedAt) lines.push(`Came back on the market (relisted) on ${onDate(l.resurfacedAt)}`);
+  if (l?.foundAt) lines.push(`We first saw it on ${onDate(l.foundAt)}${l.sourceLabel ? ` via ${l.sourceLabel}` : ""}`);
   lines.push(`Photo count on listing: ${input.photoCount ?? "unknown"}`);
-  lines.push(`Days on market (or since found): ${input.ageDays}`);
+  if (l?.score != null) {
+    lines.push(`Our automated photo-quality score: ${l.score}/10${l.scoreReasoning ? ` (${l.scoreReasoning})` : ""} — a second opinion only; judge the attached photos yourself`);
+  }
   if (input.brokerName) lines.push(`Brokerage: ${input.brokerName}`);
-  if (input.listingUrl) lines.push(`Zillow URL: ${input.listingUrl}`);
-  if (input.bookingValue != null) lines.push(`Already booked, job value: $${input.bookingValue.toLocaleString()}`);
+  lines.push(`Lukas's pipeline status for this listing: ${input.status}`);
+  if (l?.contactedAt) lines.push(`Lukas already contacted the agent about this listing on ${onDate(l.contactedAt)}`);
+  if (l?.followUpNote) lines.push(`Lukas's follow-up note: ${l.followUpNote}`);
+  if (input.bookingValue != null) lines.push(`Already booked, job value: ${money(input.bookingValue)}`);
   if (input.notes) lines.push(`Lukas's own notes on this listing: ${input.notes}`);
-  return lines.map((l) => `- ${l}`).join("\n");
+  if (input.listingUrl) lines.push(`Zillow URL: ${input.listingUrl}`);
+  return lines.map((line) => `- ${line}`).join("\n");
+}
+
+/** Everything we know about the agent beyond name/relationship. */
+function formatAgentFacts(input: DraftMessageInput): string {
+  const a = input.agent;
+  const lines: string[] = [];
+  if (a?.avgListingsPerYear != null) lines.push(`Averages about ${Math.round(a.avgListingsPerYear)} listings a year`);
+  if (a?.avgListingPrice != null) lines.push(`Average listing price: ${money(a.avgListingPrice)}`);
+  if (a?.avgDaysBetweenListings != null) lines.push(`A new listing roughly every ${Math.round(a.avgDaysBetweenListings)} days`);
+  if (input.agentLastContactedAt) lines.push(`Lukas last contacted this agent on ${onDate(input.agentLastContactedAt)}`);
+  if (a?.createdAt) lines.push(`In Lukas's contacts since ${a.createdAt.toISOString().slice(0, 10)}`);
+  return lines.map((line) => `- ${line}`).join("\n");
 }
 
 function buildInitialOutreachPrompt(input: DraftMessageInput, street: string, skipIntro: boolean): string {
@@ -160,11 +207,12 @@ How to choose the approach — determine the strongest reason to contact this ag
 1. If the listing is coming soon or has little/no photography, focus on helping them get the listing photographed quickly.
 2. If the photos are poor, amateur, cellphone-quality, outdated, poorly composed, or fail to showcase the property, offer to take professional photos for them (get them photographed properly) without insulting the agent or their current photographer.
 3. If the photos are good but there's no video or no aerial/drone shot among them, offer the specific missing service.
-4. If the property is unusually expensive, attractive, architectural, unique, or visually interesting, emphasize that strong photography could showcase it particularly well.
-5. If the agent appears high-volume or established (see "Listings we've seen from this agent" below) and the photos already look professional, do not try to convince them to replace that photographer — position Lukas as another local option or backup for busy/last-minute/quick-turnaround situations.
-6. If none of the above clearly applies, simply introduce Lukas as a local real estate photographer and put him on the agent's radar.
+4. If the listing has been sitting a long time (months on the market) or has had a price cut, that's a strong, natural opening: new professional photos or a video can get a listing that's been sitting a second look from buyers. Mention it tactfully and in passing ("looks like it's been on the market a while" / "saw the price drop"), never implying the agent did something wrong, and never quote the dollar amount of the cut.
+5. If the property is unusually expensive, attractive, architectural, unique, or visually interesting, emphasize that strong photography could showcase it particularly well.
+6. If the agent appears high-volume or established (see "Listings we've seen from this agent" below) and the photos already look professional, do not try to convince them to replace that photographer — position Lukas as another local option or backup for busy/last-minute/quick-turnaround situations.
+7. If none of the above clearly applies, simply introduce Lukas as a real estate photographer and put him on the agent's radar.
 
-Do not automatically criticize the photography — if it's already good, acknowledge that implicitly and use the backup/additional-photographer approach (case 3 or 5 above).
+Do not automatically criticize the photography — if it's already good, acknowledge that implicitly and use the backup/additional-photographer approach (case 3 or 6 above).
 
 Listing — street (use this for {{street}}): ${street}
 ${formatListingFacts(input)}
@@ -174,10 +222,11 @@ Agent (use first name for {{firstName}}, city for {{city}}):
 - City: ${input.city ?? "unknown"}
 - Relationship: ${input.agentRelationshipStatus ?? "cold"} — ${RELATIONSHIP_GUIDANCE[input.agentRelationshipStatus ?? "cold"]}
 - Listings we've seen from this agent: ${input.agentListingCount}
+${formatAgentFacts(input)}
 ${input.agentNotes ? `- Lukas's own notes on this agent: ${input.agentNotes}\n` : ""}
 Writing style:
 - Short, conversational, natural, low-pressure. 2-4 sentences.
-- The message should usually: (1) address the agent by first name, (2) introduce Lukas as a local real estate photographer, (3) reference the specific listing/street, (4) give a natural reason for reaching out, (5) offer an easy way for Lukas to help.${skipIntro ? `\n- IMPORTANT override to step (2) above: do NOT say "I'm Lukas," "it's Lukas," or name-drop Lukas at all in this message. The relationship status above means this agent already has him saved in their phone and knows exactly who's texting — treat this like a text from a contact already in their contacts list. Start straight from the greeting into the reason for reaching out.` : ""}
+- The message should usually: (1) address the agent by first name, (2) introduce Lukas as a real estate photographer (local only where the location rule below allows it), (3) reference the specific listing/street, (4) give a natural reason for reaching out, (5) offer an easy way for Lukas to help.${skipIntro ? `\n- IMPORTANT override to step (2) above: do NOT say "I'm Lukas," "it's Lukas," or name-drop Lukas at all in this message. The relationship status above means this agent already has him saved in their phone and knows exactly who's texting — treat this like a text from a contact already in their contacts list. Start straight from the greeting into the reason for reaching out.` : ""}
 - Avoid sounding like an advertisement or formal business email.
 - Do not use exaggerated sales language such as "take your listing to the next level," "elevate your brand," "best-in-class," or "earn your business."
 - Do not immediately push packages, discounts, or long explanations.
@@ -217,9 +266,10 @@ How to choose the email subject and approach — determine the strongest reason 
 1. If the listing is coming soon or has little/no photography, focus on quick turnaround and getting photos done.
 2. If the photos are poor quality, offer to take professional photos for them (get them photographed properly) without insulting their current photographer.
 3. If the photos are good but there's no video or drone shot, offer the specific missing service.
+3b. If the listing has been on the market a long time or has had a price cut, new professional photos or a video can get it a second look. Mention it tactfully, never blaming the agent, and don't quote the cut amount.
 4. If the property is expensive, visually interesting, or architectural, emphasize how strong photography can showcase it.
 5. If the agent appears established and photos look professional, position Lukas as a backup for busy/last-minute situations.
-6. If none above applies, simply introduce Lukas as a local real estate photographer.
+6. If none above applies, simply introduce Lukas as a real estate photographer.
 
 Don't automatically criticize the photos — if they're already good, acknowledge that and use the backup approach.
 
@@ -231,6 +281,7 @@ Agent (use first name for {{firstName}}, city for {{city}}):
 - City: ${input.city ?? "unknown"}
 - Relationship: ${input.agentRelationshipStatus ?? "cold"} — ${RELATIONSHIP_GUIDANCE[input.agentRelationshipStatus ?? "cold"]}
 - Listings we've seen: ${input.agentListingCount}
+${formatAgentFacts(input)}
 ${input.agentNotes ? `- Lukas's notes: ${input.agentNotes}\n` : ""}
 Writing style:
 - Casual, brief, personable — sounds like a real photographer, not automated marketing.
@@ -268,8 +319,8 @@ ${formatListingFacts(input)}
 Agent: ${input.agentName ?? "unknown"}, relationship: ${input.agentRelationshipStatus ?? "cold"}`;
 }
 
-function buildSmsPrompt(input: DraftMessageInput): string {
-  const street = shortStreetName(input.address) ?? input.address ?? "the listing";
+export function buildSmsPrompt(input: DraftMessageInput): string {
+  const street = naturalStreetName(input.address) ?? input.address ?? "the listing";
   const status = input.agentRelationshipStatus ?? "cold";
   const skipIntro = SKIP_INTRO_STATUSES.includes(status);
 
@@ -286,7 +337,9 @@ function buildSmsPrompt(input: DraftMessageInput): string {
 ${instructionBlock}
 ${scenarioPrompt}
 
-A gentle nudge on location: ${localityNudge(input)} The 24-hour turnaround is worth including when it fits naturally — he can have photos done within a day.
+Location: ${localityNudge(input)} The 24-hour turnaround is worth including when it fits naturally — he can have photos done within a day.
+
+${streetNudge(input, street)}
 
 Additional writing rules (these override anything above if they conflict, except Lukas's own instruction above, which wins over everything):
 - NEVER use an em dash (—) or en dash (–), anywhere. Use a period or comma instead.
@@ -300,7 +353,7 @@ Respond with ONLY the message text — no quotes, no JSON, no explanation.`;
 }
 
 function buildEmailPrompt(input: DraftMessageInput): string {
-  const street = shortStreetName(input.address) ?? input.address ?? "the listing";
+  const street = naturalStreetName(input.address) ?? input.address ?? "the listing";
   const status = input.agentRelationshipStatus ?? "cold";
   const skipIntro = SKIP_INTRO_STATUSES.includes(status);
 
@@ -317,7 +370,9 @@ function buildEmailPrompt(input: DraftMessageInput): string {
 ${instructionBlock}
 ${scenarioPrompt}
 
-A gentle nudge on location: ${localityNudge(input)} The 24-hour turnaround is worth including when it fits naturally — he can have photos done within a day.
+Location: ${localityNudge(input)} The 24-hour turnaround is worth including when it fits naturally — he can have photos done within a day.
+
+${streetNudge(input, street)}
 
 Writing rules:
 - NEVER use em dashes (—) or en dashes (–). Use commas or periods instead.

@@ -20,7 +20,7 @@ const MODEL = "gemini-3.5-flash";
 const NAME = "Luxury Video & Photo";
 
 const BACKUP_PRESET_BODY =
-  "Hey {{firstName}}, I'm Lukas, a real estate photographer here in {{city}}. I saw your listing on {{street}}. " +
+  "Hey {{firstName}}, I'm Lukas, a real estate photographer who works in the {{city}} area. I saw your listing on {{street}}. " +
   "You probably have a photographer you like already, but I'd love to be your backup if they're ever booked " +
   "or you need a quick turnaround. I do photo, drone, and video.";
 

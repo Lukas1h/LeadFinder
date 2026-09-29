@@ -27,7 +27,7 @@ const sql = neon(process.env.DATABASE_URL);
 
 const NAME = "Luxury Video & Photo";
 const BODY =
-  "Hey {{firstName}}, I'm Lukas, a videographer here in {{city}}. I saw your listing on {{street}}. " +
+  "Hey {{firstName}}, I'm Lukas, a videographer who works in the {{city}} area. I saw your listing on {{street}}. " +
   "If your media person is ever booked up, I'd love to be your backup for cinematic video tours, drone, " +
   "and photos. No pressure, just wanted to say hi and put myself on your radar.";
 
