@@ -458,6 +458,12 @@ export const messagePresets = pgTable("message_presets", {
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
+  // Set when a preset with send history is "deleted" from the Messaging
+  // page. It's hidden there instead of removed, because its message_sends
+  // rows are often the only record that those agents were contacted —
+  // deleting them would let the app treat those agents as never contacted.
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+
   // Targeting criteria for auto-recommending this preset in the Send
   // message dialog — all nullable, null meaning "no constraint on this
   // dimension". A listing must satisfy every criterion a preset actually

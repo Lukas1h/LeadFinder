@@ -64,6 +64,61 @@ function AgentBucketLine({
   );
 }
 
+function sumStats(list: VariantStats[]): VariantStats {
+  const total: VariantStats = {
+    sent: 0,
+    responded: 0,
+    quoted: 0,
+    booked: 0,
+    declined: 0,
+    revenue: 0,
+    newAgent: { sent: 0, booked: 0 },
+    repeatAgent: { sent: 0, booked: 0 },
+  };
+  for (const s of list) {
+    total.sent += s.sent;
+    total.responded += s.responded;
+    total.quoted += s.quoted;
+    total.booked += s.booked;
+    total.declined += s.declined;
+    total.revenue += s.revenue;
+    total.newAgent.sent += s.newAgent.sent;
+    total.newAgent.booked += s.newAgent.booked;
+    total.repeatAgent.sent += s.repeatAgent.sent;
+    total.repeatAgent.booked += s.repeatAgent.booked;
+  }
+  return total;
+}
+
+function StatsSummary({ stats }: { stats: VariantStats }) {
+  return (
+    <>
+      <div className="flex flex-wrap gap-2 mt-2">
+        <Badge variant="secondary">{stats.sent} sent</Badge>
+        <Badge variant="secondary">{rate(stats.responded, stats.sent)} responded</Badge>
+        <Badge variant="secondary">{rate(stats.booked, stats.sent)} booked</Badge>
+      </div>
+
+      {stats.sent > 0 && (
+        <details className="mt-2 group/stats">
+          <summary className="text-xs text-muted-foreground cursor-pointer select-none w-fit">
+            More stats
+          </summary>
+          <div className="text-xs text-muted-foreground mt-1.5 flex flex-col gap-0.5">
+            <p>
+              {stats.responded} responded · {stats.quoted} quoted · {stats.declined} declined (
+              {rate(stats.declined, stats.sent)})
+            </p>
+            {stats.revenue > 0 && <p>${stats.revenue.toLocaleString()} total booked</p>}
+            <AgentBucketLine label="New agents" bucket={stats.newAgent} />
+            <AgentBucketLine label="Repeat agents" bucket={stats.repeatAgent} />
+          </div>
+        </details>
+      )}
+    </>
+  );
+}
+
 function VariantRow({
   variant,
   channel,
@@ -111,27 +166,7 @@ function VariantRow({
             {variant.body}
           </p>
 
-          <div className="flex flex-wrap gap-2 mt-2">
-            <Badge variant="secondary">{stats.sent} sent</Badge>
-            <Badge variant="secondary">{rate(stats.responded, stats.sent)} responded</Badge>
-            <Badge variant="secondary">{rate(stats.booked, stats.sent)} booked</Badge>
-          </div>
-
-          {stats.sent > 0 && (
-            <details className="mt-2 group/stats">
-              <summary className="text-xs text-muted-foreground cursor-pointer select-none w-fit">
-                More stats
-              </summary>
-              <div className="text-xs text-muted-foreground mt-1.5 flex flex-col gap-0.5">
-                <p>
-                  {stats.quoted} quoted · {stats.declined} declined ({rate(stats.declined, stats.sent)})
-                </p>
-                {stats.revenue > 0 && <p>${stats.revenue.toLocaleString()} total booked</p>}
-                <AgentBucketLine label="New agents" bucket={stats.newAgent} />
-                <AgentBucketLine label="Repeat agents" bucket={stats.repeatAgent} />
-              </div>
-            </details>
-          )}
+          <StatsSummary stats={stats} />
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -236,7 +271,7 @@ export function PresetCard({
         toast.error(result.error);
         return;
       }
-      toast.success(`Deleted ${preset.name}`);
+      toast.success(result.archived ? `Removed ${preset.name} (send history kept)` : `Deleted ${preset.name}`);
     });
   };
 
@@ -305,7 +340,7 @@ export function PresetCard({
                 <AlertDialogTitle>Delete &ldquo;{preset.name}&rdquo;?</AlertDialogTitle>
                 <AlertDialogDescription>
                   {totalSent > 0
-                    ? "This preset has send history — deleting will be rejected. Disable it instead."
+                    ? "It disappears from this page, but its send history is kept so those agents still show as contacted."
                     : "This preset hasn't been sent yet — deleting it is safe."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -326,6 +361,28 @@ export function PresetCard({
               ? "Nothing sent yet — each send drafts and logs its own one-off variant here."
               : "No variants yet."}
           </p>
+        ) : preset.aiGenerated ? (
+          // Each AI send is its own one-off variant, so per-variant stats
+          // are all 1-sent rows — show them combined, drafts folded away.
+          <div className="py-3">
+            <span className="text-sm font-medium text-foreground">All AI drafts combined</span>
+            <StatsSummary stats={sumStats(variants.map((v) => statsByVariant[v.id] ?? emptyStats))} />
+            <details className="mt-3 group/drafts">
+              <summary className="text-xs text-muted-foreground cursor-pointer select-none w-fit">
+                Individual drafts ({variants.length})
+              </summary>
+              <div className="mt-2">
+                {variants.map((variant) => (
+                  <VariantRow
+                    key={variant.id}
+                    variant={variant}
+                    channel={preset.channel}
+                    stats={statsByVariant[variant.id] ?? emptyStats}
+                  />
+                ))}
+              </div>
+            </details>
+          </div>
         ) : (
           variants.map((variant) => (
             <VariantRow

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { Plus, FlaskConical } from "lucide-react";
 import { db } from "@/db";
+import { isNull } from "drizzle-orm";
 import { messagePresets, messagePresetVariants, PRESET_TYPES, type PresetType, type MessageChannel } from "@/db/schema";
 import { ensureDefaultPresets, ensureAiDraftPresets } from "@/app/messageActions";
 import { ensureDefaultEmailPreset } from "@/app/composeEmailActions";
@@ -36,7 +37,7 @@ async function MessagingContent() {
   await ensureDefaultEmailPreset();
 
   const [presets, variants, statsByVariant, recentSends] = await Promise.all([
-    db.select().from(messagePresets).orderBy(messagePresets.createdAt),
+    db.select().from(messagePresets).where(isNull(messagePresets.archivedAt)).orderBy(messagePresets.createdAt),
     db.select().from(messagePresetVariants).orderBy(messagePresetVariants.createdAt),
     computeVariantStats(),
     getRecentMessageSends(),

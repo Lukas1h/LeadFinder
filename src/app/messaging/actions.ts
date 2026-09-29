@@ -83,11 +83,17 @@ export async function deletePreset(id: string) {
     .from(messageSends)
     .where(eq(messageSends.presetId, id))
     .limit(1);
-  if (sent) return { error: "This preset has send history — disable it instead of deleting." };
+  if (sent) {
+    // Keep its sends (they're the contact history for those agents) and
+    // just hide it — see messagePresets.archivedAt.
+    await db.update(messagePresets).set({ archivedAt: new Date(), enabled: false }).where(eq(messagePresets.id, id));
+    revalidatePath("/messaging");
+    return { error: null, archived: true };
+  }
 
   await db.delete(messagePresets).where(eq(messagePresets.id, id));
   revalidatePath("/messaging");
-  return { error: null };
+  return { error: null, archived: false };
 }
 
 export async function createVariant(
