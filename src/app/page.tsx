@@ -1,3 +1,4 @@
+import { withLastContactFromHistory } from "@/lib/agentLastContact";
 import { Fragment, Suspense } from "react";
 import { PartyPopper, ChevronRight } from "lucide-react";
 import { db } from "@/db";
@@ -53,11 +54,12 @@ async function LeadsContent() {
       .orderBy(desc(listings.foundAt), listings.id),
     db.select().from(agents),
   ]);
-  const { byId: agentById, byPhone: agentByPhone, byName: agentByName } = buildAgentLookups(allAgents);
+  const contactAgents = await withLastContactFromHistory(allAgents);
+  const { byId: agentById, byPhone: agentByPhone, byName: agentByName } = buildAgentLookups(contactAgents);
 
   // Every other listing referenced by an agent's last-contacted pointer —
   // used only to name the listing in the duplicate-agent warning below.
-  const referencedIds = allAgents
+  const referencedIds = contactAgents
     .map((a) => a.lastContactedListingId)
     .filter((id): id is string => id != null);
   const referencedListings =

@@ -1,3 +1,4 @@
+import { withLastContactFromHistory } from "@/lib/agentLastContact";
 import { Suspense } from "react";
 import { db } from "@/db";
 import { listings, agents, type Agent } from "@/db/schema";
@@ -36,12 +37,13 @@ async function PipelineContent() {
   // Maps aren't valid props across the server/client boundary — plain
   // objects instead, converted back to a Map inside PipelineList where
   // findDuplicateAgentContact needs one.
-  const lookups = buildAgentLookups(allAgents);
+  const contactAgents = await withLastContactFromHistory(allAgents);
+  const lookups = buildAgentLookups(contactAgents);
   const agentByPhone: Record<string, Agent> = Object.fromEntries(lookups.byPhone);
   const agentByName: Record<string, Agent> = Object.fromEntries(lookups.byName);
   const agentById: Record<string, Agent> = Object.fromEntries(lookups.byId);
 
-  const referencedIds = allAgents
+  const referencedIds = contactAgents
     .map((a) => a.lastContactedListingId)
     .filter((id): id is string => id != null);
   const referencedListings =
