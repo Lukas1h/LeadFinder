@@ -15,7 +15,7 @@ import {
   type PresetType,
   type LeadStatus,
 } from "@/db/schema";
-import { and, count, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { markLatestSendResponded } from "@/lib/agentIdentity";
 
@@ -306,36 +306,43 @@ export async function resolvePendingInteraction(
     // sendMessage stamps the agent's last-contacted pointer at tap time too, for
     // follow-ups as well as first outreach, so calling the send off has to undo
     // that as well. Skipping it is what left a "Already contacted" badge
-    // asserting a conversation that no longer existed — the same bug this branch
-    // exists to undo, one table over.
+    // asserting a conversation that no longer existed.
     //
-    // Two guards, both from the rule that the interaction table is the source of
-    // truth. The pointer only clears if it still aims at this listing, so a
-    // genuine later contact isn't wiped by an earlier call-off; and only when
-    // the agent has no timeline rows at all, because if they do, their
-    // lastContactedAt reflects a real earlier contact that deserves to stand
-    // even though this particular attempt didn't happen.
+    // Undo it by pointing back at the agent's latest *real* contact, from what's
+    // left in the timeline and send log (the interaction table is the source of
+    // truth). Leaving the stamp alone whenever the agent had any other history
+    // was wrong too: the pointer kept naming this listing as the latest
+    // contact, and since the badge hides when the latest contact was about the
+    // listing you're looking at, an agent already emailed and texted about
+    // other listings showed no "Already contacted" badge at all. Only touches
+    // the pointer if it still aims at this listing, so a genuine later contact
+    // isn't overwritten by an earlier call-off.
     if (row.listingId) {
-      const [interactionCount] = await db
-        .select({ c: count() })
-        .from(agentInteractions)
-        .where(eq(agentInteractions.agentId, row.agentId));
-      const [sendCount] = await db
-        .select({ c: count() })
-        .from(messageSends)
-        .where(eq(messageSends.agentId, row.agentId));
+      const [[lastInteraction], [lastSend]] = await Promise.all([
+        db
+          .select({ at: agentInteractions.occurredAt, listingId: agentInteractions.listingId })
+          .from(agentInteractions)
+          .where(and(eq(agentInteractions.agentId, row.agentId), eq(agentInteractions.direction, "outbound"), isNull(agentInteractions.pendingSince)))
+          .orderBy(desc(agentInteractions.occurredAt))
+          .limit(1),
+        db
+          .select({ at: messageSends.sentAt, listingId: messageSends.listingId })
+          .from(messageSends)
+          .where(eq(messageSends.agentId, row.agentId))
+          .orderBy(desc(messageSends.sentAt))
+          .limit(1),
+      ]);
+      const latest =
+        lastInteraction && lastSend
+          ? lastInteraction.at >= lastSend.at
+            ? lastInteraction
+            : lastSend
+          : (lastInteraction ?? lastSend ?? null);
 
-      if ((interactionCount?.c ?? 0) === 0 && (sendCount?.c ?? 0) === 0) {
-        await db
-          .update(agents)
-          .set({ lastContactedAt: null, lastContactedListingId: null })
-          .where(
-            and(
-              eq(agents.id, row.agentId),
-              eq(agents.lastContactedListingId, row.listingId)
-            )
-          );
-      }
+      await db
+        .update(agents)
+        .set({ lastContactedAt: latest?.at ?? null, lastContactedListingId: latest?.listingId ?? null })
+        .where(and(eq(agents.id, row.agentId), eq(agents.lastContactedListingId, row.listingId)));
     }
   } else {
     await db
