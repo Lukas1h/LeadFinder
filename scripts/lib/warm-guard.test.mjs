@@ -202,6 +202,33 @@ test("brokerage and org rows are recognized", () => {
   }
 });
 
+// Every surname below was pulled from a real screening run: each one was
+// flagged "reads as an organization" and is in fact a person. A brokerage name
+// is also often an ordinary surname, so these are the cases that keep a guard
+// honest — if one regresses, this test fails rather than the fix vanishing.
+test("brokerage names that are also real surnames stay people", () => {
+  for (const n of [
+    "Jenna Hasson", "Tracy Hasson", "Shelley Hasson",
+    "Jay Keller", "Leslie Keller",
+    "Amy Williams", "Vickie Williams", "Patrick Williams", "Cindy Williams",
+    "Grant Williams", "Elizabeth Williams",
+    "Marcia Homes", "Mark Home", "Dan Team", "Bob Real", "Amy Group",
+  ]) {
+    assert.equal(looksLikeOrg(n).org, false, `${n} should read as a person`);
+  }
+});
+
+test("the same words still catch an actual firm", () => {
+  // The fix must not blunt the rule — these are all organizations.
+  for (const n of [
+    "Keller Williams Realty", "Windermere", "Coldwell Banker Team",
+    "HOMES BY CRANE", "Homes by Owner", "The Bylsma Team",
+    "Deb & Dez Real Properties", "Portland Heights", "West Salem",
+  ]) {
+    assert.equal(looksLikeOrg(n).org, true, `${n} should read as an org`);
+  }
+});
+
 test("real people are not mislabeled as orgs", () => {
   for (const n of [
     "Aaliyah McPhee", "Rebecca Rhoda", "Kenneth Terhaar", "Ashley Jensen",

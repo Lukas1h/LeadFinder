@@ -142,7 +142,7 @@ const ORG_TOKENS = new Set([
   "mortgage", "lending", "insurance", "builder", "construction", "collect",
   "collective", "listing", "listings", "webmaster", "postmaster", "unsubscribe",
   "donotreply", "coldwell", "banker", "homesmart", "keller", "williams",
-  "century", "compass", "windermere", "sotheby", "hasson", "stellar", "brokerage",
+  "century", "compass", "windermere", "sotheby", "stellar", "brokerage",
   "brokered", "toll", "brothers", "sisters", "usa", "nw", "ne", "sw", "se",
   "essentials", "thinking", "academy", "institute", "school", "university",
   "college", "solutions", "systems", "advisors", "holdings", "ventures",
@@ -156,13 +156,19 @@ const FIRM_NON_SURNAME = new Set([
   "properties", "radio", "pmi", "statement", "accessibility", "privacy",
   "terms", "unsubscribe", "donotreply", "noreply", "webmaster", "postmaster",
   "coldwell", "banker", "homesmart", "remax", "compass", "windermere",
-  "sotheby", "keller", "williams", "stellar", "knipe", "century",
+  "sotheby", "stellar", "knipe", "century",
   "hss", "kw", "kwc", "toll", "tollbrothers", "collect", "collective",
-  "homes", "mortgage", "lending", "escrow", "leasing", "rentals", "directory",
+  "mortgage", "lending", "escrow", "leasing", "rentals", "directory",
   "listing", "listings", "rokr", "rokerage", "exp",
-  // NOT here: "hasson". Cascade Hasson is a brokerage, but Hasson is also the
-  // surname of real agents (Jenna Hasson, Tracy Hasson), and listing the firm
-  // name here held two genuine people as "reads as an organization".
+  // Firm words deliberately NOT here, because each is also an ordinary surname
+  // and listing one flags real agents as organizations. Every entry below was
+  // found by screening a real list, not by guessing:
+  //   "hasson"    — held Jenna and Tracy Hasson (Cascade Hasson's principals)
+  //   "keller"    — held Jay Keller and Leslie Keller
+  //   "williams"  — held Amy, Vickie, Patrick and Cindy Williams
+  //   "homes"     — held Marcia Homes
+  // "Keller Williams Realty" still reads as a firm, because "realty" and
+  // "brokerage" are in this list — it is the bare surname that has to pass.
 ]);
 
 // A lone token from this set is an organization, not a person.
@@ -480,6 +486,13 @@ export function looksLikeOrg(name) {
     if (FIRM_NON_SURNAME.has(t)) return { org: true, reason: `firm_word:${t}` };
   }
   // A firm word in surname position ("AOR Essentials", "ENRG Thinking").
+  // "Homes by Crane", "Homes by Owner", "Sold by Owner" — a brand phrase, not
+  // a person. Matched on the "<something> by <something>" shape rather than by
+  // keyword, because dropping "homes" from the firm list (it is a surname)
+  // otherwise takes "HOMES BY CRANE" with it.
+  if (all.length >= 3 && all.includes("by") && all.some((t) => ORG_TOKENS.has(t))) {
+    return { org: true, reason: "brand_phrase_by" };
+  }
   const tail = all[all.length - 1];
   if (all.length > 1 && TRAILING_FIRM.has(tail)) return { org: true, reason: `trailing_firm_word:${tail}` };
   // Two org words, counting the surname-shaped ones ("Our Brokers",
