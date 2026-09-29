@@ -125,7 +125,7 @@ export function PipelineList({
     // import has an email and no phone, so a phone-only lookup showed them as
     // a stranger and hid the fact they were already mid-conversation.
     const attachedAgent = findAttachedAgent(lead, agentMap, nameMap, idMap);
-    const duplicateAgent = findDuplicateAgentContact(attachedAgent, lead.id);
+    const duplicateAgent = findDuplicateAgentContact(attachedAgent, lead);
     return (
       <LeadCard
         key={lead.id}

@@ -292,13 +292,24 @@ export async function resolvePendingInteraction(
     // contactedAt, see sendMessage), and only while the listing is still
     // sitting in the state this tap put it in — if it's moved on to quoted or
     // booked since, that later fact is the truer one and wins.
+    //
+    // contactedAt falls back to the latest *remaining* send for this listing
+    // rather than being wiped: calling off a second tap on a listing you'd
+    // genuinely texted before used to erase that earlier contact too
+    // (328 E 5th Ave lost its Sep 17 text this way).
     if (row.listingId && sendType === "initial_outreach") {
+      const [earlierSend] = await db
+        .select({ at: messageSends.sentAt })
+        .from(messageSends)
+        .where(eq(messageSends.listingId, row.listingId))
+        .orderBy(desc(messageSends.sentAt))
+        .limit(1);
       await db
         .update(listings)
         .set({
           status: (row.listingStatusBefore ?? "new") as LeadStatus,
           statusChangedAt: new Date(),
-          contactedAt: null,
+          contactedAt: earlierSend?.at ?? null,
         })
         .where(and(eq(listings.id, row.listingId), eq(listings.status, "contacted")));
     }
