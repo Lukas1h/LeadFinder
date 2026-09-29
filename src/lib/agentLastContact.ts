@@ -1,19 +1,18 @@
 import { db } from "@/db";
 import { agentInteractions, messageSends, type Agent } from "@/db/schema";
-import { and, eq, isNull, isNotNull } from "drizzle-orm";
+import { isNotNull } from "drizzle-orm";
 
 /**
- * Returns the agents with lastContactedAt / lastContactedListingId taken
- * from the real contact history — every send in message_sends and every
- * settled outbound interaction — instead of trusting the stored stamp.
+ * Returns the agents with lastContactedAt / lastContactedListingId set from
+ * their contact history — exactly what the agent's "Contact history" list
+ * shows: every send in message_sends and every agent_interactions row, in
+ * either direction. An agent with an empty history gets null, so the
+ * "Already contacted" badge (which just checks lastContactedAt) shows if
+ * and only if that list has anything in it.
  *
- * The stamp is written in a dozen places (sends, email compose, logged
- * calls, call-offs, backfills, agent merges) and some of them miss it: on
- * 2026-09-29 four agents with logged calls and cold emails had no stamp at
- * all, and two more had a stamp pointing at a listing they were never
- * messaged about. The "Already contacted" badge reads these two fields, so
- * a drifted stamp meant a missing badge. History wins whenever it has
- * anything; the stored stamp is only the fallback for agents with none.
+ * The stored stamp on the agents row is deliberately ignored here: it's
+ * written from a dozen places and drifted both ways — badges missing for
+ * agents with real history, and badges shown for agents with none.
  */
 export async function withLastContactFromHistory(allAgents: Agent[]): Promise<Agent[]> {
   const [sends, interactions] = await Promise.all([
@@ -23,8 +22,7 @@ export async function withLastContactFromHistory(allAgents: Agent[]): Promise<Ag
       .where(isNotNull(messageSends.agentId)),
     db
       .select({ agentId: agentInteractions.agentId, at: agentInteractions.occurredAt, listingId: agentInteractions.listingId })
-      .from(agentInteractions)
-      .where(and(eq(agentInteractions.direction, "outbound"), isNull(agentInteractions.pendingSince))),
+      .from(agentInteractions),
   ]);
 
   const latest = new Map<string, { at: Date; listingId: string | null }>();
@@ -40,6 +38,6 @@ export async function withLastContactFromHistory(allAgents: Agent[]): Promise<Ag
 
   return allAgents.map((agent) => {
     const contact = latest.get(agent.id);
-    return contact ? { ...agent, lastContactedAt: contact.at, lastContactedListingId: contact.listingId } : agent;
+    return { ...agent, lastContactedAt: contact?.at ?? null, lastContactedListingId: contact?.listingId ?? null };
   });
 }

@@ -1,4 +1,4 @@
-import type { Agent, AgentRelationshipStatus, LeadStatus, Listing } from "@/db/schema";
+import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { daysSince } from "@/lib/format";
 
 // Statuses that mean "we already have a relationship" — the opposite of cold
@@ -122,22 +122,13 @@ export function byLeadPriority(a: Listing, b: Listing): number {
  * for the exact people most worth warning about: 18 of the 20 contacted agents
  * on live leads, all of them with a real send on file.
  *
- * Contact about *this* listing is only left unbadged while that conversation
- * is live (the listing sits in contacted/quoted/booked/declined, where the
- * badge would just restate its own status). Anywhere else it's the most
- * important warning of all: a listing you already texted about that's back
- * on the leads page — a price cut resurfaced it, or a called-off send reset
- * it — used to show no badge at all (328 E 5th Ave, 2026-09-29).
+ * The rule is deliberately simple: the badge shows if and only if the
+ * agent's contact history has anything in it. Pages pass agents through
+ * withLastContactFromHistory (src/lib/agentLastContact.ts) first, which sets
+ * lastContactedAt from that history (null when it's empty).
  */
-const LIVE_CONVERSATION_STATUSES: LeadStatus[] = ["contacted", "quoted", "booked", "declined"];
-
-export function findDuplicateAgentContact(
-  agent: Agent | null,
-  listing: { id: string; status: LeadStatus }
-): Agent | null {
-  if (!agent?.lastContactedAt) return null;
-  if (agent.lastContactedListingId === listing.id && LIVE_CONVERSATION_STATUSES.includes(listing.status)) return null;
-  return agent;
+export function findDuplicateAgentContact(agent: Agent | null): Agent | null {
+  return agent?.lastContactedAt ? agent : null;
 }
 
 // Criteria for listings unlikely to be a good fit (grouped at the bottom of the leads page):
