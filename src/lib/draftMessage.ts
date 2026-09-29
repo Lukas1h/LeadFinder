@@ -98,7 +98,7 @@ function localityNudge(input: DraftMessageInput): string {
   const city = input.city ?? "the listing's city";
   const where = isLocalArea(input.city)
     ? `This listing is in his home area, so "I'm local" or "I'm local to the ${city} area" is accurate.`
-    : `This listing is outside his home area, so don't call him local there. "I do work in ${city}" or "I shoot in the ${city} area" is fine, or lean on his 24-hour turnaround.`;
+    : `This listing is outside his home area, so don't call him local there. "I do work around ${city}" is fine, or lean on his 24 hour turnaround. If ${city} is a small town, name the larger nearby area instead (see the small town rule below).`;
   return `Lukas lives in the Roseburg, OR area. NEVER say he's "from" a city, "based in" a city, or a photographer "here in" a city, anywhere in the message, including Roseburg's neighbors: it reads like a false claim to live there. ${where}`;
 }
 
@@ -108,10 +108,10 @@ function streetNudge(input: DraftMessageInput, street: string): string {
 }
 
 const EXAMPLE_BANK = `1. Coming Soon / No Photos
-Hey {{firstName}}, I'm Lukas. I just saw your coming-soon listing on {{street}}. Do you have photos lined up yet? If not, I'd be happy to get you taken care of this week. I'm local and shoot photo + drone.
+Hey {{firstName}}, I'm Lukas. I just saw your coming soon listing on {{street}}. Do you have photos lined up yet? If not, I'd be happy to get you taken care of this week. I'm local and shoot photo + drone.
 
 2. Coming Soon / Convenience
-Hey {{firstName}}, I'm Lukas. Just saw your coming-soon listing on {{street}}. Do you already have photography handled? If not, I can take care of the photos + drone and get everything turned around quickly.
+Hey {{firstName}}, I'm Lukas. Just saw your coming soon listing on {{street}}. Do you already have photography handled? If not, I can take care of the photos + drone and get everything turned around quickly.
 
 3. Poor Photography
 Hey {{firstName}}, I'm Lukas. I came across {{street}} and the current photos honestly don't do the property justice. If you want professional photos taken, I'd be happy to do photo + drone locally.
@@ -132,7 +132,7 @@ Hey {{firstName}}, I'm Lukas. I came across {{street}} and it looks like a prope
 Hey {{firstName}}, I'm Lukas. I'm guessing you probably already have a photographer you like, so I'm not trying to replace them. I'd just like to be a backup if they're booked, out of town, or you ever need something shot quickly. I'm local and do photo + drone.
 
 9. Backup / Very Casual
-Hey {{firstName}}, I'm Lukas. Just putting myself on your radar as a local backup photographer. If you ever get a last-minute listing or need a quick turnaround, feel free to text me. I do photo, drone, and video.
+Hey {{firstName}}, I'm Lukas. Just putting myself on your radar as a local backup photographer. If you ever get a last minute listing or need a quick turnaround, feel free to text me. I do photo, drone, and video.
 
 10. Agent Relationship / No Specific Need
 Hey {{firstName}}, I'm Lukas. I'm a local real estate photographer and wanted to introduce myself. I shoot professional photo + drone, and I'm always happy to help if you ever need another photographer.
@@ -144,7 +144,7 @@ Hey {{firstName}}, I'm Lukas. I've seen your listings around {{city}} and it loo
 Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}} and wanted to reach out. I'm a local real estate photographer and shoot photo + drone. If you still need someone for the property, I'd be happy to get you taken care of.
 
 13. Professional Photos / Short & Clean (preferred for poor photography — this is THE pattern; do not say "refresh")
-Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}}. If you want to get some professional photos taken for it, I'm local to the {{city}} area and have a 24-hour turnaround.`;
+Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}}. If you want to get some professional photos taken for it, I'm local to the {{city}} area and have a 24 hour turnaround.`;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const daysAgo = (d: Date) => Math.max(0, Math.floor((Date.now() - d.getTime()) / DAY_MS));
@@ -209,7 +209,7 @@ How to choose the approach — determine the strongest reason to contact this ag
 3. If the photos are good but there's no video or no aerial/drone shot among them, offer the specific missing service.
 4. If the listing has been sitting a long time (months on the market) or has had a price cut, that's a strong, natural opening: new professional photos or a video can get a listing that's been sitting a second look from buyers. Mention it tactfully and in passing ("looks like it's been on the market a while" / "saw the price drop"), never implying the agent did something wrong, and never quote the dollar amount of the cut.
 5. If the property is unusually expensive, attractive, architectural, unique, or visually interesting, emphasize that strong photography could showcase it particularly well.
-6. If the agent appears high-volume or established (see "Listings we've seen from this agent" below) and the photos already look professional, do not try to convince them to replace that photographer — position Lukas as another local option or backup for busy/last-minute/quick-turnaround situations.
+6. If the agent appears high-volume or established (see "Listings we've seen from this agent" below) and the photos already look professional, do not try to convince them to replace that photographer — position Lukas as another local option or backup for busy weeks, last minute listings, or quick turnarounds.
 7. If none of the above clearly applies, simply introduce Lukas as a real estate photographer and put him on the agent's radar.
 
 Do not automatically criticize the photography — if it's already good, acknowledge that implicitly and use the backup/additional-photographer approach (case 3 or 6 above).
@@ -268,7 +268,7 @@ How to choose the email subject and approach — determine the strongest reason 
 3. If the photos are good but there's no video or drone shot, offer the specific missing service.
 3b. If the listing has been on the market a long time or has had a price cut, new professional photos or a video can get it a second look. Mention it tactfully, never blaming the agent, and don't quote the cut amount.
 4. If the property is expensive, visually interesting, or architectural, emphasize how strong photography can showcase it.
-5. If the agent appears established and photos look professional, position Lukas as a backup for busy/last-minute situations.
+5. If the agent appears established and photos look professional, position Lukas as a backup for busy weeks or last minute situations.
 6. If none above applies, simply introduce Lukas as a real estate photographer.
 
 Don't automatically criticize the photos — if they're already good, acknowledge that and use the backup approach.
@@ -337,12 +337,14 @@ export function buildSmsPrompt(input: DraftMessageInput): string {
 ${instructionBlock}
 ${scenarioPrompt}
 
-Location: ${localityNudge(input)} The 24-hour turnaround is worth including when it fits naturally — he can have photos done within a day.
+Location: ${localityNudge(input)} The 24 hour turnaround is worth including when it fits naturally — he can have photos done within a day.
 
 ${streetNudge(input, street)}
 
 Additional writing rules (these override anything above if they conflict, except Lukas's own instruction above, which wins over everything):
 - NEVER use an em dash (—) or en dash (–), anywhere. Use a period or comma instead.
+- NEVER use a hyphen (-) to join words. Write "24 hour", "last minute", "coming soon", "quick turnaround". Nobody types a hyphen into a text message, so one there is the clearest possible tell that a machine wrote it. This can't be cleaned up afterwards the way a dash can — a regex would turn "well known" into "wellknown" — so it has to come out right the first time.
+- If the listing is in a small town, don't put yourself "in the {{city}} area". Name the bigger area people actually say instead: a town near Portland reads as "the Portland area", a small town near Roseburg as "the Roseburg area", a town near Medford as "the Medford area". Use the town's own name only when it's a place people recognise on its own, like Eugene, Medford, Portland or Salem. If you're not confident which larger area it belongs to, skip naming an area at all rather than guess.
 - Zero or one exclamation point in the whole message, never more. Prefer a period.
 - Never use these words/phrases — dead giveaways of AI writing: "I noticed," "I wanted to reach out," "I hope this finds you," "don't hesitate," "in case you," "showcase"/"showcasing," "ensure," "delve," "reach out," "take care of," "beautifully," "stunning," "reliable," "pivotal," "crucial."
 - Never use the word "refresh" or "updated photography" when the photos are bad — instead offer to take professional photos for the listing (frame it as getting the place photographed properly, not as sprucing up old photos).
@@ -370,7 +372,7 @@ function buildEmailPrompt(input: DraftMessageInput): string {
 ${instructionBlock}
 ${scenarioPrompt}
 
-Location: ${localityNudge(input)} The 24-hour turnaround is worth including when it fits naturally — he can have photos done within a day.
+Location: ${localityNudge(input)} The 24 hour turnaround is worth including when it fits naturally — he can have photos done within a day.
 
 ${streetNudge(input, street)}
 
