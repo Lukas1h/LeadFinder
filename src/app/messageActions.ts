@@ -99,10 +99,10 @@ export async function ensureAiDraftPresets(type: PresetType) {
   const [existing] = await db
     .select({ id: messagePresets.id })
     .from(messagePresets)
-    .where(and(eq(messagePresets.type, type), eq(messagePresets.aiGenerated, true)));
+    .where(and(eq(messagePresets.type, type), eq(messagePresets.channel, "sms"), eq(messagePresets.aiGenerated, true)));
   if (existing) return;
 
-  await db.insert(messagePresets).values({ name: AI_DRAFT_PRESET_NAME, type, aiGenerated: true });
+  await db.insert(messagePresets).values({ name: AI_DRAFT_PRESET_NAME, type, channel: "sms", aiGenerated: true });
 }
 
 export interface PresetOption {
@@ -308,7 +308,14 @@ async function getAiPreset(type: PresetType): Promise<{ id: string; name: string
   const [preset] = await db
     .select({ id: messagePresets.id, name: messagePresets.name })
     .from(messagePresets)
-    .where(and(eq(messagePresets.type, type), eq(messagePresets.aiGenerated, true), eq(messagePresets.enabled, true)));
+    .where(
+      and(
+        eq(messagePresets.type, type),
+        eq(messagePresets.channel, "sms"),
+        eq(messagePresets.aiGenerated, true),
+        eq(messagePresets.enabled, true)
+      )
+    );
   return preset ?? null;
 }
 
@@ -348,7 +355,14 @@ async function buildAiDraftOption(
   const [preset] = await db
     .select({ id: messagePresets.id, name: messagePresets.name })
     .from(messagePresets)
-    .where(and(eq(messagePresets.type, type), eq(messagePresets.aiGenerated, true), eq(messagePresets.enabled, true)));
+    .where(
+      and(
+        eq(messagePresets.type, type),
+        eq(messagePresets.channel, "sms"),
+        eq(messagePresets.aiGenerated, true),
+        eq(messagePresets.enabled, true)
+      )
+    );
   if (!preset) return null;
 
   let agent: Agent | null = null;
