@@ -13,6 +13,16 @@ const STREET_SUFFIXES: Record<string, string> = {
   loop: "loop", hwy: "highway", highway: "highway",
 };
 
+// Compass prefixes. A spelled-out direction is only kept when it's already
+// spelled out in the address, because that's when it's part of the street's
+// actual name ("Southgate", "Northgate Drive") rather than a postal prefix
+// someone typed. An abbreviation is always dropped: it exists to save the
+// county characters, and reading it back as "South Bank road" in a text
+// message is what makes the sentence sound like a form letter.
+const SPELLED_DIRECTIONALS = new Set([
+  "north", "south", "east", "west",
+  "northeast", "northwest", "southeast", "southwest",
+]);
 const DIRECTIONALS: Record<string, string> = {
   n: "North", s: "South", e: "East", w: "West", ne: "Northeast", nw: "Northwest", se: "Southeast",
   sw: "Southwest", north: "North", south: "South", east: "East", west: "West",
@@ -60,9 +70,11 @@ export function naturalStreetName(address: string | null): string | null {
     return `highway ${rest.slice(1).join(" ")}`;
   }
 
+  // A spelled-out leading direction is part of the name and stays; an
+  // abbreviated one is a postal prefix and goes. See SPELLED_DIRECTIONALS.
   let leadingDirection: string | null = null;
   if (rest.length > 1 && DIRECTIONALS[clean(rest[0])]) {
-    leadingDirection = DIRECTIONALS[clean(rest[0])];
+    if (SPELLED_DIRECTIONALS.has(clean(rest[0]))) leadingDirection = DIRECTIONALS[clean(rest[0])];
     rest = rest.slice(1);
   }
   // A trailing direction ("Granada Way S") adds nothing when said aloud.

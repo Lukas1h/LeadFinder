@@ -131,22 +131,6 @@ export function findDuplicateAgentContact(agent: Agent | null): Agent | null {
   return agent?.lastContactedAt ? agent : null;
 }
 
-// Criteria for listings unlikely to be a good fit (grouped at the bottom of the leads page):
-// 1. High photo score (> 7, pro photography) on lower-priced homes (< $650,000) that likely don't need video.
-// 2. The attached agent was marked as declined.
-// 3. No agent attached at all — no name, no phone, no linked row.
-export const UNLIKELY_MATCH_MIN_PHOTO_SCORE = 7;
-export const UNLIKELY_MATCH_MAX_PRICE = 650_000;
-
-export function isPhotoPriceUnlikelyMatch(lead: Pick<Listing, "score" | "price">): boolean {
-  return (
-    lead.score != null &&
-    lead.score > UNLIKELY_MATCH_MIN_PHOTO_SCORE &&
-    lead.price != null &&
-    lead.price < UNLIKELY_MATCH_MAX_PRICE
-  );
-}
-
 /**
  * Builds the lookups every page needs to answer "who is the agent on this
  * listing, and have I already been talking to them?".
@@ -267,14 +251,3 @@ export function isAgentUnattached(
   );
 }
 
-export function isUnlikelyLeadMatch(
-  lead: Listing,
-  agentByPhone: Map<string, Agent>,
-  agentByName?: Map<string, Agent>
-): boolean {
-  return (
-    isPhotoPriceUnlikelyMatch(lead) ||
-    isAgentDeclined(lead, agentByPhone, agentByName) ||
-    isAgentUnattached(lead)
-  );
-}

@@ -1,5 +1,6 @@
 import type { AgentRelationshipStatus, PresetType, LeadStatus, Listing, Agent } from "@/db/schema";
 import { naturalStreetName } from "@/lib/sms";
+import { leadSectionForListing, LEAD_SECTION_LABELS, LEAD_SECTION_BRIEFS } from "@/lib/leadSections";
 import { fetchImagePart, callGemini } from "@/lib/gemini";
 
 // Gemini 3.5 Flash (not Lite) — this is a low-volume, synchronous,
@@ -104,7 +105,7 @@ function localityNudge(input: DraftMessageInput): string {
 
 /** Shared street-naming rule — the street is the one detail every message references. */
 function streetNudge(input: DraftMessageInput, street: string): string {
-  return `How to say the street: say it the way a person would in a casual text. The suggested form is "${street}" (full address: ${input.address ?? "unknown"}). Spell out directions ("South Bank road", never "S Bank"). Drop the street type when the name stands on its own ("your listing on Burntwood"), keep it when the bare name would sound odd ("Main street", "Oak lane", "5th street", "South Bank road"). When you do include the street type, write it in lowercase ("road", "street", "avenue", never "Road"/"Rd"). Never use abbreviations like Rd, St, Ave, Dr, S, NW.`;
+  return `How to say the street: say it the way a person would in a casual text. The suggested form is "${street}" (full address: ${input.address ?? "unknown"}). Use the street name as given and do NOT add a compass direction that isn't part of the name — no "south", "north", "east" or "west" unless the street is genuinely called that (Southgate, Northgate). "9188 S Bank Dr" is "your listing on Bank Drive", never "your listing on South Bank Drive". Drop the street type when the name stands on its own ("your listing on Burntwood"), keep it when the bare name would sound odd ("Main street", "Oak lane", "5th street"). When you do include the street type, write it in lowercase ("road", "street", "avenue", never "Road"/"Rd").`;
 }
 
 const EXAMPLE_BANK = `1. Coming Soon / No Photos
@@ -175,6 +176,14 @@ function formatListingFacts(input: DraftMessageInput): string {
   lines.push(`Photo count on listing: ${input.photoCount ?? "unknown"}`);
   if (l?.score != null) {
     lines.push(`Our automated photo-quality score: ${l.score}/10${l.scoreReasoning ? ` (${l.scoreReasoning})` : ""} — a second opinion only; judge the attached photos yourself`);
+  }
+  // Which Leads-page section this listing sits in, and what that section is
+  // for. Without it the model picks its own angle from the photo score alone
+  // and pitches photo quality at agents whose photos are already fine — the
+  // one thing the backup section exists to avoid saying.
+  if (input.listing) {
+    const section = leadSectionForListing(input.listing, input.agentRelationshipStatus);
+    lines.push(`Leads page section: ${LEAD_SECTION_LABELS[section]} — ${LEAD_SECTION_BRIEFS[section]}`);
   }
   if (input.brokerName) lines.push(`Brokerage: ${input.brokerName}`);
   lines.push(`Lukas's pipeline status for this listing: ${input.status}`);

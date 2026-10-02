@@ -10,8 +10,8 @@ import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
 import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, WarmAgentBadge } from "./badges";
-import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isUnlikelyLeadMatch, findAttachedAgent, buildAgentLookups, isWarmAgentStatus } from "@/lib/pipeline";
-import { daysSince } from "@/lib/format";
+import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, findAttachedAgent, buildAgentLookups, isWarmAgentStatus } from "@/lib/pipeline";
+import { leadSectionForListing, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
 import { LeadsSkeleton } from "./loading";
 
@@ -71,30 +71,21 @@ async function LeadsContent() {
       : [];
   const addressById = new Map(referencedListings.map((l) => [l.id, l.address]));
 
-  // Listings unlikely to be good matches (high photo score with price < $650k,
-  // or agent marked declined) are demoted to a dedicated section at the bottom.
-  const likelyLeads: Listing[] = [];
-  const unlikelyMatches: Listing[] = [];
+  // Four sections instead of the old "likely / unlikely" split — see
+  // lib/leadSections.ts for why the old photo/price test was demoting 86% of
+  // the list. The section is decided from the listing plus its resolved
+  // agent's status, since "agent declined" and "no agent at all" are both
+  // reasons a lead is unreachable.
+  const sections: Record<LeadSection, Listing[]> = { photo: [], video: [], backup: [], unlikely: [] };
   for (const lead of leads) {
-    if (isUnlikelyLeadMatch(lead, agentByPhone, agentByName)) {
-      unlikelyMatches.push(lead);
-    } else {
-      likelyLeads.push(lead);
-    }
+    const attached = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
+    sections[leadSectionForListing(lead, attached?.relationshipStatus)].push(lead);
   }
-
-  // Cron runs once/day, so anything found in the last 24h is "today's
-  // batch" — everything else is backlog from a day (or several) you
-  // haven't gotten to yet. Within each, priority order combines coming-soon
-  // status, price-weighted photo opportunity, and listing age (see
-  // leadPriorityScore in lib/pipeline.ts). A listing a price cut
-  // resurfaced counts as today's batch too, so measure age from whichever of
-  // foundAt/resurfacedAt is more recent rather than foundAt alone.
-  const freshAt = (l: Listing) =>
-    l.resurfacedAt && l.resurfacedAt > l.foundAt ? l.resurfacedAt : l.foundAt;
-  const newToday = likelyLeads.filter((l) => daysSince(freshAt(l)) < 1).sort(byLeadPriority);
-  const earlier = likelyLeads.filter((l) => daysSince(freshAt(l)) >= 1).sort(byLeadPriority);
-  unlikelyMatches.sort(byLeadPriority);
+  // Within a section, order by the same priority score the pipeline uses:
+  // coming-soon first, then price-weighted photo opportunity, then age.
+  for (const key of Object.keys(sections) as LeadSection[]) {
+    sections[key].sort(byLeadPriority);
+  }
 
   function card(lead: Listing) {
     const attachedAgent = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
@@ -179,44 +170,26 @@ async function LeadsContent() {
         </div>
       ) : (
         <div className="flex flex-col gap-8">
-          {newToday.length === 0 && earlier.length === 0 && unlikelyMatches.length > 0 && (
-            <p className="text-muted-foreground/70 text-sm">No new priority leads right now.</p>
-          )}
-
-          {newToday.length > 0 && (
-            <section>
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                New today ({newToday.length})
-              </h2>
-              <div className="flex flex-col gap-4">{newToday.map(card)}</div>
-            </section>
-          )}
-
-          {earlier.length > 0 && (
-            <section>
-              {newToday.length > 0 && <Separator className="mb-8" />}
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Earlier ({earlier.length})
-              </h2>
-              <div className="flex flex-col gap-4">{earlier.map(card)}</div>
-            </section>
-          )}
-
-          {unlikelyMatches.length > 0 && (
-            <section>
-              {(newToday.length > 0 || earlier.length > 0) && <Separator className="mb-8" />}
-              <details className="group/details">
-                <summary className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
-                  <span className="flex items-center gap-1">
-                    <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
-                    Unlikely matches ({unlikelyMatches.length})
-                  </span>
-                  <PassAllListingsButton listingIds={unlikelyMatches.map((l) => l.id)} />
-                </summary>
-                <div className="flex flex-col gap-4 mt-3">{unlikelyMatches.map(card)}</div>
-              </details>
-            </section>
-          )}
+          {LEAD_SECTION_ORDER.map((key, index) => {
+            const items = sections[key];
+            if (items.length === 0) return null;
+            const isUnlikely = key === "unlikely";
+            return (
+              <section key={key}>
+                {index > 0 && <Separator className="mb-8" />}
+                <details className="group/details" open={!isUnlikely}>
+                  <summary className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
+                    <span className="flex items-center gap-1">
+                      <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
+                      {LEAD_SECTION_LABELS[key]} ({items.length})
+                    </span>
+                    {isUnlikely && <PassAllListingsButton listingIds={items.map((l) => l.id)} />}
+                  </summary>
+                  <div className="flex flex-col gap-4 mt-3">{items.map(card)}</div>
+                </details>
+              </section>
+            );
+          })}
         </div>
       )}
     </>
