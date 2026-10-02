@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Mail, MessageCircle, Send, SkipForward, Trash2, Pencil, Undo2, Link2 } from "lucide-react";
+import { Mail, MessageCircle, Send, SkipForward, Trash2, Pencil, Undo2, Link2, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   markQueuedTextOpened,
   setQueuedMessageStatus,
   deleteQueuedMessage,
+  retryQueuedDraft,
   type QueueItem,
 } from "./actions";
 import { EditQueuedDialog } from "./EditQueuedDialog";
@@ -41,11 +42,19 @@ function relative(date: Date, now: number): string {
 export function QueueList({ items }: { items: QueueItem[] }) {
   // Re-evaluate what's due every 30s, so a message slides from Scheduled to
   // Due now without a reload.
+  const router = useRouter();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(timer);
   }, []);
+  // While AI drafts are being written, poll so they appear without a reload.
+  const drafting = items.some((i) => i.draftStatus === "pending");
+  useEffect(() => {
+    if (!drafting) return;
+    const timer = setInterval(() => router.refresh(), 5_000);
+    return () => clearInterval(timer);
+  }, [drafting, router]);
 
   const queued = items.filter((i) => i.status === "queued");
   const due = queued.filter((i) => !i.waitingOnId && new Date(i.dueAt).getTime() <= now);
@@ -111,6 +120,8 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
   const [isPending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
   const isQueued = item.status === "queued";
+  const drafting = item.draftStatus === "pending";
+  const draftFailed = item.draftStatus === "failed";
   const isEmail = item.channel === "email";
   const to = item.recipient ?? (isEmail ? item.agentEmail : item.agentPhone);
   const isDue = isQueued && !item.waitingOnId && new Date(item.dueAt).getTime() <= now;
@@ -190,15 +201,39 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
         </div>
       )}
 
-      {isEmail && item.subject && <p className="text-sm font-medium">{item.subject}</p>}
-      <p className="text-sm text-foreground/90 whitespace-pre-wrap line-clamp-6">{item.body}</p>
+      {drafting ? (
+        <p className="text-sm text-muted-foreground italic">Writing AI draft…</p>
+      ) : draftFailed ? (
+        <p className="text-sm text-destructive">The AI draft failed — retry it, or edit to write it yourself.</p>
+      ) : (
+        <>
+          {isEmail && item.subject && <p className="text-sm font-medium">{item.subject}</p>}
+          <p className="text-sm text-foreground/90 whitespace-pre-wrap line-clamp-6">{item.body}</p>
+        </>
+      )}
 
       {isQueued ? (
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button size="sm" onClick={handleSend} disabled={isPending || !to}>
-            <Send />
-            {isEmail ? "Send email" : "Send text"}
-          </Button>
+          {draftFailed ? (
+            <Button
+              size="sm"
+              onClick={() =>
+                run(async () => {
+                  const result = await retryQueuedDraft(item.id);
+                  if (result.error) toast.error(result.error);
+                })
+              }
+              disabled={isPending}
+            >
+              <RotateCcw />
+              Retry draft
+            </Button>
+          ) : (
+            <Button size="sm" onClick={handleSend} disabled={isPending || !to || drafting}>
+              <Send />
+              {isEmail ? "Send email" : "Send text"}
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => setEditing(true)} disabled={isPending}>
             <Pencil />
             Edit

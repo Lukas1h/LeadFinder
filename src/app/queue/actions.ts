@@ -17,6 +17,7 @@ import { and, eq, inArray, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { AI_DRAFT_VARIANT_SENTINEL } from "@/lib/messageTemplate";
 import { nextSendTime } from "@/lib/queue";
+import { generatePendingDrafts } from "@/lib/queueMessages";
 import { sendMessage, ensureBlankSmsPreset } from "../messageActions";
 import { sendListingEmail, sendComposeEmail, ensureBlankEmailPreset } from "../composeEmailActions";
 import { startPendingInteraction } from "../agents/interactionActions";
@@ -26,6 +27,8 @@ export interface QueueItem {
   channel: MessageChannel;
   type: PresetType;
   status: QueuedMessageStatus;
+  /** "pending" while its AI draft is being written, "failed" if that errored; null = ready. */
+  draftStatus: string | null;
   subject: string | null;
   body: string;
   recipient: string | null;
@@ -113,6 +116,7 @@ export async function getQueue(agentId?: string): Promise<QueueItem[]> {
         channel: q.channel,
         type: q.type,
         status: q.status,
+        draftStatus: q.draftStatus,
         subject: q.subject,
         body: q.body,
         recipient: q.recipient,
@@ -153,6 +157,8 @@ export async function updateQueuedMessage(
       body: input.body.trim(),
       recipient: input.recipient?.trim() || null,
       sendAfter: input.sendAfter,
+      // Written by hand now, so it no longer waits on (or gets overwritten by) an AI draft.
+      draftStatus: null,
     })
     .where(and(eq(queuedMessages.id, id), eq(queuedMessages.status, "queued")));
   revalidateQueue();
@@ -175,7 +181,14 @@ async function loadForSend(id: string) {
     .from(queuedMessages)
     .innerJoin(agents, eq(queuedMessages.agentId, agents.id))
     .where(eq(queuedMessages.id, id));
-  return row?.q.status === "queued" ? row : null;
+  return row?.q.status === "queued" && row.q.draftStatus == null ? row : null;
+}
+
+/** Re-runs a failed (or stuck) AI draft for one queued message. */
+export async function retryQueuedDraft(id: string): Promise<{ error?: string }> {
+  const drafted = await generatePendingDrafts([id]);
+  revalidateQueue();
+  return drafted ? {} : { error: "The AI draft failed again" };
 }
 
 /** The protected Blank preset for a channel — attribution for a row queued without one. */
@@ -218,7 +231,7 @@ async function markSent(id: string, interactionId: string | null) {
 /** Sends a queued email now, through the same actions the email dialogs use. */
 export async function sendQueuedEmail(id: string): Promise<{ error?: string }> {
   const row = await loadForSend(id);
-  if (!row) return { error: "Already sent or removed" };
+  if (!row) return { error: "Already sent, removed, or still drafting" };
   const { q, agent } = row;
   if (q.channel !== "email") return { error: "Not an email" };
   const to = q.recipient ?? agent.email;

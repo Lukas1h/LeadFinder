@@ -717,6 +717,12 @@ export const queuedMessages = pgTable("queued_messages", {
   variantId: uuid("variant_id").references(() => messagePresetVariants.id, { onDelete: "set null" }),
   subject: text("subject"),
   body: text("body").notNull(),
+  // AI-drafted rows are queued before their draft exists: "pending" until
+  // the draft is written into body/subject (src/lib/queueMessages.ts), or
+  // "failed" if drafting errored. Neither can be sent. Null = ready.
+  draftStatus: text("draft_status"),
+  // Optional steering for the AI draft ("mention the price cut").
+  draftInstruction: text("draft_instruction"),
   // Overrides the agent's phone/email on file, when set.
   recipient: text("recipient"),
   // Earliest it should go out. Sends are further held to 8 AM–9 PM Pacific

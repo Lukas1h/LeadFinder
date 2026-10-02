@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { connection } from "next/server";
+import { after, connection } from "next/server";
+import { generatePendingDrafts } from "@/lib/queueMessages";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getQueue } from "./actions";
 import { QueueList } from "./QueueList";
@@ -19,5 +20,7 @@ async function QueueContent() {
   // Due/not-due is read from the clock, so defer to request time.
   await connection();
   const items = await getQueue();
+  // Pick up AI drafts whose original run died (pending for 5+ minutes).
+  if (items.some((i) => i.draftStatus === "pending")) after(() => generatePendingDrafts());
   return <QueueList items={items} />;
 }

@@ -13,7 +13,7 @@ export function registerListingTools(server: McpServer): void {
     {
       title: "Search/filter listings",
       description:
-        "Filters listings by status, location, price, photo score, coming-soon flag, and whether they have a booking. All filters are ANDed together; omit a filter to not constrain on it.",
+        "Filters listings by status, Leads-page section, when found, location, price, photo score, coming-soon flag, and whether they have a booking. All filters are ANDed together; omit a filter to not constrain on it.",
       inputSchema: {
         status: z.enum(LEAD_STATUSES).optional(),
         city: z.string().optional(),
@@ -24,12 +24,17 @@ export function registerListingTools(server: McpServer): void {
         maxScore: z.number().int().optional(),
         isComingSoon: z.boolean().optional(),
         hasBooking: z.boolean().optional(),
+        leadSection: z
+          .enum(["photo", "video", "backup", "unlikely"])
+          .optional()
+          .describe("The Leads page section (photo/video/backup opportunities, unlikely matches) — only meaningful for status 'new'"),
+        foundAfter: z.string().datetime({ offset: true }).optional().describe("Only listings first found at or after this time"),
         agentQuery: z.string().optional().describe("Substring match against the listing's agent name or phone"),
         sortBy: z.enum(["newest", "oldest", "price_desc", "price_asc", "score_asc", "score_desc"]).default("newest"),
         limit: z.number().int().min(1).max(200).default(50),
       },
     },
-    async ({ status, city, state, minPrice, maxPrice, minScore, maxScore, isComingSoon, hasBooking, agentQuery, sortBy, limit }) => {
+    async ({ status, city, state, minPrice, maxPrice, minScore, maxScore, isComingSoon, hasBooking, leadSection, foundAfter, agentQuery, sortBy, limit }) => {
       const conditions = [];
       if (status) conditions.push(eq(listings.status, status));
       if (city) conditions.push(eq(listings.city, city));
@@ -39,6 +44,8 @@ export function registerListingTools(server: McpServer): void {
       if (minScore != null) conditions.push(gte(listings.score, minScore));
       if (maxScore != null) conditions.push(lte(listings.score, maxScore));
       if (isComingSoon != null) conditions.push(eq(listings.isComingSoon, isComingSoon));
+      if (leadSection) conditions.push(eq(listings.leadSection, leadSection));
+      if (foundAfter) conditions.push(gte(listings.foundAt, new Date(foundAfter)));
 
       let rows = await db
         .select()

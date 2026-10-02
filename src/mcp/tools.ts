@@ -20,6 +20,7 @@ import { registerBookingTools } from "./tools/bookings";
 import { registerMessagingTools } from "./tools/messaging";
 import { registerInteractionTools } from "./tools/interactions";
 import { registerScheduleTools } from "./tools/schedule";
+import { registerQueueTools } from "./tools/queue";
 
 export function registerLeadFinderTools(server: McpServer): void {
   registerAgentTools(server);
@@ -28,4 +29,5 @@ export function registerLeadFinderTools(server: McpServer): void {
   registerMessagingTools(server);
   registerInteractionTools(server);
   registerScheduleTools(server);
+  registerQueueTools(server);
 }
