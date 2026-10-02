@@ -422,8 +422,7 @@ export function AgentDetailDialog({
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {(callHref || agent.phone || agent.email) && (
-              <div className="flex gap-2">
+            <div className="flex gap-2">
                 {callHref && (
                   <Button variant="outline" size="sm" asChild className="flex-1">
                     <a href={callHref} onClick={() => logHandoff("call")}>
@@ -440,16 +439,15 @@ export function AgentDetailDialog({
                     </a>
                   </Button>
                 )}
-                {agent.email && (
-                  <Button variant="outline" size="sm" asChild className="flex-1">
-                    <Link href={`/messaging?agent=${agent.id}`}>
-                      <Mail />
-                      Email
-                    </Link>
-                  </Button>
-                )}
+                {/* Always shown: with no email on file, Compose still opens with the
+                    name filled in, ready for an address to be pasted. */}
+                <Button variant="outline" size="sm" asChild className="flex-1">
+                  <Link href={`/messaging?agent=${agent.id}`}>
+                    <Mail />
+                    Email
+                  </Link>
+                </Button>
               </div>
-            )}
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={startEditingContact}>
                 <Pencil />
