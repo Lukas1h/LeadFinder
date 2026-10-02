@@ -133,7 +133,7 @@ Hey {{firstName}}, I'm Lukas. I came across {{street}} and it looks like a prope
 Hey {{firstName}}, I'm Lukas. I'm guessing you probably already have a photographer you like, so I'm not trying to replace them. I'd just like to be a backup if they're booked, out of town, or you ever need something shot quickly. I'm local and do photo + drone.
 
 9. Backup / Very Casual
-Hey {{firstName}}, I'm Lukas. Just putting myself on your radar as a local backup photographer. If you ever get a last minute listing or need a quick turnaround, feel free to text me. I do photo, drone, and video.
+Hey {{firstName}}, I'm Lukas. Just putting myself on your radar as a local backup photographer. I do photo, drone, and video, so if you ever need another shooter, feel free to text me.
 
 10. Agent Relationship / No Specific Need
 Hey {{firstName}}, I'm Lukas. I'm a local real estate photographer and wanted to introduce myself. I shoot professional photo + drone, and I'm always happy to help if you ever need another photographer.
@@ -146,6 +146,39 @@ Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}} and wanted t
 
 13. Professional Photos / Short & Clean (preferred for poor photography — this is THE pattern; do not say "refresh")
 Hey {{firstName}}, I'm Lukas. I just saw your listing on {{street}}. If you want to get some professional photos taken for it, I'm local to the {{city}} area and have a 24 hour turnaround.`;
+
+/**
+ * The 24 hour turnaround is a claim about photography. Video is scheduled
+ * differently, so promising a same-day turnaround on a video shoot is a promise
+ * Lukas can't keep, and "I do video, 24 hour turnaround" is exactly the pairing
+ * that reads as a lie. Enforced two ways: the turnaround nudge is withheld
+ * entirely for a listing we're pitching as video, and this rule covers the case
+ * the section can't predict — a photo or backup lead where the model picks a
+ * video angle on its own.
+ *
+ * Deliberately phrased as "don't attach a turnaround to video" rather than "the
+ * turnaround is for photos only". The message shouldn't promise what can't be
+ * delivered, but it also shouldn't volunteer a correction nobody asked for,
+ * which would read worse than simply leaving the turnaround out.
+ */
+const VIDEO_NO_TURNAROUND_RULE = [
+  "- The 24 hour turnaround is a claim about photography, not about video.",
+  "  If this message is about video in any way, do not mention a turnaround at all:",
+  '  not "24 hour", not "quick turnaround", not "same week", not "I can turn it around fast".',
+  "  Don't mention what the turnaround does or doesn't cover either, and don't add a correction about it.",
+  "  If it doesn't fit, leave it out and say nothing about it.",
+].join("\n");
+
+/**
+ * The "24 hour turnaround is worth including" nudge, omitted when the listing is
+ * one we're pitching as video so the model is never handed the claim in the
+ * first place for that message.
+ */
+function turnaroundNudge(input: DraftMessageInput): string {
+  const section = input.listing ? leadSectionForListing(input.listing, input.agentRelationshipStatus) : null;
+  if (section === "video") return "";
+  return " The 24 hour turnaround is worth including when it fits naturally — he can have photos done within a day.";
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const daysAgo = (d: Date) => Math.max(0, Math.floor((Date.now() - d.getTime()) / DAY_MS));
@@ -303,7 +336,7 @@ Writing style:
 Example tone (not templates to copy, just style guidance):
 - Casual: "Hey [name], I came across your listing on [street] and thought you might want professional photos taken."
 - Direct: "I'm Lukas, a local photographer. [street] could use professional photos. Happy to help if that's something you need."
-- Backup: "I specialize in real estate photos and video. I'm guessing you have someone, but I'm here if you ever need a quick turnaround."
+- Backup: "I specialize in real estate photos and video. I'm guessing you have someone already, but I'm around if you ever need a hand."
 
 Final rules:
 - Reference the specific street naturally.
@@ -346,13 +379,14 @@ export function buildSmsPrompt(input: DraftMessageInput): string {
 ${instructionBlock}
 ${scenarioPrompt}
 
-Location: ${localityNudge(input)} The 24 hour turnaround is worth including when it fits naturally — he can have photos done within a day.
+Location: ${localityNudge(input)}${turnaroundNudge(input)}
 
 ${streetNudge(input, street)}
 
 Additional writing rules (these override anything above if they conflict, except Lukas's own instruction above, which wins over everything):
 - NEVER use an em dash (—) or en dash (–), anywhere. Use a period or comma instead.
 - NEVER use a hyphen (-) to join words. Write "24 hour", "last minute", "coming soon", "quick turnaround". Nobody types a hyphen into a text message, so one there is the clearest possible tell that a machine wrote it. This can't be cleaned up afterwards the way a dash can — a regex would turn "well known" into "wellknown" — so it has to come out right the first time.
+${VIDEO_NO_TURNAROUND_RULE}
 - If the listing is in a small town, don't put yourself "in the {{city}} area". Name the bigger area people actually say instead: a town near Portland reads as "the Portland area", a small town near Roseburg as "the Roseburg area", a town near Medford as "the Medford area". Use the town's own name only when it's a place people recognise on its own, like Eugene, Medford, Portland or Salem. If you're not confident which larger area it belongs to, skip naming an area at all rather than guess.
 - Zero or one exclamation point in the whole message, never more. Prefer a period.
 - Never use these words/phrases — dead giveaways of AI writing: "I noticed," "I wanted to reach out," "I hope this finds you," "don't hesitate," "in case you," "showcase"/"showcasing," "ensure," "delve," "reach out," "take care of," "beautifully," "stunning," "reliable," "pivotal," "crucial."
@@ -381,12 +415,13 @@ function buildEmailPrompt(input: DraftMessageInput): string {
 ${instructionBlock}
 ${scenarioPrompt}
 
-Location: ${localityNudge(input)} The 24 hour turnaround is worth including when it fits naturally — he can have photos done within a day.
+Location: ${localityNudge(input)}${turnaroundNudge(input)}
 
 ${streetNudge(input, street)}
 
 Writing rules:
 - NEVER use em dashes (—) or en dashes (–). Use commas or periods instead.
+${VIDEO_NO_TURNAROUND_RULE}
 - Zero or one exclamation point total, prefer none. Emails are professional.
 - Avoid these AI giveaways: "I noticed," "I wanted to reach out," "I hope this finds you," "don't hesitate," "in case you," "showcase," "ensure," "delve," "take care of," "beautifully," "stunning," "reliable," "pivotal," "crucial."
 - Never use the word "refresh" or "updated photography" when the photos are bad — instead offer to take professional photos for the listing (frame it as getting the place photographed properly, not as sprucing up old photos).
