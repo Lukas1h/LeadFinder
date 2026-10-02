@@ -4,7 +4,7 @@ import { ImapFlow } from "imapflow";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agents } from "@/db/schema";
-import { UnsubscribedError, listUnsubscribeHeaders } from "@/lib/unsubscribe";
+import { UnsubscribedError } from "@/lib/unsubscribe";
 
 let transporter: ReturnType<typeof nodemailer.createTransport> | undefined;
 
@@ -120,7 +120,6 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     to: input.toName ? `"${input.toName.replace(/"/g, "")}" <${input.to}>` : input.to,
     subject: input.subject,
     text: input.text,
-    headers: listUnsubscribeHeaders(input.to),
     attachments: input.attachments?.map((a) => ({ filename: a.filename, content: a.content, encoding: "base64" as const })),
   };
 
