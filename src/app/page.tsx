@@ -11,7 +11,7 @@ import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
 import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, WarmAgentBadge } from "./badges";
 import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, findAttachedAgent, buildAgentLookups, isWarmAgentStatus } from "@/lib/pipeline";
-import { leadSectionForListing, refreshLeadSections, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
+import { leadSection, refreshLeadSections, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
 import { LeadsSkeleton } from "./loading";
 
@@ -87,7 +87,11 @@ async function LeadsContent() {
   for (const lead of leads) {
     const attached = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
     const section =
-      (lead.leadSection as LeadSection | null) ?? leadSectionForListing(lead, attached?.relationshipStatus);
+      (lead.leadSection as LeadSection | null) ?? leadSection({
+        ...lead,
+        relationshipStatus: attached?.relationshipStatus,
+        lastContactedAt: attached?.lastContactedAt,
+      });
     sections[section].push(lead);
   }
   // Within a section, order by the same priority score the pipeline uses:

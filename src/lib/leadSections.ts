@@ -11,9 +11,9 @@
 // so the copy a draft is written for can't disagree with the section the
 // listing was found in.
 
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, max } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, listings, type Listing } from "@/db/schema";
+import { agentInteractions, agents, listings, messageSends, type Listing } from "@/db/schema";
 
 export type LeadSection = "photo" | "video" | "backup" | "unlikely";
 
@@ -24,6 +24,12 @@ export const LEAD_FRESH_DAYS = 14;
 export const LEAD_MIN_PRICE = 250_000;
 /** Over this, a listing wants video rather than a backup-photographer text. */
 export const LEAD_VIDEO_PRICE = 750_000;
+/**
+ * A backup lead whose agent Lukas contacted (any send or interaction, either
+ * direction) within this many days goes to unlikely — a "backup photographer"
+ * text to someone he just reached out to is noise.
+ */
+export const LEAD_RECENT_CONTACT_DAYS = 7;
 /** A listing scoring this or better already has photos good enough. */
 export const LEAD_GOOD_PHOTO_SCORE = 6;
 
@@ -54,6 +60,8 @@ export interface LeadSectionInput {
   listedAt?: Date | null;
   priceCutAt?: Date | null;
   resurfacedAt?: Date | null;
+  /** Latest entry in the attached agent's contact history, if any. */
+  lastContactedAt?: Date | null;
 }
 
 function daysSince(date: Date | null | undefined): number | null {
@@ -116,6 +124,8 @@ export function leadSection(listing: LeadSectionInput): LeadSection {
 
   if (price != null && price > LEAD_VIDEO_PRICE && goodPhotos && fresh) return "video";
   if (!goodPhotos && fresh) return "photo";
+  const contactAge = daysSince(listing.lastContactedAt);
+  if (contactAge != null && contactAge < LEAD_RECENT_CONTACT_DAYS) return "unlikely";
   return "backup";
 }
 
@@ -173,9 +183,20 @@ export async function refreshLeadSections(ids: string[]): Promise<number> {
     .leftJoin(agents, eq(listings.agentId, agents.id))
     .where(inArray(listings.id, ids));
 
+  const lastContact = await lastContactByAgent(
+    rows.map((r) => r.agentId).filter((id): id is string => id != null)
+  );
+
   // leadSection() rather than leadSectionForListing(): this is a projected row,
   // not a full Listing, and the section rules only ever read these fields.
-  const decided = rows.map((r) => ({ id: r.id, section: leadSection({ ...r, relationshipStatus: r.relationshipStatus }) }));
+  const decided = rows.map((r) => ({
+    id: r.id,
+    section: leadSection({
+      ...r,
+      relationshipStatus: r.relationshipStatus,
+      lastContactedAt: r.agentId ? lastContact.get(r.agentId) ?? null : null,
+    }),
+  }));
   const changed = decided.filter((r) => {
     const stored = rows.find((x) => x.id === r.id)?.leadSection ?? null;
     return stored !== r.section;
@@ -188,4 +209,34 @@ export async function refreshLeadSections(ids: string[]): Promise<number> {
     await db.update(listings).set({ leadSection: row.section }).where(eq(listings.id, row.id));
   }
   return changed.length;
+}
+
+/**
+ * Latest contact-history timestamp per agent — the same sources the agent's
+ * "Contact history" list and the Already-contacted badge use (message_sends
+ * plus agent_interactions, either direction).
+ */
+async function lastContactByAgent(agentIds: string[]): Promise<Map<string, Date>> {
+  const out = new Map<string, Date>();
+  const ids = [...new Set(agentIds)];
+  if (ids.length === 0) return out;
+  const [sends, interactions] = await Promise.all([
+    db
+      .select({ agentId: messageSends.agentId, at: max(messageSends.sentAt) })
+      .from(messageSends)
+      .where(inArray(messageSends.agentId, ids))
+      .groupBy(messageSends.agentId),
+    db
+      .select({ agentId: agentInteractions.agentId, at: max(agentInteractions.occurredAt) })
+      .from(agentInteractions)
+      .where(inArray(agentInteractions.agentId, ids))
+      .groupBy(agentInteractions.agentId),
+  ]);
+  for (const row of [...sends, ...interactions]) {
+    if (!row.agentId || !row.at) continue;
+    const at = new Date(row.at);
+    const current = out.get(row.agentId);
+    if (!current || at > current) out.set(row.agentId, at);
+  }
+  return out;
 }
