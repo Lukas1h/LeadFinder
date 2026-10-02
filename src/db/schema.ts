@@ -40,6 +40,10 @@ export const leadStatusEnum = pgEnum("lead_status", LEAD_STATUSES);
 export const listings = pgTable("listings", {
   id: uuid("id").primaryKey().defaultRandom(),
   zpid: text("zpid").notNull().unique(),
+  // Other zpids Zillow has used for this same house — from merged duplicate
+  // rows and from src/lib/listingDedupe.ts, which recognizes a second zpid by
+  // address and folds it in here instead of inserting a twin row.
+  altZpids: text("alt_zpids").array(),
   address: text("address"),
   city: text("city"),
   state: text("state"),

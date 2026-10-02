@@ -6,6 +6,7 @@ import { notifyNewListings, notifyWarmListings } from "@/lib/push";
 import { FEW_PHOTOS_THRESHOLD, WARM_AGENT_STATUSES } from "@/lib/pipeline";
 import { linkListingToAgent } from "@/lib/agentIdentity";
 import { refreshLeadSections } from "@/lib/leadSections";
+import { dropDuplicateListings } from "@/lib/listingDedupe";
 import { and, eq, gte, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -207,6 +208,7 @@ export async function insertAndEnrichListings(
   candidates: NewListing[],
   options?: { notificationUrl?: string }
 ): Promise<number> {
+  candidates = await dropDuplicateListings(candidates);
   if (candidates.length === 0) return 0;
 
   const insertedRows = await db
