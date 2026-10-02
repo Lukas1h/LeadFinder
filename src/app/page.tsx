@@ -99,11 +99,11 @@ async function LeadsContent() {
   for (const key of Object.keys(sections) as LeadSection[]) {
     sections[key].sort(byLeadPriority);
   }
-  // Backup leads whose agent has never been contacted go first — those are
-  // the untouched relationships. Stable sort keeps priority order within each.
+  // Backup: agents never contacted first (the untouched relationships), then
+  // highest price first within each group.
   const contacted = (lead: Listing) =>
     findAttachedAgent(lead, agentByPhone, agentByName, agentById)?.lastContactedAt ? 1 : 0;
-  sections.backup.sort((a, b) => contacted(a) - contacted(b));
+  sections.backup.sort((a, b) => contacted(a) - contacted(b) || (b.price ?? 0) - (a.price ?? 0));
 
   function card(lead: Listing) {
     const attachedAgent = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
