@@ -296,7 +296,17 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   const aiPreset = await getAiPreset(type);
   if (aiPreset) {
     const specificity = criteriaCount(aiPreset);
-    if (specificity > 0 && matchesCriteria(aiPreset, listingForMatch) && specificity > bestCriteriaCount) {
+    const isUnlikely = sectionForMatch === "unlikely";
+    // The unlikely section is the one place we knowingly message a lead with no
+    // good photo or price story behind them — usually an agent we can't reach,
+    // or one who told us to leave them alone. No hand-written preset should
+    // catch those: each is gated to the section it was written for, and a
+    // preset that ignored the section would happily text a $1m listing whose
+    // agent has declined. The AI draft is the right recommendation there, so it
+    // wins outright — regardless of the photo section it targets elsewhere.
+    if (isUnlikely) {
+      recommendedPresetId = aiPreset.id;
+    } else if (specificity > 0 && matchesCriteria(aiPreset, listingForMatch) && specificity > bestCriteriaCount) {
       bestCriteriaCount = specificity;
       recommendedPresetId = aiPreset.id;
     }
