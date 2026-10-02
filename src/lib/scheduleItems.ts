@@ -75,6 +75,7 @@ export async function loadScheduleItems(today: string): Promise<ScheduleItem[]> 
       notes: r.notes,
       agent: r.agentId ? (agentById.get(r.agentId) ?? null) : null,
       href: null,
+      bookingId: r.bookingId ?? null,
       done: r.completedAt != null,
       reminderId: r.id,
       listingId: null,
@@ -98,6 +99,7 @@ export async function loadScheduleItems(today: string): Promise<ScheduleItem[]> 
       notes: b.notes,
       agent: b.contactAgentId ? (agentById.get(b.contactAgentId) ?? null) : null,
       href: "/booked",
+      bookingId: b.id,
       done: b.completedAt != null,
       reminderId: null,
       listingId: null,
@@ -122,6 +124,7 @@ export async function loadScheduleItems(today: string): Promise<ScheduleItem[]> 
         linkedAgent ??
         (l.agentName || l.agentPhone ? { id: null, name: l.agentName, phone: l.agentPhone } : null),
       href: "/pipeline",
+      bookingId: null,
       done: false,
       reminderId: null,
       listingId: l.id,

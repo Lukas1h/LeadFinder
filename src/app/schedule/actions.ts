@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { listings, reminders } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { bookings, listings, reminders } from "@/db/schema";
+import { desc, eq, ilike, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { validateReminderInput, type ReminderInput } from "@/lib/reminders";
 
@@ -39,6 +39,44 @@ export async function setReminderDone(id: string, done: boolean): Promise<void> 
 export async function deleteReminder(id: string): Promise<void> {
   await db.delete(reminders).where(eq(reminders.id, id));
   revalidate();
+}
+
+export interface BookingMatchSummary {
+  id: string;
+  address: string | null;
+  city: string | null;
+  jobDate: Date | null;
+  /** Pre-rendered "1181 Alameda Drive · Eugene" for the suggestion row. */
+  label: string;
+}
+
+/**
+ * Type-ahead over bookings, the same shape as searchAgentsByName (min two
+ * characters, ILIKE, capped results) so attaching a booking to a reminder
+ * feels identical to attaching a contact. Matches on the address a shoot
+ * happens at rather than the contact's name, because that's the thing you
+ * remember about a booking — "the Alameda one".
+ */
+export async function searchBookings(query: string): Promise<BookingMatchSummary[]> {
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+
+  const rows = await db
+    .select({
+      id: bookings.id,
+      address: bookings.address,
+      city: bookings.city,
+      jobDate: bookings.jobDate,
+    })
+    .from(bookings)
+    .where(or(ilike(bookings.address, `%${trimmed}%`), ilike(bookings.city, `%${trimmed}%`)))
+    .orderBy(desc(bookings.jobDate))
+    .limit(8);
+
+  return rows.map((r) => ({
+    ...r,
+    label: [r.address, r.city].filter(Boolean).join(" · ") || "Booking",
+  }));
 }
 
 /**

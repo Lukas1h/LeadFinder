@@ -10,6 +10,10 @@ export interface ReminderInput {
   durationMinutes: number | null;
   notes: string | null;
   agentId: string | null;
+  // Optional job this reminder is about. Validated only as a uuid shape here —
+  // the FK is what actually guarantees the booking exists, and a bad value
+  // surfaces as a database error rather than a friendly message either way.
+  bookingId?: string | null;
 }
 
 export const REMINDER_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -35,6 +39,7 @@ export function validateReminderInput(input: ReminderInput): { error: string } |
       durationMinutes,
       notes: input.notes?.trim() || null,
       agentId: input.agentId,
+      bookingId: input.bookingId ?? null,
     },
   };
 }

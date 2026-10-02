@@ -28,8 +28,13 @@ export interface ScheduleItem {
   subtitle: string | null;
   notes: string | null;
   agent: ScheduleAgent | null;
-  // Where tapping a booking/follow-up goes; reminders open their edit dialog.
+  // Where tapping a booking/follow-up goes; reminders open their detail dialog.
   href: string | null;
+  // The booking a schedule item is about — a booking item's own id, or the one
+  // a reminder is attached to. Lets a tap open BookingDetailDialog in place
+  // instead of navigating off the page, and lets the reminder dialog render the
+  // shared BookingRow.
+  bookingId: string | null;
   // Only reminders can be checked off here.
   done: boolean;
   reminderId: string | null;

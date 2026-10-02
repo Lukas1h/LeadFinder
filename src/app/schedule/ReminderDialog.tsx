@@ -4,10 +4,17 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
-import { createReminder, updateReminder, deleteReminder, type ReminderInput } from "./actions";
+import {
+  createReminder,
+  updateReminder,
+  deleteReminder,
+  searchBookings,
+  type ReminderInput,
+  type BookingMatchSummary,
+} from "./actions";
 import { searchAgentsByName, type AgentMatchSummary } from "@/app/agents/matchActions";
 import { todayScheduleDate, type ScheduleAgent, type ScheduleItem } from "@/lib/schedule";
-import { formatPhone } from "@/lib/format";
+import { formatDay, formatPhone } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +76,40 @@ export function ReminderDialog({
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Attached booking, plus its own type-ahead. Deliberately the same shape as
+  // the contact picker above rather than a different widget — searching a
+  // booking and searching a contact are the same gesture, and a reminder
+  // ("call about the 3pm") often has both.
+  const [booking, setBooking] = useState<{ id: string; label: string } | null>(
+    reminder?.bookingId ? { id: reminder.bookingId, label: "" } : null
+  );
+  const [bookingQuery, setBookingQuery] = useState("");
+  const [bookingSuggestions, setBookingSuggestions] = useState<BookingMatchSummary[]>([]);
+  const [showBookingSuggestions, setShowBookingSuggestions] = useState(false);
+  const bookingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleBookingChange = (value: string) => {
+    setBookingQuery(value);
+    if (bookingTimer.current) clearTimeout(bookingTimer.current);
+    if (value.trim().length < 2) {
+      setBookingSuggestions([]);
+      setShowBookingSuggestions(false);
+      return;
+    }
+    bookingTimer.current = setTimeout(async () => {
+      const results = await searchBookings(value);
+      setBookingSuggestions(results);
+      setShowBookingSuggestions(results.length > 0);
+    }, 200);
+  };
+
+  const handleSelectBooking = (match: BookingMatchSummary) => {
+    setShowBookingSuggestions(false);
+    setBooking({ id: match.id, label: match.label });
+  };
+
+  const handleBookingBlur = () => setTimeout(() => setShowBookingSuggestions(false), 150);
+
   // Same debounced-search pattern as BookingForm's contact name: type a name,
   // get matching agents, pick one to link the reminder to.
   const handleNameChange = (value: string) => {
@@ -107,6 +148,7 @@ export function ReminderDialog({
       durationMinutes: time && length ? Number(length) : null,
       notes: notes.trim() || null,
       agentId: agent?.id ?? null,
+      bookingId: booking?.id ?? null,
     };
 
     const result = isEditing ? await updateReminder(editingId, input) : await createReminder(input);
@@ -232,6 +274,48 @@ export function ReminderDialog({
                           <span className="text-foreground">{match.name}</span>
                           <span className="text-xs text-muted-foreground">
                             {formatPhone(match.phone) ?? match.email ?? "No contact info saved"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>Booking (optional)</Label>
+              {booking ? (
+                <div className="flex items-center justify-between gap-2 rounded-md border border-input px-3 py-2">
+                  <span className="text-sm text-foreground truncate">
+                    {booking.label || "Attached booking"}
+                  </span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setBooking(null)}>
+                    Remove
+                  </Button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Input
+                    value={bookingQuery}
+                    onChange={(e) => handleBookingChange(e.target.value)}
+                    onFocus={() => bookingSuggestions.length > 0 && setShowBookingSuggestions(true)}
+                    onBlur={handleBookingBlur}
+                    placeholder="Start typing an address or city…"
+                    autoComplete="off"
+                  />
+                  {showBookingSuggestions && (
+                    <div className="absolute top-full left-0 right-0 mt-1 z-10 rounded-lg border border-border bg-popover shadow-md max-h-56 overflow-y-auto">
+                      {bookingSuggestions.map((match) => (
+                        <button
+                          key={match.id}
+                          type="button"
+                          onMouseDown={() => handleSelectBooking(match)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex flex-col gap-0.5"
+                        >
+                          <span className="text-foreground">{match.address ?? "Booking"}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {match.jobDate ? formatDay(match.jobDate) : match.city ?? "No job date set"}
                           </span>
                         </button>
                       ))}

@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, reminders } from "@/db/schema";
+import { agents, bookings, reminders } from "@/db/schema";
 import { addDays, todayScheduleDate, type ScheduleItem } from "@/lib/schedule";
 import { loadScheduleItems } from "@/lib/scheduleItems";
 import { validateReminderInput, REMINDER_DATE_RE, REMINDER_TIME_RE } from "@/lib/reminders";
@@ -20,6 +20,11 @@ function forTool({ listing, ...item }: ScheduleItem) {
 
 async function agentExists(id: string): Promise<boolean> {
   const [row] = await db.select({ id: agents.id }).from(agents).where(eq(agents.id, id));
+  return !!row;
+}
+
+async function bookingExists(id: string): Promise<boolean> {
+  const [row] = await db.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, id));
   return !!row;
 }
 
@@ -64,7 +69,8 @@ export function registerScheduleTools(server: McpServer): void {
       title: "Add a reminder",
       description:
         "Adds a reminder to Lukas's Schedule page — something to do on a given day, e.g. an agent replied 'call me Tuesday'. " +
-        "Link the agent (agentId, from search_agents) so their phone shows on the reminder with a tap-to-call link. " +
+        "Link the agent (agentId, from search_agents) so their phone shows on the reminder with a tap-to-call link, " +
+        "and optionally the booking (bookingId, from search_bookings) so the job shows as a card you can tap into. " +
         "This only records a reminder for Lukas — it never contacts anyone.",
       inputSchema: {
         title: z.string().min(1).describe('Short action, e.g. "Call Sarah about 12 Oak St"'),
@@ -73,10 +79,13 @@ export function registerScheduleTools(server: McpServer): void {
         durationMinutes: z.number().int().positive().nullable().optional().describe("Length in minutes; only kept when a time is set."),
         notes: z.string().nullable().optional(),
         agentId: z.string().uuid().nullable().optional(),
+        bookingId: z.string().uuid().nullable().optional()
+          .describe("The job this reminder is about (from search_bookings). Shown as a booking row on the Schedule page; tapping it opens that job's details."),
       },
     },
-    async ({ title, date, time, durationMinutes, notes, agentId }) => {
+    async ({ title, date, time, durationMinutes, notes, agentId, bookingId }) => {
       if (agentId && !(await agentExists(agentId))) return errorText("No agent with that id");
+      if (bookingId && !(await bookingExists(bookingId))) return errorText("No booking with that id");
       const result = validateReminderInput({
         title,
         date,
@@ -84,6 +93,7 @@ export function registerScheduleTools(server: McpServer): void {
         durationMinutes: durationMinutes ?? null,
         notes: notes ?? null,
         agentId: agentId ?? null,
+        bookingId: bookingId ?? null,
       });
       if ("error" in result) return errorText(result.error);
 
@@ -97,7 +107,7 @@ export function registerScheduleTools(server: McpServer): void {
     {
       title: "Update a reminder",
       description:
-        "Changes a reminder's fields. Only the fields you pass change; pass null to clear time, durationMinutes, notes or agentId (clearing time also clears the length).",
+        "Changes a reminder's fields. Only the fields you pass change; pass null to clear time, durationMinutes, notes, agentId or bookingId (clearing time also clears the length).",
       inputSchema: {
         id: z.string().uuid(),
         title: z.string().min(1).optional(),
@@ -106,12 +116,15 @@ export function registerScheduleTools(server: McpServer): void {
         durationMinutes: z.number().int().positive().nullable().optional(),
         notes: z.string().nullable().optional(),
         agentId: z.string().uuid().nullable().optional(),
+        bookingId: z.string().uuid().nullable().optional()
+          .describe("The job this reminder is about (from search_bookings). Shown as a booking row on the Schedule page; tapping it opens that job's details."),
       },
     },
     async ({ id, ...patch }) => {
       const [existing] = await db.select().from(reminders).where(eq(reminders.id, id));
       if (!existing) return errorText("No reminder with that id");
       if (patch.agentId && !(await agentExists(patch.agentId))) return errorText("No agent with that id");
+      if (patch.bookingId && !(await bookingExists(patch.bookingId))) return errorText("No booking with that id");
 
       const result = validateReminderInput({
         title: patch.title ?? existing.title,
@@ -120,6 +133,7 @@ export function registerScheduleTools(server: McpServer): void {
         durationMinutes: patch.durationMinutes !== undefined ? patch.durationMinutes : existing.durationMinutes,
         notes: patch.notes !== undefined ? patch.notes : existing.notes,
         agentId: patch.agentId !== undefined ? patch.agentId : existing.agentId,
+        bookingId: patch.bookingId !== undefined ? patch.bookingId : existing.bookingId,
       });
       if ("error" in result) return errorText(result.error);
 

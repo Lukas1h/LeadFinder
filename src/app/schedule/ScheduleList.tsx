@@ -6,6 +6,10 @@ import { toast } from "sonner";
 import { AlertCircle, Bell, Camera, Phone, Plus, X } from "lucide-react";
 import { dismissListingFollowUp, restoreListingFollowUp, setReminderDone } from "./actions";
 import { ReminderDialog } from "./ReminderDialog";
+import { ReminderDetailDialog } from "./ReminderDetailDialog";
+import { BookingDetailDialog } from "../booked/BookingDetailDialog";
+import { getBookingWithDetails } from "../booked/actions";
+import type { BookingWithDetails } from "../booked/BookedList";
 import { ListingModal } from "../ListingModal";
 import { formatScheduleDay, formatScheduleTime, type ScheduleItem } from "@/lib/schedule";
 import { formatPhone } from "@/lib/format";
@@ -36,6 +40,13 @@ export function ScheduleList({ items, today }: { items: ScheduleItem[]; today: s
   });
   // The follow-up whose listing is open in ListingModal, if any.
   const [openListing, setOpenListing] = useState<ScheduleItem["listing"]>(null);
+  // Reminder detail is its own read-only dialog now; the edit form only opens
+  // from its Edit button, so a tap can't land you in a half-edited form.
+  const [detailItem, setDetailItem] = useState<ScheduleItem | null>(null);
+  // A booking tapped on the schedule opens the same BookingDetailDialog the
+  // Booked page uses, in place. Details are fetched here because the schedule
+  // rows only carry id/address/date — the same lazy load BookingRow does.
+  const [bookingDetail, setBookingDetail] = useState<{ item: ScheduleItem; booking: BookingWithDetails } | null>(null);
   const openDialog = (editing?: ScheduleItem) =>
     setDialog((prev) => ({ open: true, editing, version: prev.version + 1 }));
 
@@ -55,14 +66,24 @@ export function ScheduleList({ items, today }: { items: ScheduleItem[]; today: s
     ] satisfies DayGroup[];
   }, [items, today]);
 
-  const handleOpen = (item: ScheduleItem) => {
+  const handleOpen = async (item: ScheduleItem) => {
     if (item.kind === "reminder") {
-      openDialog(item);
+      setDetailItem(item);
       return;
     }
     if (item.kind === "followUp" && item.listing) {
       setOpenListing(item.listing);
       return;
+    }
+    // Open the job in place rather than navigating to /booked and losing the
+    // rest of the day's list. Falls back to the old navigation if the booking
+    // can't be loaded, so a tap is never a dead end.
+    if (item.kind === "booking" && item.bookingId) {
+      const booking = await getBookingWithDetails(item.bookingId);
+      if (booking) {
+        setBookingDetail({ item, booking });
+        return;
+      }
     }
     if (item.href) router.push(item.href);
   };
@@ -218,6 +239,35 @@ export function ScheduleList({ items, today }: { items: ScheduleItem[]; today: s
             if (!open) {
               setOpenListing(null);
               // The modal can change the follow-up date/status — pick that up.
+              router.refresh();
+            }
+          }}
+        />
+      )}
+
+      {detailItem && (
+        <ReminderDetailDialog
+          item={detailItem}
+          open
+          onOpenChange={(open) => {
+            if (!open) setDetailItem(null);
+          }}
+          onEdit={() => {
+            const editing = detailItem;
+            setDetailItem(null);
+            openDialog(editing);
+          }}
+        />
+      )}
+
+      {bookingDetail && (
+        <BookingDetailDialog
+          booking={bookingDetail.booking}
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setBookingDetail(null);
+              // It can complete/reopen/invoice the job, so re-read the day.
               router.refresh();
             }
           }}

@@ -375,6 +375,12 @@ export const reminders = pgTable("reminders", {
   durationMinutes: integer("duration_minutes"),
   notes: text("notes"),
   agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  // Optional job this reminder is about — "call the photographer about the
+  // 3pm shoot" is really about a booking. Set null rather than cascading so
+  // deleting a booking can't silently delete the reminder, and so a reminder
+  // can be about a booking that no longer exists without the text in it
+  // (title/notes) going away.
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
