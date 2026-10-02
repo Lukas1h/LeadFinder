@@ -26,7 +26,7 @@ export const LEAD_MIN_PRICE = 250_000;
 export const LEAD_VIDEO_PRICE = 750_000;
 /**
  * A backup lead whose agent Lukas contacted (any send or interaction, either
- * direction) within this many days goes to unlikely — a "backup photographer"
+ * direction) within this many days goes to unlikely, and so does a video lead — a "backup photographer"
  * text to someone he just reached out to is noise.
  */
 export const LEAD_RECENT_CONTACT_DAYS = 7;
@@ -122,10 +122,12 @@ export function leadSection(listing: LeadSectionInput): LeadSection {
   const fresh = isLeadFresh(listing);
   const goodPhotos = score != null && score >= LEAD_GOOD_PHOTO_SCORE;
 
-  if (price != null && price > LEAD_VIDEO_PRICE && goodPhotos && fresh) return "video";
   if (!goodPhotos && fresh) return "photo";
+  // Video and backup are both "photos are fine" pitches; neither is worth
+  // sending to an agent Lukas reached out to in the last week.
   const contactAge = daysSince(listing.lastContactedAt);
   if (contactAge != null && contactAge < LEAD_RECENT_CONTACT_DAYS) return "unlikely";
+  if (price != null && price > LEAD_VIDEO_PRICE && goodPhotos && fresh) return "video";
   return "backup";
 }
 

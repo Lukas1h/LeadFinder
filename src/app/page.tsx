@@ -99,11 +99,13 @@ async function LeadsContent() {
   for (const key of Object.keys(sections) as LeadSection[]) {
     sections[key].sort(byLeadPriority);
   }
-  // Backup: agents never contacted first (the untouched relationships), then
-  // highest price first within each group.
+  // Backup and video: agents never contacted first (the untouched
+  // relationships), then highest price first within each group.
   const contacted = (lead: Listing) =>
     findAttachedAgent(lead, agentByPhone, agentByName, agentById)?.lastContactedAt ? 1 : 0;
-  sections.backup.sort((a, b) => contacted(a) - contacted(b) || (b.price ?? 0) - (a.price ?? 0));
+  for (const key of ["backup", "video"] as const) {
+    sections[key].sort((a, b) => contacted(a) - contacted(b) || (b.price ?? 0) - (a.price ?? 0));
+  }
 
   function card(lead: Listing) {
     const attachedAgent = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
