@@ -61,7 +61,7 @@ export function registerInteractionTools(server: McpServer): void {
         outcome: z.enum(INTERACTION_OUTCOMES).nullable().optional().describe("Calls only"),
         note: z.string().optional(),
         listingId: z.string().uuid().nullable().optional().describe("The property it was about, if any"),
-        occurredAt: z.string().datetime().optional().describe("When it happened; defaults to now. ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
+        occurredAt: z.string().datetime({ offset: true }).optional().describe("When it happened; defaults to now. ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
       },
     },
     async ({ agentId, channel, direction, outcome, note, listingId, occurredAt }) => {
@@ -161,7 +161,7 @@ export function registerInteractionTools(server: McpServer): void {
         outcome: z.enum(INTERACTION_OUTCOMES).nullable().optional(),
         note: z.string().nullable().optional(),
         listingId: z.string().uuid().nullable().optional(),
-        occurredAt: z.string().datetime().optional().describe("ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
+        occurredAt: z.string().datetime({ offset: true }).optional().describe("ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
       },
     },
     async ({ id, channel, direction, outcome, note, listingId, occurredAt }) => {
@@ -229,8 +229,8 @@ export function registerInteractionTools(server: McpServer): void {
           .boolean()
           .optional()
           .describe("Only interactions the app started but whose outcome was never confirmed"),
-        since: z.string().datetime().optional().describe("ISO 8601, read as UTC when no offset is given"),
-        until: z.string().datetime().optional().describe("ISO 8601, read as UTC when no offset is given"),
+        since: z.string().datetime({ offset: true }).optional().describe("ISO 8601, read as UTC when no offset is given"),
+        until: z.string().datetime({ offset: true }).optional().describe("ISO 8601, read as UTC when no offset is given"),
         limit: z.number().int().min(1).max(200).default(50),
       },
     },
