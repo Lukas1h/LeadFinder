@@ -21,6 +21,7 @@ export interface PresetCriteriaInput {
   maxListingAgeDays: number | null;
   minPhotoCount: number | null;
   maxPhotoCount: number | null;
+  leadSection: string | null;
 }
 
 export async function createPreset(
@@ -38,6 +39,7 @@ export async function createPreset(
     minPrice: input.minPrice,
     maxPrice: input.maxPrice,
     maxListingAgeDays: input.maxListingAgeDays,
+    leadSection: input.leadSection,
     minPhotoCount: input.minPhotoCount,
     maxPhotoCount: input.maxPhotoCount,
   });
@@ -58,6 +60,7 @@ export async function updatePreset(id: string, input: { name: string } & PresetC
       minPrice: input.minPrice,
       maxPrice: input.maxPrice,
       maxListingAgeDays: input.maxListingAgeDays,
+      leadSection: input.leadSection,
       minPhotoCount: input.minPhotoCount,
       maxPhotoCount: input.maxPhotoCount,
     })

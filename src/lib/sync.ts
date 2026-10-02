@@ -5,6 +5,7 @@ import { scorePhotos } from "@/lib/photoScore";
 import { notifyNewListings, notifyWarmListings } from "@/lib/push";
 import { FEW_PHOTOS_THRESHOLD, WARM_AGENT_STATUSES } from "@/lib/pipeline";
 import { linkListingToAgent } from "@/lib/agentIdentity";
+import { refreshLeadSections } from "@/lib/leadSections";
 import { and, eq, gte, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -178,6 +179,11 @@ async function retryMissingPhotoScores(): Promise<number> {
   }
 
   if (rescored > 0) {
+    // A fresh score is the input most likely to move a listing between
+    // sections — an unscored one coming back at 8 leaves "photo" entirely — so
+    // the stored section is refreshed here rather than going stale until
+    // something else happened to touch the row.
+    await refreshLeadSections(eligible.map((r) => r.id));
     revalidatePath("/", "layout");
   }
 

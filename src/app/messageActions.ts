@@ -24,6 +24,7 @@ import {
   AI_DRAFT_VARIANT_SENTINEL,
 } from "@/lib/messageTemplate";
 import { draftMessage } from "@/lib/draftMessage";
+import { leadSectionForListing } from "@/lib/leadSections";
 import { startPendingInteraction } from "@/app/agents/interactionActions";
 import { touchAgentContact } from "@/app/actions";
 
@@ -127,6 +128,7 @@ export interface MessageOptions {
 
 interface PresetCriteria {
   minScore: number | null;
+  leadSection: string | null;
   maxScore: number | null;
   minPrice: number | null;
   maxPrice: number | null;
@@ -143,10 +145,27 @@ function listingAgeDays(listedAt: Date | null, foundAt: Date): number {
 /** A preset with no criteria set always matches — only set constraints can disqualify it. */
 function matchesCriteria(
   preset: PresetCriteria,
-  listing: { score: number | null; price: number | null; ageDays: number; photoCount: number | null }
+  listing: {
+    score: number | null;
+    price: number | null;
+    ageDays: number;
+    photoCount: number | null;
+    leadSection: string | null;
+  }
 ): boolean {
+  // Section is the one criterion that isn't a measurement of the property, so
+  // a preset can be pointed at the Leads-page section rather than at a score
+  // band. Null on the preset means no constraint, like every other field.
+  if (preset.leadSection != null && preset.leadSection !== listing.leadSection) return false;
   if (preset.minScore != null && (listing.score == null || listing.score < preset.minScore)) return false;
-  if (preset.maxScore != null && (listing.score == null || listing.score > preset.maxScore)) return false;
+  // A missing score must not disqualify on an upper bound: "we don't know yet"
+  // isn't "too high". Treating null as a miss meant a preset capped at 6 (the
+  // photo-opportunity one) could never be recommended for a listing whose photos
+  // hadn't been scored, so exactly the leads with the least evidence about them
+  // were the only ones excluded from it. Lower bounds are deliberately
+  // unchanged — an unscored listing genuinely cannot satisfy "at least this
+  // good", so minScore still rejects null.
+  if (preset.maxScore != null && listing.score != null && listing.score > preset.maxScore) return false;
   if (preset.minPrice != null && (listing.price == null || listing.price < preset.minPrice)) return false;
   if (preset.maxPrice != null && (listing.price == null || listing.price > preset.maxPrice)) return false;
   if (preset.maxListingAgeDays != null && listing.ageDays > preset.maxListingAgeDays) return false;
@@ -172,6 +191,7 @@ function criteriaCount(preset: PresetCriteria): number {
     preset.maxListingAgeDays,
     preset.minPhotoCount,
     preset.maxPhotoCount,
+    preset.leadSection,
   ].filter((v) => v != null).length;
 }
 
@@ -195,6 +215,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   if (!listing) return { presets: [] };
 
   const ageDays = listingAgeDays(listing.listedAt, listing.foundAt);
+  const sectionForMatch = listing.leadSection ?? leadSectionForListing(listing);
 
   // aiGenerated presets are excluded here — they have no reusable variants
   // to rotate through (see ensureAiDraftPresets); the AI option is drafted
@@ -204,6 +225,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       presetId: messagePresets.id,
       presetName: messagePresets.name,
       protected: messagePresets.protected,
+      leadSection: messagePresets.leadSection,
       minScore: messagePresets.minScore,
       maxScore: messagePresets.maxScore,
       minPrice: messagePresets.minPrice,
@@ -241,6 +263,14 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
     else rowsByPreset.set(row.presetId, [row]);
   }
 
+  const listingForMatch = {
+    score: listing.score,
+    price: listing.price,
+    ageDays,
+    photoCount: listing.photoCount,
+    leadSection: sectionForMatch,
+  };
+
   let recommendedPresetId: string | null = null;
   let bestCriteriaCount = -1;
   for (const group of rowsByPreset.values()) {
@@ -249,19 +279,26 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
     // default (see below), and tagging it "(Recommended)" too would just
     // be a confusing double label on the same option.
     if (preset.protected) continue;
-    if (
-      !matchesCriteria(preset, {
-        score: listing.score,
-        price: listing.price,
-        ageDays,
-        photoCount: listing.photoCount,
-      })
-    )
-      continue;
+    if (!matchesCriteria(preset, listingForMatch)) continue;
     const specificity = criteriaCount(preset);
     if (specificity > bestCriteriaCount) {
       bestCriteriaCount = specificity;
       recommendedPresetId = preset.presetId;
+    }
+  }
+
+  // The AI-draft preset runs through the identical contest. It has no reusable
+  // variant to rotate, so it never appears in `rows`, but it is a preset with
+  // criteria like any other and should win or lose on the same terms: give it
+  // a section and it's the recommendation there, give it nothing and the
+  // hand-written presets keep it. Nothing is drafted to find out — the
+  // criteria are on the row.
+  const aiPreset = await getAiPreset(type);
+  if (aiPreset) {
+    const specificity = criteriaCount(aiPreset);
+    if (specificity > 0 && matchesCriteria(aiPreset, listingForMatch) && specificity > bestCriteriaCount) {
+      bestCriteriaCount = specificity;
+      recommendedPresetId = aiPreset.id;
     }
   }
 
@@ -289,7 +326,9 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   // a wasted call most of the time. Appended, not unshifted, so it can't
   // accidentally become the presets[0] fallback if nothing else is
   // recommended either.
-  const aiPreset = await getAiPreset(type);
+  // A placeholder only — no Gemini call here; drafting stays on demand so an
+  // unused recommendation costs nothing. Appended, not unshifted, so it can't
+  // become the presets[0] fallback if nothing else is recommended either.
   if (aiPreset) {
     presets.push({
       presetId: aiPreset.id,
@@ -297,16 +336,27 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       variantId: AI_DRAFT_VARIANT_SENTINEL,
       variantLabel: "AI",
       text: "",
-      recommended: false,
+      recommended: recommendedPresetId === aiPreset.id,
     });
   }
 
   return { presets };
 }
 
-async function getAiPreset(type: PresetType): Promise<{ id: string; name: string } | null> {
+async function getAiPreset(type: PresetType): Promise<(PresetCriteria & { id: string; name: string }) | null> {
   const [preset] = await db
-    .select({ id: messagePresets.id, name: messagePresets.name })
+    .select({
+      id: messagePresets.id,
+      name: messagePresets.name,
+      minScore: messagePresets.minScore,
+      maxScore: messagePresets.maxScore,
+      minPrice: messagePresets.minPrice,
+      maxPrice: messagePresets.maxPrice,
+      maxListingAgeDays: messagePresets.maxListingAgeDays,
+      minPhotoCount: messagePresets.minPhotoCount,
+      maxPhotoCount: messagePresets.maxPhotoCount,
+      leadSection: messagePresets.leadSection,
+    })
     .from(messagePresets)
     .where(
       and(

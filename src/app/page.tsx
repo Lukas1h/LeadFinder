@@ -11,7 +11,7 @@ import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
 import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, WarmAgentBadge } from "./badges";
 import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, findAttachedAgent, buildAgentLookups, isWarmAgentStatus } from "@/lib/pipeline";
-import { leadSectionForListing, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
+import { leadSectionForListing, refreshLeadSections, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
 import { LeadsSkeleton } from "./loading";
 
@@ -76,10 +76,19 @@ async function LeadsContent() {
   // the list. The section is decided from the listing plus its resolved
   // agent's status, since "agent declined" and "no agent at all" are both
   // reasons a lead is unreachable.
+  // The stored section is what the message dialog's targeting filter reads, so
+  // settle it before bucketing rather than deriving a second, possibly
+  // different answer here. refreshLeadSections only writes rows that actually
+  // moved, so this is cheap on a page load and self-healing when a score or
+  // price cut lands after the fact.
+  await refreshLeadSections(leads.map((l) => l.id));
+
   const sections: Record<LeadSection, Listing[]> = { photo: [], video: [], backup: [], unlikely: [] };
   for (const lead of leads) {
     const attached = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
-    sections[leadSectionForListing(lead, attached?.relationshipStatus)].push(lead);
+    const section =
+      (lead.leadSection as LeadSection | null) ?? leadSectionForListing(lead, attached?.relationshipStatus);
+    sections[section].push(lead);
   }
   // Within a section, order by the same priority score the pipeline uses:
   // coming-soon first, then price-weighted photo opportunity, then age.

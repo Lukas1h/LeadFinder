@@ -11,7 +11,9 @@
 // so the copy a draft is written for can't disagree with the section the
 // listing was found in.
 
-import type { Listing } from "@/db/schema";
+import { eq, inArray } from "drizzle-orm";
+import { db } from "@/db";
+import { agents, listings, type Listing } from "@/db/schema";
 
 export type LeadSection = "photo" | "video" | "backup" | "unlikely";
 
@@ -132,3 +134,51 @@ export function leadSectionForListing(
 
 /** Display order on the Leads page, most actionable first. */
 export const LEAD_SECTION_ORDER: LeadSection[] = ["photo", "video", "backup", "unlikely"];
+
+/**
+ * Recomputes and stores listings.leadSection for the given ids, and returns
+ * how many actually moved. Called wherever the inputs that decide a section
+ * change — a price cut, a photo score landing, an agent being linked or
+ * declined — because a stored column is only useful if it's kept honest, and a
+ * section that silently went stale would mis-route every message
+ * recommendation built on it.
+ *
+ * Bulk by design: the whole point is to avoid one write per listing on the
+ * leads page, so callers hand over every id they just touched.
+ */
+export async function refreshLeadSections(ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const rows = await db
+    .select({
+      id: listings.id,
+      leadSection: listings.leadSection,
+      price: listings.price,
+      score: listings.score,
+      agentId: listings.agentId,
+      agentName: listings.agentName,
+      agentPhone: listings.agentPhone,
+      listedAt: listings.listedAt,
+      priceCutAt: listings.priceCutAt,
+      resurfacedAt: listings.resurfacedAt,
+      relationshipStatus: agents.relationshipStatus,
+    })
+    .from(listings)
+    .leftJoin(agents, eq(listings.agentId, agents.id))
+    .where(inArray(listings.id, ids));
+
+  // leadSection() rather than leadSectionForListing(): this is a projected row,
+  // not a full Listing, and the section rules only ever read these fields.
+  const decided = rows.map((r) => ({ id: r.id, section: leadSection({ ...r, relationshipStatus: r.relationshipStatus }) }));
+  const changed = decided.filter((r) => {
+    const stored = rows.find((x) => x.id === r.id)?.leadSection ?? null;
+    return stored !== r.section;
+  });
+  if (changed.length === 0) return 0;
+
+  // Sequential rather than a batched transaction: the counts involved are tens
+  // per sync, and this keeps the write obviously correct.
+  for (const row of changed) {
+    await db.update(listings).set({ leadSection: row.section }).where(eq(listings.id, row.id));
+  }
+  return changed.length;
+}

@@ -137,6 +137,14 @@ export const listings = pgTable("listings", {
   // the rubric. A
   // LOW score is the valuable lead here — it means the listing likely
   // doesn't have a pro photographer yet.
+  // Which Leads-page section this listing sorts into (see lib/leadSections.ts
+  // for the rules). Stored rather than derived on every read so preset
+  // targeting can filter on it the way it filters score and price, and so the
+  // message dialog can recommend a template without recomputing the rules.
+  // Recomputed by refreshLeadSections whenever the inputs that decide it
+  // change — the price, the photo score, the agent.
+  leadSection: text("lead_section"),
+
   score: integer("score"),
   scoreReasoning: text("score_reasoning"),
 
@@ -483,6 +491,11 @@ export const messagePresets = pgTable("message_presets", {
   maxListingAgeDays: integer("max_listing_age_days"),
   minPhotoCount: integer("min_photo_count"),
   maxPhotoCount: integer("max_photo_count"),
+  // Restrict to one Leads-page section (photo / video / backup / unlikely).
+  // The only criterion that can talk about intent rather than measurements,
+  // and the reason the AI-draft preset can be recommended for exactly the
+  // listings whose photos are weak.
+  leadSection: text("lead_section"),
 
   // Marks the one system preset per type whose "variants" aren't
   // hand-written — each is drafted live per listing by draftMessage() (see

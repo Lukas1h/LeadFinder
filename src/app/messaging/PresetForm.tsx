@@ -59,6 +59,7 @@ export function PresetForm({
   const [type, setType] = useState<PresetType>(preset?.type ?? defaultType ?? "initial_outreach");
   const [channel, setChannel] = useState<MessageChannel>(preset?.channel ?? defaultChannel ?? "sms");
   const [minScore, setMinScore] = useState(preset?.minScore?.toString() ?? "");
+  const [leadSection, setLeadSection] = useState(preset?.leadSection ?? "");
   const [maxScore, setMaxScore] = useState(preset?.maxScore?.toString() ?? "");
   const [minPrice, setMinPrice] = useState(preset?.minPrice?.toString() ?? "");
   const [maxPrice, setMaxPrice] = useState(preset?.maxPrice?.toString() ?? "");
@@ -86,6 +87,7 @@ export function PresetForm({
       maxListingAgeDays: toNumberOrNull(maxListingAgeDays),
       minPhotoCount: toNumberOrNull(minPhotoCount),
       maxPhotoCount: toNumberOrNull(maxPhotoCount),
+      leadSection: leadSection || null,
     };
 
     const result = isEditing
@@ -173,6 +175,22 @@ export function PresetForm({
                 </Label>
 
                 <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="lead-section" className="text-xs">
+                      Leads page section
+                    </Label>
+                    <Select value={leadSection} onValueChange={setLeadSection}>
+                      <SelectTrigger id="lead-section">
+                        <SelectValue placeholder="Any section" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="photo">Photo opportunities</SelectItem>
+                        <SelectItem value="video">Video opportunities</SelectItem>
+                        <SelectItem value="backup">Backup opportunities</SelectItem>
+                        <SelectItem value="unlikely">Unlikely matches</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="min-score" className="text-xs">
                       Min photo score
