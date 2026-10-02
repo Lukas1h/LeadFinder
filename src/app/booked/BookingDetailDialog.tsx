@@ -213,6 +213,16 @@ export function BookingDetailDialog({
           </div>
         )}
 
+        {booking.invoiceNote && (
+          <div className="text-sm text-foreground/90 flex items-start gap-1.5">
+            <Receipt className="size-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+            <span>
+              <span className="text-muted-foreground">On invoice: </span>
+              {booking.invoiceNote}
+            </span>
+          </div>
+        )}
+
         {(booking.contactName || booking.contactPhone) && (
           <div className="border-t pt-2">
             <AgentRow name={booking.contactName} phone={booking.contactPhone} />

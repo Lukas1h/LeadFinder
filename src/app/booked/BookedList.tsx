@@ -22,6 +22,7 @@ export interface BookingWithDetails {
   jobDate: Date | null;
   lockboxCode: string | null;
   notes: string | null;
+  invoiceNote: string | null;
   completedAt: Date | null;
   // Set once the invoice has been sent to the client (implies completedAt).
   invoiceSentAt: Date | null;

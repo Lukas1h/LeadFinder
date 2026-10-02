@@ -71,6 +71,7 @@ async function BookedContent() {
       jobDate: b.jobDate,
       lockboxCode: b.lockboxCode,
       notes: b.notes,
+      invoiceNote: b.invoiceNote,
       completedAt: b.completedAt,
       invoiceSentAt: b.invoiceSentAt,
       driveHours: b.driveHours,

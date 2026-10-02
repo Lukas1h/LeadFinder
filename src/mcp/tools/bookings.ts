@@ -129,11 +129,12 @@ export function registerBookingTools(server: McpServer): void {
         contactPhone: z.string().default(""),
         jobDate: z.string().datetime().optional().describe("When the shoot is. ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
         lockboxCode: z.string().optional(),
-        notes: z.string().optional(),
+        notes: z.string().optional().describe("Internal notes — never shown to the client."),
+        invoiceNote: z.string().optional().describe("Client-facing note printed on the invoice."),
         lineItems: z.array(lineItemSchema).default([]),
       },
     },
-    async ({ listingId, address, city, state, contactName, contactPhone, jobDate, lockboxCode, notes, lineItems }) => {
+    async ({ listingId, address, city, state, contactName, contactPhone, jobDate, lockboxCode, notes, invoiceNote, lineItems }) => {
       if (!listingId && !city?.trim()) return errorText("Enter at least a city for a booking with no linked listing");
 
       const contactAgentId =
@@ -150,6 +151,7 @@ export function registerBookingTools(server: McpServer): void {
           jobDate: jobDate ? new Date(jobDate) : null,
           lockboxCode: lockboxCode?.trim() || null,
           notes: notes?.trim() || null,
+          invoiceNote: invoiceNote?.trim() || null,
         })
         .returning({ id: bookings.id });
       if (!booking) return errorText("Couldn't create the booking");
@@ -179,7 +181,7 @@ export function registerBookingTools(server: McpServer): void {
     {
       title: "Update a booking",
       description:
-        "Edits an existing booking's contact, job date, lockbox code, notes, or line items. Passing lineItems replaces the full set (not a merge/diff) — omit it to leave line items untouched.",
+        "Edits an existing booking's contact, job date, lockbox code, internal notes, invoice note, or line items. Passing lineItems replaces the full set (not a merge/diff) — omit it to leave line items untouched.",
       inputSchema: {
         id: z.string().uuid(),
         contactName: z.string().optional(),
@@ -189,11 +191,12 @@ export function registerBookingTools(server: McpServer): void {
         state: z.string().optional(),
         jobDate: z.string().datetime().nullable().optional().describe("When the shoot is, or null to clear. ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
         lockboxCode: z.string().optional(),
-        notes: z.string().optional(),
+        notes: z.string().optional().describe("Internal notes — never shown to the client."),
+        invoiceNote: z.string().optional().describe("Client-facing note printed on the invoice."),
         lineItems: z.array(lineItemSchema).optional(),
       },
     },
-    async ({ id, contactName, contactPhone, address, city, state, jobDate, lockboxCode, notes, lineItems }) => {
+    async ({ id, contactName, contactPhone, address, city, state, jobDate, lockboxCode, notes, invoiceNote, lineItems }) => {
       const [existing] = await db.select().from(bookings).where(eq(bookings.id, id));
       if (!existing) return errorText("No booking with that id");
 
@@ -204,6 +207,7 @@ export function registerBookingTools(server: McpServer): void {
       if (jobDate !== undefined) patch.jobDate = jobDate ? new Date(jobDate) : null;
       if (lockboxCode !== undefined) patch.lockboxCode = lockboxCode.trim() || null;
       if (notes !== undefined) patch.notes = notes.trim() || null;
+      if (invoiceNote !== undefined) patch.invoiceNote = invoiceNote.trim() || null;
       if (contactName !== undefined || contactPhone !== undefined) {
         const name = contactName ?? "";
         const phone = contactPhone ?? "";

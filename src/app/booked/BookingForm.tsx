@@ -110,6 +110,7 @@ export function BookingForm({
   const [jobDate, setJobDate] = useState(toDateTimeInputValue(booking?.jobDate ?? null));
   const [lockboxCode, setLockboxCode] = useState(booking?.lockboxCode ?? "");
   const [notes, setNotes] = useState(booking?.notes ?? "");
+  const [invoiceNote, setInvoiceNote] = useState(booking?.invoiceNote ?? "");
   const [dropboxFolderLink, setDropboxFolderLink] = useState(booking?.dropboxFolderLink ?? "");
   const [lineItems, setLineItems] = useState<LineItemRow[]>(toLineItemRows(booking?.lineItems ?? []));
   const [completion, setCompletion] = useState(() => toCompletionDraft(booking));
@@ -162,6 +163,7 @@ export function BookingForm({
     setJobDate(toDateTimeInputValue(booking?.jobDate ?? null));
     setLockboxCode(booking?.lockboxCode ?? "");
     setNotes(booking?.notes ?? "");
+    setInvoiceNote(booking?.invoiceNote ?? "");
     setDropboxFolderLink(booking?.dropboxFolderLink ?? "");
     setLineItems(toLineItemRows(booking?.lineItems ?? []));
     setCompletion(toCompletionDraft(booking));
@@ -184,6 +186,7 @@ export function BookingForm({
       jobDate: jobDate ? new Date(jobDate) : null,
       lockboxCode,
       notes,
+      invoiceNote,
       lineItems: lineItems.map((li) => ({
         description: li.description,
         amount: li.amount.trim() ? Number(li.amount) : 0,
@@ -362,8 +365,15 @@ export function BookingForm({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="booking-notes">Notes</Label>
+              <Label htmlFor="booking-notes">Internal notes</Label>
               <Textarea id="booking-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+              <p className="text-xs text-muted-foreground">Only you see these.</p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="booking-invoice-note">Invoice note</Label>
+              <Textarea id="booking-invoice-note" value={invoiceNote} onChange={(e) => setInvoiceNote(e.target.value)} rows={2} />
+              <p className="text-xs text-muted-foreground">Printed on the invoice for the client.</p>
             </div>
 
             {isEditing && (

@@ -299,7 +299,11 @@ export const bookings = pgTable("bookings", {
 
   jobDate: timestamp("job_date", { withTimezone: true }),
   lockboxCode: text("lockbox_code"),
+  // Internal notes — shown in the app and calendar, never on the invoice.
   notes: text("notes"),
+  // Client-facing note printed on the invoice (e.g. "Thanks Kristi!",
+  // "25% first-time discount"). Kept separate so internal context can't leak.
+  invoiceNote: text("invoice_note"),
   // The final state — the job is done AND paid. Null = still open (either
   // upcoming or waiting for payment, see invoiceSentAt). Set via a "Mark
   // completed" action.

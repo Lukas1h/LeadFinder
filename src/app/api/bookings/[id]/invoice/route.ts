@@ -99,11 +99,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     )
     .join("");
 
-  const notesBlock = booking.notes
+  const notesBlock = booking.invoiceNote
     ? `
     <div style="background:#F9F4F1;border-left:3px solid #D67F1F;padding:16px 20px;margin-top:0.24in;flex-shrink:0;">
       <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#995000;">Notes</div>
-      <p style="margin:10px 0 0;font-family:'Outfit',sans-serif;font-weight:400;font-size:15px;color:#181A1C;line-height:1.5;">${escapeHtml(booking.notes)}</p>
+      <p style="margin:10px 0 0;font-family:'Outfit',sans-serif;font-weight:400;font-size:15px;color:#181A1C;line-height:1.5;">${escapeHtml(booking.invoiceNote)}</p>
     </div>`
     : "";
 

@@ -29,6 +29,7 @@ export interface CreateBookingInput {
   jobDate: Date | null;
   lockboxCode: string | null;
   notes: string | null;
+  invoiceNote: string | null;
   lineItems: BookingLineItemInput[];
 }
 
@@ -51,6 +52,7 @@ export interface UpdateBookingInput {
   jobDate: Date | null;
   lockboxCode: string | null;
   notes: string | null;
+  invoiceNote: string | null;
   lineItems: BookingLineItemInput[];
   // The Dropbox folder the shoot's photos were delivered into — see
   // GallerySection.tsx and src/lib/dropbox.ts for how this becomes a
@@ -120,6 +122,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
       jobDate: input.jobDate,
       lockboxCode: input.lockboxCode?.trim() || null,
       notes: input.notes?.trim() || null,
+      invoiceNote: input.invoiceNote?.trim() || null,
     })
     .returning({ id: bookings.id });
 
@@ -184,6 +187,7 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
       jobDate: input.jobDate,
       lockboxCode: input.lockboxCode?.trim() || null,
       notes: input.notes?.trim() || null,
+      invoiceNote: input.invoiceNote?.trim() || null,
       dropboxFolderLink: input.dropboxFolderLink.trim() || null,
       ...input.completion,
     })
@@ -245,6 +249,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     jobDate: booking.jobDate,
     lockboxCode: booking.lockboxCode,
     notes: booking.notes,
+    invoiceNote: booking.invoiceNote,
     completedAt: booking.completedAt,
     invoiceSentAt: booking.invoiceSentAt,
     driveHours: booking.driveHours,
@@ -319,6 +324,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       jobDate: b.jobDate,
       lockboxCode: b.lockboxCode,
       notes: b.notes,
+      invoiceNote: b.invoiceNote,
       completedAt: b.completedAt,
       invoiceSentAt: b.invoiceSentAt,
       driveHours: b.driveHours,
