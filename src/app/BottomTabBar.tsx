@@ -2,11 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Ellipsis } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NAV_LINKS } from "./nav-links";
+import { NAV_LINKS, MORE_LINKS } from "./nav-links";
+
+const TABS = [
+  ...NAV_LINKS.filter((link) => "mobileTab" in link && link.mobileTab),
+  { href: "/more", label: "More", icon: Ellipsis },
+];
 
 export function BottomTabBar() {
   const pathname = usePathname();
+  // The More tab stays lit on any page it lists, so you can tell where you are.
+  const inMore = pathname === "/more" || MORE_LINKS.some((link) => pathname.startsWith(link.href));
 
   return (
     <nav
@@ -14,8 +22,9 @@ export function BottomTabBar() {
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <div className="flex h-14 items-stretch">
-        {NAV_LINKS.filter((link) => !("hideOnMobile" in link && link.hideOnMobile)).map((link) => {
-          const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+        {TABS.map((link) => {
+          const isActive =
+            link.href === "/more" ? inMore : link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
           return (
             <Link
               key={link.href}

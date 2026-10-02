@@ -5,7 +5,8 @@ import { NAV_LINKS } from "./nav-links";
 
 export function MobileHeader() {
   const pathname = usePathname();
-  const title = NAV_LINKS.find((link) => link.href === pathname)?.label ?? "LeadFinder";
+  const title =
+    pathname === "/more" ? "More" : (NAV_LINKS.find((link) => link.href === pathname)?.label ?? "LeadFinder");
 
   return (
     // Fixed dark background (not the theme-dependent bg-background token,

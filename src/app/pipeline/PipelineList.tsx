@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   Search,
   Inbox,
@@ -61,15 +61,22 @@ export function PipelineList({
   followUpAfterDays: number;
 }) {
   const [search, setSearch] = useState("");
+  // Filtering re-renders every card, so wait for typing to pause (same
+  // 250ms as the Agents search) instead of re-filtering on each keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const agentMap = useMemo(() => new Map(Object.entries(agentByPhone)), [agentByPhone]);
   const nameMap = useMemo(() => new Map(Object.entries(agentByName)), [agentByName]);
   const idMap = useMemo(() => new Map(Object.entries(agentById)), [agentById]);
 
   const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = debouncedSearch.trim().toLowerCase();
     return listings.filter((l) => matchesSearch(l, query));
-  }, [listings, search]);
+  }, [listings, debouncedSearch]);
 
   const { manualFollowUp, replied, saved, followUpDue, quoted, waiting, closed } = useMemo(() => {
     // Distinct from the automatic contactedAt-driven followUpDue below —
@@ -202,7 +209,7 @@ export function PipelineList({
       </div>
 
       {nothingFound ? (
-        <p className="text-muted-foreground/70 text-sm">No leads match &ldquo;{search}&rdquo;.</p>
+        <p className="text-muted-foreground/70 text-sm">No leads match &ldquo;{debouncedSearch}&rdquo;.</p>
       ) : (
         <div className="flex flex-col gap-6">
           {!needsAttentionEmpty && (

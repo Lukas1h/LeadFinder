@@ -690,3 +690,48 @@ export const agentInteractions = pgTable("agent_interactions", {
 
 export type AgentInteraction = typeof agentInteractions.$inferSelect;
 export type NewAgentInteraction = typeof agentInteractions.$inferInsert;
+
+// Messages written ahead of time and sent later — a batch of listing texts
+// to work through, or an email that shouldn't go out the instant someone
+// replies. Channel-agnostic: each row is a text or an email. Nothing here
+// sends on its own; every row goes out from the Queue page's Send button,
+// which hands off to the same send actions the rest of the app uses (so the
+// send lands in message_sends and contact history exactly like any other).
+// Queued rows show in the agent's contact history as scheduled, but don't
+// count as contact for the Already-contacted badge until actually sent.
+export const QUEUED_MESSAGE_STATUSES = ["queued", "sent", "skipped"] as const;
+export type QueuedMessageStatus = (typeof QUEUED_MESSAGE_STATUSES)[number];
+export const queuedMessageStatusEnum = pgEnum("queued_message_status", QUEUED_MESSAGE_STATUSES);
+
+export const queuedMessages = pgTable("queued_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  listingId: uuid("listing_id").references((): AnyPgColumn => listings.id, { onDelete: "cascade" }),
+  channel: messageChannelEnum("channel").notNull(),
+  type: presetTypeEnum("type").notNull().default("initial_outreach"),
+  // Attribution for the send this becomes. A null variantId means an AI
+  // draft, materialized into a variant at send time like any other.
+  presetId: uuid("preset_id").references(() => messagePresets.id, { onDelete: "set null" }),
+  variantId: uuid("variant_id").references(() => messagePresetVariants.id, { onDelete: "set null" }),
+  subject: text("subject"),
+  body: text("body").notNull(),
+  // Overrides the agent's phone/email on file, when set.
+  recipient: text("recipient"),
+  // Earliest it should go out. Sends are further held to 8 AM–9 PM Pacific
+  // (see src/lib/queue.ts).
+  sendAfter: timestamp("send_after", { withTimezone: true }).notNull().defaultNow(),
+  // A chained step: waits for this other queued message to be sent, then
+  // becomes due delayMinutes after that actual send.
+  afterQueuedId: uuid("after_queued_id").references((): AnyPgColumn => queuedMessages.id, { onDelete: "set null" }),
+  delayMinutes: integer("delay_minutes"),
+  status: queuedMessageStatusEnum("status").notNull().default("queued"),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  // The pending "did it send?" interaction a text handoff created — so
+  // answering "didn't send" puts this row back in the queue.
+  interactionId: uuid("interaction_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type QueuedMessage = typeof queuedMessages.$inferSelect;

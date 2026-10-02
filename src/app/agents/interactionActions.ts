@@ -7,6 +7,7 @@ import {
   listings,
   messagePresets,
   messageSends,
+  queuedMessages,
   type InteractionChannel,
   type InteractionDirection,
   type InteractionOutcome,
@@ -48,6 +49,16 @@ export type TimelineItem =
       pending: boolean;
     }
   | {
+      // Written but not sent yet — see queuedMessages. Listed first, and not
+      // counted as contact anywhere else.
+      kind: "queued";
+      id: string;
+      at: Date;
+      channel: MessageChannel;
+      body: string;
+      listingAddress: string | null;
+    }
+  | {
       kind: "interaction";
       id: string;
       at: Date;
@@ -61,7 +72,7 @@ export type TimelineItem =
     };
 
 export async function getAgentTimeline(agentId: string): Promise<TimelineItem[]> {
-  const [sends, interactions] = await Promise.all([
+  const [sends, interactions, queued] = await Promise.all([
     db
       .select({
         id: messageSends.id,
@@ -93,6 +104,17 @@ export async function getAgentTimeline(agentId: string): Promise<TimelineItem[]>
       .from(agentInteractions)
       .leftJoin(listings, eq(agentInteractions.listingId, listings.id))
       .where(eq(agentInteractions.agentId, agentId)),
+    db
+      .select({
+        id: queuedMessages.id,
+        at: queuedMessages.sendAfter,
+        channel: queuedMessages.channel,
+        body: queuedMessages.body,
+        listingAddress: listings.address,
+      })
+      .from(queuedMessages)
+      .leftJoin(listings, eq(queuedMessages.listingId, listings.id))
+      .where(and(eq(queuedMessages.agentId, agentId), eq(queuedMessages.status, "queued"))),
   ]);
 
   // One text sent from the app produced a row in each table. Keyed on the link
@@ -133,7 +155,11 @@ export async function getAgentTimeline(agentId: string): Promise<TimelineItem[]>
       })),
   ];
 
-  return items.sort((a, b) => b.at.getTime() - a.at.getTime());
+  items.sort((a, b) => b.at.getTime() - a.at.getTime());
+  const upcoming: TimelineItem[] = queued
+    .sort((a, b) => a.at.getTime() - b.at.getTime())
+    .map((q) => ({ kind: "queued" as const, ...q }));
+  return [...upcoming, ...items];
 }
 
 export interface LogInteractionInput {
@@ -273,6 +299,11 @@ export async function resolvePendingInteraction(
     }
     // Nothing reached them, so there's no interaction worth keeping either.
     await db.delete(agentInteractions).where(eq(agentInteractions.id, id));
+    // A queued text that was handed off from the Queue page goes back in line.
+    await db
+      .update(queuedMessages)
+      .set({ status: "queued", sentAt: null, interactionId: null })
+      .where(eq(queuedMessages.interactionId, id));
 
     // The text button marks the listing "contacted" the instant it's tapped,
     // because the sms: handoff leaves the app no way to wait and see. When that

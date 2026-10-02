@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { UserPlus, Phone, PhoneIncoming, MessageCircle, Mail, History, CalendarCheck, Pencil, Trash2, Users } from "lucide-react";
+import { UserPlus, Phone, PhoneIncoming, MessageCircle, Mail, History, CalendarCheck, Pencil, Trash2, Users, Clock } from "lucide-react";
 import { getAgentTimeline, startPendingInteraction, type TimelineItem } from "./interactionActions";
 import { AddInteractionDialog } from "./AddInteractionDialog";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
@@ -111,7 +111,32 @@ function sendLabel(item: Extract<TimelineItem, { kind: "send" }>): string {
   return item.listingAddress ? `${verb} about ${item.listingAddress}` : verb;
 }
 
+function queuedWhen(at: Date): string {
+  const minutes = Math.round((new Date(at).getTime() - Date.now()) / 60_000);
+  if (minutes <= 0) return "ready to send";
+  if (minutes < 60) return `in ${minutes} min`;
+  if (minutes < 24 * 60) return `in ${Math.round(minutes / 60)} hr`;
+  return formatDate(at);
+}
+
 function TimelineRow({ item }: { item: TimelineItem }) {
+  if (item.kind === "queued") {
+    return (
+      <Link href="/queue" className="flex items-start gap-2.5 py-1.5 opacity-70 hover:opacity-100">
+        <Clock className="size-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-foreground">
+            {item.channel === "email" ? "Email" : "Text"} queued
+            {item.listingAddress ? ` about ${item.listingAddress}` : ""}
+          </p>
+          <p className="text-xs text-muted-foreground line-clamp-1">{item.body}</p>
+        </div>
+        <Badge variant="outline" className="shrink-0">
+          {queuedWhen(item.at)}
+        </Badge>
+      </Link>
+    );
+  }
   if (item.kind === "send") {
     return (
       <div className="flex items-start gap-2.5 py-1.5">
