@@ -24,6 +24,8 @@ export const LEAD_FRESH_DAYS = 14;
 export const LEAD_MIN_PRICE = 250_000;
 /** Over this, a listing wants video rather than a backup-photographer text. */
 export const LEAD_VIDEO_PRICE = 750_000;
+/** A listing scoring this or better already has photos good enough. */
+export const LEAD_GOOD_PHOTO_SCORE = 6;
 
 export const LEAD_SECTION_LABELS: Record<LeadSection, string> = {
   photo: "Photo opportunities",
@@ -99,13 +101,18 @@ export function isLeadUnlikely(listing: LeadSectionInput): boolean {
  * treated as weak photos, which puts them in the photo section — they're fresh
  * by definition if we only just found them, and a "good photos, no evidence"
  * assumption is the riskier one to make in a cold text.
+ *
+ * The photo boundary is 6: a score of 6 or better counts as photos being fine
+ * and belongs in backup/video, and only 5 or below (or unscored) is a photo
+ * opportunity. A matching floor of 6 is what the preset targeting uses, so the
+ * two can never disagree about where the line sits.
  */
 export function leadSection(listing: LeadSectionInput): LeadSection {
   if (isLeadUnlikely(listing)) return "unlikely";
   const price = listing.price;
   const score = listing.score;
   const fresh = isLeadFresh(listing);
-  const goodPhotos = score != null && score > 6;
+  const goodPhotos = score != null && score >= LEAD_GOOD_PHOTO_SCORE;
 
   if (price != null && price > LEAD_VIDEO_PRICE && goodPhotos && fresh) return "video";
   if (!goodPhotos && fresh) return "photo";
