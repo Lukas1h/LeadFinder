@@ -19,6 +19,8 @@ import {
   type QueueItem,
 } from "./actions";
 import { EditQueuedDialog } from "./EditQueuedDialog";
+import { ListingRow } from "../ListingRow";
+import { AgentRow } from "../AgentRow";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -152,28 +154,16 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
 
   return (
     <Card className="p-4 gap-2">
-      <div className="flex items-start gap-2">
+      <div className="flex items-center gap-2">
         {isEmail ? (
-          <Mail className="size-4 shrink-0 mt-0.5 text-muted-foreground" />
+          <Mail className="size-4 shrink-0 text-muted-foreground" />
         ) : (
-          <MessageCircle className="size-4 shrink-0 mt-0.5 text-muted-foreground" />
+          <MessageCircle className="size-4 shrink-0 text-muted-foreground" />
         )}
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">
-            {item.agentName ?? "Unknown agent"}
-            {item.listingAddress && (
-              <span className="font-normal text-muted-foreground">
-                {" "}
-                · {item.listingAddress}
-                {item.listingCity ? `, ${item.listingCity}` : ""}
-              </span>
-            )}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {isEmail ? "Email" : "Text"} · {to ?? (isEmail ? "no email on file" : "no phone on file")}
-            {item.presetName ? ` · ${item.presetName}` : ""}
-          </p>
-        </div>
+        <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          {isEmail ? "Email" : "Text"} · {to ?? (isEmail ? "no email on file" : "no phone on file")}
+          {item.presetName ? ` · ${item.presetName}` : ""}
+        </p>
         <Badge variant="outline" className="shrink-0">
           {item.status === "sent"
             ? `Sent ${formatWhen(item.sentAt!)}`
@@ -208,9 +198,18 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
       ) : (
         <>
           {isEmail && item.subject && <p className="text-sm font-medium">{item.subject}</p>}
-          <p className="text-sm text-foreground/90 whitespace-pre-wrap line-clamp-6">{item.body}</p>
+          {/* AI drafts are one-offs worth reading in full; template text is
+              already known, so two lines is enough to tell which it is. */}
+          <p className={`text-sm text-foreground/90 whitespace-pre-wrap ${item.aiDraft ? "" : "line-clamp-2"}`}>
+            {item.body}
+          </p>
         </>
       )}
+
+      <div className="flex flex-col gap-1">
+        {item.listing && <ListingRow listing={item.listing} />}
+        <AgentRow name={item.agentName} phone={item.agentPhone} agentId={item.agentId} />
+      </div>
 
       {isQueued ? (
         <div className="flex flex-wrap gap-2 pt-1">

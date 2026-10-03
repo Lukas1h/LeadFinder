@@ -12,6 +12,7 @@ import {
   type MessageChannel,
   type PresetType,
   type QueuedMessageStatus,
+  type Listing,
 } from "@/db/schema";
 import { and, eq, inArray, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -38,6 +39,10 @@ export interface QueueItem {
   sentAt: Date | null;
   createdAt: Date;
   presetName: string | null;
+  /** Drafted by AI for this listing (shown in full) rather than filled from a template. */
+  aiDraft: boolean;
+  /** The full listing row, for the ListingRow on the card. */
+  listing: Listing | null;
   agentId: string;
   agentName: string | null;
   agentPhone: string | null;
@@ -59,6 +64,8 @@ export async function getQueue(agentId?: string): Promise<QueueItem[]> {
     .select({
       q: queuedMessages,
       presetName: messagePresets.name,
+      presetAi: messagePresets.aiGenerated,
+      listing: listings,
       agentName: agents.name,
       agentPhone: agents.phone,
       agentEmail: agents.email,
@@ -125,6 +132,8 @@ export async function getQueue(agentId?: string): Promise<QueueItem[]> {
         sentAt: q.sentAt,
         createdAt: q.createdAt,
         presetName: r.presetName,
+        aiDraft: r.presetAi === true || q.draftStatus != null,
+        listing: r.listing,
         agentId: q.agentId,
         agentName: r.agentName,
         agentPhone: r.agentPhone,
