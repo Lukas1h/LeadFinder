@@ -5,9 +5,9 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { MessageCircle, Mail, Phone, RefreshCw, Paperclip } from "lucide-react";
 import type { PresetType } from "@/db/schema";
-import { getMessageOptions, draftAiPresetOption, type PresetOption } from "@/app/messageActions";
+import { getMessageOptions, sendMessage, draftAiPresetOption, type PresetOption } from "@/app/messageActions";
 import { getComposeEmailOptions, sendListingEmail, draftAiEmailPresetOption } from "@/app/composeEmailActions";
-import { openHandoff } from "@/lib/handoff";
+import { startPendingCallForListing } from "@/app/agents/interactionActions";
 import { AI_DRAFT_VARIANT_SENTINEL } from "@/lib/messageTemplate";
 import { smsUrl, telUrl, firstName } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,7 @@ export function SendContactDialog({
   const [editedText, setEditedText] = useState("");
   const [isDraftingAi, setIsDraftingAi] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
+  const [isSendingSms, setIsSendingSms] = useState(false);
 
   // --- Email tab state (mirrors the old SendEmailDialog) ---
   const [emailLoaded, setEmailLoaded] = useState(false);
@@ -166,23 +167,26 @@ export function SendContactDialog({
     setEditedText(drafted.text);
   };
 
-  // Both buttons open Messages or the dialer directly in the tap and log the
-  // hand-off alongside (see lib/handoff.ts). A text records only a pending
-  // question carrying the send; the send itself is logged once you confirm it
-  // went (see resolvePendingInteraction).
   const handleSendSms = () => {
     if (!selectedSms) return;
-    openHandoff(smsUrl(agentPhone ?? "", editedText), {
-      kind: "text",
-      listingId,
-      send: { listingId, type, presetId: selectedSms.presetId, variantId: selectedSms.variantId, body: editedText },
+    window.location.href = smsUrl(agentPhone ?? "", editedText);
+    setIsSendingSms(true);
+    sendMessage(listingId, type, selectedSms.presetId, selectedSms.variantId, editedText).then(() => {
+      setIsSendingSms(false);
     });
+    // Deliberately not "Send logged" — this only opened the Messages composer,
+    // and whether the text actually went is unknowable from here. The app asks
+    // once you're back (see PendingInteractionPrompt) and drops the send again
+    // if it never happened.
+    toast.success("Opened Messages — I'll ask if it sent");
     setOpen(false);
   };
 
+  // Same handoff problem as the text button: tapping Call opens the dialer and
+  // the app can't see whether they picked up. Park an unresolved interaction so
+  // the call isn't lost, and let the return prompt fill in the outcome.
   const handleCall = () => {
-    if (!callHref) return;
-    openHandoff(callHref, { kind: "call", listingId });
+    startPendingCallForListing(listingId).catch(() => {});
     setOpen(false);
   };
 
@@ -443,14 +447,16 @@ export function SendContactDialog({
           {mode === "text" ? (
             <>
               {callHref && (
-                <Button variant="outline" onClick={handleCall}>
-                  <Phone />
-                  Call
+                <Button variant="outline" asChild onClick={handleCall}>
+                  <a href={callHref}>
+                    <Phone />
+                    Call
+                  </a>
                 </Button>
               )}
               <Button
                 onClick={handleSendSms}
-                disabled={!selectedSms || !editedText.trim() || isDraftingAi}
+                disabled={!selectedSms || !editedText.trim() || isSendingSms || isDraftingAi}
               >
                 <MessageCircle />
                 Send text

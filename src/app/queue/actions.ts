@@ -18,10 +18,10 @@ import { and, eq, inArray, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { AI_DRAFT_VARIANT_SENTINEL } from "@/lib/messageTemplate";
 import { nextSendTime } from "@/lib/queue";
-import { generatePendingDrafts, markQueuedMessageSent } from "@/lib/queueMessages";
-import { ensureBlankSmsPreset } from "../messageActions";
+import { generatePendingDrafts } from "@/lib/queueMessages";
+import { sendMessage, ensureBlankSmsPreset } from "../messageActions";
 import { sendListingEmail, sendComposeEmail, ensureBlankEmailPreset } from "../composeEmailActions";
-import { startTextHandoff } from "../agents/interactionActions";
+import { startPendingInteraction } from "../agents/interactionActions";
 
 export interface QueueItem {
   id: string;
@@ -50,8 +50,6 @@ export interface QueueItem {
   listingId: string | null;
   listingAddress: string | null;
   listingCity: string | null;
-  /** Handed off to Messages; waiting on the "did it send?" answer. */
-  awaitingConfirmation: boolean;
   /** Waiting on an earlier queued message that hasn't gone out yet. */
   waitingOnId: string | null;
   /** The agent wrote back after this was queued — worth a look before sending. */
@@ -144,7 +142,6 @@ export async function getQueue(agentId?: string): Promise<QueueItem[]> {
         listingAddress: r.listingAddress,
         listingCity: r.listingCity,
         waitingOnId,
-        awaitingConfirmation: q.status === "queued" && q.interactionId != null,
         repliedSinceQueued: q.status === "queued" && replied != null && replied > q.createdAt,
         lastContactedAt: lastContact.get(q.agentId) ?? null,
       };
@@ -193,7 +190,7 @@ async function loadForSend(id: string) {
     .from(queuedMessages)
     .innerJoin(agents, eq(queuedMessages.agentId, agents.id))
     .where(eq(queuedMessages.id, id));
-  return row?.q.status === "queued" && row.q.draftStatus == null && row.q.interactionId == null ? row : null;
+  return row?.q.status === "queued" && row.q.draftStatus == null ? row : null;
 }
 
 /** Re-runs a failed (or stuck) AI draft for one queued message. */
@@ -219,6 +216,25 @@ async function fallbackPresetId(channel: MessageChannel, type: PresetType): Prom
     )
     .limit(1);
   return preset?.id ?? null;
+}
+
+/** Marks a row sent and starts the clock on any step chained after it. */
+async function markSent(id: string, interactionId: string | null) {
+  const now = new Date();
+  await db
+    .update(queuedMessages)
+    .set({ status: "sent", sentAt: now, interactionId })
+    .where(eq(queuedMessages.id, id));
+  const next = await db
+    .select({ id: queuedMessages.id, delayMinutes: queuedMessages.delayMinutes })
+    .from(queuedMessages)
+    .where(and(eq(queuedMessages.afterQueuedId, id), eq(queuedMessages.status, "queued")));
+  for (const step of next) {
+    await db
+      .update(queuedMessages)
+      .set({ sendAfter: new Date(now.getTime() + (step.delayMinutes ?? 0) * 60_000) })
+      .where(eq(queuedMessages.id, step.id));
+  }
 }
 
 /** Sends a queued email now, through the same actions the email dialogs use. */
@@ -266,29 +282,33 @@ export async function sendQueuedEmail(id: string): Promise<{ error?: string }> {
       });
   if (result.error) return result;
 
-  await markQueuedMessageSent(id);
+  await markSent(id, null);
   revalidateQueue();
   return {};
 }
 
 /**
- * Called as the client hands a queued text off to Messages. Records only a
- * pending "did it send?" question carrying the send — nothing is marked sent
- * until that's answered (see resolvePendingInteraction).
+ * Called as the client hands a queued text off to Messages. Logs it the same
+ * way the Text button does — an optimistic send plus a pending "did it send?"
+ * interaction — and remembers that interaction, so answering "didn't send"
+ * puts the row back in the queue (see resolvePendingInteraction).
  */
-export async function startQueuedTextHandoff(id: string): Promise<{ error?: string }> {
+export async function markQueuedTextOpened(id: string): Promise<void> {
   const row = await loadForSend(id);
-  if (!row) return { error: "Already sent, removed, or still drafting" };
+  if (!row) return;
   const { q } = row;
-  const presetId = q.listingId ? (q.presetId ?? (await fallbackPresetId("sms", q.type))) : null;
-  await startTextHandoff({
-    agentId: q.agentId,
-    listingId: q.listingId,
-    queuedMessageId: q.id,
-    send:
-      q.listingId && presetId
-        ? { listingId: q.listingId, type: q.type, presetId, variantId: q.variantId ?? AI_DRAFT_VARIANT_SENTINEL, body: q.body }
-        : undefined,
-  });
-  return {};
+
+  let interactionId: string | null = null;
+  if (q.listingId) {
+    const presetId = q.presetId ?? (await fallbackPresetId("sms", q.type));
+    if (presetId) {
+      const result = await sendMessage(q.listingId, q.type, presetId, q.variantId ?? AI_DRAFT_VARIANT_SENTINEL, q.body);
+      interactionId = result.pendingInteractionId;
+    }
+  } else {
+    interactionId = await startPendingInteraction({ agentId: q.agentId, channel: "text" });
+  }
+
+  await markSent(id, interactionId);
+  revalidateQueue();
 }

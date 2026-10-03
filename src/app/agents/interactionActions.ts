@@ -8,7 +8,6 @@ import {
   messagePresets,
   messageSends,
   queuedMessages,
-  type PendingSend,
   type InteractionChannel,
   type InteractionDirection,
   type InteractionOutcome,
@@ -19,9 +18,7 @@ import {
 } from "@/db/schema";
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { markLatestSendResponded, resolveAgentId } from "@/lib/agentIdentity";
-import { markQueuedMessageSent } from "@/lib/queueMessages";
-import { commitSmsSend } from "@/app/messageActions";
+import { markLatestSendResponded } from "@/lib/agentIdentity";
 
 /**
  * One agent's history as a single list, merging templated sends
@@ -238,70 +235,6 @@ export async function startPendingInteraction(input: {
   return row?.id ?? null;
 }
 
-/**
- * A text handed off to Messages. Records only a pending "did it send?" row
- * carrying what to log — no send, no listing change — so a "No" has nothing to
- * undo. The send is committed on "Yes" or a skipped question (see
- * commitPendingSend). Resolves the agent from the listing when not given.
- */
-export async function startTextHandoff(input: {
-  agentId?: string | null;
-  listingId?: string | null;
-  send?: PendingSend["send"];
-  queuedMessageId?: string;
-}): Promise<string | null> {
-  let agentId = input.agentId ?? null;
-  if (!agentId && input.listingId) {
-    const [row] = await db
-      .select({ agentId: listings.agentId, agentPhone: listings.agentPhone, agentName: listings.agentName })
-      .from(listings)
-      .where(eq(listings.id, input.listingId));
-    agentId = row?.agentId ?? null;
-    // Not linked yet: find or create the agent from the listing's snapshot and
-    // link it — the record needs an agent for the question to belong to.
-    if (!agentId && row) {
-      agentId = await resolveAgentId(row.agentPhone, row.agentName);
-      if (agentId) await db.update(listings).set({ agentId }).where(eq(listings.id, input.listingId));
-    }
-  }
-  if (!agentId) return null;
-
-  const [row] = await db
-    .insert(agentInteractions)
-    .values({
-      agentId,
-      listingId: input.listingId ?? null,
-      channel: "text",
-      direction: "outbound",
-      pendingSince: new Date(),
-      pendingSend: { send: input.send, queuedMessageId: input.queuedMessageId },
-      source: "app",
-    })
-    .returning({ id: agentInteractions.id });
-
-  if (row && input.queuedMessageId) {
-    await db.update(queuedMessages).set({ interactionId: row.id }).where(eq(queuedMessages.id, input.queuedMessageId));
-    revalidatePath("/queue");
-  }
-  return row?.id ?? null;
-}
-
-/**
- * Applies a confirmed handoff's send: the message_sends row and listing update
- * (commitSmsSend), and the queued message marked sent. Dated to when Send was
- * tapped, not when the question was answered.
- */
-async function commitPendingSend(id: string, pending: PendingSend, at: Date): Promise<void> {
-  if (pending.send) {
-    const { sendId } = await commitSmsSend({ ...pending.send, at });
-    if (sendId) await db.update(agentInteractions).set({ messageSendId: sendId }).where(eq(agentInteractions.id, id));
-  }
-  if (pending.queuedMessageId) {
-    await markQueuedMessageSent(pending.queuedMessageId, at);
-    revalidatePath("/queue");
-  }
-}
-
 /** Everything still waiting on a "how did that go?" answer, newest first. */
 export async function getPendingInteractions(): Promise<
   {
@@ -346,29 +279,11 @@ export async function resolvePendingInteraction(
       agentId: agentInteractions.agentId,
       listingId: agentInteractions.listingId,
       listingStatusBefore: agentInteractions.listingStatusBefore,
-      pendingSend: agentInteractions.pendingSend,
-      pendingSince: agentInteractions.pendingSince,
     })
     .from(agentInteractions)
     .where(eq(agentInteractions.id, id));
   if (!row) return;
 
-  // Confirm-then-commit handoffs: nothing was written beyond this row, so
-  // "No" is just deleting it (and freeing the queued message to send again).
-  if (row.pendingSend && outcome === "not_sent") {
-    await db.delete(agentInteractions).where(eq(agentInteractions.id, id));
-    if (row.pendingSend.queuedMessageId) {
-      await db
-        .update(queuedMessages)
-        .set({ interactionId: null })
-        .where(eq(queuedMessages.id, row.pendingSend.queuedMessageId));
-      revalidatePath("/queue");
-    }
-    return;
-  }
-
-  // Legacy rows from before confirm-then-commit, whose send was written at
-  // tap time and has to be unwound here.
   if (outcome === "not_sent") {
     // Read the send's type before deleting it — it's the only thing that
     // distinguishes "this tap is what marked the listing contacted" from "this
@@ -384,6 +299,11 @@ export async function resolvePendingInteraction(
     }
     // Nothing reached them, so there's no interaction worth keeping either.
     await db.delete(agentInteractions).where(eq(agentInteractions.id, id));
+    // A queued text that was handed off from the Queue page goes back in line.
+    await db
+      .update(queuedMessages)
+      .set({ status: "queued", sentAt: null, interactionId: null })
+      .where(eq(queuedMessages.interactionId, id));
 
     // The text button marks the listing "contacted" the instant it's tapped,
     // because the sms: handoff leaves the app no way to wait and see. When that
@@ -467,14 +387,10 @@ export async function resolvePendingInteraction(
         .where(and(eq(agents.id, row.agentId), eq(agents.lastContactedListingId, row.listingId)));
     }
   } else {
-    // Clear pendingSince first, guarded on it still being set, so a double
-    // answer (two tabs, a double tap) can't commit the same send twice.
-    const [claimed] = await db
+    await db
       .update(agentInteractions)
       .set({ outcome, pendingSince: null, ...(note?.trim() ? { note: note.trim() } : {}) })
-      .where(and(eq(agentInteractions.id, id), isNotNull(agentInteractions.pendingSince)))
-      .returning({ id: agentInteractions.id });
-    if (claimed && row.pendingSend) await commitPendingSend(id, row.pendingSend, row.pendingSince ?? new Date());
+      .where(eq(agentInteractions.id, id));
 
     await db.update(agents).set({ lastContactedAt: new Date() }).where(eq(agents.id, row.agentId));
   }
@@ -495,16 +411,7 @@ export async function resolvePendingInteraction(
  * honest, and better than either guessing or losing it.
  */
 export async function dismissPendingInteraction(id: string): Promise<void> {
-  // A skipped text question counts as sent — losing a real send is worse
-  // than logging one that didn't go out, which can be deleted from history.
-  const [row] = await db
-    .update(agentInteractions)
-    .set({ pendingSince: null })
-    .where(and(eq(agentInteractions.id, id), isNotNull(agentInteractions.pendingSince)))
-    .returning({ pendingSend: agentInteractions.pendingSend, createdAt: agentInteractions.createdAt });
-  if (row?.pendingSend) await commitPendingSend(id, row.pendingSend, row.createdAt);
-  revalidatePath("/");
-  revalidatePath("/pipeline");
+  await db.update(agentInteractions).set({ pendingSince: null }).where(eq(agentInteractions.id, id));
   revalidatePath("/agents");
 }
 

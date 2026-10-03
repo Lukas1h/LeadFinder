@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { HANDOFF_MARKER_KEY } from "@/lib/handoff";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { Phone, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,59 +58,22 @@ export function PendingInteractionPrompt() {
       .catch(() => {});
   }, []);
 
-  // Right after a hand-off the question may not exist yet: iOS can hold the
-  // beacon that creates it (see lib/handoff.ts) until the app is back in the
-  // foreground, so the first check races it. While a hand-off is recent, keep
-  // checking every second until the question appears (or ~20s pass).
-  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollAfterHandoff = useCallback(() => {
-    let at = 0;
-    try {
-      at = Number(localStorage.getItem(HANDOFF_MARKER_KEY) ?? 0);
-    } catch {}
-    if (!at || Date.now() - at > 10 * 60_000 || pollTimer.current) return;
-    let tries = 0;
-    pollTimer.current = setInterval(() => {
-      tries++;
-      getPendingInteractions()
-        .then((pending) => {
-          if (pending.length > 0 || tries >= 20) {
-            if (pollTimer.current) clearInterval(pollTimer.current);
-            pollTimer.current = null;
-            if (pending.length > 0) {
-              setQueue(pending);
-              try {
-                localStorage.removeItem(HANDOFF_MARKER_KEY);
-              } catch {}
-            }
-          }
-        })
-        .catch(() => {});
-    }, 1000);
-  }, []);
-
   useEffect(() => {
     refresh();
-    pollAfterHandoff();
     // visibilitychange is the signal that matters: leaving for the dialer or
     // Messages hides this document, and coming back shows it again. A plain
     // mount-time check alone would miss it, since a PWA returning from another
     // app doesn't remount.
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        refresh();
-        pollAfterHandoff();
-      }
+      if (document.visibilityState === "visible") refresh();
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
-      if (pollTimer.current) clearInterval(pollTimer.current);
-      pollTimer.current = null;
     };
-  }, [refresh, pollAfterHandoff]);
+  }, [refresh]);
 
   const current = queue[0];
   if (!current) return null;

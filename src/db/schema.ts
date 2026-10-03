@@ -637,13 +637,6 @@ export const INTERACTION_OUTCOMES = ["answered", "no_answer", "voicemail", "sent
 export type InteractionOutcome = (typeof INTERACTION_OUTCOMES)[number];
 export const interactionOutcomeEnum = pgEnum("interaction_outcome", INTERACTION_OUTCOMES);
 
-export interface PendingSend {
-  /** Present for a templated/AI text about a listing — what becomes a message_sends row. */
-  send?: { listingId: string; type: PresetType; presetId: string; variantId: string; body: string };
-  /** The queued message this handoff came from. */
-  queuedMessageId?: string;
-}
-
 export const agentInteractions = pgTable("agent_interactions", {
   id: uuid("id").primaryKey().defaultRandom(),
   agentId: uuid("agent_id")
@@ -676,13 +669,6 @@ export const agentInteractions = pgTable("agent_interactions", {
   // as "didn't send" can remove a send that never happened instead of leaving
   // it inflating the variant's numbers.
   messageSendId: uuid("message_send_id").references(() => messageSends.id, { onDelete: "set null" }),
-
-  // What a text handoff will log once confirmed. Tapping Send in a text dialog
-  // or on the Queue page records nothing but this pending row; "Yes, I sent
-  // it" (or skipping the question) commits the send — message_sends row,
-  // listing marked contacted, queued message marked sent — and "No" just
-  // deletes the row, so there's never anything to restore.
-  pendingSend: jsonb("pending_send").$type<PendingSend>(),
 
   // The listing status at the moment this interaction was started, captured
   // before the app optimistically advanced it. A "no, I didn't send it" answer

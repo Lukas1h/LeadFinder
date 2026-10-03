@@ -3,26 +3,16 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  Mail,
-  MessageCircle,
-  Send,
-  SkipForward,
-  Trash2,
-  Pencil,
-  Undo2,
-  Link2,
-  RotateCcw,
-} from "lucide-react";
+import { Mail, MessageCircle, Send, SkipForward, Trash2, Pencil, Undo2, Link2, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { smsUrl } from "@/lib/sms";
-import { openHandoff } from "@/lib/handoff";
 import { isInSendWindow } from "@/lib/queue";
 import {
   sendQueuedEmail,
+  markQueuedTextOpened,
   setQueuedMessageStatus,
   deleteQueuedMessage,
   retryQueuedDraft,
@@ -73,37 +63,26 @@ export function QueueList({ items }: { items: QueueItem[] }) {
   const queued = items
     .filter((i) => i.status === "queued")
     .sort((a, b) => (a.channel === "email" ? 0 : 1) - (b.channel === "email" ? 0 : 1));
-  const due = queued.filter(
-    (i) => !i.waitingOnId && new Date(i.dueAt).getTime() <= now,
-  );
+  const due = queued.filter((i) => !i.waitingOnId && new Date(i.dueAt).getTime() <= now);
   const scheduled = queued.filter((i) => !due.includes(i));
   const done = items
     .filter((i) => i.status !== "queued")
-    .sort(
-      (a, b) =>
-        new Date(b.sentAt ?? b.createdAt).getTime() -
-        new Date(a.sentAt ?? a.createdAt).getTime(),
-    );
+    .sort((a, b) => new Date(b.sentAt ?? b.createdAt).getTime() - new Date(a.sentAt ?? a.createdAt).getTime());
   const outsideWindow = !isInSendWindow(new Date(now));
 
   return (
     <>
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Queue
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Queue</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {queued.length} queued message{queued.length === 1 ? "" : "s"} · sends
-          8 AM–9 PM
+          {queued.length} queued message{queued.length === 1 ? "" : "s"} · sends 8 AM–9 PM
         </p>
       </header>
 
       <Tabs defaultValue="due">
         <TabsList className="mb-4">
           <TabsTrigger value="due">Due now ({due.length})</TabsTrigger>
-          <TabsTrigger value="scheduled">
-            Scheduled ({scheduled.length})
-          </TabsTrigger>
+          <TabsTrigger value="scheduled">Scheduled ({scheduled.length})</TabsTrigger>
           <TabsTrigger value="done">Done ({done.length})</TabsTrigger>
         </TabsList>
 
@@ -128,9 +107,7 @@ export function QueueList({ items }: { items: QueueItem[] }) {
         </TabsContent>
 
         <TabsContent value="done" className="flex flex-col gap-3">
-          {done.length === 0 && (
-            <Empty>Nothing sent or skipped in the last 2 days.</Empty>
-          )}
+          {done.length === 0 && <Empty>Nothing sent or skipped in the last 2 days.</Empty>}
           {done.map((item) => (
             <QueueCard key={item.id} item={item} now={now} />
           ))}
@@ -141,11 +118,7 @@ export function QueueList({ items }: { items: QueueItem[] }) {
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-sm text-muted-foreground/70 py-10 text-center">
-      {children}
-    </p>
-  );
+  return <p className="text-sm text-muted-foreground/70 py-10 text-center">{children}</p>;
 }
 
 function QueueCard({ item, now }: { item: QueueItem; now: number }) {
@@ -157,11 +130,9 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
   const draftFailed = item.draftStatus === "failed";
   const isEmail = item.channel === "email";
   const to = item.recipient ?? (isEmail ? item.agentEmail : item.agentPhone);
-  const isDue =
-    isQueued && !item.waitingOnId && new Date(item.dueAt).getTime() <= now;
+  const isDue = isQueued && !item.waitingOnId && new Date(item.dueAt).getTime() <= now;
   const recentlyContacted =
-    item.lastContactedAt != null &&
-    now - new Date(item.lastContactedAt).getTime() < 7 * DAY_MS;
+    item.lastContactedAt != null && now - new Date(item.lastContactedAt).getTime() < 7 * DAY_MS;
 
   const run = (fn: () => Promise<unknown>) =>
     startTransition(async () => {
@@ -178,10 +149,11 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
       });
       return;
     }
-    // Opens Messages directly in the tap (iOS blocks it after an await) and
-    // logs a pending "did it send?" question alongside; the message is only
-    // marked sent once that's answered.
-    openHandoff(smsUrl(to ?? "", item.body), { kind: "queued", queuedMessageId: item.id });
+    // Same handoff as the Text button: open Messages first (it has to happen
+    // inside the tap), then log it; the app asks on the way back whether it sent.
+    window.location.href = smsUrl(to ?? "", item.body);
+    run(() => markQueuedTextOpened(item.id));
+    toast.success("Opened Messages — I'll ask if it sent");
   };
 
   return (
@@ -193,8 +165,7 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
           <MessageCircle className="size-4 shrink-0 text-muted-foreground" />
         )}
         <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-          {isEmail ? "Email" : "Text"} ·{" "}
-          {to ?? (isEmail ? "no email on file" : "no phone on file")}
+          {isEmail ? "Email" : "Text"} · {to ?? (isEmail ? "no email on file" : "no phone on file")}
           {item.presetName ? ` · ${item.presetName}` : ""}
         </p>
         <Badge variant="outline" className="shrink-0">
@@ -202,27 +173,19 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
             ? `Sent ${formatWhen(item.sentAt!)}`
             : item.status === "skipped"
               ? "Skipped"
-              : item.awaitingConfirmation
-                ? "Did it send?"
-                : item.waitingOnId
-                  ? "After previous step"
-                  : isDue
-                    ? "Due"
-                    : relative(item.dueAt, now)}
+              : item.waitingOnId
+                ? "After previous step"
+                : isDue
+                  ? "Due"
+                  : relative(item.dueAt, now)}
         </Badge>
       </div>
 
-      {(item.repliedSinceQueued ||
-        (isQueued && recentlyContacted) ||
-        item.waitingOnId) && (
+      {(item.repliedSinceQueued || (isQueued && recentlyContacted) || item.waitingOnId) && (
         <div className="flex flex-wrap gap-1.5">
-          {item.repliedSinceQueued && (
-            <Badge variant="destructive">Replied since queued</Badge>
-          )}
+          {item.repliedSinceQueued && <Badge variant="destructive">Replied since queued</Badge>}
           {isQueued && recentlyContacted && (
-            <Badge variant="secondary">
-              Contacted {formatWhen(item.lastContactedAt!)}
-            </Badge>
+            <Badge variant="secondary">Contacted {formatWhen(item.lastContactedAt!)}</Badge>
           )}
           {item.waitingOnId && (
             <Badge variant="secondary">
@@ -233,23 +196,15 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
       )}
 
       {drafting ? (
-        <p className="text-sm text-muted-foreground italic">
-          Writing AI draft…
-        </p>
+        <p className="text-sm text-muted-foreground italic">Writing AI draft…</p>
       ) : draftFailed ? (
-        <p className="text-sm text-destructive">
-          The AI draft failed — retry it, or edit to write it yourself.
-        </p>
+        <p className="text-sm text-destructive">The AI draft failed — retry it, or edit to write it yourself.</p>
       ) : (
         <>
-          {isEmail && item.subject && (
-            <p className="text-sm font-medium">{item.subject}</p>
-          )}
+          {isEmail && item.subject && <p className="text-sm font-medium">{item.subject}</p>}
           {/* AI drafts are one-offs worth reading in full; template text is
               already known, so two lines is enough to tell which it is. */}
-          <p
-            className={`text-sm text-foreground/90 whitespace-pre-wrap ${item.aiDraft ? "" : "line-clamp-2"}`}
-          >
+          <p className={`text-sm text-foreground/90 whitespace-pre-wrap ${item.aiDraft ? "" : "line-clamp-2"}`}>
             {item.body}
           </p>
         </>
@@ -257,11 +212,7 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
 
       <div className="flex flex-col gap-1">
         {item.listing && <ListingRow listing={item.listing} />}
-        <AgentRow
-          name={item.agentName}
-          phone={item.agentPhone}
-          agentId={item.agentId}
-        />
+        <AgentRow name={item.agentName} phone={item.agentPhone} agentId={item.agentId} />
       </div>
 
       {isQueued ? (
@@ -281,32 +232,19 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
               Retry draft
             </Button>
           ) : (
-            <Button
-              size="sm"
-              onClick={handleSend}
-              disabled={
-                isPending || !to || drafting || item.awaitingConfirmation
-              }
-            >
+            <Button size="sm" onClick={handleSend} disabled={isPending || !to || drafting}>
               <Send />
               {isEmail ? "Send email" : "Send text"}
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setEditing(true)}
-            disabled={isPending}
-          >
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)} disabled={isPending}>
             <Pencil />
             Edit
           </Button>
           <Button
             size="sm"
             variant="outline"
-            onClick={() =>
-              run(() => setQueuedMessageStatus(item.id, "skipped"))
-            }
+            onClick={() => run(() => setQueuedMessageStatus(item.id, "skipped"))}
             disabled={isPending}
           >
             <SkipForward />
@@ -329,9 +267,7 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
             <Button
               size="sm"
               variant="outline"
-              onClick={() =>
-                run(() => setQueuedMessageStatus(item.id, "queued"))
-              }
+              onClick={() => run(() => setQueuedMessageStatus(item.id, "queued"))}
               disabled={isPending}
             >
               <Undo2 />
