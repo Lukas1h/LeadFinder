@@ -1,4 +1,4 @@
-import { Sparkles, Clock, Camera, TriangleAlert, Bell, TrendingDown } from "lucide-react";
+import { Sparkles, Clock, Camera, TriangleAlert, Bell, TrendingDown, ListOrdered } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, LeadStatus, Listing } from "@/db/schema";
 import { formatDate, formatDateOnly, daysSince, formatPrice } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +69,16 @@ export function PhotoScoreBadge({ score, reasoning }: { score: number; reasoning
       <TooltipTrigger asChild>{badge}</TooltipTrigger>
       <TooltipContent>{reasoning}</TooltipContent>
     </Tooltip>
+  );
+}
+
+/** A listing with an unsent message waiting in the Queue. */
+export function QueuedBadge() {
+  return (
+    <Badge className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950 dark:text-sky-400 dark:border-sky-900">
+      <ListOrdered />
+      Queued
+    </Badge>
   );
 }
 

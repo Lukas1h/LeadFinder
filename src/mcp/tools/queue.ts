@@ -82,6 +82,7 @@ export function registerQueueTools(server: McpServer): void {
       title: "Queue messages",
       description:
         "Queues one text or email per listing (or agent) for Lukas to send from the Queue page — it does NOT send anything. " +
+        "A listing with a queued message leaves the Leads page (it shows under Pipeline > Queued) and is marked contacted only when the message is actually sent; deleting or skipping the message puts it back. " +
         "Find the listings first with search_listings (any filters), then pass their ids here. " +
         "Pick the content with presetId (a template from list_message_templates; its variants are rotated across recipients), " +
         "an AI-draft preset or ai: true (each message drafted individually for its listing — queued right away as 'drafting' and filled in within a minute or two; can't be sent until then), " +

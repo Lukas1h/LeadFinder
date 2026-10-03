@@ -6,6 +6,7 @@ import { listings, agents, bookings, LEAD_STATUSES } from "@/db/schema";
 import { extractZpidFromUrl, fetchFullListing } from "@/lib/zillapi";
 import { insertAndEnrichListings } from "@/lib/sync";
 import { text, errorText } from "./shared";
+import { getQueuedListingIds } from "@/lib/queueMessages";
 
 export function registerListingTools(server: McpServer): void {
   server.registerTool(
@@ -28,13 +29,17 @@ export function registerListingTools(server: McpServer): void {
           .enum(["photo", "video", "backup", "unlikely"])
           .optional()
           .describe("The Leads page section (photo/video/backup opportunities, unlikely matches) — only meaningful for status 'new'"),
+        queued: z
+          .boolean()
+          .optional()
+          .describe("true = only listings with an unsent queued message, false = exclude them. A queued listing has left the Leads page already — pass false when picking listings to queue."),
         foundAfter: z.string().datetime({ offset: true }).optional().describe("Only listings first found at or after this time"),
         agentQuery: z.string().optional().describe("Substring match against the listing's agent name or phone"),
         sortBy: z.enum(["newest", "oldest", "price_desc", "price_asc", "score_asc", "score_desc"]).default("newest"),
         limit: z.number().int().min(1).max(200).default(50),
       },
     },
-    async ({ status, city, state, minPrice, maxPrice, minScore, maxScore, isComingSoon, hasBooking, leadSection, foundAfter, agentQuery, sortBy, limit }) => {
+    async ({ status, city, state, minPrice, maxPrice, minScore, maxScore, isComingSoon, hasBooking, leadSection, queued, foundAfter, agentQuery, sortBy, limit }) => {
       const conditions = [];
       if (status) conditions.push(eq(listings.status, status));
       if (city) conditions.push(eq(listings.city, city));
@@ -52,6 +57,10 @@ export function registerListingTools(server: McpServer): void {
         .from(listings)
         .where(conditions.length ? and(...conditions) : undefined);
 
+      if (queued != null) {
+        const queuedIds = await getQueuedListingIds();
+        rows = rows.filter((l) => queuedIds.has(l.id) === queued);
+      }
       if (hasBooking === true) rows = rows.filter((l) => l.bookingId != null);
       if (hasBooking === false) rows = rows.filter((l) => l.bookingId == null);
       if (agentQuery) {

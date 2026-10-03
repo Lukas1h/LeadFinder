@@ -14,6 +14,8 @@ import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, findAt
 import { leadSection, refreshLeadSections, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
 import { LeadsSkeleton } from "./loading";
+import Link from "next/link";
+import { getQueuedListingIds } from "@/lib/queueMessages";
 
 // Server Action timeouts are controlled by the maxDuration of the page
 // they're invoked from — triggerManualSync (RefreshButton's action, in
@@ -46,14 +48,20 @@ async function LeadsContent() {
   // across renders instead of reshuffling ties arbitrarily.
   // Independent of each other, so run them concurrently instead of paying
   // for two sequential round trips to Neon.
-  const [leads, allAgents] = await Promise.all([
+  const [leads, allAgents, queuedIds] = await Promise.all([
     db
       .select()
       .from(listings)
       .where(eq(listings.status, "new"))
       .orderBy(desc(listings.foundAt), listings.id),
     db.select().from(agents),
+    getQueuedListingIds(),
   ]);
+  // A listing with a message waiting in the Queue has been handled — it lives
+  // in the Pipeline's Queued section until that message is sent (see
+  // getQueuedListingIds).
+  const queuedCount = leads.filter((l) => queuedIds.has(l.id)).length;
+  const openLeads = leads.filter((l) => !queuedIds.has(l.id));
   const contactAgents = await withLastContactFromHistory(allAgents);
   const { byId: agentById, byPhone: agentByPhone, byName: agentByName } = buildAgentLookups(contactAgents);
 
@@ -84,7 +92,7 @@ async function LeadsContent() {
   await refreshLeadSections(leads.map((l) => l.id));
 
   const sections: Record<LeadSection, Listing[]> = { photo: [], video: [], backup: [], unlikely: [] };
-  for (const lead of leads) {
+  for (const lead of openLeads) {
     const attached = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
     const section =
       (lead.leadSection as LeadSection | null) ?? leadSection({
@@ -174,7 +182,15 @@ async function LeadsContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Leads</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {leads.length} new listing{leads.length === 1 ? "" : "s"}
+            {openLeads.length} new listing{openLeads.length === 1 ? "" : "s"}
+            {queuedCount > 0 && (
+              <>
+                {" · "}
+                <Link href="/queue" className="text-primary hover:underline">
+                  {queuedCount} queued
+                </Link>
+              </>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -183,7 +199,7 @@ async function LeadsContent() {
         </div>
       </header>
 
-      {leads.length === 0 ? (
+      {openLeads.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
           <PartyPopper className="size-8" />
           <p>You&rsquo;re all caught up — no new leads right now.</p>

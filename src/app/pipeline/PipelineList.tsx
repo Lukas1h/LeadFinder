@@ -11,6 +11,7 @@ import {
   Send,
   ChevronRight,
   Bell,
+  ListOrdered,
 } from "lucide-react";
 import type { Agent, Listing } from "@/db/schema";
 import { LeadCard } from "../LeadCard";
@@ -24,9 +25,12 @@ import {
   DaysSinceContactBadge,
   FollowUpBadge,
   WarmAgentBadge,
+  QueuedBadge,
 } from "../badges";
 import { findAttachedAgent, findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isWarmAgentStatus } from "@/lib/pipeline";
 import { daysSince, isDue } from "@/lib/format";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 
@@ -52,6 +56,7 @@ export function PipelineList({
   agentById,
   addressById,
   followUpAfterDays,
+  queuedListingIds,
 }: {
   listings: Listing[];
   agentByPhone: Record<string, Agent>;
@@ -59,6 +64,8 @@ export function PipelineList({
   agentById: Record<string, Agent>;
   addressById: Record<string, string | null>;
   followUpAfterDays: number;
+  /** Listings with an unsent message in the Queue (see getQueuedListingIds). */
+  queuedListingIds: string[];
 }) {
   const [search, setSearch] = useState("");
   // Filtering re-renders every card, so wait for typing to pause (same
@@ -78,7 +85,9 @@ export function PipelineList({
     return listings.filter((l) => matchesSearch(l, query));
   }, [listings, debouncedSearch]);
 
-  const { manualFollowUp, replied, saved, followUpDue, quoted, waiting, closed } = useMemo(() => {
+  const queuedSet = useMemo(() => new Set(queuedListingIds), [queuedListingIds]);
+
+  const { manualFollowUp, replied, saved, queued, followUpDue, quoted, waiting, closed } = useMemo(() => {
     // Distinct from the automatic contactedAt-driven followUpDue below —
     // this is a manually-set reminder, can apply to a listing in any
     // (non-terminal) status, and takes priority: pulled out of whichever
@@ -94,7 +103,13 @@ export function PipelineList({
       )
       .sort((a, b) => a.followUpAt!.getTime() - b.followUpAt!.getTime());
     const manualFollowUpIds = new Set(manualFollowUp.map((l) => l.id));
-    const rest = filtered.filter((l) => !manualFollowUpIds.has(l.id));
+    // Not contacted yet, but a first message is waiting in the Queue — out of
+    // Saved (it's been handled), and in here until that message is sent.
+    const queued = filtered
+      .filter((l) => queuedSet.has(l.id) && (l.status === "new" || l.status === "saved"))
+      .sort(byLeadPriority);
+    const queuedIds = new Set(queued.map((l) => l.id));
+    const rest = filtered.filter((l) => !manualFollowUpIds.has(l.id) && !queuedIds.has(l.id));
 
     const replied = rest.filter((l) => l.status === "replied").sort((a, b) => byOldest(a, b, "statusChangedAt"));
     // Saved = not yet contacted, same "which one's worth chasing" question
@@ -116,17 +131,22 @@ export function PipelineList({
     const closed = rest
       .filter((l) => l.status === "booked" || l.status === "declined" || l.status === "passed")
       .sort((a, b) => -byOldest(a, b, "statusChangedAt"));
-    return { manualFollowUp, replied, saved, followUpDue, quoted, waiting, closed };
-  }, [filtered, followUpAfterDays]);
+    return { manualFollowUp, replied, saved, queued, followUpDue, quoted, waiting, closed };
+  }, [filtered, followUpAfterDays, queuedSet]);
 
   const needsAttentionEmpty =
     manualFollowUp.length === 0 && replied.length === 0 && saved.length === 0 && followUpDue.length === 0;
-  const waitingEmpty = quoted.length === 0 && waiting.length === 0;
+  const waitingEmpty = queued.length === 0 && quoted.length === 0 && waiting.length === 0;
   const nothingFound = filtered.length === 0 && listings.length > 0;
 
   function card(
     lead: Listing,
-    options?: { showDaysSinceContact?: boolean; showStatusBadge?: boolean; showFollowUp?: boolean }
+    options?: {
+      showDaysSinceContact?: boolean;
+      showStatusBadge?: boolean;
+      showFollowUp?: boolean;
+      inQueuedSection?: boolean;
+    }
   ) {
     // Phone first, then name — a realtor first met through a cold-email
     // import has an email and no phone, so a phone-only lookup showed them as
@@ -145,6 +165,8 @@ export function PipelineList({
                 section spans any status, so both still need the badge to
                 tell listings apart. */}
             {options?.showStatusBadge && <StatusBadge status={lead.status} />}
+            {/* The Queued section's header already says it. */}
+            {queuedSet.has(lead.id) && !options?.inQueuedSection && <QueuedBadge />}
             {options?.showFollowUp && lead.followUpAt && (
               <FollowUpBadge followUpAt={lead.followUpAt} followUpNote={lead.followUpNote} />
             )}
@@ -172,16 +194,25 @@ export function PipelineList({
           </Fragment>
         }
         actions={
-          <PipelineActions
-            key={lead.id}
-            listingId={lead.id}
-            status={lead.status}
-            agentName={lead.agentName}
-            agentPhone={lead.agentPhone}
-            agentEmail={attachedAgent?.email}
-            address={lead.address}
-            city={lead.city}
-          />
+          options?.inQueuedSection ? (
+            <Button variant="outline" asChild>
+              <Link href="/queue">
+                <ListOrdered />
+                Open Queue
+              </Link>
+            </Button>
+          ) : (
+            <PipelineActions
+              key={lead.id}
+              listingId={lead.id}
+              status={lead.status}
+              agentName={lead.agentName}
+              agentPhone={lead.agentPhone}
+              agentEmail={attachedAgent?.email}
+              address={lead.address}
+              city={lead.city}
+            />
+          )
         }
       />
     );
@@ -262,6 +293,17 @@ export function PipelineList({
           {!waitingEmpty && (
             <>
               {!needsAttentionEmpty && <Separator />}
+              {queued.length > 0 && (
+                <div>
+                  <h2 className="flex items-center gap-1.5 text-xs font-medium text-sky-700 dark:text-sky-400 mb-2">
+                    <ListOrdered className="size-3.5" />
+                    Queued — waiting to send
+                  </h2>
+                  <div className="flex flex-col gap-4">
+                    {queued.map((lead) => card(lead, { inQueuedSection: true }))}
+                  </div>
+                </div>
+              )}
               {quoted.length > 0 && (
                 <div>
                   <h2 className="flex items-center gap-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-400 mb-2">

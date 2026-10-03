@@ -2,7 +2,8 @@ import { withLastContactFromHistory } from "@/lib/agentLastContact";
 import { Suspense } from "react";
 import { db } from "@/db";
 import { listings, agents, type Agent } from "@/db/schema";
-import { ne, inArray } from "drizzle-orm";
+import { ne, inArray, or } from "drizzle-orm";
+import { getQueuedListingIds } from "@/lib/queueMessages";
 import { getFollowUpAfterDays } from "@/lib/settings";
 import { buildAgentLookups } from "@/lib/pipeline";
 import { PipelineList } from "./PipelineList";
@@ -28,8 +29,18 @@ async function PipelineContent() {
 
   // Independent of each other, so run them concurrently instead of paying
   // for sequential round trips to Neon.
+  const queuedIds = await getQueuedListingIds();
   const [all, allAgents, followUpAfterDays] = await Promise.all([
-    db.select().from(listings).where(ne(listings.status, "new")),
+    // "new" listings only appear here once a message is queued for them —
+    // see getQueuedListingIds.
+    db
+      .select()
+      .from(listings)
+      .where(
+        queuedIds.size > 0
+          ? or(ne(listings.status, "new"), inArray(listings.id, [...queuedIds]))
+          : ne(listings.status, "new")
+      ),
     db.select().from(agents),
     getFollowUpAfterDays(),
   ]);
@@ -72,6 +83,7 @@ async function PipelineContent() {
         agentById={agentById}
         addressById={addressById}
         followUpAfterDays={followUpAfterDays}
+        queuedListingIds={[...queuedIds]}
       />
     </>
   );

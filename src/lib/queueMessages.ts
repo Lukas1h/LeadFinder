@@ -8,7 +8,7 @@
 // 50 Gemini calls is too slow to hold a request open for, and a pending row
 // can't be sent until its draft lands.
 
-import { and, eq, inArray, lt, max, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lt, max, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   agentInteractions,
@@ -298,3 +298,19 @@ export async function generatePendingDrafts(ids?: string[]): Promise<number> {
   return drafted;
 }
 
+
+/**
+ * Listings with an unsent queued message. Queueing a message for a listing
+ * counts as handling it — it leaves the Leads page and sits in the Pipeline's
+ * Queued section — but nothing on the listing itself changes until the
+ * message is actually sent (which marks it contacted, the same as a manual
+ * send). Derived rather than stored, so deleting or skipping the queued
+ * message puts the listing straight back with nothing to restore.
+ */
+export async function getQueuedListingIds(): Promise<Set<string>> {
+  const rows = await db
+    .selectDistinct({ listingId: queuedMessages.listingId })
+    .from(queuedMessages)
+    .where(and(eq(queuedMessages.status, "queued"), isNotNull(queuedMessages.listingId)));
+  return new Set(rows.map((r) => r.listingId!));
+}
