@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Mail, Paperclip } from "lucide-react";
 import type { PresetType } from "@/db/schema";
@@ -10,7 +10,6 @@ import {
   findAgentMatches,
   searchAgentsByName,
   mergeAgentEmail,
-  getAgentContactInfo,
   type AgentMatchSummary,
 } from "@/app/agents/matchActions";
 import type { PresetOption } from "@/app/messageActions";
@@ -20,7 +19,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -36,13 +42,41 @@ const TYPE_LABELS: Record<PresetType, string> = {
   follow_up: "Follow-up",
 };
 
-export function ComposeEmailPanel() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const nameRef = useRef<HTMLInputElement>(null);
+/** Who an Email button was pressed for — prefills Name/Email. */
+export interface ComposeRecipient {
+  id: string;
+  name: string | null;
+  email: string | null;
+}
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+/**
+ * Cold email to any realtor, in a dialog: the Messaging page's Compose
+ * button, and the Email buttons on AgentCard/AgentDetailDialog (which pass
+ * the agent). The form only mounts while open, so each open starts fresh and
+ * loads templates then, not once per agent card on the page.
+ */
+export function ComposeEmailDialog({ recipient, trigger }: { recipient?: ComposeRecipient; trigger: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Compose email</DialogTitle>
+          <DialogDescription>Sends from your email templates and counts toward their stats.</DialogDescription>
+        </DialogHeader>
+        <ComposeEmailForm recipient={recipient} onSent={() => setOpen(false)} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ComposeEmailForm({ recipient, onSent }: { recipient?: ComposeRecipient; onSent: () => void }) {
+  const router = useRouter();
+
+  // Opened from an agent's Email button: start with their name/email filled in.
+  const [name, setName] = useState(recipient?.name ?? "");
+  const [email, setEmail] = useState(recipient?.email ?? "");
   const [presets, setPresets] = useState<PresetOption[]>([]);
   const [presetsLoaded, setPresetsLoaded] = useState(false);
   // "" rather than null — keeps the Template Select controlled from the
@@ -82,35 +116,20 @@ export function ComposeEmailPanel() {
       setPresets(options);
       const recommended = options.find((p) => p.recommended) ?? options[0] ?? null;
       setSelectedPresetId(recommended?.presetId ?? "");
-      applyTemplate(recommended, "");
+      applyTemplate(recommended, name);
       setPresetsLoaded(true);
     });
-    // Loads once — Compose always shows every enabled email template.
+    // A prefilled agent gets the normal match check, same as if they'd been
+    // typed by hand.
+    if (name || email) {
+      findAgentMatches(name, email).then((result) => {
+        setExactMatch(result.exactEmailMatch);
+        setFuzzyMatches(result.exactEmailMatch ? [] : result.fuzzyMatches);
+      });
+    }
+    // Runs once on open — Compose always shows every enabled email template.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // "Email" contact button deep link (AgentCard/AgentDetailDialog ->
-  // /messaging?agent=<id>) — prefills Name/Email once presets have loaded
-  // (so applyTemplate has something to render {{firstName}} into) and runs
-  // the normal match check, same as if it'd been typed by hand.
-  useEffect(() => {
-    const agentId = searchParams.get("agent");
-    if (!agentId || !presetsLoaded) return;
-    getAgentContactInfo(agentId).then((info) => {
-      if (!info) return;
-      updateNameAndTemplate(info.name ?? "");
-      setEmail(info.email ?? "");
-      if (info.name || info.email) {
-        findAgentMatches(info.name ?? "", info.email ?? "").then((result) => {
-          setExactMatch(result.exactEmailMatch);
-          setFuzzyMatches(result.exactEmailMatch ? [] : result.fuzzyMatches);
-        });
-      }
-    });
-    // Runs once presets finish loading — not meant to re-fire on every
-    // searchParams/selected change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [presetsLoaded]);
 
   const handleSelectPreset = (presetId: string) => {
     setSelectedPresetId(presetId);
@@ -202,19 +221,6 @@ export function ComposeEmailPanel() {
     toast.success(`Merged into ${candidate.name}`);
   }
 
-  function resetForm() {
-    setName("");
-    setEmail("");
-    applyTemplate(selected, "");
-    setExactMatch(null);
-    setFuzzyMatches([]);
-    setMergedAgent(null);
-    setConfirmAnyway(false);
-    setNameSuggestions([]);
-    setShowNameSuggestions(false);
-    nameRef.current?.focus();
-  }
-
   async function handleSend() {
     if (!selected || !selected.type) return;
 
@@ -244,25 +250,19 @@ export function ComposeEmailPanel() {
     }
 
     toast.success("Email sent");
-    resetForm();
+    onSent();
     router.refresh();
   }
 
   const canSend = !!selected && !!name.trim() && !!email.trim() && !!subject.trim() && !!body.trim() && !isSending;
 
   return (
-    <Card className="p-4 gap-4">
-      <div className="flex items-center gap-2">
-        <Mail className="size-4 text-muted-foreground" />
-        <h2 className="font-semibold text-foreground">Compose</h2>
-      </div>
-
+    <div className="flex flex-col gap-4 min-w-0">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5 relative">
           <Label htmlFor="compose-name">Name</Label>
           <Input
             id="compose-name"
-            ref={nameRef}
             value={name}
             onChange={(e) => handleNameChange(e.target.value)}
             onFocus={() => nameSuggestions.length > 0 && setShowNameSuggestions(true)}
@@ -361,7 +361,7 @@ export function ComposeEmailPanel() {
 
       {presetsLoaded && presets.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No email templates yet — add one below to start composing.
+          No email templates yet — add one on the Messaging page to start composing.
         </p>
       ) : (
         <>
@@ -430,6 +430,6 @@ export function ComposeEmailPanel() {
           {isSending ? "Sending…" : confirmAnyway ? "Send anyway" : "Send"}
         </Button>
       </div>
-    </Card>
+    </div>
   );
 }

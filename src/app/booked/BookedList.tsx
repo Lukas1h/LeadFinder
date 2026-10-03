@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo } from "react";
 import { ChevronRight, Plus, CalendarCheck } from "lucide-react";
 import type { Listing } from "@/db/schema";
 import { BookingCard } from "./BookingCard";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatPrice } from "@/lib/format";
 import { averageProfitPerHour, sumProfit } from "./bookingMath";
+import { Stat, Sub } from "../Stat";
 
 export interface BookingWithDetails {
   id: string;
@@ -183,17 +184,4 @@ function BookingStats({ completed }: { completed: BookingWithDetails[] }) {
       </Stat>
     </Card>
   );
-}
-
-function Stat({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-lg font-semibold text-foreground flex flex-col">{children}</span>
-    </div>
-  );
-}
-
-function Sub({ children }: { children: ReactNode }) {
-  return <span className="text-xs font-normal text-muted-foreground">{children}</span>;
 }

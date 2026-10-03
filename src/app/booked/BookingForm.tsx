@@ -120,7 +120,7 @@ export function BookingForm({
   const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Same debounced-search pattern as Compose's Name field (see
-  // ComposeEmailPanel.tsx) — type a name, get matching agents, pick one to
+  // ComposeEmailDialog.tsx) — type a name, get matching agents, pick one to
   // autofill phone. Typing a name with no match just becomes a new agent
   // on save (findOrCreateAgentByPhone in actions.ts), same as before.
   const handleContactNameChange = (value: string) => {

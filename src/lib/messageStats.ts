@@ -10,7 +10,7 @@ import {
   type MessageResult,
   type PresetType,
 } from "@/db/schema";
-import { desc, eq, isNotNull } from "drizzle-orm";
+import { desc, eq, isNotNull, sql } from "drizzle-orm";
 
 export interface AgentBucketStats {
   sent: number;
@@ -106,36 +106,116 @@ export async function computeVariantStats(): Promise<Record<string, VariantStats
   return stats;
 }
 
+export interface SendCounts {
+  sent: number;
+  /** Sent in the last 7 days. */
+  sentRecent: number;
+  replied: number;
+  booked: number;
+}
+
+export interface TemplateSendStats extends SendCounts {
+  presetId: string;
+  name: string;
+  channel: MessageChannel;
+  type: PresetType;
+  archived: boolean;
+}
+
+export interface MessagingStats {
+  sms: SendCounts;
+  email: SendCounts;
+  /** Line-item total of bookings won by a send (bookings.messageSendId). */
+  revenue: number;
+  /** Every template with at least one send, most-sent first. */
+  templates: TemplateSendStats[];
+}
+
+/**
+ * Totals for the stats card at the top of the messaging page — per channel
+ * and per template, deliberately not per variant (PresetCard has those).
+ * Aggregated in SQL: there are thousands of cold-email sends.
+ */
+export async function computeMessagingStats(): Promise<MessagingStats> {
+  const [rows, [revenueRow]] = await Promise.all([
+    db
+      .select({
+        presetId: messageSends.presetId,
+        channel: messageSends.channel,
+        name: messagePresets.name,
+        type: messagePresets.type,
+        archived: sql<boolean>`${messagePresets.archivedAt} is not null`,
+        sent: sql<number>`count(*)::int`,
+        sentRecent: sql<number>`count(*) filter (where ${messageSends.sentAt} > now() - interval '7 days')::int`,
+        replied: sql<number>`count(${messageSends.respondedAt})::int`,
+        booked: sql<number>`count(*) filter (where ${messageSends.result} = 'booked')::int`,
+      })
+      .from(messageSends)
+      .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))
+      .groupBy(
+        messageSends.presetId,
+        messageSends.channel,
+        messagePresets.name,
+        messagePresets.type,
+        messagePresets.archivedAt
+      )
+      .orderBy(desc(sql`count(*)`)),
+    db
+      .select({ total: sql<number>`coalesce(sum(${bookingLineItems.amount}), 0)::float` })
+      .from(bookings)
+      .innerJoin(bookingLineItems, eq(bookingLineItems.bookingId, bookings.id))
+      .where(isNotNull(bookings.messageSendId)),
+  ]);
+
+  const empty = (): SendCounts => ({ sent: 0, sentRecent: 0, replied: 0, booked: 0 });
+  const byChannel: Record<MessageChannel, SendCounts> = { sms: empty(), email: empty() };
+  for (const row of rows) {
+    const total = byChannel[row.channel];
+    total.sent += row.sent;
+    total.sentRecent += row.sentRecent;
+    total.replied += row.replied;
+    total.booked += row.booked;
+  }
+
+  return { ...byChannel, revenue: revenueRow?.total ?? 0, templates: rows };
+}
+
 export interface RecentSend {
   id: string;
   channel: MessageChannel;
   type: PresetType;
   presetName: string;
   sentAt: Date;
+  respondedAt: Date | null;
   result: MessageResult;
+  agentId: string | null;
   agentName: string | null;
   agentPhone: string | null;
+  agentEmail: string | null;
   listingAddress: string | null;
 }
 
 /**
- * Most recent SMS/email sends across every preset — the "Recently sent"
+ * Most recent SMS/email sends across every preset — the "Message history"
  * feed on the messaging page. Same join shape as getAgentSendHistory
  * (src/app/agents/actions.ts), just not filtered to one agent and adding
  * the listing address, since here (unlike an agent's own detail dialog)
  * which property a send was about isn't otherwise obvious.
  */
-export async function getRecentMessageSends(limit = 20): Promise<RecentSend[]> {
+export async function getRecentMessageSends(limit = 100): Promise<RecentSend[]> {
   return db
     .select({
       id: messageSends.id,
       channel: messageSends.channel,
       type: messageSends.type,
       sentAt: messageSends.sentAt,
+      respondedAt: messageSends.respondedAt,
       result: messageSends.result,
       presetName: messagePresets.name,
+      agentId: messageSends.agentId,
       agentName: agents.name,
       agentPhone: agents.phone,
+      agentEmail: agents.email,
       listingAddress: listings.address,
     })
     .from(messageSends)

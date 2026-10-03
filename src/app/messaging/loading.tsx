@@ -6,14 +6,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function PresetsSkeleton() {
   return (
     <>
-      <header className="mb-6 flex flex-col gap-2">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-4 w-full max-w-md" />
-        <Skeleton className="h-4 w-2/3 max-w-sm" />
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-2 flex-1">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-full max-w-md" />
+        </div>
+        <Skeleton className="h-9 w-28 rounded-md" />
       </header>
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-32 w-full rounded-lg" />
-        <Skeleton className="h-32 w-full rounded-lg" />
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-56 w-full rounded-lg" />
+        <Skeleton className="h-80 w-full rounded-lg" />
       </div>
     </>
   );

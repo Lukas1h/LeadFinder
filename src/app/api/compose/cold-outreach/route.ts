@@ -19,7 +19,7 @@ function authorized(request: NextRequest): boolean {
 /**
  * The Messaging page's Compose flow, exposed as an API so an external
  * script can drive it — same preset/variant recommendation logic the
- * Compose panel itself calls on load (see ComposeEmailPanel.tsx).
+ * Compose panel itself calls on load (see ComposeEmailDialog.tsx).
  */
 export async function GET(request: NextRequest) {
   if (!authorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });

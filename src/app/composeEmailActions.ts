@@ -188,7 +188,7 @@ export async function getComposeEmailOptions(listingContext?: {
       // Un-substituted when there's no listing context (the standalone
       // Compose flow) — there's no agent name yet at load time there, it's
       // whatever's currently typed into Compose's Name field, so
-      // ComposeEmailPanel renders {{firstName}} client-side as that field
+      // ComposeEmailDialog renders {{firstName}} client-side as that field
       // changes instead. With listingContext, render against the actual
       // agent/listing now, same as getMessageOptions' SMS path.
       text: listingContext

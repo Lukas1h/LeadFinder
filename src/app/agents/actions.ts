@@ -306,6 +306,12 @@ export async function getAgentRelationshipByPhone(
   return agent ?? null;
 }
 
+/** Full row for opening AgentDetailDialog from a list that only carries the id (messaging's history). */
+export async function getAgentById(id: string): Promise<Agent | null> {
+  const [agent] = await db.select().from(agents).where(eq(agents.id, id));
+  return agent ?? null;
+}
+
 export async function getOrCreateAgentByPhone(
   phone: string,
   name: string | null,

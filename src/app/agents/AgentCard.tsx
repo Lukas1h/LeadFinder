@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { Phone, MessageCircle, Mail, StickyNote, BellOff } from "lucide-react";
 import type { Agent } from "@/db/schema";
 import { resolveAvgDaysBetweenListings } from "./stats";
 import { AgentDetailDialog } from "./AgentDetailDialog";
+import { ComposeEmailDialog } from "@/app/messaging/ComposeEmailDialog";
 import { startPendingInteraction } from "./interactionActions";
 import { RelationshipBadge } from "@/app/badges";
 import { formatDate } from "@/lib/format";
@@ -38,8 +38,8 @@ export function AgentCard({
   // Call and Text hand off to the dialer or Messages, so the app can't observe
   // whether they picked up or whether anything was sent. Park the attempt as
   // unresolved and let the app-wide prompt ask on the way back, the same as the
-  // Contact dialog's buttons do. Email needs none of this — it routes into
-  // /messaging, and the send only gets written once it's actually sent.
+  // Contact dialog's buttons do. Email needs none of this — it opens Compose
+  // in place, and the send only gets written once it's actually sent.
   const logHandoff = (channel: "call" | "text") => {
     startPendingInteraction({ agentId: agent.id, channel }).catch(() => {});
   };
@@ -114,11 +114,14 @@ export function AgentCard({
           </Button>
         )}
         {agent.email && (
-          <Button variant="outline" size="icon" asChild>
-            <Link href={`/messaging?agent=${agent.id}`} aria-label={`Email ${agent.name ?? agent.email}`}>
-              <Mail />
-            </Link>
-          </Button>
+          <ComposeEmailDialog
+            recipient={agent}
+            trigger={
+              <Button variant="outline" size="icon" aria-label={`Email ${agent.name ?? agent.email}`}>
+                <Mail />
+              </Button>
+            }
+          />
         )}
       </div>
     </Card>

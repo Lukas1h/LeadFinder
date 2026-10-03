@@ -12,6 +12,7 @@ import { formatDate, formatPrice } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { ListingRow } from "@/app/ListingRow";
 import { FindLinkButton } from "@/app/FindLinkButton";
+import { ComposeEmailDialog } from "@/app/messaging/ComposeEmailDialog";
 import { RelationshipBadge } from "@/app/badges";
 import { getAgentBookings } from "@/app/booked/actions";
 import { BookingRow } from "@/app/booked/BookingRow";
@@ -466,12 +467,15 @@ export function AgentDetailDialog({
                 )}
                 {/* Always shown: with no email on file, Compose still opens with the
                     name filled in, ready for an address to be pasted. */}
-                <Button variant="outline" size="sm" asChild className="flex-1">
-                  <Link href={`/messaging?agent=${agent.id}`}>
-                    <Mail />
-                    Email
-                  </Link>
-                </Button>
+                <ComposeEmailDialog
+                  recipient={agent}
+                  trigger={
+                    <Button variant="outline" size="sm" className="flex-1">
+                      <Mail />
+                      Email
+                    </Button>
+                  }
+                />
               </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={startEditingContact}>

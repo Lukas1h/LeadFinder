@@ -1,15 +1,16 @@
 import { Suspense } from "react";
-import { Plus, FlaskConical } from "lucide-react";
+import { Plus, FlaskConical, Mail } from "lucide-react";
 import { db } from "@/db";
 import { isNull } from "drizzle-orm";
 import { messagePresets, messagePresetVariants, PRESET_TYPES, type PresetType, type MessageChannel } from "@/db/schema";
 import { ensureDefaultPresets, ensureAiDraftPresets } from "@/app/messageActions";
 import { ensureDefaultEmailPreset } from "@/app/composeEmailActions";
-import { computeVariantStats, getRecentMessageSends } from "@/lib/messageStats";
+import { computeVariantStats, computeMessagingStats, getRecentMessageSends } from "@/lib/messageStats";
 import { PresetCard } from "./PresetCard";
 import { PresetForm } from "./PresetForm";
-import { ComposeEmailPanel } from "./ComposeEmailPanel";
-import { RecentSendsCard } from "./RecentSendsCard";
+import { ComposeEmailDialog } from "./ComposeEmailDialog";
+import { MessagingStatsCard } from "./MessagingStatsCard";
+import { MessageHistoryCard } from "./MessageHistoryCard";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { PresetsSkeleton } from "./loading";
@@ -36,10 +37,11 @@ async function MessagingContent() {
   await Promise.all(PRESET_TYPES.map((type) => ensureAiDraftPresets(type)));
   await ensureDefaultEmailPreset();
 
-  const [presets, variants, statsByVariant, recentSends] = await Promise.all([
+  const [presets, variants, statsByVariant, messagingStats, recentSends] = await Promise.all([
     db.select().from(messagePresets).where(isNull(messagePresets.archivedAt)).orderBy(messagePresets.createdAt),
     db.select().from(messagePresetVariants).orderBy(messagePresetVariants.createdAt),
     computeVariantStats(),
+    computeMessagingStats(),
     getRecentMessageSends(),
   ]);
 
@@ -53,19 +55,27 @@ async function MessagingContent() {
 
   return (
     <>
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Messaging</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Compose a cold email to any realtor, and manage the SMS/email templates the app sends
-          from — both share the same A/B rotation and stats.
-        </p>
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Messaging</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            How your texts and emails are doing, and the templates they send from.
+          </p>
+        </div>
+        <ComposeEmailDialog
+          trigger={
+            <Button className="shrink-0">
+              <Mail />
+              Compose
+            </Button>
+          }
+        />
       </header>
 
-      <section className="mb-6">
-        <ComposeEmailPanel />
-      </section>
-
-      <RecentSendsCard sends={recentSends} />
+      <div className="flex flex-col gap-6 mb-8">
+        <MessagingStatsCard stats={messagingStats} />
+        <MessageHistoryCard sends={recentSends} />
+      </div>
 
       <Separator className="mb-8" />
 
