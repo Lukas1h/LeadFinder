@@ -19,11 +19,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { smsUrl } from "@/lib/sms";
-import { handOff } from "@/lib/handoff";
+import { openHandoff } from "@/lib/handoff";
 import { isInSendWindow } from "@/lib/queue";
 import {
   sendQueuedEmail,
-  startQueuedTextHandoff,
   setQueuedMessageStatus,
   deleteQueuedMessage,
   retryQueuedDraft,
@@ -175,15 +174,10 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
       });
       return;
     }
-    // Logs a pending "did it send?" question and opens Messages; the message
-    // is only marked sent once that's answered.
-    startTransition(async () => {
-      await handOff(smsUrl(to ?? "", item.body), async () => {
-        const result = await startQueuedTextHandoff(item.id);
-        if (result.error) throw new Error(result.error);
-      });
-      router.refresh();
-    });
+    // Opens Messages directly in the tap (iOS blocks it after an await) and
+    // logs a pending "did it send?" question alongside; the message is only
+    // marked sent once that's answered.
+    openHandoff(smsUrl(to ?? "", item.body), { kind: "queued", queuedMessageId: item.id });
   };
 
   return (

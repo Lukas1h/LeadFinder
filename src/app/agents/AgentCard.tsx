@@ -5,7 +5,6 @@ import { Phone, MessageCircle, Mail, StickyNote, BellOff } from "lucide-react";
 import type { Agent } from "@/db/schema";
 import { resolveAvgDaysBetweenListings } from "./stats";
 import { AgentDetailDialog } from "./AgentDetailDialog";
-import { startPendingInteraction, startTextHandoff } from "./interactionActions";
 import { HandoffLink } from "../HandoffLink";
 import { RelationshipBadge } from "@/app/badges";
 import { formatDate } from "@/lib/format";
@@ -41,8 +40,8 @@ export function AgentCard({
   // unresolved and let the app-wide prompt ask on the way back, the same as the
   // Contact dialog's buttons do. Email needs none of this — it routes into
   // /messaging, and the send only gets written once it's actually sent.
-  const logCall = () => startPendingInteraction({ agentId: agent.id, channel: "call" });
-  const logText = () => startTextHandoff({ agentId: agent.id });
+  const logCall = { kind: "call", agentId: agent.id } as const;
+  const logText = { kind: "text", agentId: agent.id } as const;
 
   return (
     <Card className="flex-row items-start justify-between gap-4 p-4 flex-wrap">

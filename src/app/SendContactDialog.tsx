@@ -7,8 +7,7 @@ import { MessageCircle, Mail, Phone, RefreshCw, Paperclip } from "lucide-react";
 import type { PresetType } from "@/db/schema";
 import { getMessageOptions, draftAiPresetOption, type PresetOption } from "@/app/messageActions";
 import { getComposeEmailOptions, sendListingEmail, draftAiEmailPresetOption } from "@/app/composeEmailActions";
-import { startPendingCallForListing, startTextHandoff } from "@/app/agents/interactionActions";
-import { handOff } from "@/lib/handoff";
+import { openHandoff } from "@/lib/handoff";
 import { AI_DRAFT_VARIANT_SENTINEL } from "@/lib/messageTemplate";
 import { smsUrl, telUrl, firstName } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
@@ -65,7 +64,6 @@ export function SendContactDialog({
   const [editedText, setEditedText] = useState("");
   const [isDraftingAi, setIsDraftingAi] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
-  const [isSendingSms, setIsSendingSms] = useState(false);
 
   // --- Email tab state (mirrors the old SendEmailDialog) ---
   const [emailLoaded, setEmailLoaded] = useState(false);
@@ -168,26 +166,24 @@ export function SendContactDialog({
     setEditedText(drafted.text);
   };
 
-  // Both buttons log first, then open Messages or the dialer (see handOff).
-  // A text records only a pending question carrying the send; the send itself
-  // is logged once you confirm it went (see resolvePendingInteraction).
+  // Both buttons open Messages or the dialer directly in the tap and log the
+  // hand-off alongside (see lib/handoff.ts). A text records only a pending
+  // question carrying the send; the send itself is logged once you confirm it
+  // went (see resolvePendingInteraction).
   const handleSendSms = () => {
     if (!selectedSms) return;
-    setIsSendingSms(true);
-    void handOff(smsUrl(agentPhone ?? "", editedText), () =>
-      startTextHandoff({
-        listingId,
-        send: { listingId, type, presetId: selectedSms.presetId, variantId: selectedSms.variantId, body: editedText },
-      })
-    ).then(() => {
-      setIsSendingSms(false);
-      setOpen(false);
+    openHandoff(smsUrl(agentPhone ?? "", editedText), {
+      kind: "text",
+      listingId,
+      send: { listingId, type, presetId: selectedSms.presetId, variantId: selectedSms.variantId, body: editedText },
     });
+    setOpen(false);
   };
 
   const handleCall = () => {
     if (!callHref) return;
-    void handOff(callHref, () => startPendingCallForListing(listingId)).then(() => setOpen(false));
+    openHandoff(callHref, { kind: "call", listingId });
+    setOpen(false);
   };
 
   const handleSelectEmailPreset = async (presetId: string) => {
@@ -454,7 +450,7 @@ export function SendContactDialog({
               )}
               <Button
                 onClick={handleSendSms}
-                disabled={!selectedSms || !editedText.trim() || isSendingSms || isDraftingAi}
+                disabled={!selectedSms || !editedText.trim() || isDraftingAi}
               >
                 <MessageCircle />
                 Send text

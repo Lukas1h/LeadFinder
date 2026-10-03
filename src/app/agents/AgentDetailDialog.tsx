@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { UserPlus, Phone, PhoneIncoming, MessageCircle, Mail, History, CalendarCheck, Pencil, Trash2, Users, Clock } from "lucide-react";
-import { getAgentTimeline, startPendingInteraction, startTextHandoff, type TimelineItem } from "./interactionActions";
+import { getAgentTimeline, type TimelineItem } from "./interactionActions";
 import { HandoffLink } from "../HandoffLink";
 import { AddInteractionDialog } from "./AddInteractionDialog";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
@@ -336,8 +336,8 @@ export function AgentDetailDialog({
   // Same handoff problem as the Contact dialog's buttons: tapping Call opens the
   // dialer and Text opens Messages, and neither tells the app how it went. Park
   // the attempt and let PendingInteractionPrompt ask on the return trip.
-  const logCall = () => startPendingInteraction({ agentId: agent.id, channel: "call" });
-  const logText = () => startTextHandoff({ agentId: agent.id });
+  const logCall = { kind: "call", agentId: agent.id } as const;
+  const logText = { kind: "text", agentId: agent.id } as const;
   const avgDaysBetweenListings = resolveAvgDaysBetweenListings(agent, listings);
   const hasAnyStats = agent.avgListingsPerYear != null || agent.avgListingPrice != null || avgDaysBetweenListings != null;
 

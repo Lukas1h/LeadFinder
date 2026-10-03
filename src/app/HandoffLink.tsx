@@ -1,29 +1,23 @@
 "use client";
 
-import { handOff } from "@/lib/handoff";
+import { logHandoff, type HandoffPayload } from "@/lib/handoff";
 
 /**
- * An sms:/tel: link that logs before it opens (see handOff). A real <a> so it
- * still works with Button asChild and long-press.
+ * An sms:/tel: link that logs the hand-off as it opens (see lib/handoff.ts).
+ * The browser's own link navigation does the opening, so iOS treats it as the
+ * direct result of the tap.
  */
 export function HandoffLink({
-  href,
   log,
-  onDone,
+  onClick,
   ...props
-}: Omit<React.ComponentProps<"a">, "onClick" | "href"> & {
-  href: string;
-  log: () => Promise<unknown>;
-  onDone?: () => void;
-}) {
+}: React.ComponentProps<"a"> & { log: HandoffPayload }) {
   return (
     <a
       {...props}
-      href={href}
       onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        void handOff(href, log).then(onDone);
+        logHandoff(log);
+        onClick?.(e);
       }}
     />
   );
