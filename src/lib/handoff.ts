@@ -16,8 +16,19 @@ export type HandoffPayload =
   | { kind: "call"; agentId?: string | null; listingId?: string | null }
   | { kind: "queued"; queuedMessageId: string };
 
+/**
+ * localStorage key marking that a hand-off just happened. iOS can hold the
+ * beacon until the app is unfrozen, so the first "anything pending?" check on
+ * the way back can run before it lands — PendingInteractionPrompt keeps
+ * re-checking for a little while whenever this is recent.
+ */
+export const HANDOFF_MARKER_KEY = "leadfinder:handoffAt";
+
 /** Fires the log for a hand-off. Synchronous — call it inside the tap, before navigating. */
 export function logHandoff(payload: HandoffPayload): void {
+  try {
+    localStorage.setItem(HANDOFF_MARKER_KEY, String(Date.now()));
+  } catch {}
   const body = JSON.stringify(payload);
   // text/plain keeps the beacon a "simple" request with no preflight.
   const sent = navigator.sendBeacon?.("/api/handoff", new Blob([body], { type: "text/plain" }));
