@@ -68,7 +68,11 @@ export function QueueList({ items }: { items: QueueItem[] }) {
     return () => clearInterval(timer);
   }, [drafting, router]);
 
-  const queued = items.filter((i) => i.status === "queued");
+  // Emails first (they send in one tap, no hand-off), then texts — a stable
+  // sort, so each group keeps getQueue's soonest-due order.
+  const queued = items
+    .filter((i) => i.status === "queued")
+    .sort((a, b) => (a.channel === "email" ? 0 : 1) - (b.channel === "email" ? 0 : 1));
   const due = queued.filter(
     (i) => !i.waitingOnId && new Date(i.dueAt).getTime() <= now,
   );
