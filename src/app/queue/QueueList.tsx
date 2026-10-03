@@ -12,7 +12,6 @@ import { smsUrl } from "@/lib/sms";
 import { isInSendWindow } from "@/lib/queue";
 import {
   sendQueuedEmail,
-  markQueuedTextOpened,
   setQueuedMessageStatus,
   deleteQueuedMessage,
   retryQueuedDraft,
@@ -150,9 +149,15 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
       return;
     }
     // Same handoff as the Text button: open Messages first (it has to happen
-    // inside the tap), then log it; the app asks on the way back whether it sent.
+    // inside the tap), then log it in the same tick; the app asks on the way
+    // back whether it sent. The log is a plain fetch, not the server action:
+    // server actions queue behind any in-flight router refresh, which this
+    // page does constantly, and a queued call is lost when iOS freezes the
+    // app for Messages (see /api/queue/[id]/handoff).
     window.location.href = smsUrl(to ?? "", item.body);
-    run(() => markQueuedTextOpened(item.id));
+    void fetch(`/api/queue/${item.id}/handoff`, { method: "POST", keepalive: true })
+      .then(() => router.refresh())
+      .catch(() => {});
     toast.success("Opened Messages — I'll ask if it sent");
   };
 
