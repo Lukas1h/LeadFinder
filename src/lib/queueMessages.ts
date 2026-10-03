@@ -298,3 +298,21 @@ export async function generatePendingDrafts(ids?: string[]): Promise<number> {
   return drafted;
 }
 
+
+/** Marks a queued message sent and starts the clock on any step chained after it. */
+export async function markQueuedMessageSent(id: string, at: Date = new Date()): Promise<void> {
+  await db
+    .update(queuedMessages)
+    .set({ status: "sent", sentAt: at })
+    .where(and(eq(queuedMessages.id, id), eq(queuedMessages.status, "queued")));
+  const next = await db
+    .select({ id: queuedMessages.id, delayMinutes: queuedMessages.delayMinutes })
+    .from(queuedMessages)
+    .where(and(eq(queuedMessages.afterQueuedId, id), eq(queuedMessages.status, "queued")));
+  for (const step of next) {
+    await db
+      .update(queuedMessages)
+      .set({ sendAfter: new Date(at.getTime() + (step.delayMinutes ?? 0) * 60_000) })
+      .where(eq(queuedMessages.id, step.id));
+  }
+}

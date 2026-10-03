@@ -58,17 +58,14 @@ export function AgentRow({
         <User className="size-5 text-muted-foreground" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground truncate flex items-center gap-1.5">
-          {name ?? "Unknown agent"}
-          {relationship && (
-            <RelationshipBadge status={relationship} agentName={name} className="shrink-0" />
-          )}
-        </p>
+        <p className="text-sm font-medium text-foreground truncate">{name ?? "Unknown agent"}</p>
         {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
         {phone && (
           <p className="text-xs text-muted-foreground">{loading ? "Loading…" : formatPhone(phone)}</p>
         )}
       </div>
+      {/* Right-aligned, matching ListingRow's status badge. */}
+      {relationship && <RelationshipBadge status={relationship} agentName={name} className="shrink-0" />}
     </>
   );
 

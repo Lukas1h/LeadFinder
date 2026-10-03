@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { UserPlus, Phone, PhoneIncoming, MessageCircle, Mail, History, CalendarCheck, Pencil, Trash2, Users, Clock } from "lucide-react";
-import { getAgentTimeline, startPendingInteraction, type TimelineItem } from "./interactionActions";
+import { getAgentTimeline, startPendingInteraction, startTextHandoff, type TimelineItem } from "./interactionActions";
+import { HandoffLink } from "../HandoffLink";
 import { AddInteractionDialog } from "./AddInteractionDialog";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { formatDate, formatPrice } from "@/lib/format";
@@ -335,9 +336,8 @@ export function AgentDetailDialog({
   // Same handoff problem as the Contact dialog's buttons: tapping Call opens the
   // dialer and Text opens Messages, and neither tells the app how it went. Park
   // the attempt and let PendingInteractionPrompt ask on the return trip.
-  const logHandoff = (channel: "call" | "text") => {
-    startPendingInteraction({ agentId: agent.id, channel }).catch(() => {});
-  };
+  const logCall = () => startPendingInteraction({ agentId: agent.id, channel: "call" });
+  const logText = () => startTextHandoff({ agentId: agent.id });
   const avgDaysBetweenListings = resolveAvgDaysBetweenListings(agent, listings);
   const hasAnyStats = agent.avgListingsPerYear != null || agent.avgListingPrice != null || avgDaysBetweenListings != null;
 
@@ -450,18 +450,18 @@ export function AgentDetailDialog({
             <div className="flex gap-2">
                 {callHref && (
                   <Button variant="outline" size="sm" asChild className="flex-1">
-                    <a href={callHref} onClick={() => logHandoff("call")}>
+                    <HandoffLink href={callHref} log={logCall}>
                       <Phone />
                       Call
-                    </a>
+                    </HandoffLink>
                   </Button>
                 )}
                 {agent.phone && (
                   <Button variant="outline" size="sm" asChild className="flex-1">
-                    <a href={smsUrl(agent.phone, "")} onClick={() => logHandoff("text")}>
+                    <HandoffLink href={smsUrl(agent.phone, "")} log={logText}>
                       <MessageCircle />
                       Text
-                    </a>
+                    </HandoffLink>
                   </Button>
                 )}
                 {/* Always shown: with no email on file, Compose still opens with the

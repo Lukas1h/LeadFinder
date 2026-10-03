@@ -25,7 +25,6 @@ import {
 } from "@/lib/messageTemplate";
 import { draftMessage } from "@/lib/draftMessage";
 import { leadSectionForListing } from "@/lib/leadSections";
-import { startPendingInteraction } from "@/app/agents/interactionActions";
 import { touchAgentContact } from "@/app/actions";
 
 const AI_DRAFT_PRESET_NAME = "AI Draft";
@@ -498,54 +497,40 @@ async function buildAiDraftOption(
 }
 
 /**
- * Logs a send against the chosen preset variant, then applies the same
- * listing mutation the old hardcoded flow did: initial outreach moves the
- * lead to "contacted"; a follow-up just resets the follow-up clock.
+ * Commits a confirmed text: logs the send against its preset variant and
+ * applies the listing side effect — initial outreach moves the lead to
+ * "contacted"; a follow-up just resets the follow-up clock. Called only once
+ * Lukas confirms the text went out (see resolvePendingInteraction), never at
+ * tap time, so there is never an optimistic write to undo.
  *
- * `finalText` is the exact text actually sent (after any edits made in the
- * dialog). It's only used when `variantId` is the AI-draft sentinel — that
- * variant doesn't exist yet, since each AI draft is one-off, so it's
- * materialized as a real messagePresetVariants row here, at the moment of
- * sending, rather than speculatively for every dialog open.
+ * `body` is the exact text sent. It's only stored when `variantId` is the
+ * AI-draft sentinel — each AI draft is one-off, so its variant row is created
+ * here rather than for every draft that's opened.
  */
-export async function sendMessage(
-  listingId: string,
-  type: PresetType,
-  presetId: string,
-  variantId: string,
-  finalText: string
-) {
-  const now = new Date();
+export async function commitSmsSend(input: {
+  listingId: string;
+  type: PresetType;
+  presetId: string;
+  variantId: string;
+  body: string;
+  at: Date;
+}): Promise<{ sendId: string | null }> {
+  const { listingId, type, presetId, body, at } = input;
 
-  let resolvedVariantId = variantId;
+  let variantId = input.variantId;
   if (variantId === AI_DRAFT_VARIANT_SENTINEL) {
     const [variant] = await db
       .insert(messagePresetVariants)
-      .values({ presetId, label: `AI · ${now.toLocaleDateString()}`, body: finalText })
+      .values({ presetId, label: `AI · ${at.toLocaleDateString()}`, body })
       .returning({ id: messagePresetVariants.id });
-    resolvedVariantId = variant.id;
-  }
-
-  // Captured before the optimistic mark below overwrites it, so a later "no, I
-  // didn't send it" can put the listing back where it actually came from. An
-  // initial_outreach goes out from the leads page ("new") or from the
-  // pipeline's saved row ("saved"), and both are reachable from the same
-  // button — reading the status back off the row at revert time can't tell
-  // them apart, by then it's been overwritten to "contacted" either way.
-  let statusBefore: LeadStatus | null = null;
-  if (type === "initial_outreach") {
-    const [prior] = await db
-      .select({ status: listings.status })
-      .from(listings)
-      .where(eq(listings.id, listingId));
-    statusBefore = prior?.status ?? null;
+    variantId = variant.id;
   }
 
   const [lead] = await db
     .update(listings)
     .set({
-      contactedAt: now,
-      statusChangedAt: now,
+      contactedAt: at,
+      statusChangedAt: at,
       ...(type === "initial_outreach" ? { status: "contacted" as const } : {}),
     })
     .where(eq(listings.id, listingId))
@@ -555,37 +540,12 @@ export async function sendMessage(
 
   const [send] = await db
     .insert(messageSends)
-    .values({
-      listingId,
-      agentId,
-      presetId,
-      variantId: resolvedVariantId,
-      type,
-      channel: "sms",
-      sentAt: now,
-    })
+    .values({ listingId, agentId, presetId, variantId, type, channel: "sms", sentAt: at })
     .returning({ id: messageSends.id });
-
-  // This only ever means "the Messages composer was opened" — the app hands off
-  // via an sms: link and never learns whether the text was actually sent. The
-  // send is still recorded up front so nothing is lost, and a pending
-  // interaction asks on the way back in; answering "didn't send" removes it
-  // again (see resolvePendingInteraction) so unsent drafts stop counting toward
-  // a variant's stats.
-  let pendingInteractionId: string | null = null;
-  if (agentId) {
-    pendingInteractionId = await startPendingInteraction({
-      agentId,
-      listingId,
-      channel: "text",
-      messageSendId: send?.id ?? null,
-      listingStatusBefore: statusBefore,
-    });
-  }
 
   revalidatePath("/");
   revalidatePath("/pipeline");
   revalidatePath("/messaging");
 
-  return { pendingInteractionId };
+  return { sendId: send?.id ?? null };
 }

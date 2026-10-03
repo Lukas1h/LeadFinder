@@ -5,7 +5,8 @@ import { Phone, MessageCircle, Mail, StickyNote, BellOff } from "lucide-react";
 import type { Agent } from "@/db/schema";
 import { resolveAvgDaysBetweenListings } from "./stats";
 import { AgentDetailDialog } from "./AgentDetailDialog";
-import { startPendingInteraction } from "./interactionActions";
+import { startPendingInteraction, startTextHandoff } from "./interactionActions";
+import { HandoffLink } from "../HandoffLink";
 import { RelationshipBadge } from "@/app/badges";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
@@ -40,9 +41,8 @@ export function AgentCard({
   // unresolved and let the app-wide prompt ask on the way back, the same as the
   // Contact dialog's buttons do. Email needs none of this — it routes into
   // /messaging, and the send only gets written once it's actually sent.
-  const logHandoff = (channel: "call" | "text") => {
-    startPendingInteraction({ agentId: agent.id, channel }).catch(() => {});
-  };
+  const logCall = () => startPendingInteraction({ agentId: agent.id, channel: "call" });
+  const logText = () => startTextHandoff({ agentId: agent.id });
 
   return (
     <Card className="flex-row items-start justify-between gap-4 p-4 flex-wrap">
@@ -93,24 +93,16 @@ export function AgentCard({
         )}
         {callHref && (
           <Button variant="outline" size="icon" asChild>
-            <a
-              href={callHref}
-              onClick={() => logHandoff("call")}
-              aria-label={`Call ${agent.name ?? agent.phone}`}
-            >
+            <HandoffLink href={callHref} log={logCall} aria-label={`Call ${agent.name ?? agent.phone}`}>
               <Phone />
-            </a>
+            </HandoffLink>
           </Button>
         )}
         {agent.phone && (
           <Button variant="outline" size="icon" asChild>
-            <a
-              href={smsUrl(agent.phone, "")}
-              onClick={() => logHandoff("text")}
-              aria-label={`Text ${agent.name ?? agent.phone}`}
-            >
+            <HandoffLink href={smsUrl(agent.phone, "")} log={logText} aria-label={`Text ${agent.name ?? agent.phone}`}>
               <MessageCircle />
-            </a>
+            </HandoffLink>
           </Button>
         )}
         {agent.email && (
