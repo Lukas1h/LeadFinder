@@ -145,11 +145,21 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
       });
       return;
     }
-    // Same handoff as the Text button: open Messages first (it has to happen
-    // inside the tap), then log it; the app asks on the way back whether it sent.
-    window.location.href = smsUrl(to ?? "", item.body);
-    run(() => markQueuedTextOpened(item.id));
-    toast.success("Opened Messages — I'll ask if it sent");
+    // Log first, THEN open Messages. Firing the server call after the sms:
+    // navigation lost it on iOS — the page is frozen the moment Messages
+    // opens, so the request never went out and nothing was there to ask
+    // about on the way back. Logging up front is safe: if Messages doesn't
+    // open, answering "didn't send" puts the message back in the queue.
+    startTransition(async () => {
+      try {
+        await markQueuedTextOpened(item.id);
+      } catch {
+        toast.error("Couldn't log the send — try again.");
+        return;
+      }
+      window.location.href = smsUrl(to ?? "", item.body);
+      router.refresh();
+    });
   };
 
   return (
