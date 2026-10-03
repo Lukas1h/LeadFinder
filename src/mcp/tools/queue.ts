@@ -86,7 +86,8 @@ export function registerQueueTools(server: McpServer): void {
         "Pick the content with presetId (a template from list_message_templates; its variants are rotated across recipients), " +
         "an AI-draft preset or ai: true (each message drafted individually for its listing — queued right away as 'drafting' and filled in within a minute or two; can't be sent until then), " +
         "or a literal body (+ subject for email). Each listing's linked agent is the recipient. " +
-        "Results flag agents contacted in the last 7 days and agents who already have a queued message — they're queued anyway, so tell Lukas about them.",
+        "IMPORTANT: if the result has any `warnings`, show every one of them to Lukas verbatim before anything else — in particular `duplicateAgents`, agents who got more than one message in this batch (one agent with several listings). Pass onePerAgent: true to queue only one message per agent. " +
+        "Results also flag agents contacted in the last 7 days and agents who already have a queued message — they're queued anyway, so tell Lukas about them.",
       inputSchema: {
         listingIds: z.array(z.string().uuid()).max(200).optional(),
         agentIds: z.array(z.string().uuid()).max(200).optional().describe("For messages not about a listing (templates/body only — AI drafts need a listing)"),
@@ -100,6 +101,7 @@ export function registerQueueTools(server: McpServer): void {
         subject: z.string().optional(),
         sendAfter: iso.optional().describe("When the first one becomes due (default now). Include the offset, e.g. -07:00 for Pacific. Due messages are still held to 8 AM–9 PM Pacific."),
         spacingMinutes: z.number().int().min(0).max(24 * 60).optional().describe("Minutes between consecutive messages' due times"),
+        onePerAgent: z.boolean().optional().describe("Only queue the first listing for each agent; skip the rest"),
       },
     },
     async (input) => {
@@ -117,6 +119,8 @@ export function registerQueueTools(server: McpServer): void {
       // hold the request open for minutes.
       if (result.pendingDraftIds.length) after(() => generatePendingDrafts(result.pendingDraftIds));
       return text({
+        warnings: result.warnings,
+        duplicateAgents: result.duplicateAgents,
         queuedCount: result.queued.length,
         draftingCount: result.pendingDraftIds.length,
         recentlyContacted: result.queued.filter((q) => q.recentlyContacted).map((q) => q.agentName),

@@ -49,6 +49,8 @@ export interface QueueMessagesInput {
   sendAfter?: Date;
   /** Minutes between consecutive messages' due times (default 0). */
   spacingMinutes?: number;
+  /** Queue only the first target per agent; the rest are skipped. */
+  onePerAgent?: boolean;
 }
 
 export interface QueueMessagesResult {
@@ -67,12 +69,16 @@ export interface QueueMessagesResult {
   skipped: { target: QueueTarget; reason: string }[];
   /** Ids still waiting on an AI draft — pass to generatePendingDrafts. */
   pendingDraftIds: string[];
+  /** Agents who got more than one message in this batch. */
+  duplicateAgents: { agentId: string; agentName: string | null; count: number; listingAddresses: (string | null)[] }[];
+  /** Plain-language warnings to relay to Lukas. */
+  warnings: string[];
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function queueMessages(input: QueueMessagesInput): Promise<QueueMessagesResult | { error: string }> {
-  const result: QueueMessagesResult = { queued: [], skipped: [], pendingDraftIds: [] };
+  const result: QueueMessagesResult = { queued: [], skipped: [], pendingDraftIds: [], duplicateAgents: [], warnings: [] };
   if (input.targets.length === 0) return { error: "No listings or agents given" };
 
   // Resolve what to write: a template's variants, an AI draft, or free text.
@@ -150,6 +156,7 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
   const start = input.sendAfter ?? new Date();
   const spacingMs = Math.max(0, input.spacingMinutes ?? 0) * 60_000;
   let index = 0;
+  const batchByAgent = new Map<string, { agentName: string | null; listingAddresses: (string | null)[] }>();
 
   for (const target of input.targets) {
     const listing = target.listingId ? listingById.get(target.listingId) : undefined;
@@ -164,6 +171,10 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
     }
     if (ai && !listing) {
       result.skipped.push({ target, reason: "AI drafts need a listing" });
+      continue;
+    }
+    if (input.onePerAgent && batchByAgent.has(agent.id)) {
+      result.skipped.push({ target, reason: "agent already got a message in this batch" });
       continue;
     }
     if (input.channel === "email" && agent.emailUnsubscribedAt) {
@@ -194,6 +205,9 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
       .returning({ id: queuedMessages.id });
 
     if (ai) result.pendingDraftIds.push(row.id);
+    const seen = batchByAgent.get(agent.id) ?? { agentName: agent.name, listingAddresses: [] };
+    seen.listingAddresses.push(listing?.address ?? null);
+    batchByAgent.set(agent.id, seen);
     result.queued.push({
       id: row.id,
       agentName: agent.name,
@@ -206,6 +220,22 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
     });
     index++;
   }
+
+  for (const [agentId, seen] of batchByAgent) {
+    if (seen.listingAddresses.length > 1) {
+      result.duplicateAgents.push({ agentId, count: seen.listingAddresses.length, ...seen });
+    }
+  }
+  if (result.duplicateAgents.length) {
+    const names = result.duplicateAgents.map((d) => `${d.agentName ?? "Unknown"} (${d.count})`).join(", ");
+    result.warnings.push(
+      `${result.duplicateAgents.length} agent${result.duplicateAgents.length === 1 ? " is" : "s are"} getting more than one message in this batch: ${names}. Delete the extras or re-queue with onePerAgent.`
+    );
+  }
+  const alreadyQueued = result.queued.filter((q) => q.alreadyQueued).length;
+  if (alreadyQueued) result.warnings.push(`${alreadyQueued} message${alreadyQueued === 1 ? " goes" : "s go"} to agents who already had something queued.`);
+  const recentCount = result.queued.filter((q) => q.recentlyContacted).length;
+  if (recentCount) result.warnings.push(`${recentCount} message${recentCount === 1 ? " goes" : "s go"} to agents contacted in the last 7 days.`);
   return result;
 }
 
