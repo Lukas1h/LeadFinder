@@ -23,10 +23,16 @@ function getClient(): Dropbox {
 }
 
 const IMAGE_EXTENSION_RE = /\.(jpe?g|png|heic|heif|webp|gif|tiff?)$/i;
+const VIDEO_EXTENSION_RE = /\.(mp4|mov|m4v|webm)$/i;
 
 export interface GalleryPhoto {
   name: string;
   pathLower: string;
+}
+
+export interface GalleryMedia {
+  photos: GalleryPhoto[];
+  videos: GalleryPhoto[];
 }
 
 // The thumbnail route (src/app/api/gallery/[token]/thumbnail/route.ts) has
@@ -35,14 +41,14 @@ export interface GalleryPhoto {
 // succession — this short cache collapses those back down to one real
 // Dropbox list_folder call per folder per minute instead of one per photo.
 interface ListCacheEntry {
-  photos: GalleryPhoto[];
+  media: GalleryMedia;
   expiresAt: number;
 }
 const listCache = new Map<string, ListCacheEntry>();
 const LIST_CACHE_TTL_MS = 60_000;
 
 /**
- * Lists every photo in the given Dropbox shared-folder link, sorted by
+ * Lists every photo and video in the given Dropbox shared-folder link, sorted by
  * filename — naming uploads with a numeric prefix (01-, 02-, ...) is what
  * controls display order, since Dropbox itself has no separate "custom
  * sort" of its own. Only non-recursive listing is supported against a
@@ -50,27 +56,40 @@ const LIST_CACHE_TTL_MS = 60_000;
  * fine here: a client gallery is a flat folder of photos, not nested
  * subfolders.
  */
-export async function listGalleryPhotos(sharedLink: string): Promise<GalleryPhoto[]> {
+export async function listGalleryMedia(sharedLink: string): Promise<GalleryMedia> {
   const cached = listCache.get(sharedLink);
-  if (cached && cached.expiresAt > Date.now()) return cached.photos;
+  if (cached && cached.expiresAt > Date.now()) return cached.media;
 
   const dbx = getClient();
   const photos: GalleryPhoto[] = [];
+  const videos: GalleryPhoto[] = [];
 
   let res = await dbx.filesListFolder({ path: "", shared_link: { url: sharedLink } });
   for (;;) {
     for (const entry of res.result.entries) {
       if (entry[".tag"] !== "file" || !entry.path_lower) continue;
-      if (!IMAGE_EXTENSION_RE.test(entry.name)) continue;
-      photos.push({ name: entry.name, pathLower: entry.path_lower });
+      if (IMAGE_EXTENSION_RE.test(entry.name)) photos.push({ name: entry.name, pathLower: entry.path_lower });
+      else if (VIDEO_EXTENSION_RE.test(entry.name)) videos.push({ name: entry.name, pathLower: entry.path_lower });
     }
     if (!res.result.has_more) break;
     res = await dbx.filesListFolderContinue({ cursor: res.result.cursor });
   }
 
-  photos.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  listCache.set(sharedLink, { photos, expiresAt: Date.now() + LIST_CACHE_TTL_MS });
-  return photos;
+  const byName = (a: GalleryPhoto, b: GalleryPhoto) => a.name.localeCompare(b.name, undefined, { numeric: true });
+  const media = { photos: photos.sort(byName), videos: videos.sort(byName) };
+  listCache.set(sharedLink, { media, expiresAt: Date.now() + LIST_CACHE_TTL_MS });
+  return media;
+}
+
+/**
+ * A direct, four-hour link to one file's bytes on dl.dropboxusercontent.com —
+ * how gallery videos play and download. It supports range requests (so a
+ * video can stream and seek) and, like the zip, isn't a Dropbox-app universal
+ * link, so tapping it never opens the app.
+ */
+export async function getTemporaryLink(pathLower: string): Promise<string> {
+  const res = await getClient().filesGetTemporaryLink({ path: pathLower });
+  return res.result.link;
 }
 
 // w480h320/w960h640 are Dropbox's two 3:2 sizes — real estate photos are

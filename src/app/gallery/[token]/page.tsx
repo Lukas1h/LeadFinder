@@ -5,7 +5,7 @@ import { Download, ImageOff, Receipt } from "lucide-react";
 import { db } from "@/db";
 import { bookings, listings, agents } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { listGalleryPhotos } from "@/lib/dropbox";
+import { listGalleryMedia } from "@/lib/dropbox";
 import { firstName } from "@/lib/sms";
 import { GalleryPhoto } from "./GalleryPhoto";
 
@@ -101,6 +101,39 @@ function GalleryShell({ greeting, children }: { greeting: string; children: Reac
   );
 }
 
+/**
+ * One video: the native player (streams and seeks from Dropbox via the video
+ * route's direct link) plus its own download, so nobody needs the whole zip
+ * for one clip. The poster is Dropbox's thumbnail of the video; "#t=0.1"
+ * makes iOS paint the first frame if that thumbnail isn't available.
+ */
+function GalleryVideo({ token, name }: { token: string; name: string }) {
+  const src = `/api/gallery/${token}/video?name=${encodeURIComponent(name)}`;
+  const poster = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(name)}&size=w2048h1536`;
+  return (
+    <div className="flex flex-col gap-2">
+      <video
+        controls
+        playsInline
+        preload="metadata"
+        poster={poster}
+        src={`${src}#t=0.1`}
+        className="w-full aspect-video rounded-lg border border-[#181A1C]/10 bg-black"
+      />
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-[#181A1C]/70 truncate">{name.replace(/\.[^.]+$/, "")}</span>
+        <a
+          href={src}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-[#181A1C]/15 px-4 py-2 text-sm font-semibold hover:bg-[#F9F4F1] transition-colors"
+        >
+          <Download className="size-4" />
+          Download video
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function InvoiceLink({ bookingId }: { bookingId: string }) {
   return (
     <a
@@ -137,16 +170,22 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
     );
   }
 
-  const photos = await listGalleryPhotos(booking.dropboxFolderLink);
+  const { photos, videos } = await listGalleryMedia(booking.dropboxFolderLink);
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const counts = [
+    photos.length > 0 || videos.length === 0 ? plural(photos.length, "photo") : null,
+    videos.length > 0 ? plural(videos.length, "video") : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const isEmpty = photos.length === 0 && videos.length === 0;
 
   return (
     <GalleryShell greeting={greeting}>
       <h1 className="text-xl font-semibold text-center">{location}</h1>
-      <p className="text-sm text-[#181A1C]/60">
-        {photos.length} photo{photos.length === 1 ? "" : "s"}
-      </p>
+      <p className="text-sm text-[#181A1C]/60">{counts}</p>
       <div className="flex flex-wrap items-center justify-center gap-3 mt-3 mb-8">
-        {photos.length > 0 && (
+        {!isEmpty && (
           <a
             // Our route, not a dropbox.com link — see resolveZipDownloadUrl.
             href={`/api/gallery/${token}/download`}
@@ -159,12 +198,20 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
         {booking.invoiceNumber && <InvoiceLink bookingId={booking.id} />}
       </div>
 
-      {photos.length === 0 ? (
+      {videos.length > 0 && (
+        <div className="w-full flex flex-col gap-6 mb-8">
+          {videos.map((video) => (
+            <GalleryVideo key={video.name} token={token} name={video.name} />
+          ))}
+        </div>
+      )}
+
+      {isEmpty ? (
         <div className="flex flex-col items-center justify-center gap-3 text-center py-16 text-[#181A1C]/50">
           <ImageOff className="size-8" />
           <p>No photos yet — check back soon.</p>
         </div>
-      ) : (
+      ) : photos.length > 0 ? (
         <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {photos.map((photo) => {
             const thumbUrl = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(photo.name)}&size=w960h640`;
@@ -172,7 +219,7 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
             return <GalleryPhoto key={photo.name} thumbUrl={thumbUrl} fullUrl={fullUrl} name={photo.name} />;
           })}
         </div>
-      )}
+      ) : null}
 
       <footer className="w-full mt-12 pt-6 border-t border-[#181A1C]/10 text-center text-xs text-[#181A1C]/50">
         Lukas Hahn · (541) 430-3372 · lukas@lukashahn.art

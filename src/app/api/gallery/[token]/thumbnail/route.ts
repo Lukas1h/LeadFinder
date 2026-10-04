@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { bookings } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { listGalleryPhotos, getGalleryThumbnail, type GalleryThumbnailSize } from "@/lib/dropbox";
+import { listGalleryMedia, getGalleryThumbnail, type GalleryThumbnailSize } from "@/lib/dropbox";
 
 const VALID_SIZES = new Set<GalleryThumbnailSize>(["w256h256", "w480h320", "w640h480", "w960h640", "w1024h768", "w2048h1536"]);
 
@@ -24,8 +24,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   // API — only serve a thumbnail for a file this specific booking's own
   // folder actually lists, so a valid galleryToken can't be used to probe
   // arbitrary paths elsewhere in the Dropbox account.
-  const photos = await listGalleryPhotos(booking.dropboxFolderLink);
-  const photo = photos.find((p) => p.name === name);
+  // Videos too — their thumbnail is the player's poster frame.
+  const { photos, videos } = await listGalleryMedia(booking.dropboxFolderLink);
+  const photo = [...photos, ...videos].find((p) => p.name === name);
   if (!photo) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   try {
