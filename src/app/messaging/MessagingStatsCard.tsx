@@ -5,7 +5,7 @@ import type { MessagingStats, SendCounts, TemplateSendStats } from "@/lib/messag
 import { formatPrice, formatRate } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Stat, Sub } from "../Stat";
-import { ReplyTimingChart } from "./ReplyTimingChart";
+import { ReplyByDayChart } from "./ReplyByDayChart";
 
 const count = (n: number) => n.toLocaleString("en-US");
 const replyRate = (c: SendCounts) => formatRate(c.replied, c.sent);
@@ -30,9 +30,9 @@ function topTemplates(templates: TemplateSendStats[], channel: MessageChannel): 
     .slice(0, TOP_TEMPLATES);
 }
 
-/** Same layout as Booked's BookingStats, then the top templates and reply timing. */
+/** Same layout as Booked's BookingStats, then the top templates and reply rate by day. */
 export function MessagingStatsCard({ stats }: { stats: MessagingStats }) {
-  const { sms, email, revenue, templates, timing } = stats;
+  const { sms, email, revenue, templates, byDay } = stats;
   if (sms.sent + email.sent === 0) return null;
   const booked = sms.booked + email.booked;
   const groups = CHANNEL_GROUPS.map((g) => ({ ...g, rows: topTemplates(templates, g.channel) })).filter(
@@ -88,7 +88,7 @@ export function MessagingStatsCard({ stats }: { stats: MessagingStats }) {
         </div>
       )}
 
-      <ReplyTimingChart timing={timing} />
+      <ReplyByDayChart byDay={byDay} />
     </Card>
   );
 }

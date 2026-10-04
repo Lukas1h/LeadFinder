@@ -122,17 +122,10 @@ export interface TemplateSendStats extends SendCounts {
   archived: boolean;
 }
 
-export interface TimingBucket {
+export interface DayBucket {
   label: string;
   sent: number;
   replied: number;
-}
-
-export interface ReplyTiming {
-  /** Mon–Sun, by the Pacific day the message went out. */
-  byDay: TimingBucket[];
-  /** Three-hour blocks of the Pacific sending day, plus overnight. */
-  byTime: TimingBucket[];
 }
 
 export interface MessagingStats {
@@ -142,32 +135,15 @@ export interface MessagingStats {
   revenue: number;
   /** Every template with at least one send, most-sent first. */
   templates: TemplateSendStats[];
-  /** Reply rate by when the message was sent, per channel. */
-  timing: Record<MessageChannel, ReplyTiming>;
+  /** Reply rate by the Pacific weekday a message went out, Mon–Sun, per channel. */
+  byDay: Record<MessageChannel, DayBucket[]>;
 }
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const TIME_BUCKETS = [
-  { label: "6–9a", from: 6, to: 9 },
-  { label: "9–12", from: 9, to: 12 },
-  { label: "12–3p", from: 12, to: 15 },
-  { label: "3–6p", from: 15, to: 18 },
-  { label: "6–9p", from: 18, to: 21 },
-];
-const NIGHT_LABEL = "Night";
 
-// A literal, not a bound parameter, so the same expression can appear in both
-// SELECT and GROUP BY.
-const sentPacific = sql`(${messageSends.sentAt} at time zone 'America/Los_Angeles')`;
-const sentDow = sql<number>`extract(isodow from ${sentPacific})::int`;
-const sentHour = sql<number>`extract(hour from ${sentPacific})::int`;
-
-function emptyTiming(): ReplyTiming {
-  return {
-    byDay: DAY_LABELS.map((label) => ({ label, sent: 0, replied: 0 })),
-    byTime: [...TIME_BUCKETS, { label: NIGHT_LABEL }].map(({ label }) => ({ label, sent: 0, replied: 0 })),
-  };
-}
+// The time zone is a literal, not a bound parameter, so the same expression
+// can appear in both SELECT and GROUP BY.
+const sentDow = sql<number>`extract(isodow from ${messageSends.sentAt} at time zone 'America/Los_Angeles')::int`;
 
 /**
  * Totals for the stats card at the top of the messaging page — per channel
@@ -175,7 +151,7 @@ function emptyTiming(): ReplyTiming {
  * Aggregated in SQL: there are thousands of cold-email sends.
  */
 export async function computeMessagingStats(): Promise<MessagingStats> {
-  const [rows, [revenueRow], timingRows] = await Promise.all([
+  const [rows, [revenueRow], dayRows] = await Promise.all([
     db
       .select({
         presetId: messageSends.presetId,
@@ -207,23 +183,17 @@ export async function computeMessagingStats(): Promise<MessagingStats> {
       .select({
         channel: messageSends.channel,
         dow: sentDow,
-        hour: sentHour,
         sent: sql<number>`count(*)::int`,
         replied: sql<number>`count(${messageSends.respondedAt})::int`,
       })
       .from(messageSends)
-      .groupBy(messageSends.channel, sentDow, sentHour),
+      .groupBy(messageSends.channel, sentDow),
   ]);
 
-  const timing: Record<MessageChannel, ReplyTiming> = { sms: emptyTiming(), email: emptyTiming() };
-  for (const row of timingRows) {
-    const { byDay, byTime } = timing[row.channel];
-    const day = byDay[row.dow - 1];
-    const block = byTime[TIME_BUCKETS.findIndex((b) => row.hour >= b.from && row.hour < b.to)] ?? byTime.at(-1)!;
-    for (const bucket of [day, block]) {
-      bucket.sent += row.sent;
-      bucket.replied += row.replied;
-    }
+  const emptyWeek = () => DAY_LABELS.map((label) => ({ label, sent: 0, replied: 0 }));
+  const byDay: Record<MessageChannel, DayBucket[]> = { sms: emptyWeek(), email: emptyWeek() };
+  for (const row of dayRows) {
+    byDay[row.channel][row.dow - 1] = { label: DAY_LABELS[row.dow - 1], sent: row.sent, replied: row.replied };
   }
 
   const empty = (): SendCounts => ({ sent: 0, sentRecent: 0, replied: 0, booked: 0 });
@@ -236,7 +206,7 @@ export async function computeMessagingStats(): Promise<MessagingStats> {
     total.booked += row.booked;
   }
 
-  return { ...byChannel, revenue: revenueRow?.total ?? 0, templates: rows, timing };
+  return { ...byChannel, revenue: revenueRow?.total ?? 0, templates: rows, byDay };
 }
 
 export interface RecentSend {

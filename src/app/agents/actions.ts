@@ -176,6 +176,25 @@ export async function updateAgentContactInfo(
 }
 
 /**
+ * Sets just the email — AgentDetailDialog's "Find email" paste box, for an
+ * agent who replied to a text and now needs samples by email.
+ */
+export async function saveAgentEmail(id: string, emailInput: string): Promise<{ error: string | null; agent?: Agent }> {
+  const email = normalizeEmail(emailInput.trim());
+  if (!EMAIL_RE.test(email)) return { error: "That isn't a valid email address" };
+
+  const [existing] = await db
+    .select({ name: agents.name })
+    .from(agents)
+    .where(and(eq(agents.email, email), ne(agents.id, id)));
+  if (existing) return { error: `${existing.name ?? "Another agent"} already has this email` };
+
+  const [agent] = await db.update(agents).set({ email }).where(eq(agents.id, id)).returning();
+  revalidatePath("/agents");
+  return { error: null, agent };
+}
+
+/**
  * Saves the manually-entered business-volume stats from the agent edit
  * form — see the avgListingsPerYear/avgListingPrice comment in schema.ts.
  * Kept separate from updateAgentContactInfo since these aren't contact

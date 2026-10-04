@@ -13,6 +13,7 @@ import { telUrl, smsUrl } from "@/lib/sms";
 import { ListingRow } from "@/app/ListingRow";
 import { FindLinkButton } from "@/app/FindLinkButton";
 import { ComposeEmailDialog } from "@/app/messaging/ComposeEmailDialog";
+import { FindEmailBox } from "./FindEmailBox";
 import { RelationshipBadge } from "@/app/badges";
 import { getAgentBookings } from "@/app/booked/actions";
 import { BookingRow } from "@/app/booked/BookingRow";
@@ -24,6 +25,7 @@ import {
   deleteAgent,
   findAgentProfileUrl,
   getAgentListings,
+  getAgentById,
 } from "./actions";
 import { resolveAvgDaysBetweenListings } from "./stats";
 import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
@@ -193,7 +195,7 @@ function TimelineRow({ item }: { item: TimelineItem }) {
 }
 
 export function AgentDetailDialog({
-  agent,
+  agent: agentProp,
   trigger,
   open: openProp,
   onOpenChange: onOpenChangeProp,
@@ -208,6 +210,14 @@ export function AgentDetailDialog({
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
   const onOpenChange = onOpenChangeProp ?? setOpenState;
+
+  // The row as last saved from this dialog. Callers like AgentRow hand over a
+  // one-off copy that no refresh ever replaces, so an email added via Edit
+  // didn't reach the Email button until the dialog was closed and reopened. A
+  // newer prop (the Agents page after its refresh) takes over again.
+  const [saved, setSaved] = useState<{ from: Agent; to: Agent } | null>(null);
+  const agent = saved?.from === agentProp ? saved.to : agentProp;
+  const showSaved = (to: Agent) => setSaved({ from: agentProp, to });
 
   const [notes, setNotes] = useState(agent.notes ?? "");
   const [isPending, startTransition] = useTransition();
@@ -256,6 +266,8 @@ export function AgentDetailDialog({
       avgListingPrice: editAvgListingPrice.trim() ? Number(editAvgListingPrice) : null,
       avgDaysBetweenListings: editAvgDaysBetween.trim() ? Number(editAvgDaysBetween) : null,
     });
+    const fresh = await getAgentById(agent.id);
+    if (fresh) showSaved(fresh);
     setIsSavingContact(false);
     toast.success("Agent updated");
     setIsEditingContact(false);
@@ -477,6 +489,7 @@ export function AgentDetailDialog({
                   }
                 />
               </div>
+            {!agent.email && <FindEmailBox agent={agent} onSaved={showSaved} />}
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={startEditingContact}>
                 <Pencil />
