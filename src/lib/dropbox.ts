@@ -105,13 +105,31 @@ export async function getGalleryThumbnail(pathLower: string, size: GalleryThumbn
 }
 
 /**
- * The "download everything" link for a gallery — Dropbox itself zips a
- * shared folder on request when the link is hit with dl=1, so there's no
- * server-side zip to build or bandwidth to pay for; this just redirects to
- * Dropbox's own servers doing that work.
+ * Where "Download all" sends a client. Dropbox zips a shared folder itself
+ * when the link is hit with dl=1, so there's no server-side zip to build or
+ * bandwidth to pay for — but www.dropbox.com/scl/… is one of the Dropbox
+ * app's iOS universal-link paths, so tapping it on a phone with the app
+ * installed opens the app (or its sign-in screen) instead of downloading.
+ *
+ * That dl=1 link only ever 302s to the actual zip on
+ * *.dl.dropboxusercontent.com, which the app doesn't claim. So this follows
+ * the first hop server-side and hands back the direct zip URL; the gallery
+ * links to our own route (src/app/api/gallery/[token]/download), which
+ * redirects there. Falls back to the dl=1 link if Dropbox answers
+ * differently.
  */
-export function dropboxZipDownloadUrl(sharedLink: string): string {
+export async function resolveZipDownloadUrl(sharedLink: string): Promise<string> {
   const url = new URL(sharedLink);
   url.searchParams.set("dl", "1");
+  try {
+    const res = await fetch(url, { redirect: "manual", cache: "no-store" });
+    const location = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && location) {
+      const target = new URL(location, url);
+      if (target.hostname.endsWith(".dropboxusercontent.com")) return target.toString();
+    }
+  } catch (err) {
+    console.error("resolveZipDownloadUrl: Dropbox lookup failed", err);
+  }
   return url.toString();
 }

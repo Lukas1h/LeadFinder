@@ -5,7 +5,7 @@ import { Download, ImageOff, Receipt } from "lucide-react";
 import { db } from "@/db";
 import { bookings, listings, agents } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { listGalleryPhotos, dropboxZipDownloadUrl } from "@/lib/dropbox";
+import { listGalleryPhotos } from "@/lib/dropbox";
 import { firstName } from "@/lib/sms";
 import { GalleryPhoto } from "./GalleryPhoto";
 
@@ -138,7 +138,6 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
   }
 
   const photos = await listGalleryPhotos(booking.dropboxFolderLink);
-  const downloadAllUrl = dropboxZipDownloadUrl(booking.dropboxFolderLink);
 
   return (
     <GalleryShell greeting={greeting}>
@@ -149,7 +148,8 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
       <div className="flex flex-wrap items-center justify-center gap-3 mt-3 mb-8">
         {photos.length > 0 && (
           <a
-            href={downloadAllUrl}
+            // Our route, not a dropbox.com link — see resolveZipDownloadUrl.
+            href={`/api/gallery/${token}/download`}
             className="inline-flex items-center gap-2 rounded-lg bg-[#181A1C] text-white px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
           >
             <Download className="size-4" />
