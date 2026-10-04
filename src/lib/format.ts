@@ -71,3 +71,10 @@ export function formatPhone(phone: string | null): string | null {
   if (digits.length !== 10) return phone;
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
+
+/** A reply rate — one decimal under 10%, since cold email lives below 1%. */
+export function formatRate(part: number, whole: number): string {
+  if (whole === 0) return "—";
+  const pct = (part / whole) * 100;
+  return `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
+}
