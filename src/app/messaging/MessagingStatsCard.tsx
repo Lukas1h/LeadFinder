@@ -18,6 +18,9 @@ export function MessagingStatsCard({ stats }: { stats: MessagingStats }) {
   const { sms, email, revenue, templates } = stats;
   if (sms.sent + email.sent === 0) return null;
   const booked = sms.booked + email.booked;
+  // Only live cold-outreach templates that have earned a reply — the totals
+  // above still count every send.
+  const shown = templates.filter((t) => t.replied > 0 && !t.archived && t.type !== "follow_up");
 
   return (
     <Card className="p-4 gap-4">
@@ -46,15 +49,17 @@ export function MessagingStatsCard({ stats }: { stats: MessagingStats }) {
         </Stat>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-x-4 gap-y-1.5 border-t pt-3 text-sm items-center">
-        <span className="text-xs text-muted-foreground">Template</span>
-        <span className="text-xs text-muted-foreground text-right">Sent</span>
-        <span className="text-xs text-muted-foreground text-right">Replies</span>
-        <span className="text-xs text-muted-foreground text-right">Booked</span>
-        {templates.map((t) => (
-          <TemplateRow key={`${t.presetId}-${t.channel}`} template={t} />
-        ))}
-      </div>
+      {shown.length > 0 && (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-x-4 gap-y-1.5 border-t pt-3 text-sm items-center">
+          <span className="text-xs text-muted-foreground">Template</span>
+          <span className="text-xs text-muted-foreground text-right">Sent</span>
+          <span className="text-xs text-muted-foreground text-right">Replies</span>
+          <span className="text-xs text-muted-foreground text-right">Booked</span>
+          {shown.map((t) => (
+            <TemplateRow key={`${t.presetId}-${t.channel}`} template={t} />
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
@@ -63,11 +68,9 @@ function TemplateRow({ template: t }: { template: MessagingStats["templates"][nu
   const Icon = t.channel === "email" ? Mail : MessageCircle;
   return (
     <>
-      <span className={`flex items-center gap-1.5 min-w-0 ${t.archived ? "text-muted-foreground" : "text-foreground"}`}>
+      <span className="flex items-center gap-1.5 min-w-0 text-foreground">
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate">{t.name}</span>
-        {t.type === "follow_up" && <span className="shrink-0 text-xs text-muted-foreground">follow-up</span>}
-        {t.archived && <span className="shrink-0 text-xs text-muted-foreground">archived</span>}
       </span>
       <span className="text-right tabular-nums">{count(t.sent)}</span>
       <span className="text-right tabular-nums">
