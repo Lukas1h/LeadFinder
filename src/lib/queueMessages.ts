@@ -51,6 +51,8 @@ export interface QueueMessagesInput {
   spacingMinutes?: number;
   /** Queue only the first target per agent; the rest are skipped. */
   onePerAgent?: boolean;
+  /** Skip agents who've ever been contacted (any send or interaction), not just non-cold ones. */
+  skipContacted?: boolean;
 }
 
 export interface QueueMessagesResult {
@@ -63,6 +65,8 @@ export interface QueueMessagesResult {
     missingRecipient: boolean;
     /** Any contact with this agent in the last 7 days — flagged, not skipped. */
     recentlyContacted: boolean;
+    /** The agent's latest contact ever (null = never contacted). */
+    lastContactedAt: Date | null;
     /** Already has another unsent queued message. */
     alreadyQueued: boolean;
   }[];
@@ -145,12 +149,19 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
           .where(and(inArray(queuedMessages.agentId, agentIds), eq(queuedMessages.status, "queued"))),
       ])
     : [[], [], []];
+  // Latest contact of any kind: a send, an interaction, or the agent's own stamp.
+  const lastContact = new Map<string, Date>();
+  for (const r of [
+    ...sendTimes,
+    ...interactionTimes,
+    ...agentRows.map((a) => ({ agentId: a.id, at: a.lastContactedAt })),
+  ]) {
+    if (!r.agentId || !r.at) continue;
+    const at = new Date(r.at);
+    const prev = lastContact.get(r.agentId);
+    if (!prev || at > prev) lastContact.set(r.agentId, at);
+  }
   const recentCutoff = Date.now() - 7 * DAY_MS;
-  const recent = new Set(
-    [...sendTimes, ...interactionTimes]
-      .filter((r) => r.agentId && r.at && new Date(r.at).getTime() > recentCutoff)
-      .map((r) => r.agentId!)
-  );
   const hasQueued = new Set(openQueued.map((r) => r.agentId));
 
   const start = input.sendAfter ?? new Date();
@@ -175,6 +186,11 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
     }
     if (input.onePerAgent && batchByAgent.has(agent.id)) {
       result.skipped.push({ target, reason: "agent already got a message in this batch" });
+      continue;
+    }
+    const contactedAt = lastContact.get(agent.id) ?? null;
+    if (input.skipContacted && contactedAt) {
+      result.skipped.push({ target, reason: `already contacted ${contactedAt.toISOString().slice(0, 10)}` });
       continue;
     }
     if (input.channel === "email" && agent.emailUnsubscribedAt) {
@@ -215,7 +231,8 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
       sendAfter,
       draftPending: ai,
       missingRecipient: input.channel === "email" ? !agent.email : !agent.phone,
-      recentlyContacted: recent.has(agent.id),
+      recentlyContacted: !!contactedAt && contactedAt.getTime() > recentCutoff,
+      lastContactedAt: contactedAt,
       alreadyQueued: hasQueued.has(agent.id),
     });
     index++;
@@ -234,8 +251,15 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
   }
   const alreadyQueued = result.queued.filter((q) => q.alreadyQueued).length;
   if (alreadyQueued) result.warnings.push(`${alreadyQueued} message${alreadyQueued === 1 ? " goes" : "s go"} to agents who already had something queued.`);
-  const recentCount = result.queued.filter((q) => q.recentlyContacted).length;
-  if (recentCount) result.warnings.push(`${recentCount} message${recentCount === 1 ? " goes" : "s go"} to agents contacted in the last 7 days.`);
+  const contacted = result.queued.filter((q) => q.lastContactedAt);
+  if (contacted.length) {
+    const names = contacted
+      .map((q) => `${q.agentName ?? "Unknown"} (${q.lastContactedAt!.toISOString().slice(0, 10)})`)
+      .join(", ");
+    result.warnings.push(
+      `${contacted.length} message${contacted.length === 1 ? " goes" : "s go"} to agents you've already contacted: ${names}. Pass skipContacted: true to leave them out.`
+    );
+  }
   return result;
 }
 

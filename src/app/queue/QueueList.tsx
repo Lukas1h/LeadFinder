@@ -21,8 +21,6 @@ import { EditQueuedDialog } from "./EditQueuedDialog";
 import { ListingRow } from "../ListingRow";
 import { AgentRow } from "../AgentRow";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 function formatWhen(date: Date): string {
   return new Date(date).toLocaleString("en-US", {
     weekday: "short",
@@ -130,8 +128,8 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
   const isEmail = item.channel === "email";
   const to = item.recipient ?? (isEmail ? item.agentEmail : item.agentPhone);
   const isDue = isQueued && !item.waitingOnId && new Date(item.dueAt).getTime() <= now;
-  const recentlyContacted =
-    item.lastContactedAt != null && now - new Date(item.lastContactedAt).getTime() < 7 * DAY_MS;
+  // Any earlier contact, not just recent — "cold" only means they never replied.
+  const contactedBefore = item.lastContactedAt != null;
 
   const run = (fn: () => Promise<unknown>) =>
     startTransition(async () => {
@@ -185,11 +183,13 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
         </Badge>
       </div>
 
-      {(item.repliedSinceQueued || (isQueued && recentlyContacted) || item.waitingOnId) && (
+      {(item.repliedSinceQueued || (isQueued && contactedBefore) || item.waitingOnId) && (
         <div className="flex flex-wrap gap-1.5">
           {item.repliedSinceQueued && <Badge variant="destructive">Replied since queued</Badge>}
-          {isQueued && recentlyContacted && (
-            <Badge variant="secondary">Contacted {formatWhen(item.lastContactedAt!)}</Badge>
+          {isQueued && contactedBefore && (
+            <Badge className="bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900">
+              Already contacted {formatWhen(item.lastContactedAt!)}
+            </Badge>
           )}
           {item.waitingOnId && (
             <Badge variant="secondary">
