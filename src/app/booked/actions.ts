@@ -133,7 +133,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   await attributeBookingToSend(booking.id, contactAgentId, input.jobDate ?? new Date());
 
   const validLineItems: NewBookingLineItem[] = input.lineItems
-    .filter((li) => li.description.trim() && li.amount > 0)
+    .filter((li) => li.description.trim() && Number.isFinite(li.amount) && li.amount >= 0)
     .map((li) => ({ bookingId: booking.id, description: li.description.trim(), amount: li.amount }));
   if (validLineItems.length > 0) {
     await db.insert(bookingLineItems).values(validLineItems);
@@ -195,7 +195,7 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
 
   await db.delete(bookingLineItems).where(eq(bookingLineItems.bookingId, bookingId));
   const validLineItems: NewBookingLineItem[] = input.lineItems
-    .filter((li) => li.description.trim() && li.amount > 0)
+    .filter((li) => li.description.trim() && Number.isFinite(li.amount) && li.amount >= 0)
     .map((li) => ({ bookingId, description: li.description.trim(), amount: li.amount }));
   if (validLineItems.length > 0) {
     await db.insert(bookingLineItems).values(validLineItems);

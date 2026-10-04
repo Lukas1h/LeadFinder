@@ -51,7 +51,7 @@ async function findOrCreateAgentByPhone(phone: string, name: string): Promise<st
   return row?.id ?? null;
 }
 
-const lineItemSchema = z.object({ description: z.string(), amount: z.number().int().positive() });
+const lineItemSchema = z.object({ description: z.string(), amount: z.number().int().nonnegative() });
 
 export function registerBookingTools(server: McpServer): void {
   server.registerTool(
