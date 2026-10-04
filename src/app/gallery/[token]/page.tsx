@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { after } from "next/server";
 import type { Metadata } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
 import { Download, ImageOff, Receipt } from "lucide-react";
@@ -7,6 +9,7 @@ import { bookings, listings, agents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { listGalleryMedia } from "@/lib/dropbox";
 import { firstName } from "@/lib/sms";
+import { recordGalleryEvent } from "@/lib/galleryViews";
 import { GalleryPhoto } from "./GalleryPhoto";
 
 // The root layout's MobileHeader/BottomTabBar read usePathname(), which
@@ -123,7 +126,7 @@ function GalleryVideo({ token, name }: { token: string; name: string }) {
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-[#181A1C]/70 truncate">{name.replace(/\.[^.]+$/, "")}</span>
         <a
-          href={src}
+          href={`${src}&download=1`}
           className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-[#181A1C]/15 px-4 py-2 text-sm font-semibold hover:bg-[#F9F4F1] transition-colors"
         >
           <Download className="size-4" />
@@ -152,6 +155,10 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
   const { token } = await params;
   const booking = await getGalleryBooking(token);
   if (!booking) notFound();
+
+  // Shown in the booking's detail dialog — who opened it, when, on what.
+  const requestHeaders = new Headers(await headers());
+  after(() => recordGalleryEvent(booking.id, "view", requestHeaders));
 
   const location = formatLocation(booking);
   const greeting = `Hi ${firstName(booking.contactName) ?? "there"}! Please let me know if there are any edits you'd like made or any angles missing and I'll get it taken care of quickly.`;

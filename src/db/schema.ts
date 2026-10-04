@@ -360,6 +360,31 @@ export const bookings = pgTable("bookings", {
 export type Booking = typeof bookings.$inferSelect;
 export type NewBooking = typeof bookings.$inferInsert;
 
+// Every time a client's gallery link is opened or something is downloaded
+// from it — shown in the booking's detail dialog. Location comes from
+// Vercel's IP geolocation headers, so it's city-level and approximate.
+export const GALLERY_EVENTS = ["view", "download_all", "download_video"] as const;
+export type GalleryEvent = (typeof GALLERY_EVENTS)[number];
+
+export const galleryViews = pgTable("gallery_views", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bookingId: uuid("booking_id")
+    .notNull()
+    .references(() => bookings.id, { onDelete: "cascade" }),
+  event: text("event").$type<GalleryEvent>().notNull().default("view"),
+  // The video's filename, for download_video.
+  detail: text("detail"),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  ip: text("ip"),
+  city: text("city"),
+  region: text("region"),
+  country: text("country"),
+  userAgent: text("user_agent"),
+  referer: text("referer"),
+});
+
+export type GalleryView = typeof galleryViews.$inferSelect;
+
 // Price/services as line items rather than a flat number, so this can
 // eventually generate real invoices — a line item like "Twilight shoot —
 // $100" answers both "what did I charge" and "what did I do" at once. A

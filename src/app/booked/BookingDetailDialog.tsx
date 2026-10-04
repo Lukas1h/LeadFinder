@@ -9,6 +9,7 @@ import { CompleteBookingDialog } from "./CompleteBookingDialog";
 import { COMPLETION_FIELDS, bookingProfit, profitPerHour } from "./bookingMath";
 import { BookingForm } from "./BookingForm";
 import { GalleryLinkButton } from "./GallerySection";
+import { GalleryActivity } from "./GalleryActivity";
 import { ListingRow } from "@/app/ListingRow";
 import { AgentRow } from "@/app/AgentRow";
 import { formatPrice, formatDateTime } from "@/lib/format";
@@ -234,6 +235,8 @@ export function BookingDetailDialog({
             <ListingRow listing={booking.listing} />
           </div>
         )}
+
+        {booking.galleryToken && <GalleryActivity bookingId={booking.id} open={open} />}
       </DialogContent>
 
       <BookingForm booking={booking} open={editOpen} onOpenChange={setEditOpen} />

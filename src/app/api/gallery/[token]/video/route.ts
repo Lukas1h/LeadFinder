@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { db } from "@/db";
 import { bookings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { listGalleryMedia, getTemporaryLink } from "@/lib/dropbox";
+import { recordGalleryEvent } from "@/lib/galleryViews";
 
 /**
  * One gallery video — both the player's src and its Download button.
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
   const [booking] = await db
-    .select({ dropboxFolderLink: bookings.dropboxFolderLink })
+    .select({ id: bookings.id, dropboxFolderLink: bookings.dropboxFolderLink })
     .from(bookings)
     .where(eq(bookings.galleryToken, token));
   if (!booking?.dropboxFolderLink) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -24,6 +25,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   const { videos } = await listGalleryMedia(booking.dropboxFolderLink);
   const video = videos.find((v) => v.name === name);
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Only the Download button counts — the player hits this same route for playback.
+  if (req.nextUrl.searchParams.get("download") === "1") {
+    after(() => recordGalleryEvent(booking.id, "download_video", req.headers, video.name));
+  }
 
   try {
     const response = NextResponse.redirect(await getTemporaryLink(video.pathLower), 302);

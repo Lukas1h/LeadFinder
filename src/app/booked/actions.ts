@@ -2,13 +2,14 @@
 
 import { randomBytes } from "crypto";
 import { db } from "@/db";
-import { bookings, bookingLineItems, listings, agents, type NewBookingLineItem } from "@/db/schema";
+import { bookings, bookingLineItems, listings, agents, galleryViews, type GalleryEvent, type NewBookingLineItem } from "@/db/schema";
 import { eq, inArray, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
 import { bumpAgentRelationshipOnMilestone, resolveSendOutcome } from "@/app/actions";
 import { attributeBookingToSend } from "@/lib/agentIdentity";
 import { estimateDriveTime } from "@/lib/driveTime";
+import { parseUserAgent } from "@/lib/galleryViews";
 import type { BookingWithDetails } from "./BookedList";
 
 export interface BookingLineItemInput {
@@ -442,4 +443,35 @@ export async function deleteBooking(bookingId: string) {
   revalidatePath("/booked");
   revalidatePath("/messaging");
   revalidatePath("/agents");
+}
+
+export interface GalleryActivityItem {
+  id: string;
+  event: GalleryEvent;
+  detail: string | null;
+  at: Date;
+  ip: string | null;
+  location: string | null;
+  device: string;
+  browser: string;
+  isPreview: boolean;
+}
+
+/** The client gallery's open/download log for BookingDetailDialog, newest first. */
+export async function getGalleryActivity(bookingId: string): Promise<GalleryActivityItem[]> {
+  const rows = await db
+    .select()
+    .from(galleryViews)
+    .where(eq(galleryViews.bookingId, bookingId))
+    .orderBy(desc(galleryViews.at))
+    .limit(100);
+  return rows.map((r) => ({
+    id: r.id,
+    event: r.event,
+    detail: r.detail,
+    at: r.at,
+    ip: r.ip,
+    location: [r.city, r.region, r.country && r.country !== "US" ? r.country : null].filter(Boolean).join(", ") || null,
+    ...parseUserAgent(r.userAgent),
+  }));
 }
