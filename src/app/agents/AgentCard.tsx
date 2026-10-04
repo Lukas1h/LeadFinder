@@ -37,7 +37,7 @@ export function AgentCard({
 
   // Call and Text hand off to the dialer or Messages, so the app can't observe
   // whether they picked up or whether anything was sent. Park the attempt as
-  // unresolved and let the app-wide prompt ask on the way back, the same as the
+  // unresolved and let the app-wide prompt settle it on the way back, the same as the
   // Contact dialog's buttons do. Email needs none of this — it opens Compose
   // in place, and the send only gets written once it's actually sent.
   const logHandoff = (channel: "call" | "text") => {

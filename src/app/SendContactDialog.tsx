@@ -174,11 +174,9 @@ export function SendContactDialog({
     sendMessage(listingId, type, selectedSms.presetId, selectedSms.variantId, editedText).then(() => {
       setIsSendingSms(false);
     });
-    // Deliberately not "Send logged" — this only opened the Messages composer,
-    // and whether the text actually went is unknowable from here. The app asks
-    // once you're back (see PendingInteractionPrompt) and drops the send again
-    // if it never happened.
-    toast.success("Opened Messages — I'll ask if it sent");
+    // No toast here — this only opened the Messages composer. Coming back to
+    // the app confirms it with "Message sent", which has the Undo for a text
+    // that never went (see PendingInteractionPrompt).
     setOpen(false);
   };
 

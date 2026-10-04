@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { Phone, MessageCircle } from "lucide-react";
+import { toast } from "sonner";
+import { Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   getPendingInteractions,
+  confirmPendingTexts,
   resolvePendingInteraction,
   dismissPendingInteraction,
 } from "./agents/interactionActions";
@@ -31,20 +33,19 @@ const CALL_OPTIONS: { label: string; outcome: InteractionOutcome }[] = [
   { label: "Left a voicemail", outcome: "voicemail" },
 ];
 
-const TEXT_OPTIONS: { label: string; outcome: InteractionOutcome }[] = [
-  { label: "Yes, I sent it", outcome: "sent" },
-  { label: "No, I didn't send it", outcome: "not_sent" },
-];
-
 /**
- * Asks how a call or text actually went, once you're back in the app.
+ * Settles calls and texts once you're back in the app.
  *
  * Tapping Call opens the dialer and tapping Send opens Messages — in both cases
  * the app loses control and can't observe the result, so it records the attempt
- * as unresolved rather than asserting an outcome. This is the other half:
- * catching you on the way back to fill in what really happened. Answering "I
- * didn't send it" also deletes the optimistically-recorded send, which is what
- * keeps abandoned drafts out of the A/B numbers.
+ * as unresolved rather than asserting an outcome. This is the other half,
+ * catching you on the way back:
+ *
+ * - A text is assumed sent (it nearly always is) and says so in a toast with an
+ *   Undo. Undo is the old "I didn't send it": it deletes the optimistically
+ *   recorded send and puts the listing, agent and queue back how they were,
+ *   which keeps abandoned drafts out of the A/B numbers.
+ * - A call asks how it went, since there's no safe default.
  *
  * Mounted app-wide (see AppChrome) since the return trip can land on any page.
  */
@@ -53,8 +54,19 @@ export function PendingInteractionPrompt() {
   const [isPending, startTransition] = useTransition();
 
   const refresh = useCallback(() => {
-    getPendingInteractions()
-      .then(setQueue)
+    // Texts first, so the calls fetched next are all that's still pending.
+    confirmPendingTexts()
+      .then((texts) => {
+        for (const text of texts) {
+          toast.success(text.agentName ? `Message sent to ${text.agentName}!` : "Message sent!", {
+            // Longer than the default: you've just switched back from Messages.
+            duration: 8000,
+            action: { label: "Undo", onClick: () => resolvePendingInteraction(text.id, "not_sent") },
+          });
+        }
+        return getPendingInteractions();
+      })
+      .then((pending) => setQueue(pending.filter((p) => p.channel === "call")))
       .catch(() => {});
   }, []);
 
@@ -78,7 +90,6 @@ export function PendingInteractionPrompt() {
   const current = queue[0];
   if (!current) return null;
 
-  const options = current.channel === "call" ? CALL_OPTIONS : TEXT_OPTIONS;
   const who = current.agentName ?? "them";
 
   const answer = (outcome: InteractionOutcome) => {
@@ -100,8 +111,8 @@ export function PendingInteractionPrompt() {
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {current.channel === "call" ? <Phone className="size-4" /> : <MessageCircle className="size-4" />}
-            {current.channel === "call" ? `How did your call with ${who} go?` : `Did your text to ${who} send?`}
+            <Phone className="size-4" />
+            How did your call with {who} go?
           </DialogTitle>
           <DialogDescription>
             {current.listingAddress ? `About ${current.listingAddress}.` : "Logging this keeps your contact history accurate."}
@@ -109,7 +120,7 @@ export function PendingInteractionPrompt() {
         </DialogHeader>
 
         <div className="flex flex-col gap-2">
-          {options.map((option) => (
+          {CALL_OPTIONS.map((option) => (
             <Button
               key={option.outcome}
               variant="outline"

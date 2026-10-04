@@ -289,9 +289,10 @@ export async function sendQueuedEmail(id: string): Promise<{ error?: string }> {
 
 /**
  * Called as the client hands a queued text off to Messages. Logs it the same
- * way the Text button does — an optimistic send plus a pending "did it send?"
- * interaction — and remembers that interaction, so answering "didn't send"
- * puts the row back in the queue (see resolvePendingInteraction).
+ * way the Text button does — an optimistic send plus a pending interaction,
+ * confirmed when you're back — and remembers that interaction, so Undo on the
+ * "Message sent" toast puts the row back in the queue (see
+ * resolvePendingInteraction).
  */
 export async function markQueuedTextOpened(id: string): Promise<void> {
   const row = await loadForSend(id);

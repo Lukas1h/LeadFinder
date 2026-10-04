@@ -16,7 +16,7 @@ import {
   type PresetType,
   type LeadStatus,
 } from "@/db/schema";
-import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { markLatestSendResponded } from "@/lib/agentIdentity";
 
@@ -208,8 +208,9 @@ export async function logInteraction(input: LogInteractionInput): Promise<{ erro
  * Tapping Call only opens the dialer — whether they picked up, or whether a
  * text was ever actually sent after the composer opened, is unknowable from
  * here. The old behavior asserted a send outright, which is why texts that were
- * never sent still counted toward a variant's stats. This parks the row and the
- * app asks on the way back in (see resolvePendingInteraction).
+ * never sent still counted toward a variant's stats. This parks the row until
+ * you're back in the app: a call asks how it went, and a text is confirmed as
+ * sent with an Undo (see confirmPendingTexts and resolvePendingInteraction).
  */
 export async function startPendingInteraction(input: {
   agentId: string;
@@ -264,6 +265,43 @@ export async function getPendingInteractions(): Promise<
 }
 
 /**
+ * Coming back from Messages means the text went — the common case, so it's
+ * assumed rather than asked. Confirms every parked text at once and returns
+ * them for the "Message sent" toast, whose Undo is
+ * resolvePendingInteraction(id, "not_sent").
+ *
+ * One UPDATE … RETURNING claims the rows, so the mount, focus and visibility
+ * checks firing together (or a second device) can't confirm and toast the
+ * same text twice.
+ */
+export async function confirmPendingTexts(): Promise<{ id: string; agentName: string | null }[]> {
+  const confirmed = await db
+    .update(agentInteractions)
+    .set({ outcome: "sent", pendingSince: null })
+    .where(and(isNotNull(agentInteractions.pendingSince), eq(agentInteractions.channel, "text")))
+    .returning({ id: agentInteractions.id, agentId: agentInteractions.agentId, occurredAt: agentInteractions.occurredAt });
+  if (confirmed.length === 0) return [];
+
+  // Contacted as of the tap, not now: a text parked for hours went out then.
+  // Never moves the stamp backwards past a later real contact.
+  for (const row of confirmed) {
+    await db
+      .update(agents)
+      .set({ lastContactedAt: sql`greatest(coalesce(${agents.lastContactedAt}, ${row.occurredAt}), ${row.occurredAt})` })
+      .where(eq(agents.id, row.agentId));
+  }
+
+  const names = await db
+    .select({ id: agents.id, name: agents.name })
+    .from(agents)
+    .where(inArray(agents.id, [...new Set(confirmed.map((r) => r.agentId))]));
+  const nameById = new Map(names.map((n) => [n.id, n.name]));
+
+  revalidatePath("/agents");
+  return confirmed.map((r) => ({ id: r.id, agentName: nameById.get(r.agentId) ?? null }));
+}
+
+/**
  * Answers a parked interaction. "not_sent" means the text never actually went,
  * so the optimistic send recorded at tap time is removed rather than left
  * inflating that variant's numbers — the whole reason for asking.
@@ -279,6 +317,7 @@ export async function resolvePendingInteraction(
       agentId: agentInteractions.agentId,
       listingId: agentInteractions.listingId,
       listingStatusBefore: agentInteractions.listingStatusBefore,
+      occurredAt: agentInteractions.occurredAt,
     })
     .from(agentInteractions)
     .where(eq(agentInteractions.id, id));
@@ -359,33 +398,43 @@ export async function resolvePendingInteraction(
     // other listings showed no "Already contacted" badge at all. Only touches
     // the pointer if it still aims at this listing, so a genuine later contact
     // isn't overwritten by an earlier call-off.
-    if (row.listingId) {
-      const [[lastInteraction], [lastSend]] = await Promise.all([
-        db
-          .select({ at: agentInteractions.occurredAt, listingId: agentInteractions.listingId })
-          .from(agentInteractions)
-          .where(and(eq(agentInteractions.agentId, row.agentId), eq(agentInteractions.direction, "outbound"), isNull(agentInteractions.pendingSince)))
-          .orderBy(desc(agentInteractions.occurredAt))
-          .limit(1),
-        db
-          .select({ at: messageSends.sentAt, listingId: messageSends.listingId })
-          .from(messageSends)
-          .where(eq(messageSends.agentId, row.agentId))
-          .orderBy(desc(messageSends.sentAt))
-          .limit(1),
-      ]);
-      const latest =
-        lastInteraction && lastSend
-          ? lastInteraction.at >= lastSend.at
-            ? lastInteraction
-            : lastSend
-          : (lastInteraction ?? lastSend ?? null);
+    //
+    // A text with no listing (an agent's Text button, a listing-less queued
+    // text) never moved the pointer — only confirmPendingTexts' stamp, which
+    // is never earlier than the tap. So for those, it's the stamp still being
+    // from this tap or later that says the recount is needed.
+    const [[lastInteraction], [lastSend]] = await Promise.all([
+      db
+        .select({ at: agentInteractions.occurredAt, listingId: agentInteractions.listingId })
+        .from(agentInteractions)
+        .where(and(eq(agentInteractions.agentId, row.agentId), eq(agentInteractions.direction, "outbound"), isNull(agentInteractions.pendingSince)))
+        .orderBy(desc(agentInteractions.occurredAt))
+        .limit(1),
+      db
+        .select({ at: messageSends.sentAt, listingId: messageSends.listingId })
+        .from(messageSends)
+        .where(eq(messageSends.agentId, row.agentId))
+        .orderBy(desc(messageSends.sentAt))
+        .limit(1),
+    ]);
+    const latest =
+      lastInteraction && lastSend
+        ? lastInteraction.at >= lastSend.at
+          ? lastInteraction
+          : lastSend
+        : (lastInteraction ?? lastSend ?? null);
 
-      await db
-        .update(agents)
-        .set({ lastContactedAt: latest?.at ?? null, lastContactedListingId: latest?.listingId ?? null })
-        .where(and(eq(agents.id, row.agentId), eq(agents.lastContactedListingId, row.listingId)));
-    }
+    await db
+      .update(agents)
+      .set({ lastContactedAt: latest?.at ?? null, lastContactedListingId: latest?.listingId ?? null })
+      .where(
+        and(
+          eq(agents.id, row.agentId),
+          row.listingId
+            ? eq(agents.lastContactedListingId, row.listingId)
+            : gte(agents.lastContactedAt, row.occurredAt)
+        )
+      );
   } else {
     await db
       .update(agentInteractions)
@@ -403,6 +452,7 @@ export async function resolvePendingInteraction(
   revalidatePath("/pipeline");
   revalidatePath("/agents");
   revalidatePath("/messaging");
+  revalidatePath("/queue");
 }
 
 /**

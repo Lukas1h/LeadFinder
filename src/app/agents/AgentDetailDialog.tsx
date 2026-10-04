@@ -335,7 +335,7 @@ export function AgentDetailDialog({
   const callHref = telUrl(agent.phone);
   // Same handoff problem as the Contact dialog's buttons: tapping Call opens the
   // dialer and Text opens Messages, and neither tells the app how it went. Park
-  // the attempt and let PendingInteractionPrompt ask on the return trip.
+  // the attempt and let PendingInteractionPrompt settle it on the return trip.
   const logHandoff = (channel: "call" | "text") => {
     startPendingInteraction({ agentId: agent.id, channel }).catch(() => {});
   };

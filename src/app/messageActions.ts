@@ -569,7 +569,7 @@ export async function sendMessage(
   // This only ever means "the Messages composer was opened" — the app hands off
   // via an sms: link and never learns whether the text was actually sent. The
   // send is still recorded up front so nothing is lost, and a pending
-  // interaction asks on the way back in; answering "didn't send" removes it
+  // interaction is confirmed on the way back in; its Undo removes the send
   // again (see resolvePendingInteraction) so unsent drafts stop counting toward
   // a variant's stats.
   let pendingInteractionId: string | null = null;

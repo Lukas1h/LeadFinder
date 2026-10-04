@@ -149,8 +149,8 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
       return;
     }
     // Same handoff as the Text button: open Messages first (it has to happen
-    // inside the tap), then log it in the same tick; the app asks on the way
-    // back whether it sent. The log is a plain fetch, not the server action:
+    // inside the tap), then log it in the same tick; coming back confirms it
+    // with an Undo toast. The log is a plain fetch, not the server action:
     // server actions queue behind any in-flight router refresh, which this
     // page does constantly, and a queued call is lost when iOS freezes the
     // app for Messages (see /api/queue/[id]/handoff).
@@ -158,7 +158,6 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
     void fetch(`/api/queue/${item.id}/handoff`, { method: "POST", keepalive: true })
       .then(() => router.refresh())
       .catch(() => {});
-    toast.success("Opened Messages — I'll ask if it sent");
   };
 
   return (
