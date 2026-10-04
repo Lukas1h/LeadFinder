@@ -108,7 +108,7 @@ export async function computeVariantStats(): Promise<Record<string, VariantStats
 
 export interface SendCounts {
   sent: number;
-  /** Sent in the last 7 days. */
+  /** Sent in the last 30 days. */
   sentRecent: number;
   replied: number;
   booked: number;
@@ -160,7 +160,7 @@ export async function computeMessagingStats(): Promise<MessagingStats> {
         type: messagePresets.type,
         archived: sql<boolean>`${messagePresets.archivedAt} is not null`,
         sent: sql<number>`count(*)::int`,
-        sentRecent: sql<number>`count(*) filter (where ${messageSends.sentAt} > now() - interval '7 days')::int`,
+        sentRecent: sql<number>`count(*) filter (where ${messageSends.sentAt} > now() - interval '30 days')::int`,
         replied: sql<number>`count(${messageSends.respondedAt})::int`,
         booked: sql<number>`count(*) filter (where ${messageSends.result} = 'booked')::int`,
       })
