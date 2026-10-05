@@ -89,10 +89,10 @@ function streetNudge(input: DraftMessageInput, street: string): string {
 
 // {{area}} is the phrase from areaPhrase ("in the Portland area", "here in
 // Roseburg"). #1 is Lukas's own rewrite of an AI draft (2026-10-04) — the
-// voice the rest follow: an exclamation after "I'm Lukas!", where he works,
+// voice the rest follow: one exclamation in the greeting, where he works,
 // "I saw your … listing on X," with a comma straight into the question, and
 // "I'd love to shoot it for you" instead of a sales line.
-const EXAMPLE_BANK = `1. Coming Soon / No Photos (Lukas's own wording — the model for every photo opportunity)
+const EXAMPLE_BANK_TEMPLATE = `1. Coming Soon / No Photos (Lukas's own wording — the model for every photo opportunity)
 Hey {{firstName}}, I'm Lukas! I do some real estate photography {{area}}. I saw your coming soon listing on {{street}}, do you have photos lined up yet? I'd love to shoot it for you if you don't.
 
 2. Few or No Photos / Active Listing
@@ -121,6 +121,20 @@ Hey {{firstName}}, I'm Lukas! I do some real estate photography {{area}}. I've s
 
 10. Simple Listing Introduction
 Hey {{firstName}}, I'm Lukas! I do some real estate photography {{area}}. I saw your listing on {{street}}, if you still need someone to shoot it I'd love to.`;
+
+/**
+ * Lukas likes both openings, so each draft gets one at random (like a
+ * template's A/B variants) and the example bank is rewritten to match.
+ */
+const GREETINGS = [
+  { prefix: "Hey {{firstName}}, I'm Lukas! I do", shape: `"Hey {firstName}, I'm Lukas! I do some real estate photography {area}."`, bang: `right after "I'm Lukas!"` },
+  { prefix: "Hey {{firstName}}! I'm Lukas, I do", shape: `"Hey {firstName}! I'm Lukas, I do some real estate photography {area}."`, bang: `right after the first name ("Hey Sarah!")` },
+] as const;
+type Greeting = (typeof GREETINGS)[number];
+
+function exampleBank(greeting: Greeting): string {
+  return EXAMPLE_BANK_TEMPLATE.replaceAll(GREETINGS[0].prefix, greeting.prefix);
+}
 
 /**
  * The 24 hour turnaround is a claim about photography. Video is scheduled
@@ -215,7 +229,7 @@ function formatAgentFacts(input: DraftMessageInput): string {
   return lines.map((line) => `- ${line}`).join("\n");
 }
 
-function buildInitialOutreachPrompt(input: DraftMessageInput, street: string, skipIntro: boolean): string {
+function buildInitialOutreachPrompt(input: DraftMessageInput, street: string, skipIntro: boolean, greeting: Greeting): string {
   return `The purpose of this message is to automatically write a short, personalized text message to a real estate agent based on the listing, the agent, and the attached listing photos. It should feel like a real photographer personally reaching out, not automated marketing.
 
 Analyze the listing details AND the attached photos closely before deciding what to say — you are the one judging the photography here, nothing has been pre-scored for you. Look at composition, lighting, exposure, whether an aerial/drone shot is present, whether a twilight/dusk exterior shot is present, whether windows show real exterior detail (a "window pull") vs. blown out to white, converging/leaning vertical lines (a cellphone tell), and whether the property's best features are actually shown.
@@ -245,14 +259,14 @@ ${formatAgentFacts(input)}
 ${input.agentNotes ? `- Lukas's own notes on this agent: ${input.agentNotes}\n` : ""}
 Writing style:
 - Friendly and casual, not professional. Short and to the point: 3 short sentences is ideal, 4 at most.
-- The shape, in this order: (1) "Hey {firstName}, I'm Lukas!" (2) "I do some real estate photography {area}." (3) "I saw your … listing on {street}," and a comma straight into the reason, usually a question like "do you have photos lined up yet?" (4) a simple "I'd love to shoot it for you" style offer. Example #1 below is Lukas's own wording; match it closely.
+- The shape, in this order: (1-2) ${greeting.shape} (3) "I saw your … listing on {street}," and a comma straight into the reason, usually a question like "do you have photos lined up yet?" (4) a simple "I'd love to shoot it for you" style offer. Example #1 below is Lukas's own wording; match it closely.
 - Coming soon with no photos, only a few, or obvious placeholder/phone photos: use example #1 nearly word for word ("do you have photos lined up yet? I'd love to shoot it for you if you don't."). Coming soon that already has a full set of photos: still say "your coming soon listing on {street}," but offer professional photos like example #3.${skipIntro ? `\n- IMPORTANT override to step (2) above: do NOT say "I'm Lukas," "it's Lukas," or name-drop Lukas at all in this message. The relationship status above means this agent already has him saved in their phone and knows exactly who's texting — treat this like a text from a contact already in their contacts list. Start straight from the greeting into the reason for reaching out.` : ""}
 - Avoid sounding like an advertisement or formal business email. Loose, comma-joined phrasing like "I saw your listing on Clay street, do you have photos lined up yet?" is exactly right.
 - Do not use exaggerated sales language such as "take your listing to the next level," "elevate your brand," "best-in-class," or "earn your business."
 - Do not immediately push packages, discounts, or long explanations.
 
 Example messages — use these as patterns for tone and structure. Adapt the wording to the actual situation above rather than blindly copying one:
-${EXAMPLE_BANK}
+${exampleBank(greeting)}
 
 Final rules:
 - Choose the approach based on the strongest available evidence from the listing, photos, and agent — don't default to the same one every time.
@@ -343,10 +357,11 @@ export function buildSmsPrompt(input: DraftMessageInput): string {
   const street = naturalStreetName(input.address) ?? input.address ?? "the listing";
   const status = input.agentRelationshipStatus ?? "cold";
   const skipIntro = SKIP_INTRO_STATUSES.includes(status);
+  const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
 
   const scenarioPrompt =
     input.type === "initial_outreach"
-      ? buildInitialOutreachPrompt(input, street, skipIntro)
+      ? buildInitialOutreachPrompt(input, street, skipIntro, greeting)
       : buildFollowUpPrompt(input, street, skipIntro);
 
   const instructionBlock = input.instruction?.trim()
@@ -366,7 +381,7 @@ Additional writing rules (these override anything above if they conflict, except
 - NEVER use a hyphen (-) to join words. Write "24 hour", "last minute", "coming soon", "quick turnaround". Nobody types a hyphen into a text message, so one there is the clearest possible tell that a machine wrote it. This can't be cleaned up afterwards the way a dash can — a regex would turn "well known" into "wellknown" — so it has to come out right the first time.
 ${VIDEO_NO_TURNAROUND_RULE}
 - Where he works always comes from the location rule above, word for word.
-- Exactly one exclamation point, right after "I'm Lukas!" in the greeting. None anywhere else. (When the message doesn't introduce Lukas by name, use none at all.)
+- Exactly one exclamation point, ${greeting.bang} in the greeting. None anywhere else. (When the message doesn't introduce Lukas by name, put it after the first name: "Hey Sarah!")
 - Never use these words/phrases — dead giveaways of AI writing: "I noticed," "I wanted to reach out," "I hope this finds you," "don't hesitate," "in case you," "showcase"/"showcasing," "ensure," "delve," "reach out," "take care of," "beautifully," "stunning," "reliable," "pivotal," "crucial."
 - Never use the word "refresh" or "updated photography" when the photos are bad — instead offer to take professional photos for the listing (frame it as getting the place photographed properly, not as sprucing up old photos).
 - Don't write in a symmetric "not just X, but Y" or rule-of-three pattern.
