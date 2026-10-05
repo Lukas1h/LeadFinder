@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { agentInteractions, messageSends, type Agent } from "@/db/schema";
-import { isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, max } from "drizzle-orm";
 
 /**
  * Returns the agents with lastContactedAt / lastContactedListingId set from
@@ -40,4 +40,44 @@ export async function withLastContactFromHistory(allAgents: Agent[]): Promise<Ag
     const contact = latest.get(agent.id);
     return { ...agent, lastContactedAt: contact?.at ?? null, lastContactedListingId: contact?.listingId ?? null };
   });
+}
+
+export interface ContactByChannel {
+  /** Latest text or call (sends and logged interactions). */
+  texted: Date | null;
+  /** Latest email. */
+  emailed: Date | null;
+}
+
+/**
+ * Latest outbound contact per agent, split into texting/calling vs email.
+ * Kept apart because nearly every agent was in the big cold email run, and
+ * that doesn't make a first text any less of a cold first text — the data
+ * shows the same ~26% reply rate either way (2026-10-05). Inbound replies
+ * aren't counted; they're the agent reaching out, not Lukas.
+ */
+export async function contactByChannel(agentIds: string[]): Promise<Map<string, ContactByChannel>> {
+  const result = new Map<string, ContactByChannel>();
+  if (agentIds.length === 0) return result;
+  const [sends, interactions] = await Promise.all([
+    db
+      .select({ agentId: messageSends.agentId, channel: messageSends.channel, at: max(messageSends.sentAt) })
+      .from(messageSends)
+      .where(inArray(messageSends.agentId, agentIds))
+      .groupBy(messageSends.agentId, messageSends.channel),
+    db
+      .select({ agentId: agentInteractions.agentId, channel: agentInteractions.channel, at: max(agentInteractions.occurredAt) })
+      .from(agentInteractions)
+      .where(and(inArray(agentInteractions.agentId, agentIds), eq(agentInteractions.direction, "outbound")))
+      .groupBy(agentInteractions.agentId, agentInteractions.channel),
+  ]);
+  for (const r of [...sends, ...interactions]) {
+    if (!r.agentId || !r.at) continue;
+    const at = new Date(r.at);
+    const entry = result.get(r.agentId) ?? { texted: null, emailed: null };
+    const key = r.channel === "email" ? "emailed" : "texted";
+    if (!entry[key] || at > entry[key]!) entry[key] = at;
+    result.set(r.agentId, entry);
+  }
+  return result;
 }

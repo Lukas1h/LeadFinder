@@ -90,8 +90,8 @@ export function registerQueueTools(server: McpServer): void {
         "an AI-draft preset or ai: true (each message drafted individually for its listing — queued right away as 'drafting' and filled in within a minute or two; can't be sent until then), " +
         "or a literal body (+ subject for email). Each listing's linked agent is the recipient. " +
         "IMPORTANT: if the result has any `warnings`, show every one of them to Lukas verbatim before anything else — in particular `duplicateAgents`, agents who got more than one message in this batch (one agent with several listings). Pass onePerAgent: true to queue only one message per agent. " +
-        "Relationship status 'cold' only means they never replied — a cold agent may already have been texted or emailed. When Lukas asks for uncontacted agents, pass skipContacted: true. " +
-        "Results also flag agents contacted before (with the date) and agents who already have a queued message — they're queued anyway, so tell Lukas about them.",
+        "Relationship status 'cold' only means they never replied — a cold agent may already have been texted. When Lukas asks for uncontacted agents, pass skipContacted: true: it skips agents already reached on this channel (texted or called, for a text; emailed, for an email). Nearly every agent got the big cold email run, and that doesn't count against a text. " +
+        "Results also flag agents already reached on this channel (with the date) and agents who already have a queued message — they're queued anyway, so tell Lukas about them.",
       inputSchema: {
         listingIds: z.array(z.string().uuid()).max(200).optional(),
         agentIds: z.array(z.string().uuid()).max(200).optional().describe("For messages not about a listing (templates/body only — AI drafts need a listing)"),
@@ -106,7 +106,7 @@ export function registerQueueTools(server: McpServer): void {
         sendAfter: iso.optional().describe("When the first one becomes due (default now). Include the offset, e.g. -07:00 for Pacific. Due messages are still held to 8 AM–9 PM Pacific."),
         spacingMinutes: z.number().int().min(0).max(24 * 60).optional().describe("Minutes between consecutive messages' due times"),
         onePerAgent: z.boolean().optional().describe("Only queue the first listing for each agent; skip the rest"),
-        skipContacted: z.boolean().optional().describe("Skip agents who've ever been texted, emailed, called or logged — 'uncontacted' only"),
+        skipContacted: z.boolean().optional().describe("Skip agents already reached on this channel: texted or called (for texts), emailed (for emails). An earlier cold email doesn't count against a text."),
       },
     },
     async (input) => {

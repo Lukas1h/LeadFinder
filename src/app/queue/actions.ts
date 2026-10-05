@@ -7,7 +7,6 @@ import {
   listings,
   messagePresets,
   messagePresetVariants,
-  messageSends,
   queuedMessages,
   type MessageChannel,
   type PresetType,
@@ -16,6 +15,7 @@ import {
 } from "@/db/schema";
 import { and, eq, inArray, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { contactByChannel } from "@/lib/agentLastContact";
 import { AI_DRAFT_VARIANT_SENTINEL } from "@/lib/messageTemplate";
 import { nextSendTime } from "@/lib/queue";
 import { generatePendingDrafts } from "@/lib/queueMessages";
@@ -55,7 +55,10 @@ export interface QueueItem {
   /** The agent wrote back after this was queued — worth a look before sending. */
   repliedSinceQueued: boolean;
   /** Latest real contact (send or interaction) with this agent, if any. */
+  /** Latest contact on this message's channel (texted/called for a text, emailed for an email). */
   lastContactedAt: Date | null;
+  /** Latest contact on the other channel — context, not a warning. */
+  otherChannelContactedAt: Date | null;
 }
 
 /** Every unsent message plus the last 2 days of sent/skipped ones, oldest due first. */
@@ -84,33 +87,17 @@ export async function getQueue(agentId?: string): Promise<QueueItem[]> {
   );
   const agentIds = [...new Set(visible.map((r) => r.q.agentId))];
 
-  const [inbound, sends, interactions] =
+  const [inbound, contacts] = await Promise.all([
     agentIds.length === 0
-      ? [[], [], []]
-      : await Promise.all([
-          db
-            .select({ agentId: agentInteractions.agentId, at: max(agentInteractions.occurredAt) })
-            .from(agentInteractions)
-            .where(and(inArray(agentInteractions.agentId, agentIds), eq(agentInteractions.direction, "inbound")))
-            .groupBy(agentInteractions.agentId),
-          db
-            .select({ agentId: messageSends.agentId, at: max(messageSends.sentAt) })
-            .from(messageSends)
-            .where(inArray(messageSends.agentId, agentIds))
-            .groupBy(messageSends.agentId),
-          db
-            .select({ agentId: agentInteractions.agentId, at: max(agentInteractions.occurredAt) })
-            .from(agentInteractions)
-            .where(inArray(agentInteractions.agentId, agentIds))
-            .groupBy(agentInteractions.agentId),
-        ]);
+      ? []
+      : db
+          .select({ agentId: agentInteractions.agentId, at: max(agentInteractions.occurredAt) })
+          .from(agentInteractions)
+          .where(and(inArray(agentInteractions.agentId, agentIds), eq(agentInteractions.direction, "inbound")))
+          .groupBy(agentInteractions.agentId),
+    contactByChannel(agentIds),
+  ]);
   const lastInbound = new Map(inbound.map((r) => [r.agentId, r.at ? new Date(r.at) : null]));
-  const lastContact = new Map<string, Date>();
-  for (const r of [...sends, ...interactions]) {
-    if (!r.agentId || !r.at) continue;
-    const at = new Date(r.at);
-    if (!lastContact.has(r.agentId) || at > lastContact.get(r.agentId)!) lastContact.set(r.agentId, at);
-  }
   const statusById = new Map(rows.map((r) => [r.q.id, r.q.status]));
 
   return visible
@@ -143,7 +130,8 @@ export async function getQueue(agentId?: string): Promise<QueueItem[]> {
         listingCity: r.listingCity,
         waitingOnId,
         repliedSinceQueued: q.status === "queued" && replied != null && replied > q.createdAt,
-        lastContactedAt: lastContact.get(q.agentId) ?? null,
+        lastContactedAt: contacts.get(q.agentId)?.[q.channel === "email" ? "emailed" : "texted"] ?? null,
+        otherChannelContactedAt: contacts.get(q.agentId)?.[q.channel === "email" ? "texted" : "emailed"] ?? null,
       };
     })
     .sort((a, b) => (a.waitingOnId ? 1 : 0) - (b.waitingOnId ? 1 : 0) || a.dueAt.getTime() - b.dueAt.getTime());

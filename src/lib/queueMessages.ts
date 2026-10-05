@@ -8,20 +8,19 @@
 // 50 Gemini calls is too slow to hold a request open for, and a pending row
 // can't be sent until its draft lands.
 
-import { and, eq, inArray, isNotNull, lt, max, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lt, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  agentInteractions,
   agents,
   listings,
   messagePresets,
   messagePresetVariants,
-  messageSends,
   queuedMessages,
   type MessageChannel,
   type PresetType,
 } from "@/db/schema";
 import { renderMessageBody, renderSubject } from "@/lib/messageTemplate";
+import { contactByChannel } from "@/lib/agentLastContact";
 // The AI drafting lives in these server-action modules; called here as plain
 // functions (they only read the DB and call the model, no revalidation).
 import { draftAiPresetOption } from "@/app/messageActions";
@@ -51,7 +50,11 @@ export interface QueueMessagesInput {
   spacingMinutes?: number;
   /** Queue only the first target per agent; the rest are skipped. */
   onePerAgent?: boolean;
-  /** Skip agents who've ever been contacted (any send or interaction), not just non-cold ones. */
+  /**
+   * Skip agents already reached on this channel: texted or called, for a text;
+   * emailed, for an email. A cold email doesn't count against a first text
+   * (see contactByChannel).
+   */
   skipContacted?: boolean;
 }
 
@@ -65,8 +68,10 @@ export interface QueueMessagesResult {
     missingRecipient: boolean;
     /** Any contact with this agent in the last 7 days — flagged, not skipped. */
     recentlyContacted: boolean;
-    /** The agent's latest contact ever (null = never contacted). */
+    /** Latest contact on this message's channel — texted/called for a text, emailed for an email. */
     lastContactedAt: Date | null;
+    /** Latest contact on the other channel, for context. */
+    otherChannelContactedAt: Date | null;
     /** Already has another unsent queued message. */
     alreadyQueued: boolean;
   }[];
@@ -131,36 +136,17 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
   const agentRows = agentIds.length ? await db.select().from(agents).where(inArray(agents.id, agentIds)) : [];
   const agentById = new Map(agentRows.map((a) => [a.id, a]));
 
-  const [sendTimes, interactionTimes, openQueued] = agentIds.length
-    ? await Promise.all([
-        db
-          .select({ agentId: messageSends.agentId, at: max(messageSends.sentAt) })
-          .from(messageSends)
-          .where(inArray(messageSends.agentId, agentIds))
-          .groupBy(messageSends.agentId),
-        db
-          .select({ agentId: agentInteractions.agentId, at: max(agentInteractions.occurredAt) })
-          .from(agentInteractions)
-          .where(inArray(agentInteractions.agentId, agentIds))
-          .groupBy(agentInteractions.agentId),
-        db
+  const [contacts, openQueued] = await Promise.all([
+    contactByChannel(agentIds),
+    agentIds.length
+      ? db
           .select({ agentId: queuedMessages.agentId })
           .from(queuedMessages)
-          .where(and(inArray(queuedMessages.agentId, agentIds), eq(queuedMessages.status, "queued"))),
-      ])
-    : [[], [], []];
-  // Latest contact of any kind: a send, an interaction, or the agent's own stamp.
-  const lastContact = new Map<string, Date>();
-  for (const r of [
-    ...sendTimes,
-    ...interactionTimes,
-    ...agentRows.map((a) => ({ agentId: a.id, at: a.lastContactedAt })),
-  ]) {
-    if (!r.agentId || !r.at) continue;
-    const at = new Date(r.at);
-    const prev = lastContact.get(r.agentId);
-    if (!prev || at > prev) lastContact.set(r.agentId, at);
-  }
+          .where(and(inArray(queuedMessages.agentId, agentIds), eq(queuedMessages.status, "queued")))
+      : [],
+  ]);
+  const sameChannel = input.channel === "email" ? "emailed" : "texted";
+  const otherChannel = input.channel === "email" ? "texted" : "emailed";
   const recentCutoff = Date.now() - 7 * DAY_MS;
   const hasQueued = new Set(openQueued.map((r) => r.agentId));
 
@@ -188,9 +174,9 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
       result.skipped.push({ target, reason: "agent already got a message in this batch" });
       continue;
     }
-    const contactedAt = lastContact.get(agent.id) ?? null;
+    const contactedAt = contacts.get(agent.id)?.[sameChannel] ?? null;
     if (input.skipContacted && contactedAt) {
-      result.skipped.push({ target, reason: `already contacted ${contactedAt.toISOString().slice(0, 10)}` });
+      result.skipped.push({ target, reason: `already ${sameChannel} ${contactedAt.toISOString().slice(0, 10)}` });
       continue;
     }
     if (input.channel === "email" && agent.emailUnsubscribedAt) {
@@ -233,6 +219,7 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
       missingRecipient: input.channel === "email" ? !agent.email : !agent.phone,
       recentlyContacted: !!contactedAt && contactedAt.getTime() > recentCutoff,
       lastContactedAt: contactedAt,
+      otherChannelContactedAt: contacts.get(agent.id)?.[otherChannel] ?? null,
       alreadyQueued: hasQueued.has(agent.id),
     });
     index++;
@@ -257,7 +244,7 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
       .map((q) => `${q.agentName ?? "Unknown"} (${q.lastContactedAt!.toISOString().slice(0, 10)})`)
       .join(", ");
     result.warnings.push(
-      `${contacted.length} message${contacted.length === 1 ? " goes" : "s go"} to agents you've already contacted: ${names}. Pass skipContacted: true to leave them out.`
+      `${contacted.length} message${contacted.length === 1 ? " goes" : "s go"} to agents you've already ${sameChannel}: ${names}. Pass skipContacted: true to leave them out.`
     );
   }
   return result;
