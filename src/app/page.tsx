@@ -16,6 +16,16 @@ import { Separator } from "@/components/ui/separator";
 import { LeadsSkeleton } from "./loading";
 import Link from "next/link";
 import { getQueuedListingIds } from "@/lib/queueMessages";
+import { KnownAgentLeads, type KnownAgentGroup } from "./KnownAgentLeads";
+import type { AgentRelationshipStatus } from "@/db/schema";
+
+const KNOWN_AGENT_GROUP: Partial<Record<AgentRelationshipStatus, KnownAgentGroup>> = {
+  regular: "clients",
+  worked_once: "clients",
+  interested: "interested",
+  warm: "warm",
+};
+const KNOWN_AGENT_GROUP_ORDER: KnownAgentGroup[] = ["clients", "interested", "warm"];
 
 // Server Action timeouts are controlled by the maxDuration of the page
 // they're invoked from — triggerManualSync (RefreshButton's action, in
@@ -91,9 +101,19 @@ async function LeadsContent() {
   // price cut lands after the fact.
   await refreshLeadSections(leads.map((l) => l.id));
 
+  // A new listing from an agent who already knows Lukas is the best moment to
+  // get back in touch, so those come out of the four sections into their own,
+  // at the top. Display only: the stored leadSection is untouched, since the
+  // message recommendation reads it.
+  const known: { lead: Listing; group: KnownAgentGroup }[] = [];
   const sections: Record<LeadSection, Listing[]> = { photo: [], video: [], backup: [], unlikely: [] };
   for (const lead of openLeads) {
     const attached = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
+    const group = attached ? KNOWN_AGENT_GROUP[attached.relationshipStatus] : undefined;
+    if (group) {
+      known.push({ lead, group });
+      continue;
+    }
     const section =
       (lead.leadSection as LeadSection | null) ?? leadSection({
         ...lead,
@@ -114,6 +134,12 @@ async function LeadsContent() {
   for (const key of ["backup", "video"] as const) {
     sections[key].sort((a, b) => contacted(a) - contacted(b) || (b.price ?? 0) - (a.price ?? 0));
   }
+
+  known.sort(
+    (a, b) =>
+      KNOWN_AGENT_GROUP_ORDER.indexOf(a.group) - KNOWN_AGENT_GROUP_ORDER.indexOf(b.group) ||
+      byLeadPriority(a.lead, b.lead)
+  );
 
   function card(lead: Listing) {
     const attachedAgent = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
@@ -206,13 +232,26 @@ async function LeadsContent() {
         </div>
       ) : (
         <div className="flex flex-col gap-8">
+          {known.length > 0 && (
+            <section>
+              <details className="group/details" open>
+                <summary className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
+                  <span className="flex items-center gap-1">
+                    <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
+                    From agents you know ({known.length})
+                  </span>
+                </summary>
+                <KnownAgentLeads items={known.map(({ lead, group }) => ({ group, card: card(lead) }))} />
+              </details>
+            </section>
+          )}
           {LEAD_SECTION_ORDER.map((key, index) => {
             const items = sections[key];
             if (items.length === 0) return null;
             const isUnlikely = key === "unlikely";
             return (
               <section key={key}>
-                {index > 0 && <Separator className="mb-8" />}
+                {(index > 0 || known.length > 0) && <Separator className="mb-8" />}
                 <details className="group/details" open={!isUnlikely}>
                   <summary className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
                     <span className="flex items-center gap-1">

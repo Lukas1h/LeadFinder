@@ -1,8 +1,11 @@
 // Which template the Send dialog recommends for a listing — shared by the
 // text options (getMessageOptions) and the email options
 // (getComposeEmailOptions) so both channels pick the same way.
-import type { Listing } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { agents, type Listing } from "@/db/schema";
 import { leadSectionForListing } from "@/lib/leadSections";
+import { isWarmAgentStatus } from "@/lib/pipeline";
 
 export interface PresetCriteria {
   minScore: number | null;
@@ -109,12 +112,18 @@ export function listingMatchFacts(listing: Listing): ListingMatchFacts {
  * The recommended preset's id: the most specific hand-written preset whose
  * criteria the listing meets, unless the AI-draft preset is more specific
  * still. Ties go to the hand-written one.
+ *
+ * `knownAgent` (warm or better) always gets the AI draft: every hand-written
+ * template opens with "I'm Lukas," which reads wrong to someone who already
+ * has him in their phone, and the draft skips that intro for them.
  */
 export function pickRecommendedPreset(
   presets: (PresetCriteria & { id: string; protected: boolean })[],
   aiPreset: (PresetCriteria & { id: string }) | null,
-  facts: ListingMatchFacts
+  facts: ListingMatchFacts,
+  knownAgent = false
 ): string | null {
+  if (knownAgent && aiPreset) return aiPreset.id;
   let recommendedPresetId: string | null = null;
   let bestCriteriaCount = -1;
   for (const preset of presets) {
@@ -150,4 +159,14 @@ export function pickRecommendedPreset(
     }
   }
   return recommendedPresetId;
+}
+
+/** Whether the listing's agent already knows Lukas (warm or better). */
+export async function isKnownAgent(agentId: string | null): Promise<boolean> {
+  if (!agentId) return false;
+  const [row] = await db
+    .select({ status: agents.relationshipStatus })
+    .from(agents)
+    .where(eq(agents.id, agentId));
+  return row ? isWarmAgentStatus(row.status) : false;
 }

@@ -26,7 +26,7 @@ import {
 import { sendEmail } from "@/lib/mailer";
 import { draftEmailMessage } from "@/lib/draftMessage";
 import type { PresetOption, MessageOptions } from "@/app/messageActions";
-import { listingAgeDays, listingMatchFacts, pickRecommendedPreset } from "@/lib/presetCriteria";
+import { isKnownAgent, listingAgeDays, listingMatchFacts, pickRecommendedPreset } from "@/lib/presetCriteria";
 import { normalizeEmail, normalizeName, normalizePhone, EMAIL_RE } from "@/lib/normalize";
 
 /**
@@ -184,7 +184,8 @@ export async function getComposeEmailOptions(listingContext?: {
     ? pickRecommendedPreset(
         Array.from(rowsByPreset.values()).map((group) => ({ ...group[0], id: group[0].presetId })),
         aiPreset,
-        listingMatchFacts(listing)
+        listingMatchFacts(listing),
+        await isKnownAgent(listing.agentId)
       )
     : (Array.from(rowsByPreset.values()).find((group) => !group[0].protected)?.[0].presetId ?? null);
 

@@ -24,7 +24,7 @@ import {
   AI_DRAFT_VARIANT_SENTINEL,
 } from "@/lib/messageTemplate";
 import { draftMessage } from "@/lib/draftMessage";
-import { listingAgeDays, listingMatchFacts, pickRecommendedPreset, type PresetCriteria } from "@/lib/presetCriteria";
+import { isKnownAgent, listingAgeDays, listingMatchFacts, pickRecommendedPreset, type PresetCriteria } from "@/lib/presetCriteria";
 import { startPendingInteraction } from "@/app/agents/interactionActions";
 import { touchAgentContact } from "@/app/actions";
 
@@ -198,7 +198,8 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   const recommendedPresetId = pickRecommendedPreset(
     Array.from(rowsByPreset.values()).map((group) => ({ ...group[0], id: group[0].presetId })),
     aiPreset,
-    listingMatchFacts(listing)
+    listingMatchFacts(listing),
+    await isKnownAgent(listing.agentId)
   );
 
   const presets: PresetOption[] = Array.from(rowsByPreset.values()).map((group) => {
