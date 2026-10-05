@@ -76,8 +76,8 @@ const SKIP_INTRO_STATUSES: AgentRelationshipStatus[] = ["warm", "interested", "w
 // Portland metro is "in the Portland area"; Salem metro, where he's done
 // work, is "here in the Salem area"; Roseburg, Eugene and Springfield get
 // "here in" the city itself, and their smaller neighbors "here in the
-// Roseburg/Eugene area". Medford is a regular area for him too. Anywhere not
-// listed falls back to the model naming the nearest recognizable area.
+// Roseburg/Eugene area"; the Oregon coast is "here around the coast". Medford
+// is a regular area for him too. Anywhere else is "in the {City} area".
 const AREA_PHRASES: [string, string[]][] = [
   ["in the Portland area", [
     "portland", "beaverton", "hillsboro", "gresham", "lake oswego", "tigard", "tualatin", "west linn",
@@ -103,17 +103,27 @@ const AREA_PHRASES: [string, string[]][] = [
     "cottage grove", "creswell", "pleasant hill", "junction city", "coburg", "veneta", "lowell",
     "oakridge", "marcola", "harrisburg", "dexter", "elmira",
   ]],
+  ["here around the coast", [
+    "coos bay", "north bend", "lakeside", "reedsport", "winchester bay", "charleston", "bandon",
+    "coquille", "myrtle point", "port orford", "langlois", "gold beach", "brookings", "florence",
+    "dunes city", "yachats", "waldport", "seal rock", "newport", "toledo", "siletz", "otter rock",
+    "depoe bay", "gleneden beach", "lincoln city", "otis", "neskowin", "pacific city", "cloverdale",
+    "tillamook", "netarts", "oceanside", "bay city", "garibaldi", "rockaway beach", "wheeler",
+    "nehalem", "manzanita", "arch cape", "cannon beach", "tolovana park", "seaside", "gearhart",
+    "warrenton", "hammond", "astoria",
+  ]],
   ["here in the Medford area", [
     "medford", "ashland", "central point", "phoenix", "talent", "white city", "eagle point",
     "jacksonville", "gold hill", "rogue river", "shady cove", "butte falls", "grants pass",
   ]],
 ];
 
-/** "in the Portland area", "here in Roseburg", … or null when the city has no set phrase. */
+/** "in the Portland area", "here in Roseburg", "in the Bend area", … — null only with no city at all. */
 export function areaPhrase(city: string | null | undefined): string | null {
-  const key = city?.trim().toLowerCase();
-  if (!key) return null;
-  return AREA_PHRASES.find(([, cities]) => cities.includes(key))?.[0] ?? null;
+  const name = city?.trim();
+  if (!name) return null;
+  const key = name.toLowerCase();
+  return AREA_PHRASES.find(([, cities]) => cities.includes(key))?.[0] ?? `in the ${name} area`;
 }
 
 /** Shared by the SMS and email prompts — how to say where he works, honestly. */
@@ -121,7 +131,7 @@ function localityNudge(input: DraftMessageInput): string {
   const phrase = areaPhrase(input.city);
   const where = phrase
     ? `Say where he works with exactly this phrase: "I do some real estate photography ${phrase}." Don't swap in a different area or the town's own name.`
-    : `${input.city ?? "This city"} has no set phrase, so name the nearest larger area people recognize: "I do some real estate photography in the ___ area." If you're not confident which area it belongs to, leave the location out.`;
+    : `The city is unknown, so just say "I do some real estate photography" with no area.`;
   return `Lukas lives in the Roseburg, OR area. ${where} Never call him "local", "based in" a city, or "from" a city.`;
 }
 
@@ -277,7 +287,7 @@ Do not automatically criticize the photography — if it's already good, acknowl
 Listing — street (use this for {{street}}): ${street}
 ${formatListingFacts(input)}
 
-Where he works (use this for {{area}}): ${areaPhrase(input.city) ?? "no set phrase, see the location rule below"}
+Where he works (use this for {{area}}): ${areaPhrase(input.city) ?? "unknown, leave it out"}
 
 Agent (use first name for {{firstName}}):
 - Name: ${input.agentName ?? "unknown"}
@@ -408,7 +418,7 @@ Additional writing rules (these override anything above if they conflict, except
 - NEVER use an em dash (—) or en dash (–), anywhere. Use a period or comma instead.
 - NEVER use a hyphen (-) to join words. Write "24 hour", "last minute", "coming soon", "quick turnaround". Nobody types a hyphen into a text message, so one there is the clearest possible tell that a machine wrote it. This can't be cleaned up afterwards the way a dash can — a regex would turn "well known" into "wellknown" — so it has to come out right the first time.
 ${VIDEO_NO_TURNAROUND_RULE}
-- Where he works always comes from the location rule above. Never put him "in the {small town} area"; when there's no set phrase, name the bigger area people actually say, or skip it.
+- Where he works always comes from the location rule above, word for word.
 - Exactly one exclamation point, right after "I'm Lukas!" in the greeting. None anywhere else. (When the message doesn't introduce Lukas by name, use none at all.)
 - Never use these words/phrases — dead giveaways of AI writing: "I noticed," "I wanted to reach out," "I hope this finds you," "don't hesitate," "in case you," "showcase"/"showcasing," "ensure," "delve," "reach out," "take care of," "beautifully," "stunning," "reliable," "pivotal," "crucial."
 - Never use the word "refresh" or "updated photography" when the photos are bad — instead offer to take professional photos for the listing (frame it as getting the place photographed properly, not as sprucing up old photos).
