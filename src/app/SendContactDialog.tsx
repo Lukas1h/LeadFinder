@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { MessageCircle, Mail, Phone, RefreshCw, Paperclip } from "lucide-react";
+import { MessageCircle, Mail, Phone, RefreshCw, Paperclip, Sparkles } from "lucide-react";
 import type { PresetType } from "@/db/schema";
 import { getMessageOptions, sendMessage, draftAiPresetOption, type PresetOption } from "@/app/messageActions";
 import { getComposeEmailOptions, sendListingEmail, draftAiEmailPresetOption } from "@/app/composeEmailActions";
@@ -100,11 +100,8 @@ export function SendContactDialog({
       setEmailSelectedPresetId(initial?.presetId ?? null);
       setEmailLoading(false);
       setEmailLoaded(true);
-      if (initial?.variantId === AI_DRAFT_VARIANT_SENTINEL && !initial.subject) void startEmailAiDraft(initial.presetId);
-      else {
-        setEditedSubject(initial?.subject ?? "");
-        setEditedBody(initial?.text ?? "");
-      }
+      setEditedSubject(initial?.subject ?? "");
+      setEditedBody(initial?.text ?? "");
     });
   };
 
@@ -132,9 +129,7 @@ export function SendContactDialog({
       selectedSmsRef.current = initial?.presetId ?? null;
       setSmsSelectedPresetId(initial?.presetId ?? null);
       setSmsLoading(false);
-      // A recommended AI draft (price cut / sitting listings) drafts right away.
-      if (initial?.variantId === AI_DRAFT_VARIANT_SENTINEL && !initial.text) void startAiDraft(initial.presetId);
-      else setEditedText(initial?.text ?? "");
+      setEditedText(initial?.text ?? "");
     });
   };
 
@@ -145,47 +140,58 @@ export function SendContactDialog({
 
   const selectedSms = smsPresets.find((p) => p.presetId === smsSelectedPresetId) ?? null;
   const selectedEmail = emailPresets.find((p) => p.presetId === emailSelectedPresetId) ?? null;
+  // Whether a draft already exists for the selected AI preset, which is what
+  // turns the single button from "Generate" into "Regenerate". The draft is
+  // cached on the preset, so switching presets and back keeps it.
+  // Nothing drafts on open or on selection any more — including when the AI
+  // draft is the recommended one, which is the default for every unlikely
+  // lead and so was quietly spending a Gemini call just for opening the
+  // dialog.
+  const hasSmsAiDraft = Boolean(selectedSms?.text);
+  const hasEmailAiDraft = Boolean(selectedEmail?.subject || selectedEmail?.text);
   const callHref = telUrl(agentPhone);
 
-  const startAiDraft = async (presetId: string) => {
+  /**
+   * The one place a draft gets spent, whether it's the first one or a redo.
+   * `instruction` is Lukas's own steering for this message — same box either
+   * way, so the very first draft can be aimed ("mention the price cut") just
+   * as a regeneration can.
+   */
+  const startAiDraft = async (presetId: string, instruction?: string) => {
     setEditedText("");
     setIsDraftingAi(true);
-    const drafted = await draftAiPresetOption(listingId, type);
+    const drafted = await draftAiPresetOption(listingId, type, instruction);
     setIsDraftingAi(false);
     // Switched to another template while it was drafting — don't clobber it.
     if (selectedSmsRef.current !== presetId) return;
     if (!drafted) {
-      toast.error("AI draft failed — pick another preset or try again.");
+      toast.error("AI draft failed — try again.");
       return;
     }
     setSmsPresets((prev) => prev.map((p) => (p.presetId === presetId ? drafted : p)));
     setEditedText(drafted.text);
   };
 
-  const handleSelectSmsPreset = async (presetId: string) => {
+  /**
+   * Deliberately does not start a draft when the AI preset is picked. Every
+   * draft is a Gemini call with photos attached, and picking a preset is a
+   * cheap, reversible thing to do while reading the dialog — making it pay for
+   * a draft you might immediately discard was the wrong trade. Generate is the
+   * only thing that spends one.
+   */
+  const handleSelectSmsPreset = (presetId: string) => {
     selectedSmsRef.current = presetId;
     setSmsSelectedPresetId(presetId);
     const option = smsPresets.find((p) => p.presetId === presetId);
-
-    if (option?.variantId === AI_DRAFT_VARIANT_SENTINEL && !option.text) {
-      await startAiDraft(presetId);
-      return;
-    }
-
     setEditedText(option?.text ?? "");
   };
 
-  const handleRegenerateAi = async () => {
+  // The one button behind both labels: Generate before a draft exists,
+  // Regenerate after. Goes through startAiDraft so the mid-draft preset-switch
+  // guard applies to the first draft too, not just to redos.
+  const handleGenerateAi = () => {
     if (!selectedSms) return;
-    setIsDraftingAi(true);
-    const drafted = await draftAiPresetOption(listingId, type, aiInstruction.trim() || undefined);
-    setIsDraftingAi(false);
-    if (!drafted) {
-      toast.error("AI draft failed — try again.");
-      return;
-    }
-    setSmsPresets((prev) => prev.map((p) => (p.presetId === selectedSms.presetId ? drafted : p)));
-    setEditedText(drafted.text);
+    void startAiDraft(selectedSms.presetId, aiInstruction.trim() || undefined);
   };
 
   const handleSendSms = () => {
@@ -209,15 +215,16 @@ export function SendContactDialog({
     setOpen(false);
   };
 
-  const startEmailAiDraft = async (presetId: string) => {
+  // Same as the SMS side: the first draft is opt-in, and steerable.
+  const startEmailAiDraft = async (presetId: string, instruction?: string) => {
     setEditedSubject("");
     setEditedBody("");
     setIsDraftingEmailAi(true);
-    const drafted = await draftAiEmailPresetOption(listingId, type);
+    const drafted = await draftAiEmailPresetOption(listingId, type, instruction);
     setIsDraftingEmailAi(false);
     if (selectedEmailRef.current !== presetId) return;
     if (!drafted) {
-      toast.error("AI draft failed — pick another preset or try again.");
+      toast.error("AI draft failed — try again.");
       return;
     }
     setEmailPresets((prev) => prev.map((p) => (p.presetId === presetId ? drafted : p)));
@@ -225,32 +232,17 @@ export function SendContactDialog({
     setEditedBody(drafted.text ?? "");
   };
 
-  const handleSelectEmailPreset = async (presetId: string) => {
+  const handleSelectEmailPreset = (presetId: string) => {
     selectedEmailRef.current = presetId;
     setEmailSelectedPresetId(presetId);
     const option = emailPresets.find((p) => p.presetId === presetId);
-
-    if (option?.variantId === AI_DRAFT_VARIANT_SENTINEL && !option.subject) {
-      await startEmailAiDraft(presetId);
-      return;
-    }
-
     setEditedSubject(option?.subject ?? "");
     setEditedBody(option?.text ?? "");
   };
 
-  const handleRegenerateEmailAi = async () => {
+  const handleGenerateEmailAi = () => {
     if (!selectedEmail) return;
-    setIsDraftingEmailAi(true);
-    const drafted = await draftAiEmailPresetOption(listingId, type, emailAiInstruction.trim() || undefined);
-    setIsDraftingEmailAi(false);
-    if (!drafted) {
-      toast.error("AI draft failed — try again.");
-      return;
-    }
-    setEmailPresets((prev) => prev.map((p) => (p.presetId === selectedEmail.presetId ? drafted : p)));
-    setEditedSubject(drafted.subject ?? "");
-    setEditedBody(drafted.text ?? "");
+    void startEmailAiDraft(selectedEmail.presetId, emailAiInstruction.trim() || undefined);
   };
 
   const handleSendEmail = () => {
@@ -335,6 +327,11 @@ export function SendContactDialog({
                       value={editedText}
                       onChange={(e) => setEditedText(e.target.value)}
                       rows={5}
+                      placeholder={
+                        selectedSms.variantId === AI_DRAFT_VARIANT_SENTINEL && !hasSmsAiDraft
+                          ? "Hit Generate to write one, or switch to another preset."
+                          : undefined
+                      }
                       className="text-sm resize-none"
                     />
                   ))}
@@ -347,15 +344,19 @@ export function SendContactDialog({
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          handleRegenerateAi();
+                          handleGenerateAi();
                         }
                       }}
-                      placeholder="Don't like it? Tell it what to change…"
+                      placeholder={
+                        hasSmsAiDraft
+                          ? "Don't like it? Tell it what to change…"
+                          : "Optional: tell it what to write, then hit Generate…"
+                      }
                       className="text-sm flex-1"
                     />
-                    <Button type="button" variant="outline" size="sm" onClick={handleRegenerateAi}>
-                      <RefreshCw />
-                      Regenerate
+                    <Button type="button" variant="outline" size="sm" onClick={handleGenerateAi}>
+                      {hasSmsAiDraft ? <RefreshCw /> : <Sparkles />}
+                      {hasSmsAiDraft ? "Regenerate" : "Generate"}
                     </Button>
                   </div>
                 )}
@@ -438,15 +439,19 @@ export function SendContactDialog({
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault();
-                              handleRegenerateEmailAi();
+                              handleGenerateEmailAi();
                             }
                           }}
-                          placeholder="Don't like it? Tell it what to change…"
+                          placeholder={
+                            hasEmailAiDraft
+                              ? "Don't like it? Tell it what to change…"
+                              : "Optional: tell it what to write, then hit Generate…"
+                          }
                           className="text-sm flex-1"
                         />
-                        <Button type="button" variant="outline" size="sm" onClick={handleRegenerateEmailAi}>
-                          <RefreshCw />
-                          Regenerate
+                        <Button type="button" variant="outline" size="sm" onClick={handleGenerateEmailAi}>
+                          {hasEmailAiDraft ? <RefreshCw /> : <Sparkles />}
+                          {hasEmailAiDraft ? "Regenerate" : "Generate"}
                         </Button>
                       </div>
                     )}
