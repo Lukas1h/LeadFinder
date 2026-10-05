@@ -63,6 +63,7 @@ export function PresetForm({
   const [comingSoon, setComingSoon] = useState(
     preset?.comingSoon == null ? "any" : preset.comingSoon ? "yes" : "no"
   );
+  const [sitting, setSitting] = useState(preset?.sitting == null ? "any" : preset.sitting ? "yes" : "no");
   const [maxScore, setMaxScore] = useState(preset?.maxScore?.toString() ?? "");
   const [minPrice, setMinPrice] = useState(preset?.minPrice?.toString() ?? "");
   const [maxPrice, setMaxPrice] = useState(preset?.maxPrice?.toString() ?? "");
@@ -92,6 +93,7 @@ export function PresetForm({
       maxPhotoCount: toNumberOrNull(maxPhotoCount),
       leadSection: leadSection || null,
       comingSoon: comingSoon === "any" ? null : comingSoon === "yes",
+      sitting: sitting === "any" ? null : sitting === "yes",
     };
 
     const result = isEditing
@@ -207,6 +209,21 @@ export function PresetForm({
                         <SelectItem value="any">Any listing</SelectItem>
                         <SelectItem value="yes">Only coming soon</SelectItem>
                         <SelectItem value="no">Not coming soon</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="sitting" className="text-xs">
+                      Price cut or on market 30+ days
+                    </Label>
+                    <Select value={sitting} onValueChange={setSitting}>
+                      <SelectTrigger id="sitting">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="any">Any listing</SelectItem>
+                        <SelectItem value="yes">Only those</SelectItem>
+                        <SelectItem value="no">Only fresh ones</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

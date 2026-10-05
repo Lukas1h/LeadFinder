@@ -136,6 +136,15 @@ interface PresetCriteria {
   minPhotoCount: number | null;
   maxPhotoCount: number | null;
   comingSoon: boolean | null;
+  sitting: boolean | null;
+}
+
+/** See messagePresets.sitting. */
+const SITTING_DAYS = 30;
+
+function isSitting(ageDays: number, priceCutAt: Date | null): boolean {
+  if (ageDays >= SITTING_DAYS) return true;
+  return priceCutAt != null && Date.now() - priceCutAt.getTime() <= SITTING_DAYS * 24 * 60 * 60 * 1000;
 }
 
 function listingAgeDays(listedAt: Date | null, foundAt: Date): number {
@@ -153,6 +162,7 @@ function matchesCriteria(
     photoCount: number | null;
     leadSection: string | null;
     isComingSoon: boolean;
+    sitting: boolean;
   }
 ): boolean {
   // Section is the one criterion that isn't a measurement of the property, so
@@ -160,6 +170,7 @@ function matchesCriteria(
   // band. Null on the preset means no constraint, like every other field.
   if (preset.leadSection != null && preset.leadSection !== listing.leadSection) return false;
   if (preset.comingSoon != null && preset.comingSoon !== listing.isComingSoon) return false;
+  if (preset.sitting != null && preset.sitting !== listing.sitting) return false;
   if (preset.minScore != null && (listing.score == null || listing.score < preset.minScore)) return false;
   // A missing score must not disqualify on an upper bound: "we don't know yet"
   // isn't "too high". Treating null as a miss meant a preset capped at 6 (the
@@ -196,6 +207,7 @@ function criteriaCount(preset: PresetCriteria): number {
     preset.maxPhotoCount,
     preset.leadSection,
     preset.comingSoon,
+    preset.sitting,
   ].filter((v) => v != null).length;
 }
 
@@ -238,6 +250,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       minPhotoCount: messagePresets.minPhotoCount,
       maxPhotoCount: messagePresets.maxPhotoCount,
       comingSoon: messagePresets.comingSoon,
+      sitting: messagePresets.sitting,
       variantId: messagePresetVariants.id,
       label: messagePresetVariants.label,
       body: messagePresetVariants.body,
@@ -275,6 +288,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
     photoCount: listing.photoCount,
     leadSection: sectionForMatch,
     isComingSoon: listing.isComingSoon,
+    sitting: isSitting(ageDays, listing.priceCutAt),
   };
 
   let recommendedPresetId: string | null = null;
@@ -373,6 +387,7 @@ async function getAiPreset(type: PresetType): Promise<(PresetCriteria & { id: st
       maxPhotoCount: messagePresets.maxPhotoCount,
       leadSection: messagePresets.leadSection,
       comingSoon: messagePresets.comingSoon,
+      sitting: messagePresets.sitting,
     })
     .from(messagePresets)
     .where(

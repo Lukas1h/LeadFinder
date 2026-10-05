@@ -533,6 +533,11 @@ export const messagePresets = pgTable("message_presets", {
   // market, null = either. Lets a "Coming Soon" template outrank a general
   // photo-section one for the listings it was written for.
   comingSoon: boolean("coming_soon"),
+  // true = only listings that are "sitting" (a price cut in the last 30 days,
+  // or 30+ days on the market), false = only fresh ones, null = either. The
+  // AI draft takes the sitting ones, since it can mention the cut or the time
+  // on market and a fixed template can't.
+  sitting: boolean("sitting"),
 
   // Marks the one system preset per type whose "variants" aren't
   // hand-written — each is drafted live per listing by draftMessage() (see

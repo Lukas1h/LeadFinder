@@ -36,6 +36,7 @@ function formatCriteria(preset: MessagePreset): string | null {
   const parts: string[] = [];
   if (preset.leadSection != null) parts.push(SECTION_NAMES[preset.leadSection] ?? preset.leadSection);
   if (preset.comingSoon != null) parts.push(preset.comingSoon ? "coming soon only" : "not coming soon");
+  if (preset.sitting != null) parts.push(preset.sitting ? "price cut or 30+ days" : "fresh listings");
   if (preset.minScore != null || preset.maxScore != null) {
     parts.push(`score ${preset.minScore ?? 1}–${preset.maxScore ?? 10}`);
   }
