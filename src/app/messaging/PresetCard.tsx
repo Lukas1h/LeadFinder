@@ -25,8 +25,17 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const SECTION_NAMES: Record<string, string> = {
+  photo: "photo opportunities",
+  video: "video opportunities",
+  backup: "backup opportunities",
+  unlikely: "unlikely matches",
+};
+
 function formatCriteria(preset: MessagePreset): string | null {
   const parts: string[] = [];
+  if (preset.leadSection != null) parts.push(SECTION_NAMES[preset.leadSection] ?? preset.leadSection);
+  if (preset.comingSoon != null) parts.push(preset.comingSoon ? "coming soon only" : "not coming soon");
   if (preset.minScore != null || preset.maxScore != null) {
     parts.push(`score ${preset.minScore ?? 1}–${preset.maxScore ?? 10}`);
   }

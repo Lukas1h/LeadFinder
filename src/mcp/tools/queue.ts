@@ -30,7 +30,7 @@ export function registerQueueTools(server: McpServer): void {
     {
       title: "List message templates",
       description:
-        "Lists every enabled text (sms) or email template with its variants, for picking a presetId to pass to queue_messages. AI-draft presets (aiGenerated: true) have no variants — queueing with one drafts each message individually with AI. Placeholders {{firstName}}, {{street}}, {{city}} are filled in per recipient.",
+        "Lists every enabled text (sms) or email template with its variants, for picking a presetId to pass to queue_messages. AI-draft presets (aiGenerated: true) have no variants — queueing with one drafts each message individually with AI. Placeholders {{firstName}}, {{street}}, {{city}}, {{area}} are filled in per recipient. leadSection/comingSoon say which listings a template is written for (comingSoon: true = coming soon listings only).",
       inputSchema: { channel: z.enum(MESSAGE_CHANNELS).optional() },
     },
     async ({ channel }) => {
@@ -42,6 +42,7 @@ export function registerQueueTools(server: McpServer): void {
           type: messagePresets.type,
           aiGenerated: messagePresets.aiGenerated,
           leadSection: messagePresets.leadSection,
+          comingSoon: messagePresets.comingSoon,
         })
         .from(messagePresets)
         .where(

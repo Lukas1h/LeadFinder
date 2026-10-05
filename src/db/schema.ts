@@ -529,6 +529,10 @@ export const messagePresets = pgTable("message_presets", {
   // and the reason the AI-draft preset can be recommended for exactly the
   // listings whose photos are weak.
   leadSection: text("lead_section"),
+  // true = only coming soon listings, false = only ones already on the
+  // market, null = either. Lets a "Coming Soon" template outrank a general
+  // photo-section one for the listings it was written for.
+  comingSoon: boolean("coming_soon"),
 
   // Marks the one system preset per type whose "variants" aren't
   // hand-written — each is drafted live per listing by draftMessage() (see

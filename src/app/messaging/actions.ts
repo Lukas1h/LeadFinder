@@ -22,6 +22,7 @@ export interface PresetCriteriaInput {
   minPhotoCount: number | null;
   maxPhotoCount: number | null;
   leadSection: string | null;
+  comingSoon: boolean | null;
 }
 
 export async function createPreset(
@@ -42,6 +43,7 @@ export async function createPreset(
     leadSection: input.leadSection,
     minPhotoCount: input.minPhotoCount,
     maxPhotoCount: input.maxPhotoCount,
+    comingSoon: input.comingSoon,
   });
   revalidatePath("/messaging");
   return { error: null };
@@ -63,6 +65,7 @@ export async function updatePreset(id: string, input: { name: string } & PresetC
       leadSection: input.leadSection,
       minPhotoCount: input.minPhotoCount,
       maxPhotoCount: input.maxPhotoCount,
+      comingSoon: input.comingSoon,
     })
     .where(eq(messagePresets.id, id));
   revalidatePath("/messaging");

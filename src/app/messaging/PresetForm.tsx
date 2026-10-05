@@ -60,6 +60,9 @@ export function PresetForm({
   const [channel, setChannel] = useState<MessageChannel>(preset?.channel ?? defaultChannel ?? "sms");
   const [minScore, setMinScore] = useState(preset?.minScore?.toString() ?? "");
   const [leadSection, setLeadSection] = useState(preset?.leadSection ?? "");
+  const [comingSoon, setComingSoon] = useState(
+    preset?.comingSoon == null ? "any" : preset.comingSoon ? "yes" : "no"
+  );
   const [maxScore, setMaxScore] = useState(preset?.maxScore?.toString() ?? "");
   const [minPrice, setMinPrice] = useState(preset?.minPrice?.toString() ?? "");
   const [maxPrice, setMaxPrice] = useState(preset?.maxPrice?.toString() ?? "");
@@ -88,6 +91,7 @@ export function PresetForm({
       minPhotoCount: toNumberOrNull(minPhotoCount),
       maxPhotoCount: toNumberOrNull(maxPhotoCount),
       leadSection: leadSection || null,
+      comingSoon: comingSoon === "any" ? null : comingSoon === "yes",
     };
 
     const result = isEditing
@@ -188,6 +192,21 @@ export function PresetForm({
                         <SelectItem value="video">Video opportunities</SelectItem>
                         <SelectItem value="backup">Backup opportunities</SelectItem>
                         <SelectItem value="unlikely">Unlikely matches</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="coming-soon" className="text-xs">
+                      Coming soon
+                    </Label>
+                    <Select value={comingSoon} onValueChange={setComingSoon}>
+                      <SelectTrigger id="coming-soon">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="any">Any listing</SelectItem>
+                        <SelectItem value="yes">Only coming soon</SelectItem>
+                        <SelectItem value="no">Not coming soon</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

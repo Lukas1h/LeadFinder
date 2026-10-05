@@ -135,6 +135,7 @@ interface PresetCriteria {
   maxListingAgeDays: number | null;
   minPhotoCount: number | null;
   maxPhotoCount: number | null;
+  comingSoon: boolean | null;
 }
 
 function listingAgeDays(listedAt: Date | null, foundAt: Date): number {
@@ -151,12 +152,14 @@ function matchesCriteria(
     ageDays: number;
     photoCount: number | null;
     leadSection: string | null;
+    isComingSoon: boolean;
   }
 ): boolean {
   // Section is the one criterion that isn't a measurement of the property, so
   // a preset can be pointed at the Leads-page section rather than at a score
   // band. Null on the preset means no constraint, like every other field.
   if (preset.leadSection != null && preset.leadSection !== listing.leadSection) return false;
+  if (preset.comingSoon != null && preset.comingSoon !== listing.isComingSoon) return false;
   if (preset.minScore != null && (listing.score == null || listing.score < preset.minScore)) return false;
   // A missing score must not disqualify on an upper bound: "we don't know yet"
   // isn't "too high". Treating null as a miss meant a preset capped at 6 (the
@@ -192,6 +195,7 @@ function criteriaCount(preset: PresetCriteria): number {
     preset.minPhotoCount,
     preset.maxPhotoCount,
     preset.leadSection,
+    preset.comingSoon,
   ].filter((v) => v != null).length;
 }
 
@@ -233,6 +237,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       maxListingAgeDays: messagePresets.maxListingAgeDays,
       minPhotoCount: messagePresets.minPhotoCount,
       maxPhotoCount: messagePresets.maxPhotoCount,
+      comingSoon: messagePresets.comingSoon,
       variantId: messagePresetVariants.id,
       label: messagePresetVariants.label,
       body: messagePresetVariants.body,
@@ -269,6 +274,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
     ageDays,
     photoCount: listing.photoCount,
     leadSection: sectionForMatch,
+    isComingSoon: listing.isComingSoon,
   };
 
   let recommendedPresetId: string | null = null;
@@ -366,6 +372,7 @@ async function getAiPreset(type: PresetType): Promise<(PresetCriteria & { id: st
       minPhotoCount: messagePresets.minPhotoCount,
       maxPhotoCount: messagePresets.maxPhotoCount,
       leadSection: messagePresets.leadSection,
+      comingSoon: messagePresets.comingSoon,
     })
     .from(messagePresets)
     .where(
