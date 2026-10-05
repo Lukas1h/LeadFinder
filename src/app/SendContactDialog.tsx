@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { MessageCircle, Mail, Phone, RefreshCw, Paperclip } from "lucide-react";
@@ -61,6 +61,8 @@ export function SendContactDialog({
   const [smsLoading, setSmsLoading] = useState(false);
   const [smsPresets, setSmsPresets] = useState<PresetOption[]>([]);
   const [smsSelectedPresetId, setSmsSelectedPresetId] = useState<string | null>(null);
+  // Read by an in-flight AI draft to check it's still the selected template.
+  const selectedSmsRef = useRef<string | null>(null);
   const [editedText, setEditedText] = useState("");
   const [isDraftingAi, setIsDraftingAi] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
@@ -115,12 +117,18 @@ export function SendContactDialog({
     setEmailAiInstruction("");
     getMessageOptions(listingId, type).then(({ presets }) => {
       setSmsPresets(presets);
+      // The recommended template first — they're written for the listing's
+      // section now (Coming Soon, Bad Photos, Backup…). Blank only when
+      // nothing is recommended.
       const blank = presets.find((p) => p.blank);
       const recommended = presets.find((p) => p.recommended);
-      const initial = blank ?? recommended ?? presets[0] ?? null;
+      const initial = recommended ?? blank ?? presets[0] ?? null;
+      selectedSmsRef.current = initial?.presetId ?? null;
       setSmsSelectedPresetId(initial?.presetId ?? null);
-      setEditedText(initial?.text ?? "");
       setSmsLoading(false);
+      // A recommended AI draft (price cut / sitting listings) drafts right away.
+      if (initial?.variantId === AI_DRAFT_VARIANT_SENTINEL && !initial.text) void startAiDraft(initial.presetId);
+      else setEditedText(initial?.text ?? "");
     });
   };
 
@@ -133,21 +141,28 @@ export function SendContactDialog({
   const selectedEmail = emailPresets.find((p) => p.presetId === emailSelectedPresetId) ?? null;
   const callHref = telUrl(agentPhone);
 
+  const startAiDraft = async (presetId: string) => {
+    setEditedText("");
+    setIsDraftingAi(true);
+    const drafted = await draftAiPresetOption(listingId, type);
+    setIsDraftingAi(false);
+    // Switched to another template while it was drafting — don't clobber it.
+    if (selectedSmsRef.current !== presetId) return;
+    if (!drafted) {
+      toast.error("AI draft failed — pick another preset or try again.");
+      return;
+    }
+    setSmsPresets((prev) => prev.map((p) => (p.presetId === presetId ? drafted : p)));
+    setEditedText(drafted.text);
+  };
+
   const handleSelectSmsPreset = async (presetId: string) => {
+    selectedSmsRef.current = presetId;
     setSmsSelectedPresetId(presetId);
     const option = smsPresets.find((p) => p.presetId === presetId);
 
     if (option?.variantId === AI_DRAFT_VARIANT_SENTINEL && !option.text) {
-      setEditedText("");
-      setIsDraftingAi(true);
-      const drafted = await draftAiPresetOption(listingId, type);
-      setIsDraftingAi(false);
-      if (!drafted) {
-        toast.error("AI draft failed — pick another preset or try again.");
-        return;
-      }
-      setSmsPresets((prev) => prev.map((p) => (p.presetId === presetId ? drafted : p)));
-      setEditedText(drafted.text);
+      await startAiDraft(presetId);
       return;
     }
 
