@@ -63,6 +63,7 @@ export function SendContactDialog({
   const [smsSelectedPresetId, setSmsSelectedPresetId] = useState<string | null>(null);
   // Read by an in-flight AI draft to check it's still the selected template.
   const selectedSmsRef = useRef<string | null>(null);
+  const selectedEmailRef = useRef<string | null>(null);
   const [editedText, setEditedText] = useState("");
   const [isDraftingAi, setIsDraftingAi] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
@@ -89,16 +90,21 @@ export function SendContactDialog({
     setEditedBody("");
     setIsDraftingEmailAi(false);
     setEmailAiInstruction("");
-    getComposeEmailOptions({ type, agentName, address, city }).then(({ presets }) => {
+    getComposeEmailOptions({ type, agentName, address, city, listingId }).then(({ presets }) => {
       setEmailPresets(presets);
+      // Same as the text tab: the recommended template, Blank as the fallback.
       const blank = presets.find((p) => p.blank);
       const recommended = presets.find((p) => p.recommended);
-      const initial = blank ?? recommended ?? presets[0] ?? null;
+      const initial = recommended ?? blank ?? presets[0] ?? null;
+      selectedEmailRef.current = initial?.presetId ?? null;
       setEmailSelectedPresetId(initial?.presetId ?? null);
-      setEditedSubject(initial?.subject ?? "");
-      setEditedBody(initial?.text ?? "");
       setEmailLoading(false);
       setEmailLoaded(true);
+      if (initial?.variantId === AI_DRAFT_VARIANT_SENTINEL && !initial.subject) void startEmailAiDraft(initial.presetId);
+      else {
+        setEditedSubject(initial?.subject ?? "");
+        setEditedBody(initial?.text ?? "");
+      }
     });
   };
 
@@ -203,23 +209,29 @@ export function SendContactDialog({
     setOpen(false);
   };
 
+  const startEmailAiDraft = async (presetId: string) => {
+    setEditedSubject("");
+    setEditedBody("");
+    setIsDraftingEmailAi(true);
+    const drafted = await draftAiEmailPresetOption(listingId, type);
+    setIsDraftingEmailAi(false);
+    if (selectedEmailRef.current !== presetId) return;
+    if (!drafted) {
+      toast.error("AI draft failed — pick another preset or try again.");
+      return;
+    }
+    setEmailPresets((prev) => prev.map((p) => (p.presetId === presetId ? drafted : p)));
+    setEditedSubject(drafted.subject ?? "");
+    setEditedBody(drafted.text ?? "");
+  };
+
   const handleSelectEmailPreset = async (presetId: string) => {
+    selectedEmailRef.current = presetId;
     setEmailSelectedPresetId(presetId);
     const option = emailPresets.find((p) => p.presetId === presetId);
 
     if (option?.variantId === AI_DRAFT_VARIANT_SENTINEL && !option.subject) {
-      setEditedSubject("");
-      setEditedBody("");
-      setIsDraftingEmailAi(true);
-      const drafted = await draftAiEmailPresetOption(listingId, type);
-      setIsDraftingEmailAi(false);
-      if (!drafted) {
-        toast.error("AI draft failed — pick another preset or try again.");
-        return;
-      }
-      setEmailPresets((prev) => prev.map((p) => (p.presetId === presetId ? drafted : p)));
-      setEditedSubject(drafted.subject ?? "");
-      setEditedBody(drafted.text ?? "");
+      await startEmailAiDraft(presetId);
       return;
     }
 

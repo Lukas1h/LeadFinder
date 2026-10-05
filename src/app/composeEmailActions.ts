@@ -26,6 +26,7 @@ import {
 import { sendEmail } from "@/lib/mailer";
 import { draftEmailMessage } from "@/lib/draftMessage";
 import type { PresetOption, MessageOptions } from "@/app/messageActions";
+import { listingAgeDays, listingMatchFacts, pickRecommendedPreset } from "@/lib/presetCriteria";
 import { normalizeEmail, normalizeName, normalizePhone, EMAIL_RE } from "@/lib/normalize";
 
 /**
@@ -126,6 +127,8 @@ export async function getComposeEmailOptions(listingContext?: {
   agentName: string | null;
   address: string | null;
   city: string | null;
+  /** When given, the recommendation follows the presets' criteria, same as texts (see pickRecommendedPreset). */
+  listingId?: string;
 }): Promise<MessageOptions> {
   await ensureDefaultEmailPreset();
   await ensureBlankEmailPreset();
@@ -145,6 +148,7 @@ export async function getComposeEmailOptions(listingContext?: {
       presetName: messagePresets.name,
       presetType: messagePresets.type,
       attachments: messagePresets.attachments,
+      ...CRITERIA_COLUMNS,
       variantId: messagePresetVariants.id,
       label: messagePresetVariants.label,
       subject: messagePresetVariants.subject,
@@ -170,9 +174,21 @@ export async function getComposeEmailOptions(listingContext?: {
     else rowsByPreset.set(row.presetId, [row]);
   }
 
-  let recommendedPresetId: string | null = null;
+  const aiPreset = listingContext ? await getAiEmailPreset(listingContext.type) : null;
+  const [listing] = listingContext?.listingId
+    ? await db.select().from(listings).where(eq(listings.id, listingContext.listingId))
+    : [];
+  // For a listing, the same criteria contest as texts; otherwise (Compose)
+  // the oldest non-Blank template.
+  const recommendedPresetId = listing
+    ? pickRecommendedPreset(
+        Array.from(rowsByPreset.values()).map((group) => ({ ...group[0], id: group[0].presetId })),
+        aiPreset,
+        listingMatchFacts(listing)
+      )
+    : (Array.from(rowsByPreset.values()).find((group) => !group[0].protected)?.[0].presetId ?? null);
+
   const presets: PresetOption[] = Array.from(rowsByPreset.values()).map((group) => {
-    if (recommendedPresetId === null) recommendedPresetId = group[0].presetId;
 
     const minCount = Math.min(...group.map((r) => countByVariant.get(r.variantId) ?? 0));
     const leastUsed = group
@@ -198,12 +214,12 @@ export async function getComposeEmailOptions(listingContext?: {
       attachments: picked.attachments,
       type: picked.presetType,
       recommended: picked.presetId === recommendedPresetId,
+      blank: picked.protected,
     };
   });
 
   // Add AI Draft preset for listing context (same pattern as SMS)
   if (listingContext) {
-    const aiPreset = await getAiEmailPreset(listingContext.type);
     if (aiPreset) {
       presets.push({
         presetId: aiPreset.id,
@@ -212,7 +228,7 @@ export async function getComposeEmailOptions(listingContext?: {
         variantLabel: "AI",
         text: "",
         subject: "",
-        recommended: false,
+        recommended: recommendedPresetId === aiPreset.id,
       });
     }
   }
@@ -220,9 +236,23 @@ export async function getComposeEmailOptions(listingContext?: {
   return { presets };
 }
 
-async function getAiEmailPreset(type: PresetType): Promise<{ id: string; name: string } | null> {
+const CRITERIA_COLUMNS = {
+  protected: messagePresets.protected,
+  minScore: messagePresets.minScore,
+  maxScore: messagePresets.maxScore,
+  minPrice: messagePresets.minPrice,
+  maxPrice: messagePresets.maxPrice,
+  maxListingAgeDays: messagePresets.maxListingAgeDays,
+  minPhotoCount: messagePresets.minPhotoCount,
+  maxPhotoCount: messagePresets.maxPhotoCount,
+  leadSection: messagePresets.leadSection,
+  comingSoon: messagePresets.comingSoon,
+  sitting: messagePresets.sitting,
+};
+
+async function getAiEmailPreset(type: PresetType) {
   const [preset] = await db
-    .select({ id: messagePresets.id, name: messagePresets.name })
+    .select({ id: messagePresets.id, name: messagePresets.name, ...CRITERIA_COLUMNS })
     .from(messagePresets)
     .where(
       and(
@@ -235,10 +265,6 @@ async function getAiEmailPreset(type: PresetType): Promise<{ id: string; name: s
   return preset ?? null;
 }
 
-function listingAgeDays(listedAt: Date | null, foundAt: Date): number {
-  const reference = listedAt ?? foundAt;
-  return Math.floor((Date.now() - reference.getTime()) / (24 * 60 * 60 * 1000));
-}
 
 /**
  * Drafts an AI email for a listing — called on demand when user selects

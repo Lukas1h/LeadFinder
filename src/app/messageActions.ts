@@ -24,7 +24,7 @@ import {
   AI_DRAFT_VARIANT_SENTINEL,
 } from "@/lib/messageTemplate";
 import { draftMessage } from "@/lib/draftMessage";
-import { leadSectionForListing } from "@/lib/leadSections";
+import { listingAgeDays, listingMatchFacts, pickRecommendedPreset, type PresetCriteria } from "@/lib/presetCriteria";
 import { startPendingInteraction } from "@/app/agents/interactionActions";
 import { touchAgentContact } from "@/app/actions";
 
@@ -126,91 +126,6 @@ export interface MessageOptions {
   presets: PresetOption[];
 }
 
-interface PresetCriteria {
-  minScore: number | null;
-  leadSection: string | null;
-  maxScore: number | null;
-  minPrice: number | null;
-  maxPrice: number | null;
-  maxListingAgeDays: number | null;
-  minPhotoCount: number | null;
-  maxPhotoCount: number | null;
-  comingSoon: boolean | null;
-  sitting: boolean | null;
-}
-
-/** See messagePresets.sitting. */
-const SITTING_DAYS = 30;
-
-function isSitting(ageDays: number, priceCutAt: Date | null): boolean {
-  if (ageDays >= SITTING_DAYS) return true;
-  return priceCutAt != null && Date.now() - priceCutAt.getTime() <= SITTING_DAYS * 24 * 60 * 60 * 1000;
-}
-
-function listingAgeDays(listedAt: Date | null, foundAt: Date): number {
-  const reference = listedAt ?? foundAt;
-  return Math.floor((Date.now() - reference.getTime()) / (24 * 60 * 60 * 1000));
-}
-
-/** A preset with no criteria set always matches — only set constraints can disqualify it. */
-function matchesCriteria(
-  preset: PresetCriteria,
-  listing: {
-    score: number | null;
-    price: number | null;
-    ageDays: number;
-    photoCount: number | null;
-    leadSection: string | null;
-    isComingSoon: boolean;
-    sitting: boolean;
-  }
-): boolean {
-  // Section is the one criterion that isn't a measurement of the property, so
-  // a preset can be pointed at the Leads-page section rather than at a score
-  // band. Null on the preset means no constraint, like every other field.
-  if (preset.leadSection != null && preset.leadSection !== listing.leadSection) return false;
-  if (preset.comingSoon != null && preset.comingSoon !== listing.isComingSoon) return false;
-  if (preset.sitting != null && preset.sitting !== listing.sitting) return false;
-  if (preset.minScore != null && (listing.score == null || listing.score < preset.minScore)) return false;
-  // A missing score must not disqualify on an upper bound: "we don't know yet"
-  // isn't "too high". Treating null as a miss meant a preset capped at 6 (the
-  // photo-opportunity one) could never be recommended for a listing whose photos
-  // hadn't been scored, so exactly the leads with the least evidence about them
-  // were the only ones excluded from it. Lower bounds are deliberately
-  // unchanged — an unscored listing genuinely cannot satisfy "at least this
-  // good", so minScore still rejects null.
-  if (preset.maxScore != null && listing.score != null && listing.score > preset.maxScore) return false;
-  if (preset.minPrice != null && (listing.price == null || listing.price < preset.minPrice)) return false;
-  if (preset.maxPrice != null && (listing.price == null || listing.price > preset.maxPrice)) return false;
-  if (preset.maxListingAgeDays != null && listing.ageDays > preset.maxListingAgeDays) return false;
-  if (
-    preset.minPhotoCount != null &&
-    (listing.photoCount == null || listing.photoCount < preset.minPhotoCount)
-  )
-    return false;
-  if (
-    preset.maxPhotoCount != null &&
-    (listing.photoCount == null || listing.photoCount > preset.maxPhotoCount)
-  )
-    return false;
-  return true;
-}
-
-function criteriaCount(preset: PresetCriteria): number {
-  return [
-    preset.minScore,
-    preset.maxScore,
-    preset.minPrice,
-    preset.maxPrice,
-    preset.maxListingAgeDays,
-    preset.minPhotoCount,
-    preset.maxPhotoCount,
-    preset.leadSection,
-    preset.comingSoon,
-    preset.sitting,
-  ].filter((v) => v != null).length;
-}
-
 /**
  * Loads every enabled preset for `type`, each paired with whichever of its
  * enabled variants is next in rotation (fewest sends so far, tie broken by
@@ -230,8 +145,6 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
   if (!listing) return { presets: [] };
 
-  const ageDays = listingAgeDays(listing.listedAt, listing.foundAt);
-  const sectionForMatch = listing.leadSection ?? leadSectionForListing(listing);
 
   // aiGenerated presets are excluded here — they have no reusable variants
   // to rotate through (see ensureAiDraftPresets); the AI option is drafted
@@ -281,56 +194,12 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
     else rowsByPreset.set(row.presetId, [row]);
   }
 
-  const listingForMatch = {
-    score: listing.score,
-    price: listing.price,
-    ageDays,
-    photoCount: listing.photoCount,
-    leadSection: sectionForMatch,
-    isComingSoon: listing.isComingSoon,
-    sitting: isSitting(ageDays, listing.priceCutAt),
-  };
-
-  let recommendedPresetId: string | null = null;
-  let bestCriteriaCount = -1;
-  for (const group of rowsByPreset.values()) {
-    const preset = group[0];
-    // The Blank preset is never "recommended" — it's always the dialog's
-    // default (see below), and tagging it "(Recommended)" too would just
-    // be a confusing double label on the same option.
-    if (preset.protected) continue;
-    if (!matchesCriteria(preset, listingForMatch)) continue;
-    const specificity = criteriaCount(preset);
-    if (specificity > bestCriteriaCount) {
-      bestCriteriaCount = specificity;
-      recommendedPresetId = preset.presetId;
-    }
-  }
-
-  // The AI-draft preset runs through the identical contest. It has no reusable
-  // variant to rotate, so it never appears in `rows`, but it is a preset with
-  // criteria like any other and should win or lose on the same terms: give it
-  // a section and it's the recommendation there, give it nothing and the
-  // hand-written presets keep it. Nothing is drafted to find out — the
-  // criteria are on the row.
   const aiPreset = await getAiPreset(type);
-  if (aiPreset) {
-    const specificity = criteriaCount(aiPreset);
-    const isUnlikely = sectionForMatch === "unlikely";
-    // The unlikely section is the one place we knowingly message a lead with no
-    // good photo or price story behind them — usually an agent we can't reach,
-    // or one who told us to leave them alone. No hand-written preset should
-    // catch those: each is gated to the section it was written for, and a
-    // preset that ignored the section would happily text a $1m listing whose
-    // agent has declined. The AI draft is the right recommendation there, so it
-    // wins outright — regardless of the photo section it targets elsewhere.
-    if (isUnlikely) {
-      recommendedPresetId = aiPreset.id;
-    } else if (specificity > 0 && matchesCriteria(aiPreset, listingForMatch) && specificity > bestCriteriaCount) {
-      bestCriteriaCount = specificity;
-      recommendedPresetId = aiPreset.id;
-    }
-  }
+  const recommendedPresetId = pickRecommendedPreset(
+    Array.from(rowsByPreset.values()).map((group) => ({ ...group[0], id: group[0].presetId })),
+    aiPreset,
+    listingMatchFacts(listing)
+  );
 
   const presets: PresetOption[] = Array.from(rowsByPreset.values()).map((group) => {
     const minCount = Math.min(...group.map((r) => countByVariant.get(r.variantId) ?? 0));
