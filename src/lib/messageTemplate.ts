@@ -1,4 +1,5 @@
 import { firstName, naturalStreetName } from "@/lib/sms";
+import { areaPhrase } from "@/lib/areaPhrase";
 
 // sendMessage's variantId sentinel for an AI-drafted send — that variant
 // doesn't exist yet (each AI draft is one-off), so sendMessage creates it
@@ -8,7 +9,12 @@ import { firstName, naturalStreetName } from "@/lib/sms";
 // functions.
 export const AI_DRAFT_VARIANT_SENTINEL = "draft";
 
-/** Renders a preset variant body, substituting {{firstName}}, {{street}} and {{city}}. */
+/**
+ * Renders a preset variant body, substituting {{firstName}}, {{street}},
+ * {{city}} and {{area}} — the per-city "where I work" phrase the AI drafts
+ * use too ("in the Portland area", "here in Roseburg", "here around the
+ * coast"; see areaPhrase). With no city it's "around Oregon".
+ */
 export function renderMessageBody(
   body: string,
   agentName: string | null,
@@ -21,7 +27,8 @@ export function renderMessageBody(
   return body
     .replaceAll("{{firstName}}", name ?? "there")
     .replaceAll("{{street}}", street)
-    .replaceAll("{{city}}", cityName);
+    .replaceAll("{{city}}", cityName)
+    .replaceAll("{{area}}", areaPhrase(city) ?? "around Oregon");
 }
 
 /**

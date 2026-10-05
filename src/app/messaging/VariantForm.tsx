@@ -75,7 +75,8 @@ export function VariantForm({
               {!isEmail && (
                 <>
                   {" "}
-                  and <code className="font-mono">{"{{street}}"}</code>
+                  , <code className="font-mono">{"{{street}}"}</code> and{" "}
+                  <code className="font-mono">{"{{area}}"}</code> (&ldquo;in the Portland area&rdquo;, &ldquo;here in Roseburg&rdquo;…)
                 </>
               )}{" "}
               to personalize — {isEmail ? "filled in from the name you enter when composing" : "they're filled in from the listing when a message is sent"}.
@@ -136,7 +137,7 @@ export function VariantForm({
                     isEmail && subject.trim() ? "rounded-b-lg" : "rounded-lg"
                   }`}
                 >
-                  {renderMessageBody(body, "Sarah Nantucket", "827 Nantucket Ave")}
+                  {renderMessageBody(body, "Sarah Nantucket", "827 Nantucket Ave", "Eugene")}
                 </p>
               </div>
             )}
