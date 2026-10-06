@@ -11,7 +11,15 @@ import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
 import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, WarmAgentBadge } from "./badges";
 import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, findAttachedAgent, buildAgentLookups, isWarmAgentStatus } from "@/lib/pipeline";
-import { leadSection, refreshLeadSections, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
+import {
+  leadSection,
+  refreshLeadSections,
+  lastTextByAgent,
+  isRecentlyTexted,
+  LEAD_SECTION_LABELS,
+  LEAD_SECTION_ORDER,
+  type LeadSection,
+} from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
 import { LeadsSkeleton } from "./loading";
 import Link from "next/link";
@@ -99,7 +107,20 @@ async function LeadsContent() {
   // different answer here. refreshLeadSections only writes rows that actually
   // moved, so this is cheap on a page load and self-healing when a score or
   // price cut lands after the fact.
-  await refreshLeadSections(leads.map((l) => l.id));
+  const moved = await refreshLeadSections(leads.map((l) => l.id));
+  // `leads` was read before the refresh, so pick up whatever just moved.
+  const freshSection = new Map<string, string | null>();
+  if (moved > 0) {
+    const rows = await db
+      .select({ id: listings.id, leadSection: listings.leadSection })
+      .from(listings)
+      .where(inArray(listings.id, openLeads.map((l) => l.id)));
+    for (const r of rows) freshSection.set(r.id, r.leadSection);
+  }
+  // Texted or called in the last week: unlikely, even for agents he knows.
+  const lastTexted = await lastTextByAgent(
+    openLeads.map((l) => findAttachedAgent(l, agentByPhone, agentByName, agentById)?.id).filter((id): id is string => !!id)
+  );
 
   // A new listing from an agent who already knows Lukas is the best moment to
   // get back in touch, so those come out of the four sections into their own,
@@ -109,16 +130,18 @@ async function LeadsContent() {
   const sections: Record<LeadSection, Listing[]> = { photo: [], video: [], backup: [], unlikely: [] };
   for (const lead of openLeads) {
     const attached = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
+    const textedAt = attached ? lastTexted.get(attached.id) : undefined;
     const group = attached ? KNOWN_AGENT_GROUP[attached.relationshipStatus] : undefined;
-    if (group) {
+    if (group && !isRecentlyTexted(textedAt)) {
       known.push({ lead, group });
       continue;
     }
+    const stored = freshSection.has(lead.id) ? freshSection.get(lead.id) : lead.leadSection;
     const section =
-      (lead.leadSection as LeadSection | null) ?? leadSection({
+      (stored as LeadSection | null) ?? leadSection({
         ...lead,
         relationshipStatus: attached?.relationshipStatus,
-        lastContactedAt: attached?.lastContactedAt,
+        lastContactedAt: textedAt,
       });
     sections[section].push(lead);
   }

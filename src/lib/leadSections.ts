@@ -11,7 +11,7 @@
 // so the copy a draft is written for can't disagree with the section the
 // listing was found in.
 
-import { eq, inArray, max } from "drizzle-orm";
+import { and, eq, inArray, max } from "drizzle-orm";
 import { db } from "@/db";
 import { agentInteractions, agents, listings, messageSends, type Listing } from "@/db/schema";
 
@@ -25,9 +25,10 @@ export const LEAD_MIN_PRICE = 250_000;
 /** Over this, a listing wants video rather than a backup-photographer text. */
 export const LEAD_VIDEO_PRICE = 750_000;
 /**
- * A backup lead whose agent Lukas contacted (any send or interaction, either
- * direction) within this many days goes to unlikely, and so does a video lead — a "backup photographer"
- * text to someone he just reached out to is noise.
+ * A lead whose agent Lukas texted or called within this many days goes to
+ * unlikely, whatever the section — a second text inside a week to someone who
+ * hasn't answered the first reads as spam. After a week it comes back, and he
+ * checks in again. Emails don't count: nearly everyone got the cold email run.
  */
 export const LEAD_RECENT_CONTACT_DAYS = 7;
 /** A listing scoring this or better already has photos good enough. */
@@ -60,7 +61,7 @@ export interface LeadSectionInput {
   listedAt?: Date | null;
   priceCutAt?: Date | null;
   resurfacedAt?: Date | null;
-  /** Latest entry in the attached agent's contact history, if any. */
+  /** When Lukas last texted or called the attached agent, if ever (see lastTextByAgent). */
   lastContactedAt?: Date | null;
 }
 
@@ -90,6 +91,12 @@ export function hasNoAgent(listing: LeadSectionInput): boolean {
     !(listing.agentName ?? "").trim() &&
     !(listing.agentPhone ?? "").trim()
   );
+}
+
+/** Texted or called inside the last LEAD_RECENT_CONTACT_DAYS. */
+export function isRecentlyTexted(lastTextedAt: Date | null | undefined): boolean {
+  const age = daysSince(lastTextedAt);
+  return age != null && age < LEAD_RECENT_CONTACT_DAYS;
 }
 
 /** Under the floor, unreachable, or the agent already turned us down. */
@@ -122,11 +129,8 @@ export function leadSection(listing: LeadSectionInput): LeadSection {
   const fresh = isLeadFresh(listing);
   const goodPhotos = score != null && score >= LEAD_GOOD_PHOTO_SCORE;
 
+  if (isRecentlyTexted(listing.lastContactedAt)) return "unlikely";
   if (!goodPhotos && fresh) return "photo";
-  // Video and backup are both "photos are fine" pitches; neither is worth
-  // sending to an agent Lukas reached out to in the last week.
-  const contactAge = daysSince(listing.lastContactedAt);
-  if (contactAge != null && contactAge < LEAD_RECENT_CONTACT_DAYS) return "unlikely";
   if (price != null && price > LEAD_VIDEO_PRICE && goodPhotos && fresh) return "video";
   return "backup";
 }
@@ -185,7 +189,7 @@ export async function refreshLeadSections(ids: string[]): Promise<number> {
     .leftJoin(agents, eq(listings.agentId, agents.id))
     .where(inArray(listings.id, ids));
 
-  const lastContact = await lastContactByAgent(
+  const lastContact = await lastTextByAgent(
     rows.map((r) => r.agentId).filter((id): id is string => id != null)
   );
 
@@ -214,11 +218,12 @@ export async function refreshLeadSections(ids: string[]): Promise<number> {
 }
 
 /**
- * Latest contact-history timestamp per agent — the same sources the agent's
- * "Contact history" list and the Already-contacted badge use (message_sends
- * plus agent_interactions, either direction).
+ * When Lukas last texted or called each agent: SMS sends plus outbound text and
+ * call interactions (including ones still pending confirmation, since the text
+ * most likely went). Emails and their replies don't count — see
+ * LEAD_RECENT_CONTACT_DAYS.
  */
-async function lastContactByAgent(agentIds: string[]): Promise<Map<string, Date>> {
+export async function lastTextByAgent(agentIds: string[]): Promise<Map<string, Date>> {
   const out = new Map<string, Date>();
   const ids = [...new Set(agentIds)];
   if (ids.length === 0) return out;
@@ -226,12 +231,18 @@ async function lastContactByAgent(agentIds: string[]): Promise<Map<string, Date>
     db
       .select({ agentId: messageSends.agentId, at: max(messageSends.sentAt) })
       .from(messageSends)
-      .where(inArray(messageSends.agentId, ids))
+      .where(and(inArray(messageSends.agentId, ids), eq(messageSends.channel, "sms")))
       .groupBy(messageSends.agentId),
     db
       .select({ agentId: agentInteractions.agentId, at: max(agentInteractions.occurredAt) })
       .from(agentInteractions)
-      .where(inArray(agentInteractions.agentId, ids))
+      .where(
+        and(
+          inArray(agentInteractions.agentId, ids),
+          eq(agentInteractions.direction, "outbound"),
+          inArray(agentInteractions.channel, ["text", "call"])
+        )
+      )
       .groupBy(agentInteractions.agentId),
   ]);
   for (const row of [...sends, ...interactions]) {
