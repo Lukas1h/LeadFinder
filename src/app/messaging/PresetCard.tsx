@@ -251,10 +251,12 @@ export function PresetCard({
   preset,
   variants,
   statsByVariant,
+  emailTemplates = [],
 }: {
   preset: MessagePreset;
   variants: MessagePresetVariant[];
   statsByVariant: Record<string, VariantStats>;
+  emailTemplates?: { id: string; name: string }[];
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -317,6 +319,14 @@ export function PresetCard({
               </p>
             )
           )}
+          {preset.secondMessage && (
+            <p className="text-xs text-muted-foreground/80 mt-0.5">Then: &ldquo;{preset.secondMessage}&rdquo;</p>
+          )}
+          {preset.followUpEmailPresetId && (
+            <p className="text-xs text-muted-foreground/80 mt-0.5">
+              Replies get: {emailTemplates.find((t) => t.id === preset.followUpEmailPresetId)?.name ?? "an email"}
+            </p>
+          )}
           {preset.channel === "email" && !preset.aiGenerated && (
             <div className="mt-2">
               <AttachmentManager presetId={preset.id} attachments={preset.attachments} />
@@ -326,9 +336,11 @@ export function PresetCard({
 
         <div className="flex items-center gap-1 shrink-0">
           <Switch checked={preset.enabled} onCheckedChange={handleToggle} disabled={isPending} />
-          {!preset.aiGenerated && (
+          {/* The SMS AI draft is editable too, for its second message and follow-up email. */}
+          {(!preset.aiGenerated || preset.channel === "sms") && (
             <PresetForm
               preset={preset}
+              emailTemplates={emailTemplates}
               trigger={
                 <Button variant="ghost" size="icon">
                   <Pencil />

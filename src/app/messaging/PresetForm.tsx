@@ -8,6 +8,7 @@ import { createPreset, updatePreset } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -45,11 +46,14 @@ export function PresetForm({
   preset,
   defaultType,
   defaultChannel,
+  emailTemplates = [],
   trigger,
 }: {
   preset?: MessagePreset;
   defaultType?: PresetType;
   defaultChannel?: MessageChannel;
+  /** Choices for an SMS preset's follow-up email. */
+  emailTemplates?: { id: string; name: string }[];
   trigger: React.ReactNode;
 }) {
   const router = useRouter();
@@ -72,6 +76,8 @@ export function PresetForm({
   );
   const [minPhotoCount, setMinPhotoCount] = useState(preset?.minPhotoCount?.toString() ?? "");
   const [maxPhotoCount, setMaxPhotoCount] = useState(preset?.maxPhotoCount?.toString() ?? "");
+  const [secondMessage, setSecondMessage] = useState(preset?.secondMessage ?? "");
+  const [followUpEmailPresetId, setFollowUpEmailPresetId] = useState(preset?.followUpEmailPresetId ?? "none");
   const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!preset;
@@ -94,6 +100,8 @@ export function PresetForm({
       leadSection: leadSection || null,
       comingSoon: comingSoon === "any" ? null : comingSoon === "yes",
       sitting: sitting === "any" ? null : sitting === "yes",
+      secondMessage: channel === "sms" ? secondMessage : null,
+      followUpEmailPresetId: channel === "sms" && followUpEmailPresetId !== "none" ? followUpEmailPresetId : null,
     };
 
     const result = isEditing
@@ -171,6 +179,42 @@ export function PresetForm({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {channel === "sms" && (
+              <div className="flex flex-col gap-3 border-t pt-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="second-message">Second message</Label>
+                  <Textarea
+                    id="second-message"
+                    value={secondMessage}
+                    onChange={(e) => setSecondMessage(e.target.value)}
+                    rows={2}
+                    className="text-sm resize-none"
+                    placeholder="Mind if I send over a few samples of my work and a pricing sheet?"
+                  />
+                  <p className="text-xs text-muted-foreground">Copied when you send, to paste as a second text.</p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="follow-up-email">Email when they reply</Label>
+                  <Select value={followUpEmailPresetId} onValueChange={setFollowUpEmailPresetId}>
+                    <SelectTrigger id="follow-up-email" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {emailTemplates.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Sent by &ldquo;Send samples&rdquo; in Message history.
+                  </p>
+                </div>
               </div>
             )}
 

@@ -26,8 +26,21 @@ export interface PresetCriteriaInput {
   sitting: boolean | null;
 }
 
+/** SMS only — what happens after a text from this preset (see the schema columns). */
+export interface PresetFollowUpInput {
+  secondMessage: string | null;
+  followUpEmailPresetId: string | null;
+}
+
+function followUpColumns(input: PresetFollowUpInput) {
+  return {
+    secondMessage: input.secondMessage?.trim() || null,
+    followUpEmailPresetId: input.followUpEmailPresetId || null,
+  };
+}
+
 export async function createPreset(
-  input: { name: string; type: PresetType; channel: MessageChannel } & PresetCriteriaInput
+  input: { name: string; type: PresetType; channel: MessageChannel } & PresetCriteriaInput & PresetFollowUpInput
 ) {
   const name = input.name.trim();
   if (!name) return { error: "Name is required" };
@@ -46,12 +59,13 @@ export async function createPreset(
     maxPhotoCount: input.maxPhotoCount,
     comingSoon: input.comingSoon,
     sitting: input.sitting,
+    ...followUpColumns(input),
   });
   revalidatePath("/messaging");
   return { error: null };
 }
 
-export async function updatePreset(id: string, input: { name: string } & PresetCriteriaInput) {
+export async function updatePreset(id: string, input: { name: string } & PresetCriteriaInput & PresetFollowUpInput) {
   const name = input.name.trim();
   if (!name) return { error: "Name is required" };
 
@@ -69,6 +83,7 @@ export async function updatePreset(id: string, input: { name: string } & PresetC
       maxPhotoCount: input.maxPhotoCount,
       comingSoon: input.comingSoon,
       sitting: input.sitting,
+      ...followUpColumns(input),
     })
     .where(eq(messagePresets.id, id));
   revalidatePath("/messaging");

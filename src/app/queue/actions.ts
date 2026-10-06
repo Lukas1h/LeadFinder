@@ -39,6 +39,8 @@ export interface QueueItem {
   sentAt: Date | null;
   createdAt: Date;
   presetName: string | null;
+  /** Copied to the clipboard when a text is sent (see messagePresets.secondMessage). */
+  secondMessage: string | null;
   /** Drafted by AI for this listing (shown in full) rather than filled from a template. */
   aiDraft: boolean;
   /** The full listing row, for the ListingRow on the card. */
@@ -68,6 +70,7 @@ export async function getQueue(agentId?: string): Promise<QueueItem[]> {
       q: queuedMessages,
       presetName: messagePresets.name,
       presetAi: messagePresets.aiGenerated,
+      secondMessage: messagePresets.secondMessage,
       listing: listings,
       agentName: agents.name,
       agentPhone: agents.phone,
@@ -119,6 +122,7 @@ export async function getQueue(agentId?: string): Promise<QueueItem[]> {
         sentAt: q.sentAt,
         createdAt: q.createdAt,
         presetName: r.presetName,
+        secondMessage: r.secondMessage,
         aiDraft: r.presetAi === true || q.draftStatus != null,
         listing: r.listing,
         agentId: q.agentId,

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { smsUrl } from "@/lib/sms";
+import { copyInTap } from "@/lib/clipboard";
 import { isInSendWindow } from "@/lib/queue";
 import {
   sendQueuedEmail,
@@ -154,6 +155,7 @@ function QueueCard({ item, now }: { item: QueueItem; now: number }) {
     // server actions queue behind any in-flight router refresh, which this
     // page does constantly, and a queued call is lost when iOS freezes the
     // app for Messages (see /api/queue/[id]/handoff).
+    copyInTap(item.secondMessage);
     window.location.href = smsUrl(to ?? "", item.body);
     void fetch(`/api/queue/${item.id}/handoff`, { method: "POST", keepalive: true })
       .then(() => router.refresh())

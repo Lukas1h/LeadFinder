@@ -120,6 +120,8 @@ export interface PresetOption {
   recommended: boolean;
   /** The "Blank"/"type your own" preset — see ensureBlankSmsPreset. Send dialogs default to this over `recommended`. */
   blank?: boolean;
+  /** Texts only: copied to the clipboard on Send, to paste as a second text (see messagePresets.secondMessage). */
+  secondMessage?: string | null;
 }
 
 export interface MessageOptions {
@@ -164,6 +166,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       maxPhotoCount: messagePresets.maxPhotoCount,
       comingSoon: messagePresets.comingSoon,
       sitting: messagePresets.sitting,
+      secondMessage: messagePresets.secondMessage,
       variantId: messagePresetVariants.id,
       label: messagePresetVariants.label,
       body: messagePresetVariants.body,
@@ -217,6 +220,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       text: renderMessageBody(picked.body, listing.agentName, listing.address, listing.city),
       recommended: picked.presetId === recommendedPresetId,
       blank: picked.protected,
+      secondMessage: picked.secondMessage,
     };
   });
 
@@ -237,17 +241,21 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       variantLabel: "AI",
       text: "",
       recommended: recommendedPresetId === aiPreset.id,
+      secondMessage: aiPreset.secondMessage,
     });
   }
 
   return { presets };
 }
 
-async function getAiPreset(type: PresetType): Promise<(PresetCriteria & { id: string; name: string }) | null> {
+async function getAiPreset(
+  type: PresetType
+): Promise<(PresetCriteria & { id: string; name: string; secondMessage: string | null }) | null> {
   const [preset] = await db
     .select({
       id: messagePresets.id,
       name: messagePresets.name,
+      secondMessage: messagePresets.secondMessage,
       minScore: messagePresets.minScore,
       maxScore: messagePresets.maxScore,
       minPrice: messagePresets.minPrice,
@@ -305,7 +313,7 @@ async function buildAiDraftOption(
   instruction?: string
 ): Promise<PresetOption | null> {
   const [preset] = await db
-    .select({ id: messagePresets.id, name: messagePresets.name })
+    .select({ id: messagePresets.id, name: messagePresets.name, secondMessage: messagePresets.secondMessage })
     .from(messagePresets)
     .where(
       and(
@@ -386,6 +394,7 @@ async function buildAiDraftOption(
     text,
     // Never — see draftAiPresetOption's comment above.
     recommended: false,
+    secondMessage: preset.secondMessage,
   };
 }
 

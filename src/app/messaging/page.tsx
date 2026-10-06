@@ -52,6 +52,7 @@ async function MessagingContent() {
 
   const smsPresets = presets.filter((p) => p.channel === "sms");
   const emailPresets = presets.filter((p) => p.channel === "email");
+  const emailTemplates = emailPresets.filter((p) => !p.aiGenerated).map((p) => ({ id: p.id, name: p.name }));
 
   return (
     <>
@@ -85,6 +86,7 @@ async function MessagingContent() {
         presets={smsPresets}
         variantsByPreset={variantsByPreset}
         statsByVariant={statsByVariant}
+        emailTemplates={emailTemplates}
       />
 
       <Separator className="my-8" />
@@ -106,12 +108,15 @@ function TemplateSection({
   presets,
   variantsByPreset,
   statsByVariant,
+  emailTemplates,
 }: {
   title: string;
   channel: MessageChannel;
   presets: (typeof messagePresets.$inferSelect)[];
   variantsByPreset: Record<string, (typeof messagePresetVariants.$inferSelect)[]>;
   statsByVariant: Awaited<ReturnType<typeof computeVariantStats>>;
+  /** For SMS presets' "email when they reply" choice. */
+  emailTemplates?: { id: string; name: string }[];
 }) {
   return (
     <div>
@@ -133,6 +138,7 @@ function TemplateSection({
               <PresetForm
                 defaultType={type}
                 defaultChannel={channel}
+                emailTemplates={emailTemplates}
                 trigger={
                   <Button variant="outline" size="sm">
                     <Plus />
@@ -152,6 +158,7 @@ function TemplateSection({
                     preset={preset}
                     variants={variantsByPreset[preset.id] ?? []}
                     statsByVariant={statsByVariant}
+                    emailTemplates={emailTemplates}
                   />
                 ))}
               </div>

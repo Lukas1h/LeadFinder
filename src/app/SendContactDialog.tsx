@@ -3,13 +3,14 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { MessageCircle, Mail, Phone, RefreshCw, Paperclip, Sparkles } from "lucide-react";
+import { MessageCircle, Mail, Phone, RefreshCw, Paperclip, Sparkles, Copy } from "lucide-react";
 import type { PresetType } from "@/db/schema";
 import { getMessageOptions, sendMessage, draftAiPresetOption, type PresetOption } from "@/app/messageActions";
 import { getComposeEmailOptions, sendListingEmail, draftAiEmailPresetOption } from "@/app/composeEmailActions";
 import { startPendingCallForListing } from "@/app/agents/interactionActions";
 import { AI_DRAFT_VARIANT_SENTINEL } from "@/lib/messageTemplate";
 import { smsUrl, telUrl, firstName } from "@/lib/sms";
+import { copyInTap } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -196,6 +197,8 @@ export function SendContactDialog({
 
   const handleSendSms = () => {
     if (!selectedSms) return;
+    // Copied in the same tap, so the second text is one paste in Messages.
+    copyInTap(selectedSms.secondMessage);
     window.location.href = smsUrl(agentPhone ?? "", editedText);
     setIsSendingSms(true);
     sendMessage(listingId, type, selectedSms.presetId, selectedSms.variantId, editedText).then(() => {
@@ -358,6 +361,16 @@ export function SendContactDialog({
                       {hasSmsAiDraft ? <RefreshCw /> : <Sparkles />}
                       {hasSmsAiDraft ? "Regenerate" : "Generate"}
                     </Button>
+                  </div>
+                )}
+
+                {selectedSms?.secondMessage && (
+                  <div className="rounded-md bg-muted/60 px-3 py-2 text-sm">
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground mb-0.5">
+                      <Copy className="size-3" />
+                      Then paste — copied when you send
+                    </p>
+                    {selectedSms.secondMessage}
                   </div>
                 )}
               </div>

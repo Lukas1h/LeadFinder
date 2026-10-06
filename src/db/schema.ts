@@ -568,6 +568,17 @@ export const messagePresets = pgTable("message_presets", {
   // be available as a scaffold even with zero sends. Unlike aiGenerated,
   // the variant body/subject stays fully user-editable.
   protected: boolean("protected").notNull().default(false),
+
+  // SMS only. A short second text sent right after this one, by hand: tapping
+  // Send copies it to the clipboard on the way into Messages, so it's one
+  // paste. "Mind if I send over a few samples…" on the outreach templates.
+  secondMessage: text("second_message"),
+  // SMS only. The email the message detail's "Send samples" button sends when
+  // someone replies to a text from this preset (see
+  // src/app/messaging/replyActions.ts).
+  followUpEmailPresetId: uuid("follow_up_email_preset_id").references((): AnyPgColumn => messagePresets.id, {
+    onDelete: "set null",
+  }),
 });
 
 export interface PresetAttachment {
