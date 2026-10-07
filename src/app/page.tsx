@@ -12,8 +12,8 @@ import { PassAllListingsButton } from "./PassAllListingsButton";
 import { NewBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge } from "./badges";
 import { byLeadPriority, FEW_PHOTOS_THRESHOLD, findAttachedAgent, buildAgentLookups } from "@/lib/pipeline";
 import {
-  leadSection,
   refreshLeadSections,
+  isBuilderListing,
   lastTextByAgent,
   isRecentlyTexted,
   LEAD_SECTION_LABELS,
@@ -21,6 +21,7 @@ import {
   type LeadSection,
 } from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { LeadsSkeleton } from "./loading";
 import Link from "next/link";
 import { getQueuedListingIds } from "@/lib/queueMessages";
@@ -83,9 +84,9 @@ async function LeadsContent() {
   const contactAgents = await withLastContactFromHistory(allAgents);
   const { byId: agentById, byPhone: agentByPhone, byName: agentByName } = buildAgentLookups(contactAgents);
 
-  // Every other listing referenced by an agent's last-contacted pointer —
-  // used only to name the listing in the duplicate-agent warning below.
+  // The listing a declined agent turned down, named in their Declined badge.
   const referencedIds = contactAgents
+    .filter((a) => a.relationshipStatus === "declined")
     .map((a) => a.lastContactedListingId)
     .filter((id): id is string => id != null);
   const referencedListings =
@@ -97,27 +98,14 @@ async function LeadsContent() {
       : [];
   const addressById = new Map(referencedListings.map((l) => [l.id, l.address]));
 
-  // Four sections instead of the old "likely / unlikely" split — see
-  // lib/leadSections.ts for why the old photo/price test was demoting 86% of
-  // the list. The section is decided from the listing plus its resolved
-  // agent's status, since "agent declined" and "no agent at all" are both
-  // reasons a lead is unreachable.
-  // The stored section is what the message dialog's targeting filter reads, so
-  // settle it before bucketing rather than deriving a second, possibly
-  // different answer here. refreshLeadSections only writes rows that actually
-  // moved, so this is cheap on a page load and self-healing when a score or
-  // price cut lands after the fact.
-  const moved = await refreshLeadSections(leads.map((l) => l.id));
-  // `leads` was read before the refresh, so pick up whatever just moved.
-  const freshSection = new Map<string, string | null>();
-  if (moved > 0) {
-    const rows = await db
-      .select({ id: listings.id, leadSection: listings.leadSection })
-      .from(listings)
-      .where(inArray(listings.id, openLeads.map((l) => l.id)));
-    for (const r of rows) freshSection.set(r.id, r.leadSection);
-  }
-  // Texted or called in the last week: unlikely, even for agents he knows.
+  // Four sections — see lib/leadSections.ts. The stored section is what the
+  // message dialog's recommendation reads, so settle it first and bucket from
+  // exactly that. refreshLeadSections only writes rows that moved, so this is
+  // cheap per load and self-heals when a score, price cut or text lands.
+  // Queued ones too: their recommendation reads the same stored section.
+  const sectionById = await refreshLeadSections(leads.map((l) => l.id));
+  // When each agent was last texted or called: a week's quiet before texting
+  // them again, the "Texted Oct 5" on the card, and never-texted agents first.
   const lastTexted = await lastTextByAgent(
     openLeads.map((l) => findAttachedAgent(l, agentByPhone, agentByName, agentById)?.id).filter((id): id is string => !!id)
   );
@@ -142,10 +130,7 @@ async function LeadsContent() {
   for (const lead of openLeads) {
     const attached = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
     const textedAt = attached ? lastTexted.get(attached.id) : undefined;
-    const stored = freshSection.has(lead.id) ? freshSection.get(lead.id) : lead.leadSection;
-    const section =
-      (stored as LeadSection | null) ??
-      leadSection({ ...lead, relationshipStatus: attached?.relationshipStatus, lastContactedAt: textedAt });
+    const section = sectionById.get(lead.id) ?? "unlikely";
     const fallback = lead.agentPhone || lead.agentName;
     const key = attached ? attached.id : fallback ? `contact:${fallback}` : `listing:${lead.id}`;
     const group = byKey.get(key) ?? { agent: attached, entries: [], textedAt };
@@ -175,12 +160,15 @@ async function LeadsContent() {
   const sections: Record<LeadSection, AgentGroupRow[]> = { photo: [], video: [], backup: [], unlikely: [] };
   for (const g of groups) if (!g.known) sections[g.section].push(g);
 
-  // Within a section, the same priority score the pipeline uses (coming soon
-  // first, then price-weighted photo opportunity, then age). Backup and video
-  // put agents he has never texted first, then the priciest listing.
-  for (const key of LEAD_SECTION_ORDER) sections[key].sort((a, b) => byLeadPriority(a.best, b.best));
-  for (const key of ["backup", "video"] as const) {
-    sections[key].sort((a, b) => (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) || (b.best.price ?? 0) - (a.best.price ?? 0));
+  // Within a section: backup and video put agents he has never texted first,
+  // then the priciest listing; photo and unlikely go by the priority score the
+  // pipeline uses (coming soon first, then price-weighted photo opportunity).
+  for (const key of LEAD_SECTION_ORDER) {
+    sections[key].sort((a, b) =>
+      key === "backup" || key === "video"
+        ? (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) || (b.best.price ?? 0) - (a.best.price ?? 0)
+        : byLeadPriority(a.best, b.best)
+    );
   }
   known.sort(
     (a, b) =>
@@ -218,6 +206,7 @@ async function LeadsContent() {
               <FewPhotosBadge count={lead.photoCount} />
             )}
             {lead.score != null && <PhotoScoreBadge score={lead.score} reasoning={lead.scoreReasoning} />}
+            {isBuilderListing(lead.brokerName) && <Badge variant="outline">Builder</Badge>}
             {agent?.relationshipStatus === "declined" && (
               <AgentDeclinedBadge
                 agent={agent}

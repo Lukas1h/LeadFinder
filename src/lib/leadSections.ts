@@ -56,6 +56,7 @@ export interface LeadSectionInput {
   agentId?: string | null;
   agentName?: string | null;
   agentPhone?: string | null;
+  brokerName?: string | null;
   /** The attached agent's relationship status, when one is resolved. */
   relationshipStatus?: string | null;
   listedAt?: Date | null;
@@ -93,16 +94,32 @@ export function hasNoAgent(listing: LeadSectionInput): boolean {
   );
 }
 
+/**
+ * Brokerages that are really home builders (Lennar, D.R. Horton, Sekisui
+ * House…). Their listings are the same plan over and over, often with
+ * rendered photos, and their sales reps don't hire photographers. Matched on
+ * the listing's brokerage, which is how builders list on Zillow. Checked
+ * against every brokerage on file: "Mountain West" is left out on purpose
+ * (Coldwell Banker Mountain West is a normal brokerage).
+ */
+const BUILDER_BROKER =
+  /\b(lennar|d\.?\s?r\.?\s?horton|sekisui|pulte|del webb|toll brothers|kb home|weekley|taylor morrison|richmond american|meritage|century communities|hayden homes|pahlisch|holt homes|stone ?bridge homes|legend homes|adair homes|woodbridge homes|kda homes|pacific lifestyle homes|custom homes|new home (co|company)|homes,? inc|homes llc|sales corp|home ?builders?|builders?|construction|communities)\b/i;
+
+export function isBuilderListing(brokerName: string | null | undefined): boolean {
+  return !!brokerName && BUILDER_BROKER.test(brokerName);
+}
+
 /** Texted or called inside the last LEAD_RECENT_CONTACT_DAYS. */
 export function isRecentlyTexted(lastTextedAt: Date | null | undefined): boolean {
   const age = daysSince(lastTextedAt);
   return age != null && age < LEAD_RECENT_CONTACT_DAYS;
 }
 
-/** Under the floor, unreachable, or the agent already turned us down. */
+/** Under the floor, unreachable, a builder, or the agent already turned us down. */
 export function isLeadUnlikely(listing: LeadSectionInput): boolean {
   if (listing.price != null && listing.price < LEAD_MIN_PRICE) return true;
   if (hasNoAgent(listing)) return true;
+  if (isBuilderListing(listing.brokerName)) return true;
   return listing.relationshipStatus === "declined";
 }
 
@@ -135,18 +152,6 @@ export function leadSection(listing: LeadSectionInput): LeadSection {
   return "backup";
 }
 
-/** Groups a set of listings into the four sections, each in the order given. */
-export function partitionByLeadSection<T extends LeadSectionInput>(
-  items: T[],
-  statusFor: (item: T) => string | null | undefined
-): Record<LeadSection, T[]> {
-  const out: Record<LeadSection, T[]> = { photo: [], video: [], backup: [], unlikely: [] };
-  for (const item of items) {
-    out[leadSection({ ...item, relationshipStatus: statusFor(item) })].push(item);
-  }
-  return out;
-}
-
 /** Convenience for a full listings row plus its resolved agent. */
 export function leadSectionForListing(
   listing: Listing,
@@ -167,10 +172,11 @@ export const LEAD_SECTION_ORDER: LeadSection[] = ["photo", "video", "backup", "u
  * recommendation built on it.
  *
  * Bulk by design: the whole point is to avoid one write per listing on the
- * leads page, so callers hand over every id they just touched.
+ * leads page, so callers hand over every id they just touched. Returns every
+ * listing's settled section, so the Leads page can bucket straight from it.
  */
-export async function refreshLeadSections(ids: string[]): Promise<number> {
-  if (ids.length === 0) return 0;
+export async function refreshLeadSections(ids: string[]): Promise<Map<string, LeadSection>> {
+  if (ids.length === 0) return new Map();
   const rows = await db
     .select({
       id: listings.id,
@@ -180,6 +186,7 @@ export async function refreshLeadSections(ids: string[]): Promise<number> {
       agentId: listings.agentId,
       agentName: listings.agentName,
       agentPhone: listings.agentPhone,
+      brokerName: listings.brokerName,
       listedAt: listings.listedAt,
       priceCutAt: listings.priceCutAt,
       resurfacedAt: listings.resurfacedAt,
@@ -207,14 +214,12 @@ export async function refreshLeadSections(ids: string[]): Promise<number> {
     const stored = rows.find((x) => x.id === r.id)?.leadSection ?? null;
     return stored !== r.section;
   });
-  if (changed.length === 0) return 0;
-
   // Sequential rather than a batched transaction: the counts involved are tens
   // per sync, and this keeps the write obviously correct.
   for (const row of changed) {
     await db.update(listings).set({ leadSection: row.section }).where(eq(listings.id, row.id));
   }
-  return changed.length;
+  return new Map(decided.map((r) => [r.id, r.section]));
 }
 
 /**

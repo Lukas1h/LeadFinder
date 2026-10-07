@@ -83,7 +83,8 @@ export function AgentLeadCard({
             )}
           </div>
           <p className="text-sm text-muted-foreground truncate">
-            {[brokerName, contactLine].filter(Boolean).join(" · ")}
+            {/* Contact first: brokerages can be long enough to truncate it. */}
+            {[contactLine, brokerName].filter(Boolean).join(" · ")}
           </p>
         </div>
         {total > 1 && (
