@@ -110,7 +110,11 @@ export function smsUrl(phone: string = "default", message: string): string {
   else if (digits.length === 11 && digits.startsWith("1")) target = `+${digits}`;
   else target = PLACEHOLDER_PHONE;
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  // No body: a plain link, identical on the server and in the browser (the
+  // agent cards' Text buttons render this on the server, where there's no
+  // navigator to sniff).
+  if (!message) return `sms:${target}`;
+  const isIOS = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
   const separator = isIOS ? "&" : "?";
   return `sms:${target}${separator}body=${encodeURIComponent(message)}`;
 }

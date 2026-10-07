@@ -364,7 +364,7 @@ export async function getOrCreateAgentByPhone(
 /**
  * The "Follow up" queue for the top of the Agents tab.
  *
- * Eligibility: a warm or interested relationship, and no *interaction* in
+ * Eligibility: a warm, interested or past-client relationship, and no *interaction* in
  * the last 28 days, and not dismissed by Lukas in the last 28 days
  * (followUpDismissedAt — the "snooze" from the Dismiss button, which is
  * deliberately tracked separately from the real interaction facts so
@@ -381,7 +381,8 @@ export async function getOrCreateAgentByPhone(
  * "last interaction" is resolved in JS rather than kept denormalized on the
  * agent row — mirrors getAgentTimeline's merge-at-read-time philosophy.
  *
- * Order: interested first, then warm; within each, longest-untouched first
+ * Order: past clients first (the likeliest repeat work), then interested, then
+ * warm; within each, longest-untouched first
  * (the still-contactable-but-pretty-old reasoning that makes an overstretched
  * warm lead worth nudging the most). Never-interacted sorts ahead of the
  * merely long-overdue.
@@ -390,7 +391,7 @@ export async function getFollowUpAgents(): Promise<Agent[]> {
   const candidates = await db
     .select()
     .from(agents)
-    .where(inArray(agents.relationshipStatus, ["interested", "warm"]));
+    .where(inArray(agents.relationshipStatus, ["regular", "worked_once", "interested", "warm"]));
 
   if (candidates.length === 0) return [];
 
@@ -429,7 +430,8 @@ export async function getFollowUpAgents(): Promise<Agent[]> {
       return !at || at.getTime() < cutoff.getTime();
     })
     .sort((a, b) => {
-      const statusDiff = a.relationshipStatus === b.relationshipStatus ? 0 : a.relationshipStatus === "interested" ? -1 : 1;
+      const rank = (s: string) => (s === "regular" || s === "worked_once" ? 0 : s === "interested" ? 1 : 2);
+      const statusDiff = rank(a.relationshipStatus) - rank(b.relationshipStatus);
       if (statusDiff !== 0) return statusDiff;
       const aAt = lastInteractionAt(a)?.getTime() ?? -Infinity;
       const bAt = lastInteractionAt(b)?.getTime() ?? -Infinity;

@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { MessageCircle, Bookmark } from "lucide-react";
-import { updateListingStatus } from "./actions";
+import { updateListingStatus, markListingsPassed } from "./actions";
 import { SendContactDialog } from "./SendContactDialog";
 import { firstName } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ export function LeadActions({
   agentEmail,
   address,
   city,
+  passListingIds,
 }: {
   listingId: string;
   agentName: string | null;
@@ -21,6 +22,8 @@ export function LeadActions({
   agentEmail?: string | null;
   address?: string | null;
   city?: string | null;
+  /** Agent cards: Pass drops every one of the agent's open listings, not just this one. */
+  passListingIds?: string[];
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -34,7 +37,8 @@ export function LeadActions({
   // funnel, so this is purely Lukas deciding the property isn't for him.
   const handlePass = () => {
     startTransition(() => {
-      updateListingStatus(listingId, "passed");
+      if (passListingIds && passListingIds.length > 1) markListingsPassed(passListingIds);
+      else updateListingStatus(listingId, "passed");
     });
   };
 
@@ -61,7 +65,7 @@ export function LeadActions({
         Save
       </Button>
       <Button variant="ghost" className="text-muted-foreground" onClick={handlePass} disabled={isPending}>
-        Pass
+        {passListingIds && passListingIds.length > 1 ? `Pass all ${passListingIds.length}` : "Pass"}
       </Button>
     </div>
   );

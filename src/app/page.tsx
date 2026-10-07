@@ -2,15 +2,15 @@ import { withLastContactFromHistory } from "@/lib/agentLastContact";
 import { Fragment, Suspense } from "react";
 import { PartyPopper, ChevronRight } from "lucide-react";
 import { db } from "@/db";
-import { listings, agents, type Listing } from "@/db/schema";
+import { listings, agents, type Agent, type Listing } from "@/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
 import { LeadActions } from "./LeadActions";
-import { LeadCard } from "./LeadCard";
+import { AgentLeadCard } from "./AgentLeadCard";
 import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
-import { NewBadge, DuplicateAgentBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, WarmAgentBadge } from "./badges";
-import { findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, findAttachedAgent, buildAgentLookups, isWarmAgentStatus } from "@/lib/pipeline";
+import { NewBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge } from "./badges";
+import { byLeadPriority, FEW_PHOTOS_THRESHOLD, findAttachedAgent, buildAgentLookups } from "@/lib/pipeline";
 import {
   leadSection,
   refreshLeadSections,
@@ -122,91 +122,109 @@ async function LeadsContent() {
     openLeads.map((l) => findAttachedAgent(l, agentByPhone, agentByName, agentById)?.id).filter((id): id is string => !!id)
   );
 
-  // A new listing from an agent who already knows Lukas is the best moment to
-  // get back in touch, so those come out of the four sections into their own,
-  // at the top. Display only: the stored leadSection is untouched, since the
-  // message recommendation reads it.
-  const known: { lead: Listing; group: KnownAgentGroup }[] = [];
-  const sections: Record<LeadSection, Listing[]> = { photo: [], video: [], backup: [], unlikely: [] };
+  // One card per agent: outreach is about the person now, and each listing is
+  // just a reason to text them. Their best open listing leads the card — the
+  // strongest section first (a photo pitch beats video beats backup), then the
+  // usual priority score — and the rest fold away underneath it. Grouping is
+  // display only; each listing keeps its stored section, so if the best one
+  // goes away the next one takes its place.
+  type Entry = { lead: Listing; section: LeadSection };
+  type AgentGroupRow = {
+    key: string;
+    agent: Agent | null;
+    entries: Entry[];
+    textedAt: Date | undefined;
+    best: Listing;
+    section: LeadSection;
+    known: KnownAgentGroup | undefined;
+  };
+  const byKey = new Map<string, { agent: Agent | null; entries: Entry[]; textedAt: Date | undefined }>();
   for (const lead of openLeads) {
     const attached = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
     const textedAt = attached ? lastTexted.get(attached.id) : undefined;
-    const group = attached ? KNOWN_AGENT_GROUP[attached.relationshipStatus] : undefined;
-    if (group && !isRecentlyTexted(textedAt)) {
-      known.push({ lead, group });
-      continue;
-    }
     const stored = freshSection.has(lead.id) ? freshSection.get(lead.id) : lead.leadSection;
     const section =
-      (stored as LeadSection | null) ?? leadSection({
-        ...lead,
-        relationshipStatus: attached?.relationshipStatus,
-        lastContactedAt: textedAt,
-      });
-    sections[section].push(lead);
-  }
-  // Within a section, order by the same priority score the pipeline uses:
-  // coming-soon first, then price-weighted photo opportunity, then age.
-  for (const key of Object.keys(sections) as LeadSection[]) {
-    sections[key].sort(byLeadPriority);
-  }
-  // Backup and video: agents never contacted first (the untouched
-  // relationships), then highest price first within each group.
-  const contacted = (lead: Listing) =>
-    findAttachedAgent(lead, agentByPhone, agentByName, agentById)?.lastContactedAt ? 1 : 0;
-  for (const key of ["backup", "video"] as const) {
-    sections[key].sort((a, b) => contacted(a) - contacted(b) || (b.price ?? 0) - (a.price ?? 0));
+      (stored as LeadSection | null) ??
+      leadSection({ ...lead, relationshipStatus: attached?.relationshipStatus, lastContactedAt: textedAt });
+    const fallback = lead.agentPhone || lead.agentName;
+    const key = attached ? attached.id : fallback ? `contact:${fallback}` : `listing:${lead.id}`;
+    const group = byKey.get(key) ?? { agent: attached, entries: [], textedAt };
+    group.entries.push({ lead, section });
+    byKey.set(key, group);
   }
 
+  const groups: AgentGroupRow[] = [...byKey.entries()].map(([key, g]) => {
+    g.entries.sort(
+      (a, b) =>
+        LEAD_SECTION_ORDER.indexOf(a.section) - LEAD_SECTION_ORDER.indexOf(b.section) ||
+        byLeadPriority(a.lead, b.lead)
+    );
+    const known = g.agent ? KNOWN_AGENT_GROUP[g.agent.relationshipStatus] : undefined;
+    return {
+      key,
+      ...g,
+      best: g.entries[0].lead,
+      section: g.entries[0].section,
+      // Someone he already knows comes first — unless he texted them this
+      // week, in which case they wait in Unlikely like everyone else.
+      known: known && !isRecentlyTexted(g.textedAt) ? known : undefined,
+    };
+  });
+
+  const known = groups.filter((g) => g.known);
+  const sections: Record<LeadSection, AgentGroupRow[]> = { photo: [], video: [], backup: [], unlikely: [] };
+  for (const g of groups) if (!g.known) sections[g.section].push(g);
+
+  // Within a section, the same priority score the pipeline uses (coming soon
+  // first, then price-weighted photo opportunity, then age). Backup and video
+  // put agents he has never texted first, then the priciest listing.
+  for (const key of LEAD_SECTION_ORDER) sections[key].sort((a, b) => byLeadPriority(a.best, b.best));
+  for (const key of ["backup", "video"] as const) {
+    sections[key].sort((a, b) => (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) || (b.best.price ?? 0) - (a.best.price ?? 0));
+  }
   known.sort(
     (a, b) =>
-      KNOWN_AGENT_GROUP_ORDER.indexOf(a.group) - KNOWN_AGENT_GROUP_ORDER.indexOf(b.group) ||
-      byLeadPriority(a.lead, b.lead)
+      KNOWN_AGENT_GROUP_ORDER.indexOf(a.known!) - KNOWN_AGENT_GROUP_ORDER.indexOf(b.known!) ||
+      byLeadPriority(a.best, b.best)
   );
+  const agentCount = groups.filter((g) => !g.key.startsWith("listing:")).length;
 
-  function card(lead: Listing) {
-    const attachedAgent = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
-    const duplicateAgent = findDuplicateAgentContact(attachedAgent);
-    const agentDeclined = attachedAgent?.relationshipStatus === "declined";
+  function contactLine(g: AgentGroupRow): string | null {
+    if (g.textedAt) return `Texted ${shortDate(g.textedAt)}`;
+    if (g.agent?.lastContactedAt) return `Never texted · emailed ${shortDate(g.agent.lastContactedAt)}`;
+    return g.agent || !g.key.startsWith("listing:") ? "Never contacted" : null;
+  }
+
+  function card(g: AgentGroupRow) {
+    const lead = g.best;
+    const agent = g.agent;
+    const ids = g.entries.map((e) => e.lead.id);
 
     return (
-      <LeadCard
-        key={lead.id}
+      <AgentLeadCard
+        key={g.key}
+        agent={agent}
+        agentName={lead.agentName}
+        brokerName={lead.brokerName}
+        contactLine={contactLine(g)}
         lead={lead}
+        others={g.entries.slice(1).map((e) => e.lead)}
         badges={
           <Fragment key={lead.id}>
             <NewBadge />
             {lead.isComingSoon && <ComingSoonBadge />}
             <PriceCutBadge lead={lead} />
-            {attachedAgent && isWarmAgentStatus(attachedAgent.relationshipStatus) && (
-              <WarmAgentBadge agent={attachedAgent} />
-            )}
             {lead.photoCount != null && lead.photoCount < FEW_PHOTOS_THRESHOLD && (
               <FewPhotosBadge count={lead.photoCount} />
             )}
-            {lead.score != null && (
-              <PhotoScoreBadge score={lead.score} reasoning={lead.scoreReasoning} />
-            )}
-            {agentDeclined && attachedAgent ? (
+            {lead.score != null && <PhotoScoreBadge score={lead.score} reasoning={lead.scoreReasoning} />}
+            {agent?.relationshipStatus === "declined" && (
               <AgentDeclinedBadge
-                agent={attachedAgent}
+                agent={agent}
                 duplicateAddress={
-                  attachedAgent.lastContactedListingId
-                    ? addressById.get(attachedAgent.lastContactedListingId)
-                    : undefined
+                  agent.lastContactedListingId ? addressById.get(agent.lastContactedListingId) : undefined
                 }
               />
-            ) : (
-              duplicateAgent && (
-                <DuplicateAgentBadge
-                  duplicateAgent={duplicateAgent}
-                  duplicateAddress={
-                    duplicateAgent.lastContactedListingId
-                      ? addressById.get(duplicateAgent.lastContactedListingId)
-                      : undefined
-                  }
-                />
-              )
             )}
           </Fragment>
         }
@@ -216,9 +234,10 @@ async function LeadsContent() {
             listingId={lead.id}
             agentName={lead.agentName}
             agentPhone={lead.agentPhone}
-            agentEmail={attachedAgent?.email}
+            agentEmail={agent?.email}
             address={lead.address}
             city={lead.city}
+            passListingIds={ids}
           />
         }
       />
@@ -231,7 +250,8 @@ async function LeadsContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Leads</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {openLeads.length} new listing{openLeads.length === 1 ? "" : "s"}
+            {agentCount} agent{agentCount === 1 ? "" : "s"} · {openLeads.length} listing
+            {openLeads.length === 1 ? "" : "s"}
             {queuedCount > 0 && (
               <>
                 {" · "}
@@ -261,10 +281,10 @@ async function LeadsContent() {
                 <summary className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
                   <span className="flex items-center gap-1">
                     <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
-                    From agents you know ({known.length})
+                    Agents you know ({known.length})
                   </span>
                 </summary>
-                <KnownAgentLeads items={known.map(({ lead, group }) => ({ group, card: card(lead) }))} />
+                <KnownAgentLeads items={known.map((g) => ({ group: g.known!, card: card(g) }))} />
               </details>
             </section>
           )}
@@ -281,7 +301,9 @@ async function LeadsContent() {
                       <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
                       {LEAD_SECTION_LABELS[key]} ({items.length})
                     </span>
-                    {isUnlikely && <PassAllListingsButton listingIds={items.map((l) => l.id)} />}
+                    {isUnlikely && (
+                      <PassAllListingsButton listingIds={items.flatMap((g) => g.entries.map((e) => e.lead.id))} />
+                    )}
                   </summary>
                   <div className="flex flex-col gap-4 mt-3">{items.map(card)}</div>
                 </details>
@@ -290,6 +312,19 @@ async function LeadsContent() {
           })}
         </div>
       )}
+
+      <p className="mt-10 text-center text-sm text-muted-foreground">
+        Saved, contacted and imported listings live in the{" "}
+        <Link href="/pipeline" className="text-primary hover:underline">
+          Pipeline
+        </Link>
+        .
+      </p>
     </>
   );
+}
+
+/** "Oct 5" in Pacific time — this renders on the server, which runs in UTC. */
+function shortDate(date: Date): string {
+  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 }
