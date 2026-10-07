@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Phone, MessageCircle, Mail, StickyNote, BellOff } from "lucide-react";
 import type { Agent } from "@/db/schema";
 import { resolveAvgDaysBetweenListings } from "./stats";
@@ -17,6 +18,8 @@ export function AgentCard({
   listingCount,
   listingDates,
   followUpDismiss,
+  lastReplyAt,
+  children,
 }: {
   agent: Agent;
   listingCount: number;
@@ -26,6 +29,10 @@ export function AgentCard({
   // When set, shows a "Not now" snooze button (the Follow up section's
   // dismiss — hides this agent from that list for another 28 days).
   followUpDismiss?: (agentId: string) => void;
+  /** Their latest reply, shown on the Follow up page. */
+  lastReplyAt?: Date | null;
+  /** Full-width extra row under the card, e.g. the listing they just put up. */
+  children?: ReactNode;
 }) {
   // Relationship status is shown as a read-only badge, not edited here: the
   // agent's name is right next to it and opens the detail dialog, which is
@@ -67,6 +74,7 @@ export function AgentCard({
             {listingCount} listing{listingCount === 1 ? "" : "s"}
           </span>
           {agent.lastContactedAt && <span>Last contacted {formatDate(agent.lastContactedAt)}</span>}
+          {lastReplyAt && <span>Last replied {formatDate(lastReplyAt)}</span>}
           {avgDaysBetweenListings != null && <span>~{avgDaysBetweenListings}d between listings</span>}
         </div>
 
@@ -124,6 +132,8 @@ export function AgentCard({
           />
         )}
       </div>
+
+      {children && <div className="basis-full min-w-0 -mx-2 -mb-2">{children}</div>}
     </Card>
   );
 }

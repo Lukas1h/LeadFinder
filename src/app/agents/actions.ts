@@ -16,6 +16,7 @@ import {
 } from "@/db/schema";
 import { eq, isNotNull, isNull, sql, desc, and, ne, or, ilike, inArray, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { getFollowUpBoard } from "@/app/follow-up/data";
 import { findFirstResultUrl, findFirstNameMatchResultUrl } from "@/lib/tavily";
 import { normalizePhone, normalizeEmail, normalizeName, EMAIL_RE, hasValidPhoneDigitCount } from "@/lib/normalize";
 import { resolveAgentId, setAgentRelationshipStatus } from "@/lib/agentIdentity";
@@ -362,81 +363,14 @@ export async function getOrCreateAgentByPhone(
 }
 
 /**
- * The "Follow up" queue for the top of the Agents tab.
- *
- * Eligibility: a warm, interested or past-client relationship, and no *interaction* in
- * the last 28 days, and not dismissed by Lukas in the last 28 days
- * (followUpDismissedAt — the "snooze" from the Dismiss button, which is
- * deliberately tracked separately from the real interaction facts so
- * dismissing doesn't lie about when the last touch was).
- *
- * "Interaction" means either direction: lastContactedAt (your own touches —
- * every outbound path stamps it), messageSends.respondedAt (their reply to a
- * send), or an inbound agent_interactions row (they reached you first).
- * Without the latter two, an agent who got back to you twice in the last
- * month but who you've never re-contacted would read as 28+ days stale when
- * you two just talked.
- *
- * The warm/interested set is small (double digits), so the cross-table
- * "last interaction" is resolved in JS rather than kept denormalized on the
- * agent row — mirrors getAgentTimeline's merge-at-read-time philosophy.
- *
- * Order: past clients first (the likeliest repeat work), then interested, then
- * warm; within each, longest-untouched first
- * (the still-contactable-but-pretty-old reasoning that makes an overstretched
- * warm lead worth nudging the most). Never-interacted sorts ahead of the
- * merely long-overdue.
+ * The "Follow up" queue for the top of the Agents tab: past clients, then
+ * interested, then warm agents who have gone quiet. See getFollowUpBoard,
+ * which the Follow up page also uses; agents with a fresh listing come first
+ * here since that page shows them in their own "Just listed" section.
  */
 export async function getFollowUpAgents(): Promise<Agent[]> {
-  const candidates = await db
-    .select()
-    .from(agents)
-    .where(inArray(agents.relationshipStatus, ["regular", "worked_once", "interested", "warm"]));
-
-  if (candidates.length === 0) return [];
-
-  const candidateIds = candidates.map((a) => a.id);
-
-  const [latestReplies, latestInbound] = await Promise.all([
-    db
-      .select({ agentId: messageSends.agentId, at: max(messageSends.respondedAt) })
-      .from(messageSends)
-      .where(and(inArray(messageSends.agentId, candidateIds), isNotNull(messageSends.respondedAt)))
-      .groupBy(messageSends.agentId),
-    db
-      .select({ agentId: agentInteractions.agentId, at: max(agentInteractions.occurredAt) })
-      .from(agentInteractions)
-      .where(and(inArray(agentInteractions.agentId, candidateIds), eq(agentInteractions.direction, "inbound")))
-      .groupBy(agentInteractions.agentId),
-  ]);
-
-  const replyByAgent = new Map(latestReplies.map((r) => [r.agentId, r.at]));
-  const inboundByAgent = new Map(latestInbound.map((r) => [r.agentId, r.at]));
-
-  const lastInteractionAt = (agent: Agent): Date | null => {
-    const stamps = [agent.lastContactedAt, replyByAgent.get(agent.id), inboundByAgent.get(agent.id)].filter(
-      (d): d is Date => d != null
-    );
-    if (stamps.length === 0) return null;
-    return new Date(Math.max(...stamps.map((d) => d.getTime())));
-  };
-
-  const cutoff = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
-
-  return candidates
-    .filter((agent) => {
-      if (agent.followUpDismissedAt && agent.followUpDismissedAt.getTime() > cutoff.getTime()) return false;
-      const at = lastInteractionAt(agent);
-      return !at || at.getTime() < cutoff.getTime();
-    })
-    .sort((a, b) => {
-      const rank = (s: string) => (s === "regular" || s === "worked_once" ? 0 : s === "interested" ? 1 : 2);
-      const statusDiff = rank(a.relationshipStatus) - rank(b.relationshipStatus);
-      if (statusDiff !== 0) return statusDiff;
-      const aAt = lastInteractionAt(a)?.getTime() ?? -Infinity;
-      const bAt = lastInteractionAt(b)?.getTime() ?? -Infinity;
-      return aAt - bAt;
-    });
+  const { justListed, agents: quiet } = await getFollowUpBoard();
+  return [...justListed, ...quiet].map((e) => e.agent);
 }
 
 /**
@@ -449,6 +383,7 @@ export async function getFollowUpAgents(): Promise<Agent[]> {
 export async function dismissFollowUpAgent(id: string) {
   await db.update(agents).set({ followUpDismissedAt: new Date() }).where(eq(agents.id, id));
   revalidatePath("/agents");
+  revalidatePath("/follow-up");
 }
 
 /**

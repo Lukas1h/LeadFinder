@@ -1,23 +1,27 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { HeartHandshake } from "lucide-react";
 import type { Agent } from "@/db/schema";
 import { dismissFollowUpAgent } from "@/app/agents/actions";
 import { AgentCard } from "@/app/agents/AgentCard";
+import { ListingRow } from "@/app/ListingRow";
+import type { FollowUpEntry, JustListedEntry } from "./data";
 
 const GROUPS = [
   { label: "Past clients", match: (a: Agent) => a.relationshipStatus === "regular" || a.relationshipStatus === "worked_once" },
-  { label: "Interested", match: (a: Agent) => a.relationshipStatus === "interested" },
+  { label: "Interested, gone quiet", match: (a: Agent) => a.relationshipStatus === "interested" },
   { label: "Warm", match: (a: Agent) => a.relationshipStatus === "warm" },
 ];
 
 export function FollowUpList({
+  justListed,
   agents,
   counts,
   dates,
 }: {
-  agents: Agent[];
+  justListed: JustListedEntry[];
+  agents: FollowUpEntry[];
   counts: Record<string, number>;
   dates: Record<string, { listedAt: Date | null; foundAt: Date }[]>;
 }) {
@@ -30,38 +34,55 @@ export function FollowUpList({
     startTransition(() => dismissFollowUpAgent(id));
   };
 
-  const visible = agents.filter((a) => !snoozed.has(a.id));
+  const listed = justListed.filter((e) => !snoozed.has(e.agent.id));
+  const quiet = agents.filter((e) => !snoozed.has(e.agent.id));
 
-  if (visible.length === 0) {
+  if (listed.length === 0 && quiet.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
         <HeartHandshake className="size-8" />
-        <p>Everyone you know has heard from you in the last 4 weeks.</p>
+        <p>Everyone you know has heard from you recently.</p>
       </div>
     );
   }
 
+  const card = (e: FollowUpEntry, extra?: ReactNode) => (
+    <AgentCard
+      key={e.agent.id}
+      agent={e.agent}
+      listingCount={counts[e.agent.id] ?? 0}
+      listingDates={dates[e.agent.id] ?? []}
+      followUpDismiss={dismiss}
+      lastReplyAt={e.lastReplyAt}
+    >
+      {extra}
+    </AgentCard>
+  );
+
   return (
     <div className="flex flex-col gap-8">
+      {listed.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Just listed ({listed.length})
+          </h2>
+          <p className="text-sm text-muted-foreground mb-3">
+            A client or interested agent put up a new listing and hasn&rsquo;t heard from you since.
+          </p>
+          <div className="flex flex-col gap-4">
+            {listed.map((e) => card(e, <ListingRow listing={e.listing} />))}
+          </div>
+        </section>
+      )}
       {GROUPS.map(({ label, match }) => {
-        const group = visible.filter(match);
+        const group = quiet.filter((e) => match(e.agent));
         if (group.length === 0) return null;
         return (
           <section key={label}>
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
               {label} ({group.length})
             </h2>
-            <div className="flex flex-col gap-4">
-              {group.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  listingCount={counts[agent.id] ?? 0}
-                  listingDates={dates[agent.id] ?? []}
-                  followUpDismiss={dismiss}
-                />
-              ))}
-            </div>
+            <div className="flex flex-col gap-4">{group.map((e) => card(e))}</div>
           </section>
         );
       })}
