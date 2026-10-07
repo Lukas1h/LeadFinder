@@ -90,7 +90,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const lineItemRows = lineItems
     .map(
       (li) => `
-      <div style="display:grid;grid-template-columns:1fr 70px 110px 110px;gap:16px;padding:16px 0;border-bottom:1px solid rgba(24,26,28,0.1);align-items:baseline;">
+      <div style="display:grid;grid-template-columns:1fr 70px 110px 110px;gap:16px;padding:16px 0;border-bottom:1px solid #E8E8E8;align-items:baseline;">
         <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:16px;color:#181A1C;">${escapeHtml(li.description)}</div>
         <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:16px;color:#181A1C;text-align:center;">1</div>
         <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:16px;color:#181A1C;text-align:right;">${formatPrice(li.amount)}</div>
@@ -117,6 +117,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+  /* Grays below are solid colors, never opacity or rgba: printing turns
+     see-through text into a low-resolution bitmap, so those lines came out
+     blurry on paper while everything else stayed sharp. */
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { margin: 0; background: #E7E5E3; font-family: 'Outfit', sans-serif; }
   .page {
@@ -168,31 +171,31 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   <section class="page">
     <div style="text-align:center;flex-shrink:0;">
       <div id="big-logo" style="font-family:'Noto Serif',serif;font-weight:700;font-size:82px;line-height:0.95;color:#181A1C;letter-spacing:-0.01em;display:inline-block;white-space:nowrap;">Hahn Media</div>
-      <div id="big-sub" style="font-family:'Outfit',sans-serif;font-weight:400;font-size:16px;text-transform:uppercase;color:#181A1C;opacity:0.72;margin-top:9px;display:inline-block;">Real Estate Photo &amp; Video</div>
+      <div id="big-sub" style="font-family:'Outfit',sans-serif;font-weight:400;font-size:16px;text-transform:uppercase;color:#595A5C;margin-top:9px;display:inline-block;">Real Estate Photo &amp; Video</div>
     </div>
 
-    <div style="height:1px;background:#181A1C;opacity:0.14;margin:0.3in 0 0;flex-shrink:0;"></div>
+    <div style="height:1px;background:#DFDFDF;margin:0.3in 0 0;flex-shrink:0;"></div>
 
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-top:0.26in;flex-shrink:0;">
       <div>
         <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#995000;">Billed To</div>
         <div style="margin-top:12px;display:flex;flex-direction:column;gap:3px;">
           <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:17px;color:#181A1C;">${escapeHtml(billedToName)}</div>
-          ${billedToSub ? `<div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#181A1C;opacity:0.72;">${escapeHtml(billedToSub)}</div>` : ""}
+          ${billedToSub ? `<div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#595A5C;">${escapeHtml(billedToSub)}</div>` : ""}
         </div>
       </div>
       <div style="text-align:right;flex-shrink:0;">
         <div style="font-family:'Noto Serif',serif;font-weight:700;font-size:30px;color:#181A1C;line-height:1;">Invoice</div>
         <div style="margin-top:12px;display:flex;flex-direction:column;gap:3px;">
           <div style="font-family:'Outfit',sans-serif;font-weight:500;font-size:14px;color:#181A1C;">No. ${invoiceNumber}</div>
-          <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#181A1C;opacity:0.72;">${formatDate(invoicedAt)}</div>
-          ${addressLine ? `<div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#181A1C;opacity:0.72;">${escapeHtml(addressLine)}</div>` : ""}
+          <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#595A5C;">${formatDate(invoicedAt)}</div>
+          ${addressLine ? `<div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#595A5C;">${escapeHtml(addressLine)}</div>` : ""}
         </div>
       </div>
     </div>
 
     <div style="margin-top:0.34in;flex-shrink:0;">
-      <div style="display:grid;grid-template-columns:1fr 70px 110px 110px;gap:16px;padding-bottom:9px;border-bottom:1px solid rgba(24,26,28,0.22);">
+      <div style="display:grid;grid-template-columns:1fr 70px 110px 110px;gap:16px;padding-bottom:9px;border-bottom:1px solid #CCCCCD;">
         <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#995000;">Description</div>
         <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#995000;text-align:center;">Qty</div>
         <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#995000;text-align:right;">Price</div>
@@ -214,15 +217,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:0;margin-top:16px;">
           <div style="padding-right:24px;">
             <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:14px;color:#181A1C;">Check by mail</div>
-            <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#181A1C;opacity:0.72;line-height:1.45;margin-top:4px;">Make checks payable to ${escapeHtml(BUSINESS.checkPayee)}<br>${escapeHtml(BUSINESS.checkAddress)}</div>
+            <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#595A5C;line-height:1.45;margin-top:4px;">Make checks payable to ${escapeHtml(BUSINESS.checkPayee)}<br>${escapeHtml(BUSINESS.checkAddress)}</div>
           </div>
-          <div style="padding:0 24px;border-left:1px solid rgba(24,26,28,0.14);">
+          <div style="padding:0 24px;border-left:1px solid #DFDFDF;">
             <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:14px;color:#181A1C;">Venmo</div>
-            <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#181A1C;opacity:0.72;margin-top:4px;">${escapeHtml(BUSINESS.venmo)}</div>
+            <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#595A5C;margin-top:4px;">${escapeHtml(BUSINESS.venmo)}</div>
           </div>
-          <div style="padding:0 24px;border-left:1px solid rgba(24,26,28,0.14);">
+          <div style="padding:0 24px;border-left:1px solid #DFDFDF;">
             <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:14px;color:#181A1C;">Cash App</div>
-            <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#181A1C;opacity:0.72;margin-top:4px;">${escapeHtml(BUSINESS.cashApp)}</div>
+            <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#595A5C;margin-top:4px;">${escapeHtml(BUSINESS.cashApp)}</div>
           </div>
         </div>
       </div>
@@ -231,11 +234,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     ${notesBlock}
 
     <div style="padding-top:0.3in;flex-shrink:0;">
-      <div style="height:1px;background:#181A1C;opacity:0.14;margin:0 0 0.16in;"></div>
+      <div style="height:1px;background:#DFDFDF;margin:0 0 0.16in;"></div>
       <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:24px;">
         <div style="display:flex;flex-direction:column;gap:4px;">
           <div style="font-family:'Outfit',sans-serif;font-weight:600;font-size:16px;color:#181A1C;">${escapeHtml(BUSINESS.name)}</div>
-          <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:13px;color:#181A1C;opacity:0.72;">${escapeHtml(BUSINESS.entity)}</div>
+          <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:13px;color:#595A5C;">${escapeHtml(BUSINESS.entity)}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
           <div style="font-family:'Outfit',sans-serif;font-weight:400;font-size:14px;color:#181A1C;">${escapeHtml(BUSINESS.phone)}</div>
