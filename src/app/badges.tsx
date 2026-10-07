@@ -28,6 +28,7 @@ const STATUS_STYLES: Record<LeadStatus, string> = {
   // housekeeping and should recede.
   passed: "bg-muted text-muted-foreground/70",
   declined: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900",
+  outreach: "bg-muted text-muted-foreground",
 };
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -39,6 +40,7 @@ export const STATUS_LABELS: Record<LeadStatus, string> = {
   booked: "Booked",
   passed: "Passed",
   declined: "Declined",
+  outreach: "Agent outreach",
 };
 
 export function StatusBadge({ status }: { status: LeadStatus }) {

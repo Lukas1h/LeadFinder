@@ -381,7 +381,7 @@ export async function resolvePendingInteraction(
           statusChangedAt: new Date(),
           contactedAt: earlierSend?.at ?? null,
         })
-        .where(and(eq(listings.id, row.listingId), eq(listings.status, "contacted")));
+        .where(and(eq(listings.id, row.listingId), inArray(listings.status, ["contacted", "outreach"])));
     }
 
     // sendMessage stamps the agent's last-contacted pointer at tap time too, for

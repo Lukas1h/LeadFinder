@@ -442,12 +442,21 @@ export async function sendMessage(
     statusBefore = prior?.status ?? null;
   }
 
+  // A text about the agent rather than the property (Backup Option) still
+  // takes the listing off Leads, but as "outreach", which stays out of the
+  // Pipeline — see messagePresets.pitchesListing.
+  const [preset] = await db
+    .select({ pitchesListing: messagePresets.pitchesListing })
+    .from(messagePresets)
+    .where(eq(messagePresets.id, presetId));
+  const sentStatus = preset?.pitchesListing === false ? ("outreach" as const) : ("contacted" as const);
+
   const [lead] = await db
     .update(listings)
     .set({
       contactedAt: now,
       statusChangedAt: now,
-      ...(type === "initial_outreach" ? { status: "contacted" as const } : {}),
+      ...(type === "initial_outreach" ? { status: sentStatus } : {}),
     })
     .where(eq(listings.id, listingId))
     .returning({ agentPhone: listings.agentPhone, agentName: listings.agentName });

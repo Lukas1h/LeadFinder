@@ -30,12 +30,15 @@ export interface PresetCriteriaInput {
 export interface PresetFollowUpInput {
   secondMessage: string | null;
   followUpEmailPresetId: string | null;
+  /** Omitted = leave as is (see messagePresets.pitchesListing). */
+  pitchesListing?: boolean;
 }
 
 function followUpColumns(input: PresetFollowUpInput) {
   return {
     secondMessage: input.secondMessage?.trim() || null,
     followUpEmailPresetId: input.followUpEmailPresetId || null,
+    ...(input.pitchesListing != null ? { pitchesListing: input.pitchesListing } : {}),
   };
 }
 

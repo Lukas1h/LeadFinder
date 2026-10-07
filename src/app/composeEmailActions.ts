@@ -409,7 +409,7 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
   if (!body) return { error: "Message body is required" };
 
   const [preset] = await db
-    .select({ attachments: messagePresets.attachments })
+    .select({ attachments: messagePresets.attachments, pitchesListing: messagePresets.pitchesListing })
     .from(messagePresets)
     .where(eq(messagePresets.id, input.presetId));
 
@@ -442,7 +442,10 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
     .set({
       contactedAt: now,
       statusChangedAt: now,
-      ...(input.type === "initial_outreach" ? { status: "contacted" as const } : {}),
+      // See messagePresets.pitchesListing.
+      ...(input.type === "initial_outreach"
+        ? { status: preset?.pitchesListing === false ? ("outreach" as const) : ("contacted" as const) }
+        : {}),
     })
     .where(eq(listings.id, input.listingId))
     .returning({ agentPhone: listings.agentPhone, agentName: listings.agentName });

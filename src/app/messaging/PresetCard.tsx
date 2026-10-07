@@ -319,6 +319,9 @@ export function PresetCard({
               </p>
             )
           )}
+          {!preset.pitchesListing && (
+            <p className="text-xs text-muted-foreground/80 mt-0.5">About you: the listing skips the Pipeline</p>
+          )}
           {preset.secondMessage && (
             <p className="text-xs text-muted-foreground/80 mt-0.5">Then: &ldquo;{preset.secondMessage}&rdquo;</p>
           )}

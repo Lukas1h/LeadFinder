@@ -2,7 +2,7 @@ import { withLastContactFromHistory } from "@/lib/agentLastContact";
 import { Suspense } from "react";
 import { db } from "@/db";
 import { listings, agents, type Agent } from "@/db/schema";
-import { ne, inArray, or } from "drizzle-orm";
+import { and, ne, inArray, or } from "drizzle-orm";
 import { getQueuedListingIds } from "@/lib/queueMessages";
 import { getFollowUpAfterDays } from "@/lib/settings";
 import { buildAgentLookups } from "@/lib/pipeline";
@@ -37,9 +37,14 @@ async function PipelineContent() {
       .select()
       .from(listings)
       .where(
-        queuedIds.size > 0
-          ? or(ne(listings.status, "new"), inArray(listings.id, [...queuedIds]))
-          : ne(listings.status, "new")
+        // "outreach" listings were only a reason to text the agent, not
+        // something being pursued — they stay out (see LEAD_STATUSES).
+        and(
+          ne(listings.status, "outreach"),
+          queuedIds.size > 0
+            ? or(ne(listings.status, "new"), inArray(listings.id, [...queuedIds]))
+            : ne(listings.status, "new")
+        )
       ),
     db.select().from(agents),
     getFollowUpAfterDays(),

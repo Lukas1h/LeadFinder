@@ -76,6 +76,7 @@ export function PresetForm({
   );
   const [minPhotoCount, setMinPhotoCount] = useState(preset?.minPhotoCount?.toString() ?? "");
   const [maxPhotoCount, setMaxPhotoCount] = useState(preset?.maxPhotoCount?.toString() ?? "");
+  const [pitchesListing, setPitchesListing] = useState(preset?.pitchesListing === false ? "agent" : "listing");
   const [secondMessage, setSecondMessage] = useState(preset?.secondMessage ?? "");
   const [followUpEmailPresetId, setFollowUpEmailPresetId] = useState(preset?.followUpEmailPresetId ?? "none");
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +103,7 @@ export function PresetForm({
       sitting: sitting === "any" ? null : sitting === "yes",
       secondMessage: channel === "sms" ? secondMessage : null,
       followUpEmailPresetId: channel === "sms" && followUpEmailPresetId !== "none" ? followUpEmailPresetId : null,
+      pitchesListing: pitchesListing === "listing",
     };
 
     const result = isEditing
@@ -181,6 +183,22 @@ export function PresetForm({
                 </Select>
               </div>
             )}
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="pitches-listing">This message is about</Label>
+              <Select value={pitchesListing} onValueChange={setPitchesListing}>
+                <SelectTrigger id="pitches-listing" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="listing">The listing (moves it to the Pipeline)</SelectItem>
+                  <SelectItem value="agent">Me (the listing skips the Pipeline)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Pick &ldquo;me&rdquo; when the listing is just a reason to reach out, like Backup Option.
+              </p>
+            </div>
 
             {channel === "sms" && (
               <div className="flex flex-col gap-3 border-t pt-4">

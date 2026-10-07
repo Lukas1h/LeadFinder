@@ -142,7 +142,14 @@ async function recordReply(
       await db
         .update(listings)
         .set({ status: "declined", statusChangedAt: now })
-        .where(and(eq(listings.id, send.listingId), ne(listings.status, "booked")));
+        // An "outreach" listing was never pursued, so the no is the agent's
+        // (recorded above), not the property's.
+        .where(
+          and(
+            eq(listings.id, send.listingId),
+            inArray(listings.status, ["new", "saved", "contacted", "replied", "quoted"])
+          )
+        );
     } else {
       await db
         .update(listings)

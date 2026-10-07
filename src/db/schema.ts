@@ -32,6 +32,12 @@ export const LEAD_STATUSES = [
   "booked",
   "passed",
   "declined",
+  // Texted the agent about themselves, not this property (a "backup
+  // photographer" text from a template with pitchesListing off). The listing
+  // was only the reason to reach out: it leaves Leads so it isn't texted
+  // about twice, but stays out of the Pipeline, and replies move the agent,
+  // not the listing.
+  "outreach",
 ] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
@@ -568,6 +574,12 @@ export const messagePresets = pgTable("message_presets", {
   // be available as a scaffold even with zero sends. Unlike aiGenerated,
   // the variant body/subject stays fully user-editable.
   protected: boolean("protected").notNull().default(false),
+
+  // Whether a send from this preset pursues the listing itself (Coming Soon,
+  // Bad Photos, video: the listing goes to the Pipeline as "contacted") or
+  // just uses it as the reason to text the agent about Lukas (Backup Option:
+  // the listing goes to "outreach" and stays out of the Pipeline).
+  pitchesListing: boolean("pitches_listing").notNull().default(true),
 
   // SMS only. A short second text sent right after this one, by hand: tapping
   // Send copies it to the clipboard on the way into Messages, so it's one
