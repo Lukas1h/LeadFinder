@@ -160,6 +160,7 @@ export function registerListingTools(server: McpServer): void {
 
       const inserted = await insertAndEnrichListings([{ ...full, sourceLabel: "MCP import", status: "saved" }], {
         notificationUrl: "/pipeline",
+        agentAlreadyFetched: true,
       });
       if (inserted === 0) return errorText("Listing was not inserted (likely a duplicate zpid race) — try again");
 

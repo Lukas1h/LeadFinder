@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, bookings, listings, messageSends, type AgentRelationshipStatus } from "@/db/schema";
-import { normalizeName, normalizePhone } from "./normalize";
+import { normalizeEmail, normalizeName, normalizePhone } from "./normalize";
 
 /**
  * Find-or-create for the agent behind a listing, matching on name as well as
@@ -36,13 +36,17 @@ export async function resolveAgentId(
   if (!phone && !name) return null;
 
   if (phone) {
-    const [byPhone] = await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, phone));
+    const [byPhone] = await db.select({ id: agents.id, name: agents.name }).from(agents).where(eq(agents.phone, phone));
     if (byPhone) {
       // Skipped entirely when there's nothing new to write. A caller that only
       // wants the id (ensureAgentsBackfilled resolving a listing's agent, say)
       // passes no patch and often no name, and Drizzle rejects an empty set()
       // outright rather than treating it as the no-op it is.
-      const changes = { ...patch, ...(name ? { name } : {}) };
+      //
+      // A listing only fills in a missing name. Listing feeds name teams
+      // ("DeAnna & Dyan" for Dyan Lane), and renaming someone Lukas knows by
+      // name makes them hard to find.
+      const changes = { ...patch, ...(name && !byPhone.name ? { name } : {}) };
       if (Object.keys(changes).length > 0) {
         await db.update(agents).set(changes).where(eq(agents.id, byPhone.id));
       }
@@ -91,11 +95,35 @@ export async function resolveAgentId(
 export async function linkListingToAgent(
   listingId: string,
   agentPhone: string | null,
-  agentName: string | null
+  agentName: string | null,
+  agentEmail: string | null = null
 ): Promise<string | null> {
-  const agentId = await resolveAgentId(agentPhone, agentName);
+  const phone = agentPhone ? normalizePhone(agentPhone) : null;
+  const email = agentEmail ? normalizeEmail(agentEmail) : null;
+
+  // An email (from a Compass lookup) can find the record a cold-email import
+  // already made for this person, with its whole send history. A phone match
+  // still wins, the same as resolveAgentId: the email-only record only takes
+  // the listing when nobody on file has the phone yet.
+  let agentId: string | null = null;
+  if (email) {
+    const [byPhone] = phone ? await db.select({ id: agents.id }).from(agents).where(eq(agents.phone, phone)) : [];
+    const [byEmail] = await db.select({ id: agents.id, phone: agents.phone }).from(agents).where(eq(agents.email, email));
+    if (!byPhone && byEmail) {
+      agentId = byEmail.id;
+      if (!byEmail.phone && phone) await db.update(agents).set({ phone }).where(eq(agents.id, byEmail.id));
+    }
+  }
+
+  agentId ??= await resolveAgentId(agentPhone, agentName);
   if (agentId) {
     await db.update(listings).set({ agentId }).where(eq(listings.id, listingId));
+    if (email) {
+      const [taken] = await db.select({ id: agents.id }).from(agents).where(eq(agents.email, email));
+      if (!taken) {
+        await db.update(agents).set({ email }).where(and(eq(agents.id, agentId), isNull(agents.email)));
+      }
+    }
   }
   return agentId;
 }

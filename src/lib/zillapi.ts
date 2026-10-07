@@ -312,7 +312,7 @@ export async function fetchNewListings(options: FetchNewListingsOptions): Promis
     .filter((l): l is NewListing => l !== null);
 }
 
-interface AgentInfo {
+export interface AgentInfo {
   agentName: string | null;
   agentPhone: string | null;
   brokerName: string | null;

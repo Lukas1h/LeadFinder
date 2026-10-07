@@ -240,7 +240,7 @@ export async function importListingFromUrl(url: string): Promise<ImportListingRe
 
   const inserted = await insertAndEnrichListings(
     [{ ...full, sourceLabel: "Manual import", status: "saved" }],
-    { notificationUrl: "/pipeline" }
+    { notificationUrl: "/pipeline", agentAlreadyFetched: true }
   );
 
   revalidatePath("/", "layout");
@@ -288,7 +288,7 @@ export async function importListingsFromUrls(urls: string[]): Promise<ImportList
     .map((full) => ({ ...full, sourceLabel: "Manual import", status: "saved" as const }));
   failed += newZpids.length - candidates.length;
 
-  const inserted = await insertAndEnrichListings(candidates, { notificationUrl: "/pipeline" });
+  const inserted = await insertAndEnrichListings(candidates, { notificationUrl: "/pipeline", agentAlreadyFetched: true });
 
   revalidatePath("/", "layout");
 

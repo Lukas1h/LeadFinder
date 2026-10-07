@@ -103,7 +103,7 @@ export function hasNoAgent(listing: LeadSectionInput): boolean {
  * (Coldwell Banker Mountain West is a normal brokerage).
  */
 const BUILDER_BROKER =
-  /\b(lennar|d\.?\s?r\.?\s?horton|sekisui|pulte|del webb|toll brothers|kb home|weekley|taylor morrison|richmond american|meritage|century communities|hayden homes|pahlisch|holt homes|stone ?bridge homes|legend homes|adair homes|woodbridge homes|kda homes|pacific lifestyle homes|custom homes|new home (co|company)|homes,? inc|homes llc|sales corp|home ?builders?|builders?|construction|communities)\b/i;
+  /\b(lennar|d\.?\s?r\.?\s?horton|sekisui|pulte|del webb|toll brothers|kb home|weekley|taylor morrison|richmond american|meritage|century communities|hayden homes|pahlisch|holt homes|stone ?bridge homes|legend homes|adair homes|woodbridge homes|kda homes|pacific lifestyle homes|custom homes|new home (co|company|star)|homes,? inc|homes llc|sales corp|home ?builders?|builders?|construction|communities)\b/i;
 
 export function isBuilderListing(brokerName: string | null | undefined): boolean {
   return !!brokerName && BUILDER_BROKER.test(brokerName);

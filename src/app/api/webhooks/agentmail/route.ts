@@ -217,7 +217,8 @@ async function handle(req: Request): Promise<Response> {
       return { ...l, ...fromEmail, sourceLabel: "Zillow email alert" } satisfies NewListing;
     });
 
-  const inserted = await insertAndEnrichListings(candidates);
+  // fetchFullListing already asked Zillapi about the agent.
+  const inserted = await insertAndEnrichListings(candidates, { agentAlreadyFetched: true });
 
   if (staleRecommendations.length > 0) {
     console.log("agentmail webhook: skipped stale recommendations", staleRecommendations);

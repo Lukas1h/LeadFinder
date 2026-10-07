@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { listings, searchSources, agents, type NewListing } from "@/db/schema";
-import { fetchNewListings, fetchAgentInfo } from "@/lib/zillapi";
+import { fetchNewListings, fetchAgentInfo, type AgentInfo } from "@/lib/zillapi";
+import { fetchCompassAgent } from "@/lib/compass";
 import { scorePhotos } from "@/lib/photoScore";
 import { notifyNewListings, notifyWarmListings } from "@/lib/push";
 import { FEW_PHOTOS_THRESHOLD, WARM_AGENT_STATUSES } from "@/lib/pipeline";
@@ -46,6 +47,35 @@ const SCORE_RETRY_LIMIT = 20;
 // every single sync run.
 const AGENT_RETRY_WINDOW_DAYS = 3;
 const AGENT_RETRY_LIMIT = 20;
+
+type AgentLookup = AgentInfo & { agentEmail: string | null };
+
+/**
+ * Finds a listing's agent. Zillapi costs a credit and can't name the agent on
+ * Oregon Datashare listings (Medford, Grants Pass, Bend: it only has the
+ * brokerage), while Compass is free and does — see src/lib/compass.ts. So
+ * Compass fills whatever Zillapi leaves blank, and `zillapi` says where the
+ * paid lookup goes: "first" for search results, "never" when the caller
+ * already fetched the full listing, "last" for retries, where Compass is tried
+ * before spending another credit on a listing that came back empty once.
+ */
+async function lookUpAgent(
+  row: { zpid: string; address: string | null; city: string | null; price: number | null },
+  zillapi: "first" | "last" | "never"
+): Promise<AgentLookup> {
+  let result: AgentLookup = { agentName: null, agentPhone: null, brokerName: null, agentEmail: null };
+  const merge = (found: Partial<AgentLookup> | null) => {
+    if (!found) return;
+    for (const [key, value] of Object.entries(found)) {
+      if (value) result = { ...result, [key]: value };
+    }
+  };
+
+  if (zillapi === "first") merge(await fetchAgentInfo(row.zpid));
+  if (!result.agentPhone) merge(await fetchCompassAgent(row).catch(() => null));
+  if (!result.agentPhone && zillapi === "last") merge(await fetchAgentInfo(row.zpid));
+  return result;
+}
 
 export interface SyncResult {
   fetched: number;
@@ -107,7 +137,7 @@ export async function runSync(): Promise<SyncResult> {
 async function retryMissingAgentInfo(): Promise<number> {
   const cutoff = new Date(Date.now() - AGENT_RETRY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const candidates = await db
-    .select({ id: listings.id, zpid: listings.zpid })
+    .select({ id: listings.id, zpid: listings.zpid, address: listings.address, city: listings.city, price: listings.price })
     .from(listings)
     .where(and(isNull(listings.agentPhone), gte(listings.foundAt, cutoff)));
 
@@ -119,7 +149,7 @@ async function retryMissingAgentInfo(): Promise<number> {
     const batch = eligible.slice(i, i + ENRICHMENT_CONCURRENCY);
     await Promise.all(
       batch.map(async (row) => {
-        const agent = await fetchAgentInfo(row.zpid);
+        const agent = await lookUpAgent(row, "last");
         if (!agent.agentName && !agent.agentPhone && !agent.brokerName) return;
 
         const update: Record<string, unknown> = {};
@@ -130,7 +160,7 @@ async function retryMissingAgentInfo(): Promise<number> {
         await db.update(listings).set(update).where(eq(listings.id, row.id));
         // Same as the insert path: the agent only just became known, so link
         // the listing to a record now rather than leaving it phone-derived.
-        await linkListingToAgent(row.id, agent.agentPhone, agent.agentName);
+        await linkListingToAgent(row.id, agent.agentPhone, agent.agentName, agent.agentEmail);
         updated++;
       })
     );
@@ -206,7 +236,11 @@ async function retryMissingPhotoScores(): Promise<number> {
  */
 export async function insertAndEnrichListings(
   candidates: NewListing[],
-  options?: { notificationUrl?: string }
+  options?: {
+    notificationUrl?: string;
+    /** The rows came from a full listing fetch, so Zillapi has nothing more to say about the agent. */
+    agentAlreadyFetched?: boolean;
+  }
 ): Promise<number> {
   candidates = await dropDuplicateListings(candidates);
   if (candidates.length === 0) return 0;
@@ -223,6 +257,7 @@ export async function insertAndEnrichListings(
       agentName: listings.agentName,
       address: listings.address,
       city: listings.city,
+      price: listings.price,
     });
 
   // Which inserted listing ended up attached to which agent record — the same
@@ -241,7 +276,7 @@ export async function insertAndEnrichListings(
         // a score nobody needs.
         const enoughPhotosToScore = (row.photos?.length ?? 0) >= FEW_PHOTOS_THRESHOLD;
         const [agent, photoScore] = await Promise.all([
-          row.agentPhone ? null : fetchAgentInfo(row.zpid),
+          row.agentPhone ? null : lookUpAgent(row, options?.agentAlreadyFetched ? "never" : "first"),
           enoughPhotosToScore ? scorePhotos(row.photos) : Promise.resolve({ score: null, reasoning: null }),
         ]);
 
@@ -264,7 +299,8 @@ export async function insertAndEnrichListings(
         const agentId = await linkListingToAgent(
           row.id,
           agent?.agentPhone ?? row.agentPhone,
-          agent?.agentName ?? row.agentName
+          agent?.agentName ?? row.agentName,
+          agent?.agentEmail
         );
         if (agentId) agentIdByListing.set(row.id, agentId);
       })
