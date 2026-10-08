@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { UserPlus, Phone, PhoneIncoming, MessageCircle, Mail, History, CalendarCheck, Pencil, Trash2, Users, Clock } from "lucide-react";
+import { UserPlus, Phone, PhoneIncoming, MessageCircle, MessagesSquare, Mail, History, CalendarCheck, Pencil, Trash2, Users, Clock } from "lucide-react";
 import { getAgentTimeline, startPendingInteraction, type TimelineItem } from "./interactionActions";
 import { AddInteractionDialog } from "./AddInteractionDialog";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
@@ -494,6 +494,16 @@ export function AgentDetailDialog({
                 <Pencil />
                 Edit
               </Button>
+              {/* Just opens the thread to read back through it. Unlike Text, it
+                  logs nothing, so there's no "did you send it?" to undo. */}
+              {agent.phone && (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={smsUrl(agent.phone, "")}>
+                    <MessagesSquare />
+                    Messages
+                  </a>
+                </Button>
+              )}
               {agent.name && <FindLinkButton label="profile" initialUrl={agent.realtorProfileUrl} onFind={findAgentProfile} />}
               {!agent.email && <FindEmailButton agent={agent} onSaved={showSaved} />}
               <Button variant="outline" size="sm" className="ml-auto" asChild>
