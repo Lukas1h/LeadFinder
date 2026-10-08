@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { agents, bookings, listings } from "@/db/schema";
-import { eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { brokerageByAgent } from "@/lib/agentBrokerage";
 import { estimateDriveMinutes } from "@/lib/driveTime";
 
@@ -20,7 +20,7 @@ export interface OfficeClient {
   name: string | null;
   brokerage: string;
   address: string | null;
-  /** Cities of their jobs — the area the connection means something in. */
+  /** Cities of their jobs and listings — the area the connection means something in. */
   cities: string[];
 }
 
@@ -87,6 +87,17 @@ export async function clientOffices(): Promise<Map<string, OfficeClient[]>> {
     };
     byAgent.set(b.agentId!, client);
     offices.set(key, [...(offices.get(key) ?? []), client]);
+  }
+
+  // Where they list counts as their area too: Kristi works out of Eugene even
+  // though the job was in Roseburg.
+  const listed = byAgent.size === 0 ? [] : await db
+    .selectDistinct({ agentId: listings.agentId, city: listings.city })
+    .from(listings)
+    .where(and(inArray(listings.agentId, [...byAgent.keys()]), isNotNull(listings.city)));
+  for (const l of listed) {
+    const client = byAgent.get(l.agentId!);
+    if (client && l.city && !client.cities.includes(l.city)) client.cities.push(l.city);
   }
   return offices;
 }
