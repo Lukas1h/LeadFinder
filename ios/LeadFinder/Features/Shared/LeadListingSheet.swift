@@ -41,13 +41,6 @@ struct LeadListingSheet: View {
         if let urls = listing.photos, !urls.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 PhotoCarousel(photos: urls, alt: listing.address ?? "Listing photos", alwaysShowControls: true)
-                if let total = listing.photoCount, total > urls.count {
-                    Text("Showing \(urls.count) of \(total) photos")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.tertiaryText)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 4)
-                }
             }
         }
     }

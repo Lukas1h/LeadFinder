@@ -53,12 +53,6 @@ struct LeadDetailView: View {
                     alt: listing.address ?? "Listing photos",
                     alwaysShowControls: true
                 )
-                if let total = listing.photoCount, total > urls.count {
-                    Text("Showing \(urls.count) of \(total) photos")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.tertiaryText)
-                        .padding(.horizontal, 16)
-                }
             }
         }
     }

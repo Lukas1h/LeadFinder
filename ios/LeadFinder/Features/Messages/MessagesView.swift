@@ -10,21 +10,7 @@ import SwiftUI
 struct MessagesView: View {
     @Environment(AppState.self) private var appState
 
-    /// Which channel the by-day chart is showing.
-    @State private var chartChannel: Channel = .sms
     @State private var openSend: MessagesResponse.Send?
-
-    enum Channel: String, CaseIterable {
-        case sms
-        case email
-
-        var title: String {
-            switch self {
-            case .sms: "Texts"
-            case .email: "Emails"
-            }
-        }
-    }
 
     var body: some View {
         NavigationStack {
@@ -59,7 +45,7 @@ struct MessagesView: View {
 
             // The web hides both cards when there's nothing to show, rather than
             // printing a wall of zeroes.
-            if messages.stats.sms.sent + messages.stats.email.sent == 0 && messages.sends.isEmpty {
+            if messages.stats.sms.sent == 0 && messages.sends.isEmpty {
                 EmptyStateView(
                     icon: "paperplane",
                     title: "Nothing sent yet",
@@ -85,8 +71,8 @@ struct MessagesView: View {
 
     // MARK: - Stats card
 
-    /// The web's four headline numbers. Note the 30-day window applies to "sent"
-    /// only — reply and booked rates are all-time, exactly as on the web.
+    /// The web's three headline numbers, texting only. The 30-day window applies
+    /// to "sent" only — reply and booked rates are all-time, as on the web.
     private func statsCard(_ stats: MessagesResponse.Stats) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             LazyVGrid(
@@ -95,18 +81,13 @@ struct MessagesView: View {
             ) {
                 stat(
                     "Last 30 days",
-                    "\(stats.sms.sentRecent + stats.email.sentRecent) sent",
-                    "\(stats.sms.sentRecent) texts · \(stats.email.sentRecent) emails"
+                    "\(stats.sms.sentRecent) sent",
+                    "texts"
                 )
                 stat(
                     "Text replies",
                     Self.rate(stats.sms.replied, stats.sms.sent),
                     "\(stats.sms.replied) of \(stats.sms.sent) texts"
-                )
-                stat(
-                    "Email replies",
-                    Self.rate(stats.email.replied, stats.email.sent),
-                    "\(stats.email.replied) of \(stats.email.sent) emails"
                 )
                 stat(
                     "Booked",
@@ -147,75 +128,67 @@ struct MessagesView: View {
 
     // MARK: - Reply rate by day
 
+    /// Texts only, as on the web: cold email was a one-off campaign and its
+    /// reply rate sat next to live texting making it look worse.
     private func replyByDay(_ stats: MessagesResponse.Stats) -> some View {
-        let buckets = chartChannel == .sms ? stats.byDay.sms : stats.byDay.email
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Reply rate by day sent")
+                .font(.headline)
+                .foregroundStyle(Theme.primaryText)
 
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Reply rate by day sent")
-                    .font(.headline)
-                    .foregroundStyle(Theme.primaryText)
-                Spacer(minLength: 0)
-                Picker("Channel", selection: $chartChannel) {
-                    ForEach(Channel.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 150)
-            }
-
-            ReplyByDayChart(buckets: buckets)
+            ReplyByDayChart(buckets: stats.byDay.sms)
         }
         .card(padding: 14)
     }
 
     // MARK: - Top templates
 
+    /// One row per template with the numbers on a second line. The web's
+    /// four-column grid wraps "44 · 33%" onto two lines at phone widths, which
+    /// makes the whole block unreadable.
     private func topTemplates(_ templates: [MessagesResponse.Template]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Top templates")
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.primaryText)
 
-            HStack {
-                Text("Template").frame(maxWidth: .infinity, alignment: .leading)
-                Text("Sent").frame(width: 40, alignment: .trailing)
-                Text("Replies").frame(width: 56, alignment: .trailing)
-                Text("Booked").frame(width: 52, alignment: .trailing)
-            }
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(Theme.tertiaryText)
-
             ForEach(templates) { template in
-                HStack {
-                    Label {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperplane")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.tertiaryText)
                         Text(template.name)
-                            .font(.subheadline)
+                            .font(.subheadline.weight(.medium))
                             .foregroundStyle(Theme.primaryText)
                             .lineLimit(1)
-                    } icon: {
-                        Image(systemName: template.channel == "email" ? "envelope" : "paperplane")
-                            .font(.caption)
-                            .foregroundStyle(Theme.tertiaryText)
+                        Spacer(minLength: 0)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text("\(template.sent)")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.secondaryText)
-                        .frame(width: 40, alignment: .trailing)
-                    Text("\(template.replied) · \(Self.rate(template.replied, template.sent))")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.secondaryText)
-                        .frame(width: 56, alignment: .trailing)
-                    Text(template.booked > 0 ? "\(template.booked)" : "—")
-                        .font(.subheadline)
-                        .foregroundStyle(template.booked > 0 ? Theme.positive : Theme.tertiaryText)
-                        .frame(width: 52, alignment: .trailing)
+                    HStack(spacing: 6) {
+                        number("\(template.sent) sent")
+                        number("\(template.replied) replies")
+                        number(Self.rate(template.replied, template.sent))
+                        if template.booked > 0 {
+                            Text("\(template.booked) booked")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Theme.positive)
+                        }
+                    }
                 }
-                .padding(.vertical, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .card(padding: 14)
+    }
+
+    private func number(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundStyle(Theme.tertiaryText)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Theme.cardRaised, in: Capsule())
     }
 
     // MARK: - History
@@ -303,10 +276,6 @@ struct ReplyByDayChart: View {
                 }
             }
             .frame(height: 62, alignment: .bottom)
-
-            Text("Faded days have too few sends to tell yet.")
-                .font(.caption2)
-                .foregroundStyle(Theme.tertiaryText)
         }
     }
 
