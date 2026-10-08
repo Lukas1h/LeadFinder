@@ -1,5 +1,6 @@
 "use server";
 
+import { clientOffices, officeClientFor } from "@/lib/clientOffices";
 import { db } from "@/db";
 import {
   listings,
@@ -167,6 +168,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       comingSoon: messagePresets.comingSoon,
       sitting: messagePresets.sitting,
       secondMessage: messagePresets.secondMessage,
+      sameOffice: messagePresets.sameOffice,
       variantId: messagePresetVariants.id,
       label: messagePresetVariants.label,
       body: messagePresetVariants.body,
@@ -197,15 +199,29 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
     else rowsByPreset.set(row.presetId, [row]);
   }
 
+  // Same rules as the Leads page's "Same office" group: a real agent, not the
+  // client or someone who declined, near where the client works.
+  const [offices, [listingAgent]] = await Promise.all([
+    clientOffices(),
+    listing.agentId
+      ? db.select({ id: agents.id, status: agents.relationshipStatus }).from(agents).where(eq(agents.id, listing.agentId))
+      : Promise.resolve([]),
+  ]);
+  const office = listingAgent ? officeClientFor(offices, listing.brokerName, [listing.city]) : null;
+  const officeClient = office && office.agentId !== listingAgent?.id && listingAgent?.status !== "declined" ? office : null;
+
   const aiPreset = await getAiPreset(type);
   const recommendedPresetId = pickRecommendedPreset(
     Array.from(rowsByPreset.values()).map((group) => ({ ...group[0], id: group[0].presetId })),
     aiPreset,
     listingMatchFacts(listing),
-    await isKnownAgent(listing.agentId)
+    await isKnownAgent(listing.agentId),
+    officeClient != null
   );
 
-  const presets: PresetOption[] = Array.from(rowsByPreset.values()).map((group) => {
+  // An office template is a false statement for anyone else, so it's only offered when it fits.
+  const offered = Array.from(rowsByPreset.values()).filter((group) => !group[0].sameOffice || officeClient);
+  const presets: PresetOption[] = offered.map((group) => {
     const minCount = Math.min(...group.map((r) => countByVariant.get(r.variantId) ?? 0));
     const leastUsed = group
       .filter((r) => (countByVariant.get(r.variantId) ?? 0) === minCount)
@@ -217,7 +233,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       presetName: picked.presetName,
       variantId: picked.variantId,
       variantLabel: picked.label,
-      text: renderMessageBody(picked.body, listing.agentName, listing.address, listing.city),
+      text: renderMessageBody(picked.body, listing.agentName, listing.address, listing.city, officeClient?.name ?? null),
       recommended: picked.presetId === recommendedPresetId,
       blank: picked.protected,
       secondMessage: picked.secondMessage,

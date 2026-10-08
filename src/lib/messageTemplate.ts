@@ -19,7 +19,8 @@ export function renderMessageBody(
   body: string,
   agentName: string | null,
   address: string | null,
-  city: string | null = null
+  city: string | null = null,
+  officeClient: string | null = null
 ): string {
   const name = firstName(agentName);
   const street = naturalStreetName(address) ?? "your property";
@@ -28,7 +29,8 @@ export function renderMessageBody(
     .replaceAll("{{firstName}}", name ?? "there")
     .replaceAll("{{street}}", street)
     .replaceAll("{{city}}", cityName)
-    .replaceAll("{{area}}", areaPhrase(city) ?? "around Oregon");
+    .replaceAll("{{area}}", areaPhrase(city) ?? "around Oregon")
+    .replaceAll("{{officeClient}}", firstName(officeClient) ?? "someone in your office");
 }
 
 /**

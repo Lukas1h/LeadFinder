@@ -550,6 +550,11 @@ export const messagePresets = pgTable("message_presets", {
   // AI draft takes the sitting ones, since it can mention the cut or the time
   // on market and a fixed template can't.
   sitting: boolean("sitting"),
+  // A template written around a client in the agent's office ("I recently did
+  // some work for {{officeClient}}"). Only offered, and always recommended,
+  // for a lead whose agent is in the same office as a client (see
+  // lib/clientOffices.ts); never for anyone else, since the line would be false.
+  sameOffice: boolean("same_office").notNull().default(false),
 
   // Marks the one system preset per type whose "variants" aren't
   // hand-written — each is drafted live per listing by draftMessage() (see
