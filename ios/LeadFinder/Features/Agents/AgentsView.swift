@@ -45,6 +45,18 @@ struct AgentsView: View {
                 }
             }
             .task { await appState.agents.load() }
+            .task {
+                #if DEBUG
+                guard DebugLaunchArguments.opensAgent else { return }
+                for _ in 0..<60 {
+                    if let first = appState.agents.value?.agents.first {
+                        openAgent = first
+                        return
+                    }
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+                #endif
+            }
             .searchable(
                 text: $query,
                 placement: .navigationBarDrawer(displayMode: .always),
@@ -310,8 +322,8 @@ struct AgentDirectoryDetail: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     // MARK: - Listings and bookings
@@ -328,8 +340,8 @@ struct AgentDirectoryDetail: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
             .card()
+            .padding(.horizontal, 16)
         }
     }
 
@@ -345,8 +357,8 @@ struct AgentDirectoryDetail: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
             .card()
+            .padding(.horizontal, 16)
         }
     }
 
@@ -377,8 +389,8 @@ struct AgentDirectoryDetail: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
             .card()
+            .padding(.horizontal, 16)
         }
     }
 
@@ -416,8 +428,8 @@ struct AgentDirectoryDetail: View {
                     .foregroundStyle(Theme.primaryText)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
             .card()
+            .padding(.horizontal, 16)
         }
     }
 

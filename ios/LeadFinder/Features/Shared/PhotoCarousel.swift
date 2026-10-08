@@ -80,7 +80,7 @@ struct PhotoCarousel: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(.black.opacity(0.55), in: Capsule())
-                    .padding(6)
+                    .padding(8)
             }
         }
         .accessibilityLabel(alt.isEmpty ? "Listing photos" : alt)
@@ -92,7 +92,7 @@ struct PhotoCarousel: View {
             arrowButton("chevron.right") { step(1) }
         }
         .opacity(alwaysShowControls ? 1 : 0.9)
-        .padding(6)
+        .padding(8)
     }
 
     private func arrowButton(_ symbol: String, action: @escaping () -> Void) -> some View {

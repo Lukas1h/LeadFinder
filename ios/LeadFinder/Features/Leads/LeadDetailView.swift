@@ -21,12 +21,16 @@ struct LeadDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 photos
-                listingFacts
-                if !group.badges.isEmpty { badgeReasons }
-                agentBlock
-                if !group.others.isEmpty { otherListings }
+                // Everything below the photo is inset; the photo itself runs to
+                // the edges.
+                VStack(alignment: .leading, spacing: 16) {
+                    listingFacts
+                    if !group.cardBadges.isEmpty { badgeReasons }
+                    agentBlock
+                    if !group.others.isEmpty { otherListings }
+                }
             }
-            .padding(.vertical, 12)
+            .padding(.bottom, 12)
         }
         .background(Theme.background)
         .navigationTitle(group.best.address?.nilIfBlank ?? "Lead")
@@ -98,8 +102,8 @@ struct LeadDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     private func chip(_ text: String) -> some View {
@@ -111,30 +115,33 @@ struct LeadDetailView: View {
             .background(Theme.cardRaised, in: Capsule())
     }
 
+    /// Each badge as its name in the badge's own colour, with the server's
+    /// reasoning underneath. The chips elsewhere are for scanning; here, where
+    /// there's room, the sentence is what actually matters — why this listing is
+    /// flagged, not merely that it is.
     private var badgeReasons: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 14) {
             sectionTitle("Badges")
-            FlowRow(spacing: 6) {
-                ForEach(group.badges, id: \.kind) { badge in
-                    BadgeChip(text: badge.label, tint: badge.badgeTint(photoScore: group.best.score))
-                }
-            }
-            // Why a badge is there matters as much as that it is: the server
-            // sends the reasoning (score reason, duplicate address).
-            ForEach(group.badges.filter { $0.detail != nil }, id: \.kind) { badge in
-                HStack(alignment: .top, spacing: 6) {
+
+            ForEach(group.cardBadges, id: \.kind) { badge in
+                VStack(alignment: .leading, spacing: 3) {
                     Text(badge.label)
-                        .font(.caption.weight(.semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(badge.badgeTint(photoScore: group.best.score))
-                    Text(badge.detail ?? "")
-                        .font(.caption)
-                        .foregroundStyle(Theme.tertiaryText)
+
+                    if let detail = badge.detail?.nilIfBlank {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     // MARK: - Agent
@@ -150,32 +157,17 @@ struct LeadDetailView: View {
                 relationshipStatus: group.agent?.relationshipStatus
             )
 
-            if let contact = group.contactLine {
-                Label(contact, systemImage: "clock.arrow.circlepath")
+            // Only what has actually happened — the web's line leads with
+            // "Never texted ·", which is a negative with no use here.
+            if let contact = group.contactSummary {
+                Text(contact)
                     .font(.caption)
                     .foregroundStyle(Theme.tertiaryText)
             }
-
-            let phone = (group.agentPhone ?? group.best.agentPhone)
-                .flatMap { $0.nilIfBlank?.filter(\.isNumber) }
-            if let phone, !phone.isEmpty {
-                Link(destination: URL(string: "tel://\(phone)")!) {
-                    Label("Call \(group.agentName ?? group.best.agentName ?? "agent")", systemImage: "phone")
-                        .font(.footnote)
-                }
-            }
-
-            if let email = group.agent?.email?.nilIfBlank {
-                Link(destination: URL(string: "mailto:\(email)")!) {
-                    Label(email, systemImage: "envelope")
-                        .font(.footnote)
-                        .lineLimit(1)
-                }
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     // MARK: - Other listings
@@ -191,8 +183,8 @@ struct LeadDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     private func sectionTitle(_ text: String) -> some View {

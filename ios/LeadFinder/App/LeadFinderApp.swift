@@ -103,6 +103,16 @@ enum DebugLaunchArguments {
         ProcessInfo.processInfo.arguments.contains("-lead-detail")
     }
 
+    /// `-contact` opens the Contact sheet on the first lead, for screenshotting.
+    static var opensContact: Bool {
+        ProcessInfo.processInfo.arguments.contains("-contact")
+    }
+
+    /// `-agent` opens the first agent's detail sheet on arrival.
+    static var opensAgent: Bool {
+        ProcessInfo.processInfo.arguments.contains("-agent")
+    }
+
     /// `-bookings` opens the Schedule tab's bookings page on arrival.
     static var opensBookings: Bool {
         ProcessInfo.processInfo.arguments.contains("-bookings")

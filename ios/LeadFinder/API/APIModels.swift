@@ -105,6 +105,9 @@ struct LeadsResponse: Codable, Sendable {
         var agentPhone: String?
         var brokerName: String?
         var contactLine: String?
+        /// When this agent was last texted. Separate from contactLine, which
+        /// leads with "Never texted ·", a negative the phone has no use for.
+        var textedAt: String?
         var knownGroup: String?
         var section: String
         var best: Listing
@@ -114,6 +117,28 @@ struct LeadsResponse: Codable, Sendable {
         var listingIds: [String]
 
         var id: String { key }
+
+        /// Only what has actually happened, for the card: "Texted Oct 5",
+        /// else "Emailed Sep 27", else nothing. Silence is the right way to say
+        /// an agent hasn't been contacted — "Never contacted" on every card is
+        /// just noise repeated a hundred times.
+        var contactSummary: String? {
+            if let textedAt, !textedAt.isEmpty {
+                return "Texted \(DateFormatting.monthDay.string(from: DateFormatting.parse(textedAt) ?? Date()))"
+            }
+            if let last = agent?.lastContactedAt.flatMap({ $0.nilIfBlank }),
+               let date = DateFormatting.parse(last) {
+                return "Emailed \(DateFormatting.monthDay.string(from: date))"
+            }
+            return nil
+        }
+
+        /// The card never shows "New": everything on the Leads page is by
+        /// definition a listing he hasn't acted on, so the badge is always true
+        /// and carries no information.
+        var cardBadges: [LeadBadge] {
+            badges.filter { $0.kind != "new" }
+        }
     }
 
     struct Section: Codable, Sendable, Identifiable {

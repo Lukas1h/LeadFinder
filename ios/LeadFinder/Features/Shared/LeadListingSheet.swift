@@ -15,12 +15,15 @@ struct LeadListingSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     photos
+                    // Re-inset the facts so they don't run into the photo's edges.
+                    VStack(alignment: .leading, spacing: 16) {
                     facts
                     if let agent {
                         agentRow(agent)
                     }
+                    }
                 }
-                .padding(.vertical, 12)
+                .padding(.bottom, 12)
             }
             .background(Theme.background)
             .navigationTitle(listing.address?.nilIfBlank ?? "Listing")
@@ -43,6 +46,7 @@ struct LeadListingSheet: View {
                         .font(.caption2)
                         .foregroundStyle(Theme.tertiaryText)
                         .padding(.horizontal, 16)
+                        .padding(.top, 4)
                 }
             }
         }
@@ -91,8 +95,8 @@ struct LeadListingSheet: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     private func agentRow(_ agent: Agent) -> some View {
@@ -109,8 +113,8 @@ struct LeadListingSheet: View {
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     private func chip(_ text: String) -> some View {

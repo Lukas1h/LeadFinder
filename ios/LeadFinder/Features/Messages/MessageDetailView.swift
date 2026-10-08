@@ -26,8 +26,8 @@ struct MessageDetailView: View {
                         .font(.footnote)
                         .foregroundStyle(Theme.danger)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
                         .card()
+                        .padding(.horizontal, 16)
                 }
 
                 actions
@@ -102,8 +102,8 @@ struct MessageDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     private var outcomeTint: Color {
@@ -147,8 +147,8 @@ struct MessageDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
@@ -193,24 +193,18 @@ struct MessageDetailView: View {
                 .foregroundStyle(Theme.tertiaryText)
                 .kerning(0.6)
 
+            // Just a reference: calling and emailing an agent belongs on their
+            // own screen, not on every row that happens to mention them.
             AgentRow(
                 name: agent.displayName,
                 phone: agent.phone,
                 subtitle: agent.email,
                 relationshipStatus: agent.relationshipStatus
             )
-
-            if let email = agent.email?.nilIfBlank {
-                Link(destination: URL(string: "mailto:\(email)")!) {
-                    Label(email, systemImage: "envelope")
-                        .font(.footnote)
-                        .lineLimit(1)
-                }
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     private func listingCard(_ listing: Listing) -> some View {
@@ -222,8 +216,8 @@ struct MessageDetailView: View {
             ListingRow(listing: listing)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     private func bodyCard(_ text: String) -> some View {
@@ -240,8 +234,8 @@ struct MessageDetailView: View {
                 .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     /// The web offers to send this preset's sample email. The phone says what it
@@ -256,8 +250,8 @@ struct MessageDetailView: View {
                 .foregroundStyle(Theme.tertiaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
         .card()
+        .padding(.horizontal, 16)
     }
 
     private func load() async {

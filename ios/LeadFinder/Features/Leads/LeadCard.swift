@@ -9,6 +9,9 @@ import SwiftUI
 struct LeadCard: View {
     let group: LeadsResponse.Group
     var onShowListing: (() -> Void)?
+    /// Debug only: opens the contact sheet as soon as this card appears, so the
+    /// sheet can be screenshotted without tapping through to it.
+    var openContactOnAppear: Bool = false
 
     @State private var showOthers = false
     @State private var showContact = false
@@ -25,6 +28,11 @@ struct LeadCard: View {
             if !group.others.isEmpty { othersDisclosure }
         }
         .card(padding: 14)
+        .task {
+            #if DEBUG
+            if openContactOnAppear { showContact = true }
+            #endif
+        }
         .sheet(isPresented: $showContact) {
             ContactSheet(
                 listingId: group.best.id,
@@ -119,8 +127,9 @@ struct LeadCard: View {
                         BadgeChip(text: status.relationshipLabel, tint: status.relationshipTint)
                     }
                 }
-                // Contact first, as on the web: brokerage names truncate.
-                Text([group.contactLine, group.brokerName]
+                // Contact first, as on the web: brokerage names truncate. Only
+                // what has actually happened — no "Never texted" on every card.
+                Text([group.contactSummary, group.brokerName]
                     .compactMap { $0 }
                     .joined(separator: " · "))
                     .font(.caption)
@@ -128,11 +137,6 @@ struct LeadCard: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-            if totalListings > 1 {
-                Text("\(totalListings) listings")
-                    .font(.caption)
-                    .foregroundStyle(Theme.tertiaryText)
-            }
         }
     }
 
@@ -157,9 +161,9 @@ struct LeadCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.leading)
 
-            if !group.badges.isEmpty {
+            if !group.cardBadges.isEmpty {
                 FlowRow(spacing: 5) {
-                    ForEach(group.badges, id: \.kind) { badge in
+                    ForEach(group.cardBadges, id: \.kind) { badge in
                         BadgeChip(text: badge.label, tint: badge.badgeTint(photoScore: group.best.score))
                     }
                 }
@@ -232,7 +236,6 @@ struct LeadCard: View {
         }
     }
 
-    private var totalListings: Int { group.others.count + 1 }
 }
 
 /// Wraps badge chips to the next line instead of truncating, the way the web's

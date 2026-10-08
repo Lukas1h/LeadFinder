@@ -10,6 +10,7 @@ struct LeadsView: View {
     @State private var collapsed: Set<String> = []
     @State private var didSetInitialCollapse = false
     @State private var openLead: LeadsResponse.Group?
+    @State private var contactKey: String?
 
     var body: some View {
         NavigationStack {
@@ -37,7 +38,11 @@ struct LeadsView: View {
                 guard DebugLaunchArguments.opensLeadDetail else { return }
                 for _ in 0..<60 {
                     if let first = appState.leads.value?.sections.first?.groups.first {
-                        openLead = first
+                        if DebugLaunchArguments.opensContact {
+                            contactKey = first.key
+                        } else {
+                            openLead = first
+                        }
                         return
                     }
                     try? await Task.sleep(for: .milliseconds(250))
@@ -138,7 +143,10 @@ struct LeadsView: View {
             if !isCollapsed {
                 ForEach(section.groups) { group in
                     Button { openLead = group } label: {
-                        LeadCard(group: group)
+                        LeadCard(
+                            group: group,
+                            openContactOnAppear: DebugLaunchArguments.opensContact && contactKey == group.key
+                        )
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 16)
