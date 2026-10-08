@@ -49,14 +49,10 @@ async function findResults(
   }
 }
 
-export async function findFirstResultUrl(query: string, domain?: string): Promise<string | null> {
-  const [result] = await findResults(query, domain, 1);
-  return result?.url ?? null;
-}
-
 /**
- * Same as findFirstResultUrl, but for site-restricted address searches
- * where a wrong (or generic search-page) match is worse than no match.
+ * The listing's own page on a site (Redfin, realtor.com), for site-restricted
+ * address searches where a wrong (or generic search-page) match is worse than
+ * no match.
  * Problems verified live on realtor.com, all for real addresses:
  *  - Redfin doesn't have every Zillow-sourced listing indexed, and without
  *    a check Tavily happily returns a *different*, nearby property's page
@@ -88,22 +84,5 @@ export async function findFirstAddressResultUrl(query: string, domain: string, s
     if (streetName && !title.includes(streetName.toLowerCase())) return false;
     return true;
   });
-  return match?.url ?? null;
-}
-
-/**
- * Like findFirstResultUrl, but scans a few results and returns the first
- * whose title contains every word of `name` — a bare-name search for a
- * common surname doesn't reliably rank the right person's own profile
- * first. Verified live on zillow.com: a plain "Chandra Reynolds" search
- * ranked a generic zip-code reviews page above her actual profile, and a
- * differently-phrased query matched an unrelated "Joan Reynolds" outright.
- * Requiring every name token to appear in the title is a cheap guard
- * against landing on the wrong person's page.
- */
-export async function findFirstNameMatchResultUrl(name: string, domain: string): Promise<string | null> {
-  const results = await findResults(name, domain, 5, "advanced");
-  const tokens = name.toLowerCase().split(/\s+/).filter(Boolean);
-  const match = results.find((r) => tokens.every((t) => r.title?.toLowerCase().includes(t)));
   return match?.url ?? null;
 }

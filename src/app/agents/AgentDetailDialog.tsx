@@ -4,14 +4,13 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { UserPlus, Phone, PhoneIncoming, MessageCircle, MessagesSquare, Mail, History, CalendarCheck, Pencil, Trash2, Users, Clock } from "lucide-react";
+import { UserPlus, Phone, PhoneIncoming, MessageCircle, MessagesSquare, Mail, Search, History, CalendarCheck, Pencil, Trash2, Users, Clock } from "lucide-react";
 import { getAgentTimeline, startPendingInteraction, type TimelineItem } from "./interactionActions";
 import { AddInteractionDialog } from "./AddInteractionDialog";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { formatDate, formatPrice } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { ListingRow } from "@/app/ListingRow";
-import { FindLinkButton } from "@/app/FindLinkButton";
 import { ComposeEmailDialog } from "@/app/messaging/ComposeEmailDialog";
 import { FindEmailButton } from "./FindEmailButton";
 import { RelationshipBadge } from "@/app/badges";
@@ -23,7 +22,6 @@ import {
   updateAgentContactInfo,
   updateAgentStats,
   deleteAgent,
-  findAgentProfileUrl,
   getAgentListings,
   getAgentById,
 } from "./actions";
@@ -283,11 +281,6 @@ export function AgentDetailDialog({
     router.refresh();
   };
 
-  const findAgentProfile = async () => {
-    const fallback = `https://www.google.com/search?q=${encodeURIComponent(`${agent.name} zillow`)}`;
-    return (await findAgentProfileUrl(agent).catch(() => null)) ?? fallback;
-  };
-
   const [history, setHistory] = useState<TimelineItem[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   // Bumped after logging an interaction so the timeline refetches in place.
@@ -504,7 +497,18 @@ export function AgentDetailDialog({
                   </a>
                 </Button>
               )}
-              {agent.name && <FindLinkButton label="profile" initialUrl={agent.realtorProfileUrl} onFind={findAgentProfile} />}
+              {agent.name && (
+                <Button variant="outline" size="sm" asChild>
+                  <a
+                    href={`https://www.google.com/search?q=${encodeURIComponent(`${agent.name} real estate oregon`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Search />
+                    Google
+                  </a>
+                </Button>
+              )}
               {!agent.email && <FindEmailButton agent={agent} onSaved={showSaved} />}
               <Button variant="outline" size="sm" className="ml-auto" asChild>
                 <a href={`/api/agents/${agent.id}/vcard`}>
