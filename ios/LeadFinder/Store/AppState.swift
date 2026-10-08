@@ -75,5 +75,6 @@ final class AppState {
         // Pull everything once at launch so tab switches are instant and the
         // two big payloads are already decoded when their tab opens.
         await leads.load()
+        await CallerIDSync.syncIfChanged()
     }
 }

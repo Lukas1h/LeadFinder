@@ -35,6 +35,8 @@ targets:
     platform: iOS
     sources:
       - path: LeadFinder
+    dependencies:
+      - target: CallerID
     info:
       path: LeadFinder/Resources/Info.plist
       properties:
@@ -57,3 +59,25 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: art.lukashahn.LeadFinder
+
+  # Call Directory extension: labels incoming calls from agents. Switched on
+  # once in Settings › Apps › Phone › Call Blocking & Identification.
+  CallerID:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: CallerID
+      - path: LeadFinder/App/AppConfig.swift
+      - path: LeadFinder/API/CallerIDTable.swift
+    info:
+      path: CallerID/Info.plist
+      properties:
+        CFBundleDisplayName: LeadFinder
+        MOBILE_API_BASE_URL: $(MOBILE_API_BASE_URL)
+        MOBILE_API_SECRET: $(MOBILE_API_SECRET)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.callkit.call-directory
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CallDirectoryHandler
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: art.lukashahn.LeadFinder.CallerID
