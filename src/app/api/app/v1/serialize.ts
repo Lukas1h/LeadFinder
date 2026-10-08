@@ -109,6 +109,10 @@ export function leadGroupJson(g: LeadGroup, addressById: Map<string, string | nu
     agentPhone: best.agentPhone,
     brokerName: best.brokerName,
     contactLine: g.contactLine,
+    // When this agent was last texted, separate from contactLine so the app can
+    // say only what has actually happened: contactLine reads "Never texted ·
+    // emailed Sep 27", which leads with a negative the phone has no use for.
+    textedAt: g.textedAt ?? null,
     knownGroup: g.known ?? null,
     section: g.section,
     best: listingJson(best, "card"),
