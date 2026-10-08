@@ -113,12 +113,12 @@ export function duplicateAgentBadge(
   };
 }
 
-/** "Shot for Sarah at Oregon Life Homes" — a client in this lead's office (see lib/clientOffices.ts). */
+/** "Same office as Sarah" — a client in this lead's office (see lib/clientOffices.ts). Brokerage names run long, so they go in the detail. */
 export function officeClientBadge(client: { name: string | null; brokerage: string; address: string | null }): BadgeText {
   const who = client.name?.trim().split(/\s+/)[0] ?? "a client";
   return {
     kind: "officeClient",
-    label: `Shot for ${who} at ${client.brokerage}`,
-    detail: client.address ? `${client.name ?? "Client"} · ${client.address}` : undefined,
+    label: `Same office as ${who}`,
+    detail: `You shot ${client.address ?? "a job"} for ${client.name ?? "a client"} at ${client.brokerage}`,
   };
 }

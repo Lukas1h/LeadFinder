@@ -6,7 +6,7 @@ import { byLeadPriority, findAttachedAgent, buildAgentLookups } from "@/lib/pipe
 import { refreshLeadSections, lastTextByAgent, isRecentlyTexted, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
 import { getQueuedListingIds } from "@/lib/queueMessages";
 import type { KnownAgentGroup } from "@/app/KnownAgentLeads";
-import { clientOffices, officeKey, type OfficeClient } from "@/lib/clientOffices";
+import { clientOffices, officeClientFor, type OfficeClient } from "@/lib/clientOffices";
 
 /**
  * Everything the Leads page shows, as data.
@@ -132,8 +132,12 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
     const known = g.agent ? KNOWN_AGENT_GROUP[g.agent.relationshipStatus] : undefined;
     // Shooting for someone in their office is a warm intro even to a stranger,
     // so a cold agent at a client's brokerage moves up with the people he
-    // knows. Declined agents stay put; the client themself never matches.
-    const client = offices.get(officeKey(g.entries[0].lead.brokerName) ?? "");
+    // knows. Only for a real agent (a listing with no one to text stays where
+    // it is), never the client themself or someone who declined, and only
+    // when one of their listings is near where that client works.
+    const client = g.agent
+      ? officeClientFor(offices, g.entries[0].lead.brokerName, g.entries.map((e) => e.lead.city))
+      : null;
     const officeClient =
       client && client.agentId !== g.agent?.id && g.agent?.relationshipStatus !== "declined" ? client : null;
     const group = known ?? (officeClient ? ("office" as const) : undefined);

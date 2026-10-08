@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { agents, bookings, listings } from "@/db/schema";
 import { eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { brokerageByAgent } from "@/lib/agentBrokerage";
+import { estimateDriveMinutes } from "@/lib/driveTime";
 
 /**
  * Brokerages Lukas has shot for, keyed by a normalized office name.
@@ -19,6 +20,8 @@ export interface OfficeClient {
   name: string | null;
   brokerage: string;
   address: string | null;
+  /** Cities of their jobs — the area the connection means something in. */
+  cities: string[];
 }
 
 /**
@@ -37,9 +40,15 @@ export function officeKey(brokerName: string | null): string | null {
   return key || null;
 }
 
-export async function clientOffices(): Promise<Map<string, OfficeClient>> {
+export async function clientOffices(): Promise<Map<string, OfficeClient[]>> {
   const booked = await db
-    .select({ agentId: bookings.contactAgentId, address: bookings.address, listingAddress: listings.address })
+    .select({
+      agentId: bookings.contactAgentId,
+      address: bookings.address,
+      city: bookings.city,
+      listingAddress: listings.address,
+      listingCity: listings.city,
+    })
     .from(bookings)
     .leftJoin(listings, eq(bookings.listingId, listings.id))
     .where(isNotNull(bookings.contactAgentId))
@@ -54,19 +63,55 @@ export async function clientOffices(): Promise<Map<string, OfficeClient>> {
   const nameById = new Map(names.map((n) => [n.id, n.name]));
   const typedById = new Map(names.map((n) => [n.id, n.brokerage]));
 
-  const offices = new Map<string, OfficeClient>();
+  // Every client per office, newest job first: a big franchise office covers
+  // several towns, and which client to name depends on where the lead is.
+  const offices = new Map<string, OfficeClient[]>();
+  const byAgent = new Map<string, OfficeClient>();
   for (const b of booked) {
+    const city = b.listingCity ?? b.city;
+    const known = byAgent.get(b.agentId!);
+    if (known) {
+      if (city && !known.cities.includes(city)) known.cities.push(city);
+      continue;
+    }
     // A brokerage typed on the agent wins; otherwise their latest listing's.
     const brokerage = typedById.get(b.agentId!) || brokerages.get(b.agentId!);
     const key = officeKey(brokerage ?? null);
-    // Newest job first, so the first client seen per office is the freshest intro.
-    if (!brokerage || !key || offices.has(key)) continue;
-    offices.set(key, {
+    if (!brokerage || !key) continue;
+    const client: OfficeClient = {
       agentId: b.agentId!,
       name: nameById.get(b.agentId!) ?? null,
       brokerage,
       address: b.listingAddress ?? b.address,
-    });
+      cities: city ? [city] : [],
+    };
+    byAgent.set(b.agentId!, client);
+    offices.set(key, [...(offices.get(key) ?? []), client]);
   }
   return offices;
+}
+
+// "RE/MAX Integrity" is one name across Roseburg and Central Point, and
+// shooting for someone three towns away means nothing to the agent. Drive
+// times are all measured from Winston, so two towns within half an hour of
+// each other on that scale are treated as one area — Sutherlin and Roseburg
+// match, Central Point and Roseburg don't. A city missing from the table never
+// matches rather than guessing.
+const SAME_AREA_MINUTES = 30;
+
+export function sameArea(cityA: string | null, cityB: string): boolean {
+  if (!cityA) return false;
+  const a = estimateDriveMinutes(cityA);
+  const b = estimateDriveMinutes(cityB);
+  return a != null && b != null && Math.abs(a - b) <= SAME_AREA_MINUTES;
+}
+
+/** The client to name for a lead: same office, and one of their jobs near any of the agent's listings. */
+export function officeClientFor(
+  offices: Map<string, OfficeClient[]>,
+  brokerName: string | null,
+  listingCities: (string | null)[]
+): OfficeClient | null {
+  const clients = offices.get(officeKey(brokerName) ?? "") ?? [];
+  return clients.find((c) => c.cities.some((city) => listingCities.some((l) => sameArea(l, city)))) ?? null;
 }
