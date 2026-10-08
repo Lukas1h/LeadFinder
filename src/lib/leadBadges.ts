@@ -25,7 +25,7 @@ function shortMoney(n: number): string {
 }
 
 export interface BadgeText {
-  kind: "new" | "comingSoon" | "priceCut" | "fewPhotos" | "photoScore" | "builder" | "declined";
+  kind: "new" | "comingSoon" | "priceCut" | "fewPhotos" | "photoScore" | "builder" | "declined" | "officeClient";
   label: string;
   /** Tooltip text, where the badge has one. */
   detail?: string;
@@ -110,5 +110,15 @@ export function duplicateAgentBadge(
     detail: `Already contacted ${agent.name ?? "this agent"} on ${formatDate(agent.lastContactedAt)}${
       duplicateAddress ? ` about ${duplicateAddress}` : ""
     }`,
+  };
+}
+
+/** "Shot for Sarah at Oregon Life Homes" — a client in this lead's office (see lib/clientOffices.ts). */
+export function officeClientBadge(client: { name: string | null; brokerage: string; address: string | null }): BadgeText {
+  const who = client.name?.trim().split(/\s+/)[0] ?? "a client";
+  return {
+    kind: "officeClient",
+    label: `Shot for ${who} at ${client.brokerage}`,
+    detail: client.address ? `${client.name ?? "Client"} · ${client.address}` : undefined,
   };
 }

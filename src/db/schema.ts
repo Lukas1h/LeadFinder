@@ -272,6 +272,12 @@ export const agents = pgTable("agents", {
   // the computed one; leave it null to keep using observed data.
   avgDaysBetweenListings: integer("avg_days_between_listings"),
 
+  // The agent's office, typed in by hand. Listings carry their own broker
+  // name and that's used when this is empty, but a client met off-Zillow has
+  // no listing on file, and their office is what makes "I shot for someone at
+  // your brokerage" work (see lib/clientOffices.ts).
+  brokerage: text("brokerage"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

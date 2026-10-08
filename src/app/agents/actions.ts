@@ -207,6 +207,7 @@ export async function updateAgentStats(
     avgListingsPerYear: number | null;
     avgListingPrice: number | null;
     avgDaysBetweenListings: number | null;
+    brokerage?: string | null;
   }
 ) {
   await db
@@ -215,6 +216,7 @@ export async function updateAgentStats(
       avgListingsPerYear: input.avgListingsPerYear,
       avgListingPrice: input.avgListingPrice,
       avgDaysBetweenListings: input.avgDaysBetweenListings,
+      ...(input.brokerage !== undefined ? { brokerage: input.brokerage?.trim() || null } : {}),
     })
     .where(eq(agents.id, id));
   revalidatePath("/agents");
