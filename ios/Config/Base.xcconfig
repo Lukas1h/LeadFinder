@@ -1,0 +1,5 @@
+// Shared build settings. Secrets.xcconfig is #included by the per-config files
+// and is git-ignored, so the API secret never lands in the repo.
+#include? "Secrets.xcconfig"
+
+MOBILE_API_BASE_URL = https:/$()/realestate.lukashahn.art

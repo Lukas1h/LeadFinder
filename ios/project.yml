@@ -1,0 +1,59 @@
+name: LeadFinder
+
+options:
+  bundleIdPrefix: art.lukashahn
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+# Secrets.xcconfig is git-ignored and holds MOBILE_API_SECRET. It is optional:
+# without it the app compiles but shows the "not configured" setup screen.
+# Secrets.example.xcconfig is the committed template.
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+    CODE_SIGN_STYLE: Automatic
+    # Lukas's free "Personal Team". Not the RKS242Y24L certificates that are in
+    # the keychain: those belong to a different team and Xcode has no account for
+    # either, so signing needs the Apple ID added in Xcode ▸ Settings ▸ Accounts.
+    DEVELOPMENT_TEAM: 8AK8X62ARR
+    # Personal Team provisioning: the app is re-signed every 7 days.
+    CODE_SIGN_IDENTITY: "Apple Development"
+
+targets:
+  LeadFinder:
+    type: application
+    platform: iOS
+    sources:
+      - path: LeadFinder
+    info:
+      path: LeadFinder/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: LeadFinder
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIUserInterfaceStyle: Dark
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        ITSAppUsesNonExemptEncryption: false
+        # Xcode expands $(VAR) in Info.plist from the build settings, which come
+        # from Config/Base.xcconfig and the git-ignored Secrets.xcconfig. Left
+        # unexpanded when the secret is missing, which AppConfig detects.
+        MOBILE_API_BASE_URL: $(MOBILE_API_BASE_URL)
+        MOBILE_API_SECRET: $(MOBILE_API_SECRET)
+        # Lets a Debug build talk to `next dev` on the Mac's own localhost.
+        # Localhost only, so the production API still has to be HTTPS.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: art.lukashahn.LeadFinder
