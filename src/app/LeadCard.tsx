@@ -7,21 +7,7 @@ import { formatPrice, formatDate } from "@/lib/format";
 import { ListingModal } from "./ListingModal";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { Card } from "@/components/ui/card";
-
-// Cards show at most this many photos — spread evenly through the set so
-// you get a feel for the whole property (hero exterior, a bedroom, the
-// kitchen, a bathroom, the yard…) rather than just the first few, which are
-// almost always the same three exterior shots.
-const MAX_CARD_PHOTOS = 5;
-
-function sampleCardPhotos(photos: string[]): string[] {
-  if (photos.length <= MAX_CARD_PHOTOS) return photos;
-  const indexes: number[] = [];
-  for (let i = 0; i < MAX_CARD_PHOTOS; i++) {
-    indexes.push(Math.round((i * (photos.length - 1)) / (MAX_CARD_PHOTOS - 1)));
-  }
-  return [...new Set(indexes)].map((i) => photos[i]);
-}
+import { sampleCardPhotos } from "@/lib/cardPhotos";
 
 export function LeadCard({
   lead,

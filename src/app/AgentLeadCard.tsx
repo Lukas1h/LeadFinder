@@ -10,19 +10,7 @@ import { ListingModal } from "./ListingModal";
 import { ListingRow } from "./ListingRow";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { Card } from "@/components/ui/card";
-
-// Same sampling as LeadCard: a spread of the set rather than the first few
-// exterior shots.
-const MAX_CARD_PHOTOS = 5;
-
-function sampleCardPhotos(photos: string[]): string[] {
-  if (photos.length <= MAX_CARD_PHOTOS) return photos;
-  const indexes: number[] = [];
-  for (let i = 0; i < MAX_CARD_PHOTOS; i++) {
-    indexes.push(Math.round((i * (photos.length - 1)) / (MAX_CARD_PHOTOS - 1)));
-  }
-  return [...new Set(indexes)].map((i) => photos[i]);
-}
+import { sampleCardPhotos } from "@/lib/cardPhotos";
 
 /**
  * One agent on the Leads page. Outreach is about the person now — most texts

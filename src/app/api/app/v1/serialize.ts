@@ -2,6 +2,7 @@ import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { isBuilderListing } from "@/lib/leadSections";
 import { officeClientBadge, agentDeclinedBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, type BadgeText } from "@/lib/leadBadges";
+import { sampleCardPhotos } from "@/lib/cardPhotos";
 import type { BookingWithDetails } from "@/app/booked/BookedList";
 import type { LeadGroup } from "@/app/leads-data";
 
@@ -30,22 +31,31 @@ function numericToNumber(value: string | number | null): number | null {
 }
 
 /**
- * `photos` is trimmed to the first URL for list endpoints — a card needs one
- * image, and the full array on every lead would multiply the payload by an
- * order of magnitude. Detail endpoints ask for "all".
+ * How many photos go out with a listing:
+ *
+ * - "first" — one image, for the rows that only reference a listing.
+ * - "card"  — the same spread the web lead card swipes through, so the phone
+ *             shows the photos the web shows rather than one hero shot.
+ * - "all"   — the full set, for a detail screen.
+ *
+ * The full array on every lead would multiply the payload by an order of
+ * magnitude, which is why "first" and "card" exist.
  *
  * altZpids is the one column left out: it's Zillow's bookkeeping for
  * deduplication (see lib/listingDedupe.ts), which means nothing to the app.
  */
-export function listingJson(l: Listing, photos: "first" | "all") {
+export function listingJson(l: Listing, photos: "first" | "card" | "all") {
   const { altZpids, bedrooms, bathrooms, photos: allPhotos, ...rest } = l;
   void altZpids;
+
+  const photosOut =
+    photos === "all" ? allPhotos : photos === "card" ? sampleCardPhotos(allPhotos ?? []) : allPhotos?.slice(0, 1) ?? [];
 
   return {
     ...rest,
     bedrooms: numericToNumber(bedrooms),
     bathrooms: numericToNumber(bathrooms),
-    photos: photos === "all" ? allPhotos : allPhotos?.slice(0, 1) ?? [],
+    photos: photosOut,
   };
 }
 
@@ -101,7 +111,7 @@ export function leadGroupJson(g: LeadGroup, addressById: Map<string, string | nu
     contactLine: g.contactLine,
     knownGroup: g.known ?? null,
     section: g.section,
-    best: listingJson(best, "first"),
+    best: listingJson(best, "card"),
     badges: leadBadges(best, agent, agent?.lastContactedListingId ? addressById.get(agent.lastContactedListingId) : null, g.officeClient),
     others: g.entries.slice(1).map((e) => listingJson(e.lead, "first")),
     // Every listing in the card, so the app's Pass can drop the whole group the
