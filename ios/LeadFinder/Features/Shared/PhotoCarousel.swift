@@ -15,6 +15,8 @@ struct PhotoCarousel: View {
     /// plain height on a fill-mode image lets it distort, and the web's carousel
     /// is 3:2 for the same reason.
     var aspectRatio: CGFloat = 3.0 / 2.0
+    /// Cards ask for Zillow's smaller rendition; detail screens the full photo.
+    var size: PhotoSize = .full
     var onTap: (() -> Void)?
 
     @State private var index = 0
@@ -44,20 +46,14 @@ struct PhotoCarousel: View {
     private var image: some View {
         TabView(selection: $index) {
             ForEach(photos.indices, id: \.self) { photoIndex in
-                AsyncImage(url: URL(string: photos[photoIndex])) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image.resizable().scaledToFill()
-                    case .empty:
-                        ZStack {
-                            Theme.cardRaised
-                            ProgressView().controlSize(.small)
-                        }
-                    default:
-                        ZStack {
-                            Theme.cardRaised
-                            Image(systemName: "photo").foregroundStyle(Theme.tertiaryText)
-                        }
+                // Only the page on screen and its neighbours load: a card is
+                // five photos, and fetching all of them for every card the
+                // list passes is what made the bottom of Leads so slow.
+                Group {
+                    if abs(photoIndex - index) <= 1 {
+                        RemoteImage(url: size.url(photos[photoIndex]), size: size)
+                    } else {
+                        Theme.cardRaised
                     }
                 }
                 // scaledToFill crops rather than stretches, but only once the

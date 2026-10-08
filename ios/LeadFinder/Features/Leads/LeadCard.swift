@@ -152,6 +152,7 @@ struct LeadCard: View {
                 alt: group.best.address ?? "Listing photo",
                 // The web's card photo box is a little taller than 3:2.
                 aspectRatio: 1.5,
+                size: .card,
                 onTap: onShowListing
             )
 

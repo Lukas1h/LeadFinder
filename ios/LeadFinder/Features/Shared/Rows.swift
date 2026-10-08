@@ -39,14 +39,8 @@ struct ListingRow: View {
 
     private var thumb: some View {
         Group {
-            if let urlString = listing.photos?.first, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    if case let .success(image) = phase {
-                        image.resizable().aspectRatio(contentMode: .fill)
-                    } else {
-                        Theme.cardRaised
-                    }
-                }
+            if let urlString = listing.photos?.first {
+                RemoteImage(url: PhotoSize.card.url(urlString), size: .card)
             } else {
                 ZStack {
                     Theme.cardRaised

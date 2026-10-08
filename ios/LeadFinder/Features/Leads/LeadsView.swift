@@ -77,8 +77,18 @@ struct LeadsView: View {
 
                 header(leads.counts)
 
+                // Every card is its own child of the LazyVStack. Wrapping a
+                // section's cards in a VStack made the whole section one lazy
+                // item, so opening Leads built all ~300 Backup cards at once.
                 ForEach(leads.sections) { section in
-                    sectionView(section)
+                    sectionHeader(section)
+                    if !collapsed.contains(section.key) {
+                        let groups = section.groups
+                        ForEach(Array(groups.enumerated()), id: \.element.id) { offset, group in
+                            card(group)
+                                .onAppear { prefetchPhotos(after: offset, in: groups) }
+                        }
+                    }
                 }
 
                 if leads.sections.isEmpty {
@@ -108,51 +118,53 @@ struct LeadsView: View {
         .padding(.horizontal, 16)
     }
 
-    @ViewBuilder
-    private func sectionView(_ section: LeadsResponse.Section) -> some View {
+    private func sectionHeader(_ section: LeadsResponse.Section) -> some View {
         let isCollapsed = collapsed.contains(section.key)
-
-        VStack(alignment: .leading, spacing: 10) {
-            Button {
-                withAnimation(.snappy(duration: 0.22)) {
-                    if isCollapsed { collapsed.remove(section.key) } else { collapsed.insert(section.key) }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(section.label)
-                        .font(.headline)
-                        .foregroundStyle(Theme.primaryText)
-                    Text("\(section.groups.count)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.tertiaryText)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(Theme.cardRaised, in: Capsule())
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Theme.tertiaryText)
-                        .rotationEffect(.degrees(isCollapsed ? -90 : 0))
-                }
-                .contentShape(Rectangle())
-                .padding(.horizontal, 16)
-                .padding(.vertical, 2)
+        return Button {
+            withAnimation(.snappy(duration: 0.22)) {
+                if isCollapsed { collapsed.remove(section.key) } else { collapsed.insert(section.key) }
             }
-            .buttonStyle(.plain)
-
-            if !isCollapsed {
-                ForEach(section.groups) { group in
-                    Button { openLead = group } label: {
-                        LeadCard(
-                            group: group,
-                            openContactOnAppear: DebugLaunchArguments.opensContact && contactKey == group.key
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 16)
-                }
+        } label: {
+            HStack(spacing: 6) {
+                Text(section.label)
+                    .font(.headline)
+                    .foregroundStyle(Theme.primaryText)
+                Text("\(section.groups.count)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.tertiaryText)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Theme.cardRaised, in: Capsule())
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Theme.tertiaryText)
+                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
             }
+            .contentShape(Rectangle())
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
         }
+        .buttonStyle(.plain)
+    }
+
+    private func card(_ group: LeadsResponse.Group) -> some View {
+        Button { openLead = group } label: {
+            LeadCard(
+                group: group,
+                openContactOnAppear: DebugLaunchArguments.opensContact && contactKey == group.key
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+    }
+
+    /// The first photo of the next few cards, so they're loaded by the time
+    /// they scroll into view.
+    private func prefetchPhotos(after offset: Int, in groups: [LeadsResponse.Group]) {
+        let upcoming = groups.dropFirst(offset + 1).prefix(4)
+        let urls = upcoming.compactMap { PhotoSampling.card($0.best.photos ?? []).first.flatMap(PhotoSize.card.url) }
+        ImagePipeline.shared.prefetch(urls, maxPixel: PhotoSize.card.maxPixel)
     }
 
     private var loadFailure: some View {
