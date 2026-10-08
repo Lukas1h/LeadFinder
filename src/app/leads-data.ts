@@ -6,6 +6,7 @@ import { byLeadPriority, findAttachedAgent, buildAgentLookups } from "@/lib/pipe
 import { refreshLeadSections, lastTextByAgent, isRecentlyTexted, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
 import { getQueuedListingIds } from "@/lib/queueMessages";
 import type { KnownAgentGroup } from "@/app/KnownAgentLeads";
+import { clientOffices, officeClientFor, type OfficeClient } from "@/lib/clientOffices";
 
 /**
  * Everything the Leads page shows, as data.
@@ -25,7 +26,7 @@ const KNOWN_AGENT_GROUP: Partial<Record<Agent["relationshipStatus"], KnownAgentG
   interested: "interested",
   warm: "warm",
 };
-const KNOWN_AGENT_GROUP_ORDER: KnownAgentGroup[] = ["clients", "interested", "warm"];
+const KNOWN_AGENT_GROUP_ORDER: KnownAgentGroup[] = ["clients", "interested", "warm", "office"];
 
 /** One card's worth of leads: an agent, and every open listing that leads to them. */
 export interface LeadGroup {
@@ -36,6 +37,8 @@ export interface LeadGroup {
   best: Listing;
   section: LeadSection;
   known: KnownAgentGroup | undefined;
+  /** A client of Lukas's at the same brokerage as this lead — the warm intro for a stranger. */
+  officeClient: OfficeClient | null;
   /** "Texted Oct 5" / "Never contacted" — null only for a listing with no agent at all. */
   contactLine: string | null;
 }
@@ -97,6 +100,7 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
   const sectionById = await refreshLeadSections(leads.map((l) => l.id));
   // When each agent was last texted or called: a week's quiet before texting
   // them again, the "Texted Oct 5" on the card, and never-texted agents first.
+  const offices = await clientOffices();
   const lastTexted = await lastTextByAgent(
     openLeads.map((l) => findAttachedAgent(l, agentByPhone, agentByName, agentById)?.id).filter((id): id is string => !!id)
   );
@@ -126,6 +130,17 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
         byLeadPriority(a.lead, b.lead)
     );
     const known = g.agent ? KNOWN_AGENT_GROUP[g.agent.relationshipStatus] : undefined;
+    // Shooting for someone in their office is a warm intro even to a stranger,
+    // so a cold agent at a client's brokerage moves up with the people he
+    // knows. Only for a real agent (a listing with no one to text stays where
+    // it is), never the client themself or someone who declined, and only
+    // when one of their listings is near where that client works.
+    const client = g.agent
+      ? officeClientFor(offices, g.entries[0].lead.brokerName, g.entries.map((e) => e.lead.city))
+      : null;
+    const officeClient =
+      client && client.agentId !== g.agent?.id && g.agent?.relationshipStatus !== "declined" ? client : null;
+    const group = known ?? (officeClient ? ("office" as const) : undefined);
     return {
       key,
       ...g,
@@ -133,7 +148,8 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
       section: g.entries[0].section,
       // Someone he already knows comes first — unless he texted them this
       // week, in which case they wait in Unlikely like everyone else.
-      known: known && !isRecentlyTexted(g.textedAt) ? known : undefined,
+      known: group && !isRecentlyTexted(g.textedAt) ? group : undefined,
+      officeClient,
       contactLine: contactLine(g.agent, key, g.textedAt),
     };
   });

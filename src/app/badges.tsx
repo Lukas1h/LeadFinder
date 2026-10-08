@@ -9,7 +9,7 @@ import { RELATIONSHIP_LABELS } from "./agents/relationshipLabels";
 // The wording lives in lib/leadBadges.ts (a plain module) so the iPhone app's
 // JSON API can render the same labels server-side — a value can't be imported
 // out of a "use client" file — while this file keeps the presentation.
-import { agentDeclinedBadge, duplicateAgentBadge, fewPhotosBadge, photoScoreTier, priceCutBadge } from "@/lib/leadBadges";
+import { officeClientBadge, agentDeclinedBadge, duplicateAgentBadge, fewPhotosBadge, photoScoreTier, priceCutBadge } from "@/lib/leadBadges";
 
 export function NewBadge() {
   return (
@@ -263,4 +263,18 @@ export function RelationshipBadge({
 // what each status means.
 export function WarmAgentBadge({ agent }: { agent: Agent }) {
   return <RelationshipBadge status={agent.relationshipStatus} agentName={agent.name} />;
+}
+
+export function OfficeClientBadge({ client }: { client: Parameters<typeof officeClientBadge>[0] }) {
+  const badge = officeClientBadge(client);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950 dark:text-sky-400 dark:border-sky-900">
+          {badge.label}
+        </Badge>
+      </TooltipTrigger>
+      {badge.detail && <TooltipContent>{badge.detail}</TooltipContent>}
+    </Tooltip>
+  );
 }

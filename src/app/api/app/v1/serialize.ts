@@ -1,7 +1,7 @@
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { isBuilderListing } from "@/lib/leadSections";
-import { agentDeclinedBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, type BadgeText } from "@/lib/leadBadges";
+import { officeClientBadge, agentDeclinedBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, type BadgeText } from "@/lib/leadBadges";
 import { sampleCardPhotos } from "@/lib/cardPhotos";
 import type { BookingWithDetails } from "@/app/booked/BookedList";
 import type { LeadGroup } from "@/app/leads-data";
@@ -63,8 +63,14 @@ export function listingJson(l: Listing, photos: "first" | "card" | "all") {
  * The badges a lead card shows, in the same order card() renders them in
  * src/app/page.tsx.
  */
-export function leadBadges(lead: Listing, agent: Agent | null, declinedAddress?: string | null): BadgeText[] {
+export function leadBadges(
+  lead: Listing,
+  agent: Agent | null,
+  declinedAddress?: string | null,
+  officeClient?: Parameters<typeof officeClientBadge>[0] | null
+): BadgeText[] {
   const badges: BadgeText[] = [{ kind: "new", label: "New" }];
+  if (officeClient) badges.push(officeClientBadge(officeClient));
 
   if (lead.isComingSoon) badges.push({ kind: "comingSoon", label: "Coming soon" });
 
@@ -76,7 +82,7 @@ export function leadBadges(lead: Listing, agent: Agent | null, declinedAddress?:
   }
 
   if (lead.score != null) {
-    badges.push({ kind: "photoScore", label: photoScoreTier(lead.score).label, detail: lead.scoreReasoning ?? undefined });
+    badges.push({ kind: "photoScore", label: `${photoScoreTier(lead.score).label} (${lead.score}/10)`, detail: lead.scoreReasoning ?? undefined });
   }
 
   if (isBuilderListing(lead.brokerName)) badges.push({ kind: "builder", label: "Builder" });
@@ -110,7 +116,7 @@ export function leadGroupJson(g: LeadGroup, addressById: Map<string, string | nu
     knownGroup: g.known ?? null,
     section: g.section,
     best: listingJson(best, "card"),
-    badges: leadBadges(best, agent, agent?.lastContactedListingId ? addressById.get(agent.lastContactedListingId) : null),
+badges: leadBadges(best, agent, agent?.lastContactedListingId ? addressById.get(agent.lastContactedListingId) : null, g.officeClient),
     others: g.entries.slice(1).map((e) => listingJson(e.lead, "first")),
     // Every listing in the card, so the app's Pass can drop the whole group the
     // way the web's "Pass all N" does.

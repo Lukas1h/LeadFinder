@@ -26,7 +26,7 @@ export function ReplyByDayChart({ days }: { days: DayBucket[] }) {
 
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
-      <h3 className="text-xs text-muted-foreground">Reply rate by day sent</h3>
+<h3 className="text-xs text-muted-foreground">Reply rate by day sent</h3>
       <div className="flex gap-2">
         {days.map((d) => (
           <div

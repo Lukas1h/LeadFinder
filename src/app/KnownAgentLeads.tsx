@@ -5,12 +5,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Groups on the "From agents you know" section, in display order. Clients are
 // worked_once + regular: anyone who has actually paid for a shoot.
-export type KnownAgentGroup = "clients" | "interested" | "warm";
+// "office" is a stranger at a client's brokerage (see lib/clientOffices.ts).
+export type KnownAgentGroup = "clients" | "interested" | "warm" | "office";
 
 const GROUP_LABELS: Record<KnownAgentGroup, string> = {
   clients: "Clients",
   interested: "Interested",
   warm: "Warm",
+  office: "Same office",
 };
 
 /**

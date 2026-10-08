@@ -5,7 +5,7 @@ import { LeadActions } from "./LeadActions";
 import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
-import { NewBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge } from "./badges";
+import { NewBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, OfficeClientBadge } from "./badges";
 import { FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
 import { isBuilderListing, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER } from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
@@ -60,6 +60,7 @@ async function LeadsContent() {
         badges={
           <Fragment key={lead.id}>
             <NewBadge />
+            {g.officeClient && <OfficeClientBadge client={g.officeClient} />}
             {lead.isComingSoon && <ComingSoonBadge />}
             <PriceCutBadge lead={lead} />
             {lead.photoCount != null && lead.photoCount < FEW_PHOTOS_THRESHOLD && (

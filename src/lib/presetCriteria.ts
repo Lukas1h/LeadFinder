@@ -118,11 +118,17 @@ export function listingMatchFacts(listing: Listing): ListingMatchFacts {
  * has him in their phone, and the draft skips that intro for them.
  */
 export function pickRecommendedPreset(
-  presets: (PresetCriteria & { id: string; protected: boolean })[],
+  presets: (PresetCriteria & { id: string; protected: boolean; sameOffice?: boolean })[],
   aiPreset: (PresetCriteria & { id: string }) | null,
   facts: ListingMatchFacts,
-  knownAgent = false
+  knownAgent = false,
+  sameOffice = false
 ): string | null {
+  // A stranger at a client's office gets the template that names the client —
+  // that intro beats any photo or price pitch (Bryan McKeun said yes within
+  // minutes, Oct 8).
+  const officePreset = presets.find((p) => p.sameOffice && !p.protected);
+  if (sameOffice && officePreset) return officePreset.id;
   if (knownAgent && aiPreset) return aiPreset.id;
   let recommendedPresetId: string | null = null;
   let bestCriteriaCount = -1;
@@ -130,7 +136,7 @@ export function pickRecommendedPreset(
     // The Blank preset is never "recommended" — it's the fallback when
     // nothing is, and tagging it "(Recommended)" too would just be a
     // confusing double label on the same option.
-    if (preset.protected) continue;
+    if (preset.protected || preset.sameOffice) continue;
     if (!matchesCriteria(preset, facts)) continue;
     const specificity = criteriaCount(preset);
     if (specificity > bestCriteriaCount) {

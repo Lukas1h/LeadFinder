@@ -229,6 +229,7 @@ export function AgentDetailDialog({
   const [editAvgListingsPerYear, setEditAvgListingsPerYear] = useState(agent.avgListingsPerYear?.toString() ?? "");
   const [editAvgListingPrice, setEditAvgListingPrice] = useState(agent.avgListingPrice?.toString() ?? "");
   const [editAvgDaysBetween, setEditAvgDaysBetween] = useState(agent.avgDaysBetweenListings?.toString() ?? "");
+  const [editBrokerage, setEditBrokerage] = useState(agent.brokerage ?? "");
   const [contactError, setContactError] = useState<string | null>(null);
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -241,6 +242,7 @@ export function AgentDetailDialog({
     setEditAvgListingsPerYear(agent.avgListingsPerYear?.toString() ?? "");
     setEditAvgListingPrice(agent.avgListingPrice?.toString() ?? "");
     setEditAvgDaysBetween(agent.avgDaysBetweenListings?.toString() ?? "");
+    setEditBrokerage(agent.brokerage ?? "");
     setContactError(null);
     setIsEditingContact(true);
   };
@@ -263,6 +265,7 @@ export function AgentDetailDialog({
       avgListingsPerYear: editAvgListingsPerYear.trim() ? Number(editAvgListingsPerYear) : null,
       avgListingPrice: editAvgListingPrice.trim() ? Number(editAvgListingPrice) : null,
       avgDaysBetweenListings: editAvgDaysBetween.trim() ? Number(editAvgDaysBetween) : null,
+      brokerage: editBrokerage,
     });
     const fresh = await getAgentById(agent.id);
     if (fresh) showSaved(fresh);
@@ -372,6 +375,7 @@ export function AgentDetailDialog({
               placeholder="Email"
               type="email"
             />
+            <Input value={editBrokerage} onChange={(e) => setEditBrokerage(e.target.value)} placeholder="Brokerage" />
             <Select value={editStatus} onValueChange={(v) => setEditStatus(v as AgentRelationshipStatus)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
