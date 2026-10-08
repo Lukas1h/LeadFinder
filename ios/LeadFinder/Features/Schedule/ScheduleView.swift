@@ -5,9 +5,11 @@ import SwiftUI
 /// buckets. Read-only in Phase 2 — checking reminders off arrives later.
 struct ScheduleView: View {
     @Environment(AppState.self) private var appState
+    @State private var path = NavigationPath()
+    @State private var openBooking: Booking?
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if appState.schedule.value != nil || appState.bookings.value != nil {
                     content
@@ -20,13 +22,37 @@ struct ScheduleView: View {
             }
             .background(Theme.background)
             .navigationTitle("Schedule")
-            .navigationDestination(for: Booking.self) { BookingDetailView(booking: $0) }
-            .refreshable {
-                await appState.schedule.load(force: true)
-                await appState.bookings.load(force: true)
+            .sheet(item: $openBooking) { booking in
+                BookingDetailView(booking: booking)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+            .navigationDestination(for: BookingsRoute.self) { _ in
+                BookingsView()
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink(value: BookingsRoute()) {
+                        Label("Bookings", systemImage: "list.bullet.rectangle")
+                    }
+                }
             }
             .task { await appState.schedule.load() }
             .task { await appState.bookings.load() }
+            .task {
+                #if DEBUG
+                // `-bookings` lands on the bookings page directly, for
+                // screenshotting it without anyone tapping the header button.
+                guard DebugLaunchArguments.opensBookings else { return }
+                for _ in 0..<60 {
+                    if appState.bookings.value != nil {
+                        path.append(BookingsRoute())
+                        return
+                    }
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+                #endif
+            }
         }
     }
 
@@ -50,14 +76,11 @@ struct ScheduleView: View {
         scheduleItems.filter { !DateFormatting.isPastDay($0.date) && !DateFormatting.isToday($0.date) }
     }
 
+    /// Same definition as the Bookings page, so "is there anything here?" and
+    /// "is there anything there?" can't disagree.
     private var bookingSections: [BookingSection] {
         guard let bookings = appState.bookings.value else { return [] }
-        return [
-            BookingSection(title: "Upcoming", bookings: bookings.upcoming),
-            BookingSection(title: "Waiting for payment", bookings: bookings.waitingForPayment),
-            BookingSection(title: "Completed", bookings: bookings.completed),
-        ]
-        .filter { !$0.bookings.isEmpty }
+        return BookingsView.sections(from: bookings)
     }
 
     private var bookingById: [String: Booking] {
@@ -78,10 +101,9 @@ struct ScheduleView: View {
     @ViewBuilder
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
-            FreshnessBar(
-                fetchedAt: [appState.schedule.fetchedAt, appState.bookings.fetchedAt].compactMap { $0 }.min(),
-                isRefreshing: appState.schedule.isRefreshing || appState.bookings.isRefreshing,
-                error: appState.schedule.error ?? appState.bookings.error
+            ErrorBanner(
+                message: appState.schedule.error ?? appState.bookings.error,
+                onRetry: { Task { await appState.schedule.load(force: true); await appState.bookings.load(force: true) } }
             )
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -100,12 +122,15 @@ struct ScheduleView: View {
                             todaySection
                         }
                         upcomingSection
-                        bookingsSection
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 28)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .refreshable {
+                    await appState.schedule.load(force: true)
+                    await appState.bookings.load(force: true)
                 }
             }
         }
@@ -209,82 +234,12 @@ struct ScheduleView: View {
         return buckets.keys.sorted().map { DayBucket(date: $0, items: buckets[$0] ?? []) }
     }
 
-    // MARK: - Bookings
-
-    @ViewBuilder
-    private var bookingsSection: some View {
-        if !bookingSections.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                sectionHeader("Bookings", count: bookingSections.reduce(0) { $0 + $1.bookings.count })
-                ForEach(bookingSections) { section in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(section.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Theme.secondaryText)
-                        ForEach(section.bookings) { booking in
-                            bookingRow(booking)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func bookingRow(_ booking: Booking) -> some View {
-        NavigationLink(value: booking) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "calendar")
-                    .font(.title3)
-                    .foregroundStyle(Theme.tertiaryText)
-                    .frame(width: 26)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(BookingFormat.jobLine(booking))
-                            .font(.caption)
-                            .foregroundStyle(Theme.tertiaryText)
-                        Spacer(minLength: 0)
-                        if let code = booking.lockboxCode?.nilIfBlank {
-                            BadgeChip(text: "Lockbox \(code)", tint: Theme.warning, filled: true)
-                        }
-                    }
-                    Text(booking.addressLine.isEmpty ? "No address on file" : booking.addressLine)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.primaryText)
-                    Text(contactAndTotal(booking))
-                        .font(.caption)
-                        .foregroundStyle(Theme.secondaryText)
-                    if let drive = booking.driveTime?.nilIfBlank {
-                        Label(drive, systemImage: "car")
-                            .font(.caption)
-                            .foregroundStyle(Theme.tertiaryText)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .card()
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func contactAndTotal(_ booking: Booking) -> String {
-        var parts: [String] = []
-        if let name = booking.contactName?.nilIfBlank {
-            parts.append(name)
-        }
-        parts.append(BookingFormat.price(booking.total))
-        return parts.joined(separator: " · ")
-    }
-
     // MARK: - Schedule item rows
 
     @ViewBuilder
     private func itemRow(_ item: ScheduleResponse.Item) -> some View {
         if let booking = item.bookingId.flatMap({ bookingById[$0] }) {
-            NavigationLink(value: booking) {
+            Button { openBooking = booking } label: {
                 scheduleRow(item)
             }
             .buttonStyle(.plain)
@@ -442,11 +397,4 @@ private struct DayBucket: Identifiable {
     let items: [ScheduleResponse.Item]
 
     var id: String { date }
-}
-
-private struct BookingSection: Identifiable {
-    let title: String
-    let bookings: [Booking]
-
-    var id: String { title }
 }

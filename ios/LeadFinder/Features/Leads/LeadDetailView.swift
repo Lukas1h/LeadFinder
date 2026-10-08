@@ -49,7 +49,6 @@ struct LeadDetailView: View {
                     alt: listing.address ?? "Listing photos",
                     alwaysShowControls: true
                 )
-                .frame(height: 240)
                 if let total = listing.photoCount, total > urls.count {
                     Text("Showing \(urls.count) of \(total) photos")
                         .font(.caption2)

@@ -39,43 +39,65 @@ extension View {
     }
 }
 
-/// "As of 2 min ago" line, so stale data is never mistaken for live data.
-struct FreshnessBar: View {
-    let fetchedAt: Date?
-    let isRefreshing: Bool
-    var error: String?
+/// Only ever shown when something has gone wrong.
+///
+/// The freshness label it replaces ("Updated 2 min ago" / "Updating…") was
+/// noise: every screen refetches in the background, so the line was describing
+/// the app's own plumbing rather than anything Lukas could act on. Data that is
+/// merely stale is fine — it's the last known good copy, and the screen says so
+/// by simply looking normal. A failure that leaves the cache unusable is worth
+/// interrupting for.
+struct ErrorBanner: View {
+    /// Nil when the last refresh worked, which is the normal case.
+    let message: String?
+    var onRetry: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: 6) {
-            if isRefreshing {
-                ProgressView().controlSize(.mini)
-                Text("Updating…")
-            } else {
-                Image(systemName: "clock.arrow.circlepath")
-                Text(label)
-            }
-            Spacer(minLength: 0)
-            if let error {
-                Text(error)
-                    .foregroundStyle(Theme.danger)
-                    .lineLimit(1)
-            }
+        if let message {
+            banner(message)
         }
-        .font(.caption2)
-        .foregroundStyle(Theme.tertiaryText)
     }
 
-    private var label: String {
-        guard let fetchedAt else { return "Never synced" }
-        let seconds = Date().timeIntervalSince(fetchedAt)
-        if seconds < 60 { return "Updated just now" }
-        if seconds < 3600 { return "Updated \(Int(seconds / 60)) min ago" }
-        if seconds < 86_400 { return "Updated \(Int(seconds / 3600)) hr ago" }
-        return "Updated \(DateFormatting.monthDay.string(from: fetchedAt))"
+    private func banner(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Theme.warning)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(Theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            if let onRetry {
+                Button("Retry", action: onRetry)
+                    .font(.caption.weight(.semibold))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
-/// Full-screen placeholder for a screen with nothing to show yet.
+/// An error worth the whole screen: nothing cached to fall back on.
+struct FullErrorView: View {
+    let title: String
+    let message: String?
+    var onRetry: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 14) {
+            EmptyStateView(icon: "wifi.exclamationmark", title: title, message: message)
+            if let onRetry {
+                Button("Try again", action: onRetry)
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.accent)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 24)
+    }
+}
+
 struct EmptyStateView: View {
     let icon: String
     let title: String

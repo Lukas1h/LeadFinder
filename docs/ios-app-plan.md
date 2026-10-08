@@ -58,7 +58,9 @@ An Expo app was tried once (branch `mobile-app`, 2026-09-11, never merged). It r
 - **Location:** `ios/` in this repo, so one Claude session sees both the API and the app. Vercel ignores it.
 - **Signing: free Apple ID ("Personal Team"), no paid program.** See [Free Apple account](#free-apple-account-what-it-means).
 - **Config:** the API base URL (`https://realestate.lukashahn.art`) and `MOBILE_API_SECRET` go in a git-ignored `ios/Secrets.xcconfig` and reach both targets through Info.plist. Building them in means the caller ID extension can use them without sharing anything with the app.
-- **Tabs:** Leads · Follow up · Schedule · Agents. Bookings live under Schedule. A dark theme close to the web app (`#111116`). Big rows and one-handed reach, with swipe actions and pull to refresh.
+- **Tabs:** Leads · Schedule · Messages · Agents. Two lists hang off the headers rather than taking a tab each, because four is already the most the bar should carry: **Follow up** off Agents (it is a board over agents) and **Bookings** off Schedule. Leads stays flat — no subpages. Every detail screen (lead, listing, agent, booking, message) is a **slide-up sheet**, not a pushed page: they are looks, not places you navigate away from. A dark theme close to the web app (`#111116`). Big rows and one-handed reach, with pull to refresh.
+- **Booking stats** lead the Bookings page, ported from the web's `bookingMath.ts`: last 30 days, all time, average per booking, average per hour.
+- **Messages.** The web's Messaging stats card, top templates, reply-rate-by-day chart and message history, on the phone. The web's two real send paths — "Send samples" and "Compose" — are deliberately **not** in the API, so the app cannot put mail in an agent's inbox. "Keep in touch" and "Declined" are there; they only record what happened. This is a change from the plan below, which had messaging web-only.
 - **Offline-first:** each screen renders its last cached JSON (files in the app's container) immediately, then refreshes. This is the main speed fix. The directory uses the ETag, so it only downloads again when something changed.
 - **Texting:** `MFMessageComposeViewController` with the recipient and body prefilled. On `.sent`, POST to the API. On `.cancelled`, nothing happens.
 - **Caller ID:** a Call Directory extension (`CXCallDirectoryProvider`). It needs no special entitlement.
@@ -102,7 +104,7 @@ Today's web push alerts (new leads, warm agents listing, price cuts) keep workin
 | 0 | Linux | Login for the web app ([spec](ios-backend-spec.md), Part A) | short |
 | 1 | Linux | `/api/app/v1` ([spec](ios-backend-spec.md), Part B), tested with curl | 1 session |
 | 2 | Mac | Xcode project, API client, cache, the four tabs read-only | 1–2 sessions |
-| 3 | Mac | Texting sheet + AI drafts + logging, pass/snooze, notes, reminders, booking actions, invoice view | 1–2 sessions |
+| 3 | Mac | ~~Texting sheet + AI drafts~~ **done in Phase 2**: the Contact sheet opens the native Messages sheet with the server's presets and an AI draft, and only records a text when the sheet reports `.sent`. Snooze, notes, reminders, booking actions and the invoice view remain | 1–2 sessions |
 | 4 | Mac | Call Directory extension, local notifications | 1 session |
 | 5 | Mac | Install on the iPhone (Xcode, then SideStore), the notification-tap bridge, fix what real use turns up | 1 session |
 | later | | Lock-screen widget for the next job, Siri / App Intents ("what's my next job"), real push if he ever pays for the program | |

@@ -8,6 +8,7 @@ enum CacheKey: String, CaseIterable {
     case bookings
     case agents
     case callerID = "caller-id"
+    case messages
 }
 
 /// Offline-first store: every screen renders the last cached JSON immediately,

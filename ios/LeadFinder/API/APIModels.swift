@@ -264,3 +264,166 @@ struct ListingDetailResponse: Codable, Sendable {
     var listing: Listing
     var agent: Agent?
 }
+
+// MARK: - GET /messages
+//
+// Mirrors the web's /messaging page (MessagingStatsCard + MessageHistoryCard).
+// The wording is the web's; only the transport is ours.
+
+struct MessagesResponse: Codable, Sendable {
+    struct SendCounts: Codable, Sendable {
+        /// All-time.
+        var sent: Int
+        /// The last 30 days. Computed server-side; not recomputed here.
+        var sentRecent: Int
+        var replied: Int
+        var booked: Int
+    }
+
+    struct Template: Codable, Sendable, Identifiable, Hashable {
+        var presetId: String
+        var name: String
+        var channel: String
+        var type: String
+        var sent: Int
+        var replied: Int
+        var booked: Int
+        var archived: Bool
+
+        var id: String { presetId }
+    }
+
+    /// One weekday's sends and replies, Monday first, zero-filled server-side.
+    struct DayBucket: Codable, Sendable, Hashable {
+        var label: String
+        var sent: Int
+        var replied: Int
+    }
+
+    struct ByDay: Codable, Sendable {
+        var sms: [DayBucket]
+        var email: [DayBucket]
+    }
+
+    struct Stats: Codable, Sendable {
+        var sms: SendCounts
+        var email: SendCounts
+        var revenue: Double
+        /// Already trimmed to the top three per channel, texts first, by the server.
+        var templates: [Template]
+        var byDay: ByDay
+    }
+
+    /// One row of the history list. The web's RecentSend.
+    struct Send: Codable, Sendable, Identifiable, Hashable {
+        var id: String
+        var channel: String
+        var type: String
+        var presetName: String
+        var sentAt: String
+        var respondedAt: String?
+        /// "pending" | "quoted" | "booked" | "declined"
+        var result: String?
+        var agentId: String?
+        var agentName: String?
+        var agentPhone: String?
+        var agentEmail: String?
+        var listingAddress: String?
+
+        /// Who the message went to, in the web's fallback order.
+        var recipient: String {
+            agentName?.nilIfBlank
+                ?? agentPhone?.nilIfBlank
+                ?? agentEmail?.nilIfBlank
+                ?? "Unknown recipient"
+        }
+
+        /// The web's RESULT_LABELS, with "Replied" standing in when a reply came
+        /// back but no result was recorded. Returns nil when there's nothing to
+        /// say. The colour lives with the view, so the model stays plain data.
+        var outcomeLabel: String? {
+            if let result, result != "pending" { return result.capitalized }
+            if respondedAt != nil { return "Replied" }
+            return nil
+        }
+    }
+
+    var stats: Stats
+    var sends: [Send]
+}
+
+// MARK: - GET /messages/:id
+
+struct MessageDetailResponse: Codable, Sendable {
+    /// The template as it reads for this agent and listing. Edits made at send
+    /// time aren't stored, so this is re-rendered from the variant rather than
+    /// the exact bytes that went out.
+    var text: String
+    var agent: Agent?
+    var listing: Listing?
+    /// Present when the preset has an email follow-up. The app shows it as
+    /// information only — sending email stays on the web.
+    var followUpEmail: FollowUpEmail?
+
+    struct FollowUpEmail: Codable, Sendable, Hashable {
+        var presetId: String
+        var name: String
+    }
+}
+
+// MARK: - GET /listings/:id/message-options, POST /listings/:id/ai-draft
+//
+// The web's PresetOption (src/app/messageActions.ts), same fields.
+
+struct MessageOptionsResponse: Codable, Sendable {
+    var presets: [MessageOption]
+}
+
+struct MessageOption: Codable, Sendable, Hashable {
+    var presetId: String
+    var presetName: String
+    var variantId: String
+    var variantLabel: String
+    var text: String
+    var recommended: Bool?
+    /// The "Blank"/"type your own" preset, which the send dialogs default to
+    /// over the recommended one.
+    var blank: Bool?
+    /// Copied to the clipboard on send so a second text can be pasted after.
+    var secondMessage: String?
+    var subject: String?
+
+    /// The AI draft placeholder: variantId "draft" with empty text, filled in
+    /// by POST /listings/:id/ai-draft.
+    var aiDraft: Bool { variantId == "draft" }
+
+    /// Identity for ForEach and for tracking the selection. variantId is only
+    /// unique within a preset, so the pair is what distinguishes two options.
+    var key: String { "\(presetId)::\(variantId)" }
+}
+
+// MARK: - GET /agents/:id
+
+struct AgentDetailResponse: Codable, Sendable {
+    struct Entry: Codable, Sendable, Identifiable {
+        var kind: String
+        var id: String
+        var at: String?
+        var presetName: String?
+        var channel: String?
+        var type: String?
+        var respondedAt: String?
+        var result: String?
+        var listingAddress: String?
+        var outcome: String?
+        var note: String?
+        var pending: Bool?
+    }
+
+    var agent: Agent
+    var brokerage: String?
+    /// Sends and logged interactions, newest first.
+    var timeline: [Entry]
+    var listings: [Listing]
+    var bookings: [Booking]
+}

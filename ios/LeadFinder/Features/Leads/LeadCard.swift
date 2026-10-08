@@ -11,17 +11,96 @@ struct LeadCard: View {
     var onShowListing: (() -> Void)?
 
     @State private var showOthers = false
+    @State private var showContact = false
+    @State private var working: Action?
 
-    private var agent: LeadsResponse.Group { group }
+    private enum Action: String { case pass }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
             photosAndFacts
             if let notes = group.best.notes?.nilIfBlank { notesLine(notes) }
+            actions
             if !group.others.isEmpty { othersDisclosure }
         }
         .card(padding: 14)
+        .sheet(isPresented: $showContact) {
+            ContactSheet(
+                listingId: group.best.id,
+                type: "initial_outreach",
+                agentName: group.agentName ?? group.best.agentName,
+                agentPhone: group.agentPhone ?? group.best.agentPhone,
+                address: group.best.address
+            )
+        }
+    }
+
+    /// The web's LeadActions: contact, save, pass. Pass covers every listing in
+    /// the agent's group, because that's what the card is about.
+    private var actions: some View {
+        HStack(spacing: 8) {
+            Button {
+                showContact = true
+            } label: {
+                Label("Contact \(firstName)", systemImage: "message")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .foregroundStyle(Theme.background)
+            }
+            .buttonStyle(.plain)
+            .disabled(working != nil)
+
+            Button {
+                Task { await run(.pass) }
+            } label: {
+                actionIcon("xmark", tint: Theme.tertiaryText)
+            }
+            .buttonStyle(.plain)
+            .disabled(working != nil)
+        }
+    }
+
+    private func actionIcon(_ symbol: String, tint: Color) -> some View {
+        Image(systemName: symbol)
+            .font(.callout)
+            .foregroundStyle(tint)
+            .frame(width: 38, height: 36)
+            .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay {
+                if working != nil {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+    }
+
+    private var firstName: String {
+        let name = group.agentName ?? group.best.agentName ?? ""
+        return name.split(separator: " ").first.map(String.init) ?? "agent"
+    }
+
+    private func run(_ action: Action) async {
+        working = action
+        defer { working = nil }
+
+        do {
+            switch action {
+            case .pass:
+                // The whole group, as the web's "Pass all N" does: the card is
+                // about this agent, not one of their listings.
+                try await APIClient.shared.setListingStatus(listingIds: group.listingIds, status: "passed")
+            }
+            await refresh()
+        } catch {
+            // Leave the card in place: a failed action shouldn't look like it
+            // worked. The error surfaces on the next pull-to-refresh.
+        }
+    }
+
+    private func refresh() async {
+        NotificationCenter.default.post(name: .leadsDidChange, object: nil)
     }
 
     // MARK: - Agent
@@ -59,54 +138,47 @@ struct LeadCard: View {
 
     // MARK: - Photos and facts
 
+    /// Photo across the top, facts underneath. Side by side left the image too
+    /// small to judge a property from, which is the whole reason the card is
+    /// here — you swipe the photos to decide whether it's worth a text.
     private var photosAndFacts: some View {
-        HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             PhotoCarousel(
                 photos: PhotoSampling.card(group.best.photos ?? []),
                 alt: group.best.address ?? "Listing photo",
+                // The web's card photo box is a little taller than 3:2.
+                aspectRatio: 1.5,
                 onTap: onShowListing
             )
-            .frame(width: 140)
-            .frame(maxHeight: 132)
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(group.best.address?.nilIfBlank ?? "Unknown address")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+            Text(group.best.address?.nilIfBlank ?? "Unknown address")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.primaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
 
-                if !group.badges.isEmpty {
-                    FlowRow(spacing: 5) {
-                        ForEach(group.badges, id: \.kind) { badge in
-                            BadgeChip(text: badge.label, tint: badge.badgeTint(photoScore: group.best.score))
-                        }
+            if !group.badges.isEmpty {
+                FlowRow(spacing: 5) {
+                    ForEach(group.badges, id: \.kind) { badge in
+                        BadgeChip(text: badge.label, tint: badge.badgeTint(photoScore: group.best.score))
                     }
                 }
+            }
 
+            HStack(spacing: 8) {
                 Text(group.best.priceLine)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Theme.primaryText)
-
-                Text([group.best.city, group.best.state]
-                    .compactMap { $0?.nilIfBlank }
-                    .joined(separator: ", "))
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondaryText)
-                    .lineLimit(1)
-
                 Text(specs)
                     .font(.caption)
                     .foregroundStyle(Theme.secondaryText)
-                    .lineLimit(1)
-
+                Spacer(minLength: 0)
                 if let listed = DateFormatting.parse(group.best.listedAt) {
-                    Text("Listed \(DateFormatting.monthDay.string(from: listed))")
+                    Text(DateFormatting.monthDay.string(from: listed))
                         .font(.caption2)
                         .foregroundStyle(Theme.tertiaryText)
                 }
             }
-            Spacer(minLength: 0)
         }
     }
 

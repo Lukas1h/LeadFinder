@@ -20,17 +20,20 @@ struct LeadFinderApp: App {
     }
 }
 
+/// Four tabs. Follow up is deliberately not one of them — it is a board over
+/// agents, so it hangs off the Agents tab's header; bookings hang off
+/// Schedule's. Four is already the most the tab bar should carry on a phone.
 enum AppTab: Int, Hashable, CaseIterable {
     case leads
-    case followUp
     case schedule
+    case messages
     case agents
 
     var title: String {
         switch self {
         case .leads: "Leads"
-        case .followUp: "Follow up"
         case .schedule: "Schedule"
+        case .messages: "Messages"
         case .agents: "Agents"
         }
     }
@@ -38,8 +41,8 @@ enum AppTab: Int, Hashable, CaseIterable {
     var icon: String {
         switch self {
         case .leads: "sparkles"
-        case .followUp: "arrow.triangle.2.circlepath"
         case .schedule: "calendar"
+        case .messages: "paperplane"
         case .agents: "person.2"
         }
     }
@@ -55,13 +58,13 @@ struct RootTabView: View {
                 .tabItem { Label(AppTab.leads.title, systemImage: AppTab.leads.icon) }
                 .tag(AppTab.leads)
 
-            FollowUpView()
-                .tabItem { Label(AppTab.followUp.title, systemImage: AppTab.followUp.icon) }
-                .tag(AppTab.followUp)
-
             ScheduleView()
                 .tabItem { Label(AppTab.schedule.title, systemImage: AppTab.schedule.icon) }
                 .tag(AppTab.schedule)
+
+            MessagesView()
+                .tabItem { Label(AppTab.messages.title, systemImage: AppTab.messages.icon) }
+                .tag(AppTab.messages)
 
             AgentsView()
                 .tabItem { Label(AppTab.agents.title, systemImage: AppTab.agents.icon) }
@@ -98,6 +101,11 @@ enum DebugLaunchArguments {
 
     static var opensLeadDetail: Bool {
         ProcessInfo.processInfo.arguments.contains("-lead-detail")
+    }
+
+    /// `-bookings` opens the Schedule tab's bookings page on arrival.
+    static var opensBookings: Bool {
+        ProcessInfo.processInfo.arguments.contains("-bookings")
     }
 }
 #endif

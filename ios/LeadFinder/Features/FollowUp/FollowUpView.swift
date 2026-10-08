@@ -1,32 +1,33 @@
 import SwiftUI
 
+/// The Follow up board. Reached from the Agents tab's header rather than being
+/// a tab of its own, so it brings no NavigationStack with it — the one it is
+/// pushed onto supplies the bar and the back button.
 struct FollowUpView: View {
     @Environment(AppState.self) private var appState
     @State private var query = ""
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let response = appState.followUp.value {
-                    content(response)
-                } else if appState.followUp.error != nil {
-                    errorState
-                } else {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+        Group {
+            if let response = appState.followUp.value {
+                content(response)
+            } else if appState.followUp.error != nil {
+                errorState
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .background(Theme.background)
-            .navigationTitle("Follow up")
-            .navigationDestination(for: Agent.self) { FollowUpAgentDetailView(agent: $0) }
-            .refreshable { await appState.followUp.load(force: true) }
-            .task { await appState.followUp.load() }
-            .searchable(
-                text: $query,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search name, notes, phone"
-            )
         }
+        .background(Theme.background)
+        .navigationTitle("Follow up")
+        .navigationDestination(for: Agent.self) { FollowUpAgentDetailView(agent: $0) }
+        .refreshable { await appState.followUp.load(force: true) }
+        .task { await appState.followUp.load() }
+        .searchable(
+            text: $query,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search name, notes, phone"
+        )
     }
 
     // MARK: - Content
@@ -44,10 +45,9 @@ struct FollowUpView: View {
             emptyState
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                FreshnessBar(
-                    fetchedAt: appState.followUp.fetchedAt,
-                    isRefreshing: appState.followUp.isRefreshing,
-                    error: appState.followUp.error
+                ErrorBanner(
+                    message: appState.followUp.error,
+                    onRetry: { Task { await appState.followUp.load(force: true) } }
                 )
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -388,4 +388,11 @@ private struct FollowUpAgentDetailView: View {
               let url = URL(string: "mailto://\(email)") else { return nil }
         return url
     }
+}
+
+/// Value pushed from the Agents tab to reach the Follow up board. A wrapper
+/// rather than pushing `FollowUpView` directly, so the navigation value type
+/// says which screen it is and can't collide with another view's.
+struct FollowUpRoute: Hashable {
+    init() {}
 }

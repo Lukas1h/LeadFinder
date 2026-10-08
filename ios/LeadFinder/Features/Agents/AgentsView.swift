@@ -10,6 +10,7 @@ struct AgentsView: View {
     @Environment(AppState.self) private var appState
     @State private var query = ""
     @State private var filter: AgentFilter = .all
+    @State private var openAgent: AgentsResponse.Row?
 
     var body: some View {
         NavigationStack {
@@ -24,10 +25,25 @@ struct AgentsView: View {
             }
             .background(Theme.background)
             .navigationTitle("Agents")
-            .navigationDestination(for: AgentsResponse.Row.self) { agent in
+            // Detail is a sheet, not a push: it's a look at one agent, not a
+            // place you keep navigating from.
+            .sheet(item: $openAgent) { agent in
                 AgentDirectoryDetail(agent: agent)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
-            .refreshable { await appState.agents.load(force: true) }
+            .navigationDestination(for: FollowUpRoute.self) { _ in
+                FollowUpView()
+            }
+            // Follow up lives here rather than as a tab of its own: it is a view
+            // over agents, so it belongs under the directory.
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink(value: FollowUpRoute()) {
+                        Label("Follow up", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+            }
             .task { await appState.agents.load() }
             .searchable(
                 text: $query,
@@ -42,10 +58,9 @@ struct AgentsView: View {
         let agents = filtered(all)
 
         return VStack(spacing: 0) {
-            FreshnessBar(
-                fetchedAt: appState.agents.fetchedAt,
-                isRefreshing: appState.agents.isRefreshing,
-                error: appState.agents.error
+            ErrorBanner(
+                message: appState.agents.error,
+                onRetry: { Task { await appState.agents.load(force: true) } }
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
@@ -59,13 +74,15 @@ struct AgentsView: View {
                 Spacer(minLength: 0)
             } else {
                 List(agents) { agent in
-                    NavigationLink(value: agent) {
+                    Button { openAgent = agent } label: {
                         AgentDirectoryRow(agent: agent)
                     }
+                    .buttonStyle(.plain)
                     .listRowBackground(Theme.background)
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .refreshable { await appState.agents.load(force: true) }
             }
         }
     }
@@ -211,91 +228,214 @@ struct AgentDirectoryRow: View {
     }
 }
 
-/// Read-only detail for one agent, built only from the directory's own copy.
-/// `/agents/:id` (timeline, listings, bookings) is more than Phase 2 needs.
+/// One agent in full: who they are, what you've done with them, and the listings
+/// and bookings that hang off them.
+///
+/// Presented as a sheet rather than pushed: it's a look, not a place you navigate
+/// away from. Their listings and bookings reuse the shared ListingRow and
+/// BookingRow so an agent, a listing and a job look the same everywhere.
 struct AgentDirectoryDetail: View {
     let agent: AgentsResponse.Row
 
+    @State private var detail: AgentDetailResponse?
+    @State private var loadError: String?
+    @State private var openListing: Listing?
+    @State private var openBooking: Booking?
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(agent.displayName)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(Theme.primaryText)
-
-                    if let brokerage = agent.brokerage?.nilIfBlank {
-                        Text(brokerage)
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.secondaryText)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    if let error = loadError {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(Theme.danger)
                     }
-
-                    if let status = agent.relationshipStatus {
-                        BadgeChip(text: status.relationshipLabel, tint: status.relationshipTint)
-                    }
+                    listings
+                    bookings
+                    timeline
+                    callerID
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .card()
+                .padding(.vertical, 12)
+            }
+            .background(Theme.background)
+            .navigationTitle(agent.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { close() }
+                }
+            }
+            .task { await load() }
+            .sheet(item: $openListing) { listing in
+                LeadListingSheet(listing: listing, agent: detail?.agent)
+            }
+            .sheet(item: $openBooking) { booking in
+                BookingDetailView(booking: booking)
+            }
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    if let phone = agent.phone?.nilIfBlank {
-                        let digits = phone.filter(\.isNumber)
-                        if !digits.isEmpty {
-                            Link(destination: URL(string: "tel://\(digits)")!) {
-                                Label(phone, systemImage: "phone")
-                                    .font(.subheadline)
-                            }
-                        }
-                    }
+    @Environment(\.dismiss) private var dismiss
+    private func close() { dismiss() }
 
-                    if let email = agent.email?.nilIfBlank {
-                        Link(destination: URL(string: "mailto:\(email)")!) {
-                            Label(email, systemImage: "envelope")
-                                .font(.subheadline)
-                                .lineLimit(1)
-                        }
-                    }
+    // MARK: - Header
 
-                    if let contacted = DateFormatting.parse(agent.lastContactedAt) {
-                        Label(
-                            "Last contact \(DateFormatting.relativeDay(DateFormatting.day.string(from: contacted)))",
-                            systemImage: "clock.arrow.circlepath"
-                        )
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AgentRow(
+                name: agent.displayName,
+                phone: agent.phone,
+                subtitle: detail?.brokerage ?? agent.brokerage,
+                relationshipStatus: agent.relationshipStatus
+            )
+
+            if let email = agent.email?.nilIfBlank {
+                Link(destination: URL(string: "mailto:\(email)")!) {
+                    Label(email, systemImage: "envelope")
                         .font(.footnote)
-                        .foregroundStyle(Theme.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+
+            if let phone = agent.phone?.nilIfBlank {
+                let digits = phone.filter(\.isNumber)
+                if !digits.isEmpty {
+                    Link(destination: URL(string: "tel://\(digits)")!) {
+                        Label(phone, systemImage: "phone")
+                            .font(.footnote)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .card()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .card()
+    }
 
-                // What iOS caller ID will show for this number, so the label can
-                // be sanity-checked before it turns up on a call screen.
-                if let label = agent.callerLabel?.nilIfBlank {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("CALLER ID")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(Theme.tertiaryText)
-                            .kerning(0.6)
-                        Text(label)
+    // MARK: - Listings and bookings
+
+    @ViewBuilder
+    private var listings: some View {
+        let listings = detail?.listings ?? []
+        if !listings.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                sectionTitle("Listings (\(listings.count))")
+                ForEach(listings) { listing in
+                    Button { openListing = listing } label: { ListingRow(listing: listing) }
+                        .buttonStyle(.plain)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .card()
+        }
+    }
+
+    @ViewBuilder
+    private var bookings: some View {
+        let bookings = detail?.bookings ?? []
+        if !bookings.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                sectionTitle("Bookings (\(bookings.count))")
+                ForEach(bookings) { booking in
+                    Button { openBooking = booking } label: { BookingRow(booking: booking) }
+                        .buttonStyle(.plain)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .card()
+        }
+    }
+
+    // MARK: - Timeline
+
+    @ViewBuilder
+    private var timeline: some View {
+        let entries = detail?.timeline ?? []
+        if !entries.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionTitle("History")
+
+                ForEach(entries) { entry in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(summary(entry))
                             .font(.subheadline)
                             .foregroundStyle(Theme.primaryText)
-                        if let number = agent.callerNumber {
-                            Text("Matches +\(number)")
+                        Text(when(entry))
+                            .font(.caption2)
+                            .foregroundStyle(Theme.tertiaryText)
+                        if let note = entry.note?.nilIfBlank {
+                            Text(note)
                                 .font(.caption)
-                                .foregroundStyle(Theme.tertiaryText)
+                                .foregroundStyle(Theme.secondaryText)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .card()
                 }
             }
-            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .card()
         }
-        .background(Theme.background)
-        .navigationTitle(agent.displayName)
-        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func summary(_ entry: AgentDetailResponse.Entry) -> String {
+        var parts: [String] = []
+
+        switch entry.kind {
+        case "send":
+            parts.append(entry.channel == "email" ? "Emailed" : "Texted")
+            if let preset = entry.presetName?.nilIfBlank { parts.append("“\(preset)”") }
+            if let result = entry.result, result != "pending" { parts.append("· \(result.capitalized)") }
+        default:
+            parts.append(entry.kind.capitalized)
+            if let channel = entry.channel?.nilIfBlank { parts.append("· \(channel)") }
+        }
+
+        if let address = entry.listingAddress?.nilIfBlank { parts.append("· \(address)") }
+        return parts.joined(separator: " ")
+    }
+
+    private func when(_ entry: AgentDetailResponse.Entry) -> String {
+        guard let at = entry.at, let date = DateFormatting.parse(at) else { return "" }
+        return DateFormatting.dayTime.string(from: date)
+    }
+
+    // MARK: - Caller ID
+
+    @ViewBuilder
+    private var callerID: some View {
+        if let label = agent.callerLabel?.nilIfBlank {
+            VStack(alignment: .leading, spacing: 4) {
+                sectionTitle("Caller ID")
+                Text(label)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.primaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .card()
+        }
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(Theme.tertiaryText)
+            .kerning(0.6)
+    }
+
+    private func load() async {
+        guard detail == nil else { return }
+        do {
+            detail = try await APIClient.shared.agentDetail(agent.id)
+        } catch let apiError as APIError {
+            loadError = apiError.errorDescription
+        } catch {
+            loadError = error.localizedDescription
+        }
     }
 }

@@ -11,6 +11,10 @@ struct PhotoCarousel: View {
     /// full-size context (a detail screen) shows them. Cards don't: on a phone
     /// you swipe the photo anyway, and arrows just cover it.
     var alwaysShowControls: Bool = false
+    /// The frame's shape. Fixing this is what stops the photo stretching: a
+    /// plain height on a fill-mode image lets it distort, and the web's carousel
+    /// is 3:2 for the same reason.
+    var aspectRatio: CGFloat = 3.0 / 2.0
     var onTap: (() -> Void)?
 
     @State private var index = 0
@@ -25,7 +29,7 @@ struct PhotoCarousel: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 132)
+        .aspectRatio(aspectRatio, contentMode: .fit)
         .background(Theme.cardRaised)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -43,7 +47,7 @@ struct PhotoCarousel: View {
                 AsyncImage(url: URL(string: photos[photoIndex])) { phase in
                     switch phase {
                     case let .success(image):
-                        image.resizable().aspectRatio(contentMode: .fill)
+                        image.resizable().scaledToFill()
                     case .empty:
                         ZStack {
                             Theme.cardRaised
@@ -56,6 +60,10 @@ struct PhotoCarousel: View {
                         }
                     }
                 }
+                // scaledToFill crops rather than stretches, but only once the
+                // page is clipped to the frame.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
                 .tag(photoIndex)
             }
         }
@@ -107,6 +115,7 @@ struct PhotoCarousel: View {
         }
         .foregroundStyle(Theme.tertiaryText)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 
     private func step(_ delta: Int) {

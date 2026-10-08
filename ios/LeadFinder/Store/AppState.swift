@@ -67,6 +67,7 @@ final class AppState {
     let schedule = Resource<ScheduleResponse>(path: "api/app/v1/schedule", key: .schedule)
     let bookings = Resource<BookingsResponse>(path: "api/app/v1/bookings", key: .bookings)
     let agents = Resource<AgentsResponse>(path: "api/app/v1/agents", key: .agents)
+    let messages = Resource<MessagesResponse>(path: "api/app/v1/messages", key: .messages)
 
     init() {}
 

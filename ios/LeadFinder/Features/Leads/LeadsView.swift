@@ -9,10 +9,10 @@ struct LeadsView: View {
     /// closed, matching the web page.
     @State private var collapsed: Set<String> = []
     @State private var didSetInitialCollapse = false
-    @State private var path = NavigationPath()
+    @State private var openLead: LeadsResponse.Group?
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             Group {
                 if let leads = appState.leads.value {
                     leadsList(leads)
@@ -24,20 +24,29 @@ struct LeadsView: View {
             }
             .background(Theme.background)
             .navigationTitle("Leads")
-            .navigationDestination(for: LeadsResponse.Group.self) { group in
+            .sheet(item: $openLead) { group in
                 LeadDetailView(group: group)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
             .task {
                 #if DEBUG
-                // `-lead-detail` opens the first lead straight away, so the
-                // detail screen can be screenshotted without tapping.
-                if DebugLaunchArguments.opensLeadDetail,
-                   let first = appState.leads.value?.sections.first?.groups.first {
-                    path.append(first)
+                // `-lead-detail` opens the first lead straight away, so the detail
+                // screen can be screenshotted without anyone tapping. It waits for
+                // the data, because at first appear there is nothing to push.
+                guard DebugLaunchArguments.opensLeadDetail else { return }
+                for _ in 0..<60 {
+                    if let first = appState.leads.value?.sections.first?.groups.first {
+                        openLead = first
+                        return
+                    }
+                    try? await Task.sleep(for: .milliseconds(250))
                 }
                 #endif
             }
-            .refreshable { await appState.leads.load(force: true) }
+            .onReceive(NotificationCenter.default.publisher(for: .leadsDidChange)) { _ in
+                Task { await appState.leads.load(force: true) }
+            }
             .task { await appState.leads.load() }
             .task {
                 guard !didSetInitialCollapse else { return }
@@ -53,11 +62,11 @@ struct LeadsView: View {
 
     private func leadsList(_ leads: LeadsResponse) -> some View {
         ScrollView {
+
             LazyVStack(spacing: 14, pinnedViews: []) {
-                FreshnessBar(
-                    fetchedAt: appState.leads.fetchedAt,
-                    isRefreshing: appState.leads.isRefreshing,
-                    error: appState.leads.error
+                ErrorBanner(
+                    message: appState.leads.error,
+                    onRetry: { Task { await appState.leads.load(force: true) } }
                 )
                 .padding(.horizontal, 16)
 
@@ -77,6 +86,7 @@ struct LeadsView: View {
             }
             .padding(.vertical, 12)
         }
+        .refreshable { await appState.leads.load(force: true) }
     }
 
     private func header(_ counts: LeadsResponse.Counts) -> some View {
@@ -127,7 +137,7 @@ struct LeadsView: View {
 
             if !isCollapsed {
                 ForEach(section.groups) { group in
-                    NavigationLink(value: group) {
+                    Button { openLead = group } label: {
                         LeadCard(group: group)
                     }
                     .buttonStyle(.plain)
@@ -152,4 +162,9 @@ struct LeadsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+}
+/// Posted after a card's Save or Pass lands, so the list can refetch and drop
+/// the card rather than leaving a row that no longer exists.
+extension Notification.Name {
+    static let leadsDidChange = Notification.Name("leadsDidChange")
 }
