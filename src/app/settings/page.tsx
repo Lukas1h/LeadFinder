@@ -5,6 +5,8 @@ import { searchSources } from "@/db/schema";
 import { desc } from "drizzle-orm";
 import { fetchAccountUsage } from "@/lib/zillapi";
 import { getFollowUpAfterDays } from "@/lib/settings";
+import { authGateEnabled } from "@/lib/adminSession";
+import { signOut } from "@/app/login/actions";
 import { SourceCard } from "./SourceCard";
 import { SourceForm } from "./SourceForm";
 import { EmailSourceCard } from "./EmailSourceCard";
@@ -91,6 +93,16 @@ async function SettingsContent() {
             <SourceCard key={source.id} source={source} />
           ))}
         </div>
+      )}
+
+      {/* Only when there's a session to end — with the gate off (local dev,
+          either var unset) there's no cookie and the button would do nothing. */}
+      {authGateEnabled() && (
+        <form action={signOut} className="mt-12 flex justify-center">
+          <Button type="submit" variant="ghost" className="text-muted-foreground">
+            Sign out
+          </Button>
+        </form>
       )}
     </>
   );
