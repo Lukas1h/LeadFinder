@@ -2,17 +2,11 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 import { HeartHandshake } from "lucide-react";
-import type { Agent } from "@/db/schema";
 import { dismissFollowUpAgent } from "@/app/agents/actions";
 import { AgentCard } from "@/app/agents/AgentCard";
 import { ListingRow } from "@/app/ListingRow";
 import type { FollowUpEntry, JustListedEntry } from "./data";
-
-const GROUPS = [
-  { label: "Past clients", match: (a: Agent) => a.relationshipStatus === "regular" || a.relationshipStatus === "worked_once" },
-  { label: "Interested, gone quiet", match: (a: Agent) => a.relationshipStatus === "interested" },
-  { label: "Warm", match: (a: Agent) => a.relationshipStatus === "warm" },
-];
+import { FOLLOW_UP_GROUPS } from "./groups";
 
 export function FollowUpList({
   justListed,
@@ -74,7 +68,7 @@ export function FollowUpList({
           </div>
         </section>
       )}
-      {GROUPS.map(({ label, match }) => {
+      {FOLLOW_UP_GROUPS.map(({ label, match }) => {
         const group = quiet.filter((e) => match(e.agent));
         if (group.length === 0) return null;
         return (

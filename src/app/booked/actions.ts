@@ -243,6 +243,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
   return {
     id: booking.id,
     listingId: booking.listingId,
+    contactAgentId: booking.contactAgentId,
     address: linkedListing?.address ?? booking.address,
     city,
     state,
@@ -318,6 +319,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
     return {
       id: b.id,
       listingId: b.listingId,
+      contactAgentId: b.contactAgentId,
       address: linkedListing?.address ?? b.address,
       city,
       state,

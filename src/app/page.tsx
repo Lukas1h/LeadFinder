@@ -1,40 +1,19 @@
-import { withLastContactFromHistory } from "@/lib/agentLastContact";
 import { Fragment, Suspense } from "react";
 import { PartyPopper, ChevronRight } from "lucide-react";
-import { db } from "@/db";
-import { listings, agents, type Agent, type Listing } from "@/db/schema";
-import { desc, eq, inArray } from "drizzle-orm";
-import { LeadActions } from "./LeadActions";
 import { AgentLeadCard } from "./AgentLeadCard";
+import { LeadActions } from "./LeadActions";
 import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
 import { NewBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge } from "./badges";
-import { byLeadPriority, FEW_PHOTOS_THRESHOLD, findAttachedAgent, buildAgentLookups } from "@/lib/pipeline";
-import {
-  refreshLeadSections,
-  isBuilderListing,
-  lastTextByAgent,
-  isRecentlyTexted,
-  LEAD_SECTION_LABELS,
-  LEAD_SECTION_ORDER,
-  type LeadSection,
-} from "@/lib/leadSections";
+import { FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { isBuilderListing, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER } from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { LeadsSkeleton } from "./loading";
 import Link from "next/link";
-import { getQueuedListingIds } from "@/lib/queueMessages";
-import { KnownAgentLeads, type KnownAgentGroup } from "./KnownAgentLeads";
-import type { AgentRelationshipStatus } from "@/db/schema";
-
-const KNOWN_AGENT_GROUP: Partial<Record<AgentRelationshipStatus, KnownAgentGroup>> = {
-  regular: "clients",
-  worked_once: "clients",
-  interested: "interested",
-  warm: "warm",
-};
-const KNOWN_AGENT_GROUP_ORDER: KnownAgentGroup[] = ["clients", "interested", "warm"];
+import { KnownAgentLeads } from "./KnownAgentLeads";
+import { getLeadsBoard, type LeadGroup } from "./leads-data";
 
 // Server Action timeouts are controlled by the maxDuration of the page
 // they're invoked from — triggerManualSync (RefreshButton's action, in
@@ -62,128 +41,9 @@ export default function LeadsPage() {
 async function LeadsContent() {
   // Deliberately NOT "use cache" — see the comment in src/app/pipeline/page.tsx.
 
-  // foundAt is transaction-time, so a batch insert gives every row in it
-  // the exact same value — listings.id as a tiebreaker keeps order stable
-  // across renders instead of reshuffling ties arbitrarily.
-  // Independent of each other, so run them concurrently instead of paying
-  // for two sequential round trips to Neon.
-  const [leads, allAgents, queuedIds] = await Promise.all([
-    db
-      .select()
-      .from(listings)
-      .where(eq(listings.status, "new"))
-      .orderBy(desc(listings.foundAt), listings.id),
-    db.select().from(agents),
-    getQueuedListingIds(),
-  ]);
-  // A listing with a message waiting in the Queue has been handled — it lives
-  // in the Pipeline's Queued section until that message is sent (see
-  // getQueuedListingIds).
-  const queuedCount = leads.filter((l) => queuedIds.has(l.id)).length;
-  const openLeads = leads.filter((l) => !queuedIds.has(l.id));
-  const contactAgents = await withLastContactFromHistory(allAgents);
-  const { byId: agentById, byPhone: agentByPhone, byName: agentByName } = buildAgentLookups(contactAgents);
+  const { known, sections, openLeadCount, queuedCount, agentCount, addressById } = await getLeadsBoard();
 
-  // The listing a declined agent turned down, named in their Declined badge.
-  const referencedIds = contactAgents
-    .filter((a) => a.relationshipStatus === "declined")
-    .map((a) => a.lastContactedListingId)
-    .filter((id): id is string => id != null);
-  const referencedListings =
-    referencedIds.length > 0
-      ? await db
-          .select({ id: listings.id, address: listings.address })
-          .from(listings)
-          .where(inArray(listings.id, referencedIds))
-      : [];
-  const addressById = new Map(referencedListings.map((l) => [l.id, l.address]));
-
-  // Four sections — see lib/leadSections.ts. The stored section is what the
-  // message dialog's recommendation reads, so settle it first and bucket from
-  // exactly that. refreshLeadSections only writes rows that moved, so this is
-  // cheap per load and self-heals when a score, price cut or text lands.
-  // Queued ones too: their recommendation reads the same stored section.
-  const sectionById = await refreshLeadSections(leads.map((l) => l.id));
-  // When each agent was last texted or called: a week's quiet before texting
-  // them again, the "Texted Oct 5" on the card, and never-texted agents first.
-  const lastTexted = await lastTextByAgent(
-    openLeads.map((l) => findAttachedAgent(l, agentByPhone, agentByName, agentById)?.id).filter((id): id is string => !!id)
-  );
-
-  // One card per agent: outreach is about the person now, and each listing is
-  // just a reason to text them. Their best open listing leads the card — the
-  // strongest section first (a photo pitch beats video beats backup), then the
-  // usual priority score — and the rest fold away underneath it. Grouping is
-  // display only; each listing keeps its stored section, so if the best one
-  // goes away the next one takes its place.
-  type Entry = { lead: Listing; section: LeadSection };
-  type AgentGroupRow = {
-    key: string;
-    agent: Agent | null;
-    entries: Entry[];
-    textedAt: Date | undefined;
-    best: Listing;
-    section: LeadSection;
-    known: KnownAgentGroup | undefined;
-  };
-  const byKey = new Map<string, { agent: Agent | null; entries: Entry[]; textedAt: Date | undefined }>();
-  for (const lead of openLeads) {
-    const attached = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
-    const textedAt = attached ? lastTexted.get(attached.id) : undefined;
-    const section = sectionById.get(lead.id) ?? "unlikely";
-    const fallback = lead.agentPhone || lead.agentName;
-    const key = attached ? attached.id : fallback ? `contact:${fallback}` : `listing:${lead.id}`;
-    const group = byKey.get(key) ?? { agent: attached, entries: [], textedAt };
-    group.entries.push({ lead, section });
-    byKey.set(key, group);
-  }
-
-  const groups: AgentGroupRow[] = [...byKey.entries()].map(([key, g]) => {
-    g.entries.sort(
-      (a, b) =>
-        LEAD_SECTION_ORDER.indexOf(a.section) - LEAD_SECTION_ORDER.indexOf(b.section) ||
-        byLeadPriority(a.lead, b.lead)
-    );
-    const known = g.agent ? KNOWN_AGENT_GROUP[g.agent.relationshipStatus] : undefined;
-    return {
-      key,
-      ...g,
-      best: g.entries[0].lead,
-      section: g.entries[0].section,
-      // Someone he already knows comes first — unless he texted them this
-      // week, in which case they wait in Unlikely like everyone else.
-      known: known && !isRecentlyTexted(g.textedAt) ? known : undefined,
-    };
-  });
-
-  const known = groups.filter((g) => g.known);
-  const sections: Record<LeadSection, AgentGroupRow[]> = { photo: [], video: [], backup: [], unlikely: [] };
-  for (const g of groups) if (!g.known) sections[g.section].push(g);
-
-  // Within a section: backup and video put agents he has never texted first,
-  // then the priciest listing; photo and unlikely go by the priority score the
-  // pipeline uses (coming soon first, then price-weighted photo opportunity).
-  for (const key of LEAD_SECTION_ORDER) {
-    sections[key].sort((a, b) =>
-      key === "backup" || key === "video"
-        ? (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) || (b.best.price ?? 0) - (a.best.price ?? 0)
-        : byLeadPriority(a.best, b.best)
-    );
-  }
-  known.sort(
-    (a, b) =>
-      KNOWN_AGENT_GROUP_ORDER.indexOf(a.known!) - KNOWN_AGENT_GROUP_ORDER.indexOf(b.known!) ||
-      byLeadPriority(a.best, b.best)
-  );
-  const agentCount = groups.filter((g) => !g.key.startsWith("listing:")).length;
-
-  function contactLine(g: AgentGroupRow): string | null {
-    if (g.textedAt) return `Texted ${shortDate(g.textedAt)}`;
-    if (g.agent?.lastContactedAt) return `Never texted · emailed ${shortDate(g.agent.lastContactedAt)}`;
-    return g.agent || !g.key.startsWith("listing:") ? "Never contacted" : null;
-  }
-
-  function card(g: AgentGroupRow) {
+  function card(g: LeadGroup) {
     const lead = g.best;
     const agent = g.agent;
     const ids = g.entries.map((e) => e.lead.id);
@@ -194,7 +54,7 @@ async function LeadsContent() {
         agent={agent}
         agentName={lead.agentName}
         brokerName={lead.brokerName}
-        contactLine={contactLine(g)}
+        contactLine={g.contactLine}
         lead={lead}
         others={g.entries.slice(1).map((e) => e.lead)}
         badges={
@@ -239,8 +99,8 @@ async function LeadsContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Leads</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {agentCount} agent{agentCount === 1 ? "" : "s"} · {openLeads.length} listing
-            {openLeads.length === 1 ? "" : "s"}
+            {agentCount} agent{agentCount === 1 ? "" : "s"} · {openLeadCount} listing
+            {openLeadCount === 1 ? "" : "s"}
             {queuedCount > 0 && (
               <>
                 {" · "}
@@ -257,7 +117,7 @@ async function LeadsContent() {
         </div>
       </header>
 
-      {openLeads.length === 0 ? (
+      {openLeadCount === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
           <PartyPopper className="size-8" />
           <p>You&rsquo;re all caught up — no new leads right now.</p>
@@ -311,9 +171,4 @@ async function LeadsContent() {
       </p>
     </>
   );
-}
-
-/** "Oct 5" in Pacific time — this renders on the server, which runs in UTC. */
-function shortDate(date: Date): string {
-  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 }

@@ -9,11 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatPrice } from "@/lib/format";
 import { averageProfitPerHour, sumProfit } from "./bookingMath";
+import { groupBookings } from "./data";
 import { Stat, Sub } from "../Stat";
 
 export interface BookingWithDetails {
   id: string;
   listingId: string | null;
+  // The agents row behind contactName/contactPhone, for callers that want to
+  // jump from a booking to the agent (the iPhone app does; the web reads it
+  // off the card's own dialog instead).
+  contactAgentId: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -56,26 +61,9 @@ export interface BookingWithDetails {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
-  const { upcoming, waiting, completed } = useMemo(() => {
-    const upcoming = bookings
-      .filter((b) => !b.completedAt && !b.invoiceSentAt)
-      .sort((a, b) => {
-        // No job date yet sinks to the bottom rather than sorting first.
-        if (!a.jobDate && !b.jobDate) return b.createdAt.getTime() - a.createdAt.getTime();
-        if (!a.jobDate) return 1;
-        if (!b.jobDate) return -1;
-        return a.jobDate.getTime() - b.jobDate.getTime();
-      });
-    // Invoice sent but not yet paid — longest-waiting first, so the one to
-    // chase is on top.
-    const waiting = bookings
-      .filter((b) => !b.completedAt && b.invoiceSentAt)
-      .sort((a, b) => a.invoiceSentAt!.getTime() - b.invoiceSentAt!.getTime());
-    const completed = bookings
-      .filter((b) => b.completedAt)
-      .sort((a, b) => b.completedAt!.getTime() - a.completedAt!.getTime());
-    return { upcoming, waiting, completed };
-  }, [bookings]);
+  // The split lives in ./data so the iPhone app's GET /bookings returns the
+  // same buckets rather than a second opinion on what "waiting" means.
+  const { upcoming, waiting, completed } = useMemo(() => groupBookings(bookings), [bookings]);
 
   if (bookings.length === 0) {
     return (

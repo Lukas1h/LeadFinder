@@ -1,11 +1,15 @@
 import { Sparkles, Clock, Camera, TriangleAlert, Bell, TrendingDown, ListOrdered } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, LeadStatus, Listing } from "@/db/schema";
-import { formatDate, formatDateOnly, daysSince, formatPrice } from "@/lib/format";
+import { formatDate, formatDateOnly, daysSince } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { isWarmAgentStatus } from "@/lib/pipeline";
 import { cn } from "@/lib/utils";
 import { RELATIONSHIP_LABELS } from "./agents/relationshipLabels";
+// The wording lives in lib/leadBadges.ts (a plain module) so the iPhone app's
+// JSON API can render the same labels server-side — a value can't be imported
+// out of a "use client" file — while this file keeps the presentation.
+import { agentDeclinedBadge, duplicateAgentBadge, fewPhotosBadge, photoScoreTier, priceCutBadge } from "@/lib/leadBadges";
 
 export function NewBadge() {
   return (
@@ -48,14 +52,7 @@ export function StatusBadge({ status }: { status: LeadStatus }) {
 }
 
 export function PhotoScoreBadge({ score, reasoning }: { score: number; reasoning: string | null }) {
-  const tier =
-    score <= 3
-      ? { label: "Poor photos", style: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900" }
-      : score <= 5
-        ? { label: "Amateur photos", style: "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900" }
-        : score <= 7
-          ? { label: "Good photos", style: "bg-muted text-muted-foreground" }
-          : { label: "Pro photos", style: "bg-muted text-muted-foreground/60" };
+  const tier = photoScoreTier(score);
 
   const badge = (
     <Badge className={tier.style}>
@@ -93,48 +90,23 @@ export function ComingSoonBadge() {
   );
 }
 
-// Compact money for badge text, where there's room for at most one decimal.
-// The unary + drops a trailing ".0" so a clean $10,000 reads "$10K" rather
-// than "$10.0K".
-function shortMoney(n: number) {
-  if (n >= 1_000_000) return `$${+(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `$${+(n / 1000).toFixed(1)}K`;
-  return `$${n}`;
-}
-
 export function PriceCutBadge({
   lead,
 }: {
   lead: Pick<Listing, "priceCutAt" | "priceCutAmount" | "priceCutCount" | "originalPrice" | "price" | "listedAt">;
 }) {
-  if (!lead.priceCutAt) return null;
-
-  const { priceCutAt, priceCutAmount, priceCutCount, originalPrice, price, listedAt } = lead;
-
-  // Each part is optional: a cut we've only just detected may not have a
-  // count or a prior price yet, and an agent can cut before the listing has
-  // been on the market long enough for us to know its listed date.
-  const details: string[] = [];
-  if (priceCutCount != null && priceCutCount > 0) {
-    details.push(`${priceCutCount} price cut${priceCutCount === 1 ? "" : "s"}`);
-  }
-  if (originalPrice != null && price != null && originalPrice > price) {
-    details.push(`${formatPrice(originalPrice)} → ${formatPrice(price)}`);
-  }
-  if (listedAt) {
-    details.push(`on market ${daysSince(listedAt)} days`);
-  }
-  details.push(`cut ${formatDateOnly(priceCutAt)}`);
+  const text = priceCutBadge(lead);
+  if (!text) return null;
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Badge className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-400 dark:border-orange-900">
           <TrendingDown />
-          Price cut{priceCutAmount != null ? ` −${shortMoney(priceCutAmount)}` : ""}
+          {text.label}
         </Badge>
       </TooltipTrigger>
-      <TooltipContent>{details.join(" · ")}</TooltipContent>
+      <TooltipContent>{text.detail}</TooltipContent>
     </Tooltip>
   );
 }
@@ -178,7 +150,7 @@ export function FewPhotosBadge({ count }: { count: number }) {
       <TooltipTrigger asChild>
         <Badge className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900">
           <Camera />
-          Only {count} photo{count === 1 ? "" : "s"}
+          {fewPhotosBadge(count).label}
         </Badge>
       </TooltipTrigger>
       <TooltipContent>
@@ -203,14 +175,7 @@ export function DuplicateAgentBadge({
           Already contacted
         </Badge>
       </TooltipTrigger>
-      <TooltipContent>
-        {/* Without a listing pointer the contact was a cold email or a logged
-            call, not a property conversation — naming "another listing" there
-            would invent one. */}
-        Already contacted {duplicateAgent.name ?? "this agent"} on{" "}
-        {formatDate(duplicateAgent.lastContactedAt)}
-        {duplicateAddress ? ` about ${duplicateAddress}` : ""}
-      </TooltipContent>
+      <TooltipContent>{duplicateAgentBadge(duplicateAgent, duplicateAddress).detail}</TooltipContent>
     </Tooltip>
   );
 }
@@ -230,10 +195,7 @@ export function AgentDeclinedBadge({
           Agent declined
         </Badge>
       </TooltipTrigger>
-      <TooltipContent>
-        {agent.name ?? "This agent"} has marked their status as declined
-        {duplicateAddress ? ` · previously on ${duplicateAddress}` : ""}
-      </TooltipContent>
+      <TooltipContent>{agentDeclinedBadge(agent, duplicateAddress)?.detail}</TooltipContent>
     </Tooltip>
   );
 }
