@@ -54,7 +54,7 @@ An Expo app was tried once (branch `mobile-app`, 2026-09-11, never merged). It r
 
 ### iOS app (SwiftUI): Phases 2–5
 
-- **Stack:** current Xcode, Swift 6, SwiftUI. No third-party packages to start. Minimum iOS set to whatever his iPhone runs (still to confirm).
+- **Stack:** current Xcode, Swift 6, SwiftUI. No third-party packages to start. Minimum iOS 18 (his iPhone 16e).
 - **Location:** `ios/` in this repo, so one Claude session sees both the API and the app. Vercel ignores it.
 - **Signing: free Apple ID ("Personal Team"), no paid program.** See [Free Apple account](#free-apple-account-what-it-means).
 - **Config:** the API base URL (`https://realestate.lukashahn.art`) and `MOBILE_API_SECRET` go in a git-ignored `ios/Secrets.xcconfig` and reach both targets through Info.plist. Building them in means the caller ID extension can use them without sharing anything with the app.
@@ -123,8 +123,8 @@ Today's web push alerts (new leads, warm agents listing, price cuts) keep workin
 7. **Backend now on Linux:** yes. Spec written, handed to another agent; Claude verifies and ships.
 8. **Lock down `realestate.lukashahn.art`:** yes, Phase 0.
 
-Still open: iPhone model and iOS version.
+iPhone: 16e on iOS 18, so the minimum target is iOS 18.
 
 ## Kickoff prompt for the Mac session
 
-> Read `CLAUDE.md`, `docs/ios-app-plan.md` and `docs/ios-backend-spec.md`. We're building the LeadFinder iPhone app in `ios/` with SwiftUI, signed with my free Apple ID (Personal Team). Phases 0–1 (web login + `/api/app/v1`) should already be live; check git log and `curl https://realestate.lukashahn.art/api/app/v1/ping` with the token from `.env.local` (`MOBILE_API_SECRET`). Then start Phase 2. My iPhone is a ___ on iOS ___.
+> Read `CLAUDE.md`, `docs/ios-app-plan.md` and `docs/ios-backend-spec.md`. We're building the LeadFinder iPhone app in `ios/` with SwiftUI, signed with my free Apple ID (Personal Team). Phases 0–1 (web login + `/api/app/v1`) should already be live; check git log and `curl https://realestate.lukashahn.art/api/app/v1/ping` with the token from `.env.local` (`MOBILE_API_SECRET`). Then start Phase 2. My iPhone is a 16e on iOS 18.
