@@ -16,7 +16,7 @@ import { etagged } from "../helpers";
  * record an outcome.
  */
 
-/** How many templates the card lists per channel, as on the web. */
+/** How many templates the card lists, as on the web. */
 const TOP_TEMPLATES = 3;
 
 /**
@@ -24,16 +24,16 @@ const TOP_TEMPLATES = 3;
  * reply, that aren't archived, and that aren't follow-ups (those are replies to
  * a conversation rather than outreach). Done here rather than in the app so the
  * two surfaces cut the same list.
+ *
+ * Texts only, matching the web card. Cold email was a one-off campaign, and its
+ * 0.8% reply rate sat next to live texting at 28% doing neither of them any
+ * favours.
  */
 function topTemplates(templates: MessagingStats["templates"]): MessagingStats["templates"] {
-  const contenders = templates
-    .filter((t) => t.replied > 0 && !t.archived && t.type !== "follow_up")
-    .sort((a, b) => b.replied - a.replied || b.booked - a.booked);
-
-  return [
-    ...contenders.filter((t) => t.channel === "sms").slice(0, TOP_TEMPLATES),
-    ...contenders.filter((t) => t.channel === "email").slice(0, TOP_TEMPLATES),
-  ];
+  return templates
+    .filter((t) => t.channel === "sms" && t.replied > 0 && !t.archived && t.type !== "follow_up")
+    .sort((a, b) => b.replied - a.replied || b.booked - a.booked)
+    .slice(0, TOP_TEMPLATES);
 }
 
 export async function GET(req: Request) {

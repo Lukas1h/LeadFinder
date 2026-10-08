@@ -1,23 +1,20 @@
-"use client";
-
-import { useState } from "react";
-import type { MessageChannel } from "@/db/schema";
 import type { DayBucket } from "@/lib/messageStats";
 import { formatRate } from "@/lib/format";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /** Below this many expected replies a bar is mostly luck, so it's faded. */
 const MIN_EXPECTED_REPLIES = 5;
 
 /**
- * Reply rate by the weekday a message went out, texts or emails. Plain divs
- * rather than a chart library — it's one row of bars. Bars too thin to trust
- * are faded, since a few dozen texts a day can make any weekday look best;
- * hovering one shows the counts behind it.
+ * Reply rate by the weekday a text went out. Plain divs rather than a chart
+ * library — it's one row of bars. Bars too thin to trust are faded, since a few
+ * dozen texts a day can make any weekday look best; hovering one shows the counts
+ * behind it.
+ *
+ * Texts only. The card used to switch to emails on a toggle, but cold email is
+ * a one-off campaign that's already been sent — showing a 0.3% reply rate for it
+ * next to live texting only made the texting look worse.
  */
-export function ReplyByDayChart({ byDay }: { byDay: Record<MessageChannel, DayBucket[]> }) {
-  const [channel, setChannel] = useState<MessageChannel>("sms");
-  const days = byDay[channel];
+export function ReplyByDayChart({ days }: { days: DayBucket[] }) {
   const sent = days.reduce((n, d) => n + d.sent, 0);
   const replied = days.reduce((n, d) => n + d.replied, 0);
   const minSent = replied > 0 ? (MIN_EXPECTED_REPLIES * sent) / replied : Infinity;
@@ -31,12 +28,6 @@ export function ReplyByDayChart({ byDay }: { byDay: Record<MessageChannel, DayBu
     <div className="flex flex-col gap-2 border-t pt-3">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-xs text-muted-foreground">Reply rate by day sent</h3>
-        <Tabs value={channel} onValueChange={(v) => setChannel(v as MessageChannel)}>
-          <TabsList>
-            <TabsTrigger value="sms">Texts</TabsTrigger>
-            <TabsTrigger value="email">Emails</TabsTrigger>
-          </TabsList>
-        </Tabs>
       </div>
       <div className="flex gap-2">
         {days.map((d) => (
