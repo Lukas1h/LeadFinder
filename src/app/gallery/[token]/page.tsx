@@ -3,10 +3,10 @@ import { headers } from "next/headers";
 import { after } from "next/server";
 import type { Metadata } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
-import { Download, ImageOff, Receipt } from "lucide-react";
+import { CheckCircle2, CreditCard, Download, ImageOff, Receipt } from "lucide-react";
 import { db } from "@/db";
-import { bookings, listings, agents } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { bookings, bookingLineItems, listings, agents } from "@/db/schema";
+import { eq, sum } from "drizzle-orm";
 import { listGalleryMedia } from "@/lib/dropbox";
 import { firstName } from "@/lib/sms";
 import { recordGalleryEvent } from "@/lib/galleryViews";
@@ -49,6 +49,9 @@ async function getGalleryBooking(token: string) {
       contactAgentId: bookings.contactAgentId,
       dropboxFolderLink: bookings.dropboxFolderLink,
       invoiceNumber: bookings.invoiceNumber,
+      paymentLinkUrl: bookings.paymentLinkUrl,
+      paymentLinkAmount: bookings.paymentLinkAmount,
+      paidAt: bookings.paidAt,
     })
     .from(bookings)
     .where(eq(bookings.galleryToken, token));
@@ -68,8 +71,19 @@ async function getGalleryBooking(token: string) {
     ? await db.select({ name: agents.name }).from(agents).where(eq(agents.id, booking.contactAgentId))
     : [];
 
+  // A link made for an older total stays hidden until a new one is made, so a
+  // client is never asked to pay the wrong amount.
+  const [{ total }] = await db
+    .select({ total: sum(bookingLineItems.amount).mapWith(Number) })
+    .from(bookingLineItems)
+    .where(eq(bookingLineItems.bookingId, booking.id));
+  const paymentLinkUrl =
+    booking.paymentLinkUrl && booking.paymentLinkAmount === (total ?? 0) ? booking.paymentLinkUrl : null;
+
   return {
     id: booking.id,
+    paymentLinkUrl,
+    paidAt: booking.paidAt,
     dropboxFolderLink: booking.dropboxFolderLink,
     invoiceNumber: booking.invoiceNumber,
     contactName: contact?.name ?? null,
@@ -151,8 +165,41 @@ function InvoiceLink({ bookingId }: { bookingId: string }) {
   );
 }
 
-export default async function GalleryPage({ params }: { params: Promise<{ token: string }> }) {
+/**
+ * "Pay online" for an open Stripe payment link, or a thank-you once paid.
+ * ?paid=1 is where Stripe sends the client back after paying, which can beat
+ * the webhook that sets paidAt.
+ */
+function PayOnline({ url, paid }: { url: string | null; paid: boolean }) {
+  if (paid) {
+    return (
+      <span className="inline-flex items-center gap-2 px-2 py-2.5 text-sm font-semibold text-green-700">
+        <CheckCircle2 className="size-4" />
+        Paid, thank you!
+      </span>
+    );
+  }
+  if (!url) return null;
+  return (
+    <a
+      href={url}
+      className="inline-flex items-center gap-2 rounded-lg bg-[#181A1C] text-white px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity"
+    >
+      <CreditCard className="size-4" />
+      Pay online
+    </a>
+  );
+}
+
+export default async function GalleryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ paid?: string }>;
+}) {
   const { token } = await params;
+  const { paid: justPaid } = await searchParams;
   const booking = await getGalleryBooking(token);
   if (!booking) notFound();
 
@@ -161,6 +208,7 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
   after(() => recordGalleryEvent(booking.id, "view", requestHeaders));
 
   const location = formatLocation(booking);
+  const payOnline = <PayOnline url={booking.paymentLinkUrl} paid={Boolean(booking.paidAt) || justPaid === "1"} />;
   const greeting = `Hi ${firstName(booking.contactName) ?? "there"}! Please let me know if there are any edits you'd like made or any angles missing and I'll get it taken care of quickly.`;
 
   if (!booking.dropboxFolderLink) {
@@ -168,11 +216,10 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
       <GalleryShell greeting={greeting}>
         <h1 className="text-xl font-semibold text-center">{location}</h1>
         <p className="mt-2 text-[#181A1C]/60 text-center">Photos aren&rsquo;t ready yet — check back soon.</p>
-        {booking.invoiceNumber && (
-          <div className="mt-4">
-            <InvoiceLink bookingId={booking.id} />
-          </div>
-        )}
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+          {payOnline}
+          {booking.invoiceNumber && <InvoiceLink bookingId={booking.id} />}
+        </div>
       </GalleryShell>
     );
   }
@@ -202,6 +249,7 @@ export default async function GalleryPage({ params }: { params: Promise<{ token:
             Download all (.zip)
           </a>
         )}
+        {payOnline}
         {booking.invoiceNumber && <InvoiceLink bookingId={booking.id} />}
       </div>
 

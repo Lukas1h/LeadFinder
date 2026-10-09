@@ -56,6 +56,11 @@ export interface BookingWithDetails {
   // first clicked) — see src/app/gallery/[token]/page.tsx.
   dropboxFolderLink: string | null;
   galleryToken: string | null;
+  // The Stripe payment link and the total it was made for, and when the
+  // client paid through it — see src/lib/stripe.ts.
+  paymentLinkUrl: string | null;
+  paymentLinkAmount: number | null;
+  paidAt: Date | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

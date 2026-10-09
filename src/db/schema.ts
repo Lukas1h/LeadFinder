@@ -367,6 +367,19 @@ export const bookings = pgTable("bookings", {
   // client-facing /gallery/[token] URL can't also be used to look up the
   // rest of the booking (line items, lockbox code, notes).
   galleryToken: text("gallery_token").unique(),
+
+  // A Stripe Payment Link for the booking's total, made on demand from the
+  // booking's detail view (see src/lib/stripe.ts) and shown on the client
+  // gallery as "Pay online". paymentLinkAmount is the total, in whole
+  // dollars, the link was made for: once line items change it no longer
+  // matches, and the gallery hides the link until a new one is made.
+  stripePaymentLinkId: text("stripe_payment_link_id"),
+  paymentLinkUrl: text("payment_link_url"),
+  paymentLinkAmount: integer("payment_link_amount"),
+  // Set by the Stripe webhook when the client pays through the link. Doesn't
+  // complete the booking: that still records the job's hours by hand.
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
 });
 
 export type Booking = typeof bookings.$inferSelect;

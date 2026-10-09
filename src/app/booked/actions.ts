@@ -10,6 +10,7 @@ import { bumpAgentRelationshipOnMilestone, resolveSendOutcome } from "@/app/acti
 import { attributeBookingToSend } from "@/lib/agentIdentity";
 import { estimateDriveTime } from "@/lib/driveTime";
 import { parseUserAgent } from "@/lib/galleryViews";
+import { createPaymentLink, deactivatePaymentLink, stripeConfigured } from "@/lib/stripe";
 import type { BookingWithDetails } from "./BookedList";
 
 export interface BookingLineItemInput {
@@ -268,6 +269,9 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     invoicedAt: booking.invoicedAt,
     dropboxFolderLink: booking.dropboxFolderLink,
     galleryToken: booking.galleryToken,
+    paymentLinkUrl: booking.paymentLinkUrl,
+    paymentLinkAmount: booking.paymentLinkAmount,
+    paidAt: booking.paidAt,
   };
 }
 
@@ -344,6 +348,9 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       invoicedAt: b.invoicedAt,
       dropboxFolderLink: b.dropboxFolderLink,
       galleryToken: b.galleryToken,
+      paymentLinkUrl: b.paymentLinkUrl,
+      paymentLinkAmount: b.paymentLinkAmount,
+      paidAt: b.paidAt,
     };
   });
 }
@@ -366,6 +373,50 @@ export async function getOrAssignGalleryToken(bookingId: string): Promise<string
   await db.update(bookings).set({ galleryToken: token }).where(eq(bookings.id, bookingId));
   revalidatePath("/booked");
   return token;
+}
+
+export type PaymentLinkResult = { url: string } | { error: string };
+
+/**
+ * The booking's Stripe payment link for its current total, made the first
+ * time it's asked for and reused after that. If the line items changed since,
+ * the old link is switched off and a new one made, so a client can never pay
+ * a stale amount. The link also shows on the client gallery as "Pay online".
+ */
+export async function getOrCreatePaymentLink(bookingId: string): Promise<PaymentLinkResult> {
+  if (!stripeConfigured()) return { error: "Stripe isn't set up yet (STRIPE_SECRET_KEY)" };
+
+  const booking = await getBookingWithDetails(bookingId);
+  if (!booking) return { error: "Booking not found" };
+  if (booking.paidAt) return { error: "Already paid online" };
+  const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
+  if (total <= 0) return { error: "Add line items first" };
+  if (booking.paymentLinkUrl && booking.paymentLinkAmount === total) return { url: booking.paymentLinkUrl };
+
+  const [row] = await db
+    .select({ oldLinkId: bookings.stripePaymentLinkId })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId));
+
+  // Paying lands the client back on their gallery, which then says thanks.
+  const token = await getOrAssignGalleryToken(bookingId);
+  const where = [booking.address, booking.city].filter(Boolean).join(", ");
+  const link = await createPaymentLink({
+    bookingId,
+    amountDollars: total,
+    description: ["Hahn Media", booking.invoiceNumber ? `Invoice #${booking.invoiceNumber}` : null, where || null]
+      .filter(Boolean)
+      .join(" · "),
+    redirectUrl: `https://gallery.lukashahn.art/${token}?paid=1`,
+  });
+
+  await db
+    .update(bookings)
+    .set({ stripePaymentLinkId: link.id, paymentLinkUrl: link.url, paymentLinkAmount: total })
+    .where(eq(bookings.id, bookingId));
+  if (row?.oldLinkId) await deactivatePaymentLink(row.oldLinkId).catch(() => {});
+  revalidatePath("/booked");
+  return { url: link.url };
 }
 
 /**

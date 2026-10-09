@@ -88,6 +88,9 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       invoicedAt: b.invoicedAt,
       dropboxFolderLink: b.dropboxFolderLink,
       galleryToken: b.galleryToken,
+      paymentLinkUrl: b.paymentLinkUrl,
+      paymentLinkAmount: b.paymentLinkAmount,
+      paidAt: b.paidAt,
     };
   });
 }

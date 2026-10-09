@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, ImagePlus, Images } from "lucide-react";
-import { getOrAssignGalleryToken } from "./actions";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Check, CreditCard, ImagePlus, Images } from "lucide-react";
+import { getOrAssignGalleryToken, getOrCreatePaymentLink } from "./actions";
 import { Button } from "@/components/ui/button";
 import type { BookingWithDetails } from "./BookedList";
 
@@ -51,6 +53,58 @@ export function GalleryLinkButton({ booking, onAddGallery }: { booking: BookingW
     <Button variant="outline" size="sm" onClick={handleClick} disabled={isPending}>
       {copied ? <Check className="text-green-600" /> : <Images />}
       {isPending ? "Generating…" : copied ? "Copied!" : "Copy gallery link"}
+    </Button>
+  );
+}
+
+/**
+ * Makes (or reuses) the booking's Stripe payment link and copies it. Once it
+ * exists, the client gallery shows a "Pay online" button for it too. A link
+ * made for an older total is replaced on the next click.
+ */
+export function PaymentLinkButton({ booking }: { booking: BookingWithDetails }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [copied, setCopied] = useState(false);
+  const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
+
+  if (booking.paidAt) {
+    return (
+      <Button variant="outline" size="sm" disabled>
+        <Check className="text-green-600" />
+        Paid online
+      </Button>
+    );
+  }
+  if (total <= 0) return null;
+
+  const current = booking.paymentLinkUrl && booking.paymentLinkAmount === total;
+  const handleClick = () => {
+    startTransition(async () => {
+      const result = await getOrCreatePaymentLink(booking.id);
+      if ("error" in result) {
+        toast.error(result.error);
+        return;
+      }
+      await navigator.clipboard.writeText(result.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+      if (!current) router.refresh();
+    });
+  };
+
+  return (
+    <Button variant="outline" size="sm" onClick={handleClick} disabled={isPending}>
+      {copied ? <Check className="text-green-600" /> : <CreditCard />}
+      {isPending
+        ? "Generating…"
+        : copied
+          ? "Copied!"
+          : current
+            ? "Copy payment link"
+            : booking.paymentLinkUrl
+              ? "Update payment link"
+              : "Create payment link"}
     </Button>
   );
 }
