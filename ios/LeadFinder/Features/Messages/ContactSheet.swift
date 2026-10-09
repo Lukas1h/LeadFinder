@@ -36,6 +36,9 @@ struct ContactSheet: View {
     @State private var isRecording = false
     @State private var sendError: String?
 
+    /// Opens at half height; typing pulls it up so the keyboard has room.
+    @State private var detent: PresentationDetent = .medium
+
     @FocusState private var focus: Field?
     private enum Field { case message, instruction }
 
@@ -102,7 +105,10 @@ struct ContactSheet: View {
             }
             .task { await load() }
         }
-        .presentationDetents([.large])
+        .presentationDetents([.medium, .large], selection: $detent)
+        .onChange(of: focus) { _, field in
+            if field != nil { withAnimation(.snappy) { detent = .large } }
+        }
         .presentationDragIndicator(.visible)
         .presentationBackground(Theme.background)
     }
@@ -171,7 +177,7 @@ struct ContactSheet: View {
         TextField("Write a message", text: $text, axis: .vertical)
             .font(.body)
             .foregroundStyle(Theme.primaryText)
-            .lineLimit(6...)
+            .lineLimit(4...)
             .focused($focus, equals: .message)
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .topLeading)
