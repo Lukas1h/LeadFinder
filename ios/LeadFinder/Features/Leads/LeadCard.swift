@@ -28,6 +28,8 @@ struct LeadCard: View {
             if !group.others.isEmpty { othersDisclosure }
         }
         .card(padding: 14)
+        // So tapping Contact opens on the message, not a spinner.
+        .onAppear { MessageOptionsCache.shared.prefetch(listingId: group.best.id, type: "initial_outreach") }
         .task {
             #if DEBUG
             if openContactOnAppear { showContact = true }
@@ -39,7 +41,8 @@ struct LeadCard: View {
                 type: "initial_outreach",
                 agentName: group.agentName ?? group.best.agentName,
                 agentPhone: group.agentPhone ?? group.best.agentPhone,
-                address: group.best.address
+                agentSubtitle: group.best.address,
+                relationshipStatus: group.agent?.relationshipStatus
             )
         }
     }
@@ -114,30 +117,19 @@ struct LeadCard: View {
     // MARK: - Agent
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(group.agentName ?? group.best.agentName ?? "No agent listed")
-                        .font(.headline)
-                        .foregroundStyle(Theme.primaryText)
-                        .lineLimit(1)
-                    // The web hides the badge on cold agents: it's the neutral
-                    // baseline and almost every lead, so it would be noise.
-                    if let status = group.agent?.relationshipStatus, status != "cold" {
-                        BadgeChip(text: status.relationshipLabel, tint: status.relationshipTint)
-                    }
-                }
-                // Contact first, as on the web: brokerage names truncate. Only
-                // what has actually happened — no "Never texted" on every card.
-                Text([group.contactSummary, group.brokerName]
-                    .compactMap { $0 }
-                    .joined(separator: " · "))
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondaryText)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
+        AgentRow(
+            name: group.agentName ?? group.best.agentName,
+            // Contact first, as on the web: brokerage names truncate. Only
+            // what has actually happened — no "Never texted" on every card.
+            subtitle: [group.contactSummary, group.brokerName]
+                .compactMap { $0 }
+                .joined(separator: " · ")
+                .nilIfBlank,
+            // The web hides the badge on cold agents: it's the neutral
+            // baseline and almost every lead, so it would be noise.
+            relationshipStatus: group.agent?.relationshipStatus.flatMap { $0 == "cold" ? nil : $0 }
+        )
+        .padding(.vertical, -6)
     }
 
     // MARK: - Photos and facts

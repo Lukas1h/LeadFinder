@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// Contact an agent about a lead: pick a template, tweak the words, send.
+/// Text an agent about a lead: who it's to, which template, the words, send.
 ///
-/// Deliberately three things and nothing else — a dropdown, a message box, and
-/// two buttons — because this gets used standing in a driveway. It mirrors the
-/// web's text tab, minus everything that doesn't earn its place on a phone: the
-/// AI draft, the email tab, and the explanatory subtext.
+/// Templates are one tap each in a row of chips rather than a menu, because
+/// switching between two to compare them is the common case. "AI" is one of
+/// those chips: picking it drafts a message on the spot, and a line under the
+/// message steers a redraft ("shorter", "mention the drone shot").
+///
+/// Templates usually arrive before the sheet does — lead cards prefetch them
+/// through `MessageOptionsCache` — so the message is there on the first frame.
 ///
 /// Nothing is sent from here. "Send text" opens the native Messages sheet with
 /// the message ready, and the text is only recorded when that sheet says it went.
@@ -14,38 +17,83 @@ struct ContactSheet: View {
     let type: String
     let agentName: String?
     let agentPhone: String?
-    let address: String?
+    let agentSubtitle: String?
+    let relationshipStatus: String?
 
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
-    @State private var options: [MessageOption] = []
-    @State private var selected: MessageOption?
-    @State private var text = ""
-    @State private var isLoading = true
+    @State private var options: [MessageOption]
+    @State private var selectedKey: String?
+    @State private var text: String
     @State private var loadError: String?
-    @State private var isSending = false
+
+    @State private var aiOption: MessageOption?
+    @State private var isDrafting = false
+    @State private var aiError: String?
+    @State private var instruction = ""
+
+    @State private var isRecording = false
     @State private var sendError: String?
 
-    private struct ComposerLaunch {
-        let recipients: [String]
-        let body: String
-        let secondMessage: String?
+    @FocusState private var focus: Field?
+    private enum Field { case message, instruction }
+
+    init(
+        listingId: String,
+        type: String,
+        agentName: String?,
+        agentPhone: String?,
+        agentSubtitle: String? = nil,
+        relationshipStatus: String? = nil
+    ) {
+        self.listingId = listingId
+        self.type = type
+        self.agentName = agentName
+        self.agentPhone = agentPhone
+        self.agentSubtitle = agentSubtitle
+        self.relationshipStatus = relationshipStatus
+
+        let cached = MessageOptionsCache.shared.cached(listingId: listingId, type: type) ?? []
+        let pick = Self.defaultOption(in: cached)
+        _options = State(initialValue: cached)
+        _selectedKey = State(initialValue: pick?.key)
+        _text = State(initialValue: pick?.text ?? "")
     }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                if isLoading {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    content
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    AgentRow(
+                        name: agentName,
+                        phone: agentPhone,
+                        subtitle: agentSubtitle,
+                        relationshipStatus: relationshipStatus
+                    )
+                    .card()
+
+                    if let error = loadError {
+                        ErrorBanner(message: error) { Task { await load() } }
+                    } else if options.isEmpty {
+                        loadingTemplates
+                    } else {
+                        templateChips
+                        messageField
+                        if isAISelected { aiControls }
+                        secondMessageNote
+                    }
+
+                    if let sendError {
+                        ErrorBanner(message: sendError)
+                    }
                 }
+                .padding(16)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .scrollDismissesKeyboard(.interactively)
             .background(Theme.background)
-            .navigationTitle(agentName.map { "Contact \($0)" } ?? "Contact")
+            .safeAreaInset(edge: .bottom) { sendBar }
+            .navigationTitle("Text \(firstName)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -53,114 +101,206 @@ struct ContactSheet: View {
                 }
             }
             .task { await load() }
-            // Half height by default: this is a quick errand, and the composer it
-            // leads to is its own sheet.
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Theme.background)
+    }
+
+    // MARK: - Templates
+
+    private var loadingTemplates: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                ForEach(0..<3, id: \.self) { _ in
+                    Capsule().fill(Theme.cardRaised).frame(width: 84, height: 32)
+                }
+            }
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Theme.card)
+                .frame(height: 160)
+                .overlay { ProgressView() }
         }
     }
 
-    // MARK: - Content
+    private var templateChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(chipOptions, id: \.key) { option in
+                    chip(option)
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .padding(.horizontal, -16)
+    }
 
-    @ViewBuilder
-    private var content: some View {
-        if let error = loadError ?? sendError {
-            VStack(spacing: 12) {
-                Text(error)
-                    .font(.footnote)
+    /// The AI chip first — it's the one worth trying — then the presets in the
+    /// server's order.
+    private var chipOptions: [MessageOption] {
+        options.filter(\.aiDraft) + options.filter { !$0.aiDraft }
+    }
+
+    private func chip(_ option: MessageOption) -> some View {
+        let selected = option.key == selectedKey
+        return Button {
+            select(option)
+        } label: {
+            HStack(spacing: 5) {
+                if option.aiDraft {
+                    Image(systemName: "sparkles")
+                } else if option.recommended ?? false {
+                    Image(systemName: "star.fill").font(.caption2)
+                }
+                Text(option.aiDraft ? "AI draft" : option.presetName)
+                    .lineLimit(1)
+            }
+            .font(.subheadline.weight(selected ? .semibold : .regular))
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+            .background(selected ? Theme.accent.opacity(0.18) : Theme.card, in: Capsule())
+            .overlay(Capsule().strokeBorder(selected ? Theme.accent.opacity(0.6) : Theme.border, lineWidth: 1))
+            .foregroundStyle(selected ? Theme.accent : Theme.secondaryText)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Message
+
+    private var messageField: some View {
+        TextField("Write a message", text: $text, axis: .vertical)
+            .font(.body)
+            .foregroundStyle(Theme.primaryText)
+            .lineLimit(6...)
+            .focused($focus, equals: .message)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(focus == .message ? Theme.accent.opacity(0.5) : Theme.border, lineWidth: 1)
+            )
+            .overlay {
+                if isDrafting {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.card.opacity(0.85))
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Drafting…").font(.subheadline).foregroundStyle(Theme.secondaryText)
+                        }
+                    }
+                }
+            }
+            .disabled(isDrafting)
+    }
+
+    /// Steering for the next draft. Empty is fine: Redraft then just tries again.
+    private var aiControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                TextField("Change something? e.g. shorter", text: $instruction)
+                    .font(.subheadline)
+                    .focused($focus, equals: .instruction)
+                    .submitLabel(.go)
+                    .onSubmit { Task { await draft() } }
+                    .padding(.horizontal, 12)
+                    .frame(height: 40)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Theme.border, lineWidth: 1)
+                    )
+
+                Button {
+                    Task { await draft() }
+                } label: {
+                    Label("Redraft", systemImage: "arrow.clockwise")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .frame(height: 40)
+                        .background(Theme.violet.opacity(0.16), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .foregroundStyle(Theme.violet)
+                }
+                .buttonStyle(.plain)
+                .disabled(isDrafting)
+            }
+            if let aiError {
+                Text(aiError)
+                    .font(.caption)
                     .foregroundStyle(Theme.danger)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer()
-            }
-        } else if options.isEmpty {
-            Text("No templates for this lead.")
-                .font(.subheadline)
-                .foregroundStyle(Theme.secondaryText)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            templatePicker
-            messageBox
-            secondMessage
-            Spacer(minLength: 0)
-            buttons
-        }
-    }
-
-    private var templatePicker: some View {
-        Picker("Template", selection: Binding(
-            get: { selected?.key ?? "" },
-            set: { key in if let option = options.first(where: { $0.key == key }) { select(option) } }
-        )) {
-            ForEach(options, id: \.key) { option in
-                Text(label(for: option)).tag(option.key)
             }
         }
-        .pickerStyle(.menu)
-        .tint(Theme.primaryText)
-        .labelsHidden()
     }
 
-    private var messageBox: some View {
-        TextEditor(text: $text)
-            .font(.subheadline)
-            .scrollContentBackground(.hidden)
-            .padding(8)
-            .frame(height: 120)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    /// The follow-up the preset wants sent after this one. Shown because it's
-    /// part of what you're agreeing to, and it's copied to the clipboard when
-    /// the text goes out so it can be pasted straight after.
+    /// The follow-up the preset wants sent after this one. It's copied to the
+    /// clipboard when the text goes out so it can be pasted straight after.
     @ViewBuilder
-    private var secondMessage: some View {
-        if let second = selected?.secondMessage?.nilIfBlank {
-            VStack(alignment: .leading, spacing: 3) {
-                Label("Then paste — copied when you send", systemImage: "doc.on.doc")
-                    .font(.caption2)
+    private var secondMessageNote: some View {
+        if let second = selectedOption?.secondMessage?.nilIfBlank {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Then paste this — copied when you send", systemImage: "doc.on.clipboard")
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(Theme.tertiaryText)
                 Text(second)
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(Theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .card()
         }
     }
 
-    private var buttons: some View {
+    // MARK: - Send bar
+
+    private var sendBar: some View {
         HStack(spacing: 10) {
-            if let digits = phoneDigits {
-                Link(destination: URL(string: "tel://\(digits)")!) {
-                    Image(systemName: "phone")
+            if let digits = phoneDigits, let url = URL(string: "tel://\(digits)") {
+                Link(destination: url) {
+                    Image(systemName: "phone.fill")
                         .font(.title3)
                         .foregroundStyle(Theme.primaryText)
-                        .frame(width: 46, height: 46)
-                        .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .frame(width: 52, height: 52)
+                        .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
 
-            Button {
-                presentComposer()
-            } label: {
-                Label("Send text", systemImage: "message")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(canSend ? Theme.accent : Theme.cardRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .foregroundStyle(canSend ? Theme.background : Theme.tertiaryText)
+            Button(action: presentComposer) {
+                HStack(spacing: 8) {
+                    if isRecording {
+                        ProgressView().tint(Theme.background)
+                    } else {
+                        Image(systemName: "message.fill")
+                    }
+                    Text("Send text")
+                }
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(canSend ? Theme.accent : Theme.cardRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .foregroundStyle(canSend ? Theme.background : Theme.tertiaryText)
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(Theme.background)
     }
 
-    // MARK: - Data
+    // MARK: - State
+
+    private var selectedOption: MessageOption? {
+        if let aiOption, aiOption.key == selectedKey { return aiOption }
+        return options.first { $0.key == selectedKey }
+    }
+
+    private var isAISelected: Bool { selectedOption?.aiDraft ?? false }
 
     private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
+        phoneDigits != nil && !isDrafting && !isRecording
+            && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var phoneDigits: String? {
@@ -168,33 +308,65 @@ struct ContactSheet: View {
         return digits.isEmpty ? nil : digits
     }
 
-    private func label(for option: MessageOption) -> String {
-        var name = option.presetName
-        if option.aiDraft { name += " (AI)" }
-        if (option.recommended ?? false) && !option.aiDraft { name += " (Recommended)" }
-        return name
+    private var firstName: String {
+        agentName?.nilIfBlank?.split(separator: " ").first.map(String.init) ?? "agent"
     }
 
-    private func load() async {
-        do {
-            let response = try await APIClient.shared.messageOptions(listingId: listingId, type: type)
-            options = response.presets
-            isLoading = false
-            // Prefilled to the recommended template, as the web's dropdown is.
-            let recommended = options.first { ($0.recommended ?? false) && !$0.aiDraft }
-            if let pick = recommended ?? options.first { select(pick) }
-        } catch let apiError as APIError {
-            loadError = apiError.errorDescription
-            isLoading = false
-        } catch {
-            loadError = error.localizedDescription
-            isLoading = false
-        }
+    /// The recommended template, as the web's dropdown preselects; never the
+    /// AI placeholder, which would cost a draft just for opening the sheet.
+    private static func defaultOption(in options: [MessageOption]) -> MessageOption? {
+        let presets = options.filter { !$0.aiDraft }
+        return presets.first { $0.recommended ?? false } ?? presets.first
     }
 
     private func select(_ option: MessageOption) {
-        selected = option
-        text = option.text
+        selectedKey = option.key
+        if option.aiDraft {
+            if let aiOption {
+                text = aiOption.text
+            } else {
+                Task { await draft() }
+            }
+        } else {
+            text = option.text
+        }
+    }
+
+    private func load() async {
+        loadError = nil
+        do {
+            let fresh = try await MessageOptionsCache.shared.options(listingId: listingId, type: type)
+            let hadOptions = !options.isEmpty
+            options = fresh
+            // Don't overwrite what's on screen if it was already filled from cache.
+            if !hadOptions, let pick = Self.defaultOption(in: fresh) {
+                selectedKey = pick.key
+                text = pick.text
+            }
+        } catch {
+            if options.isEmpty { loadError = (error as? APIError)?.errorDescription ?? error.localizedDescription }
+        }
+    }
+
+    private func draft() async {
+        guard !isDrafting else { return }
+        isDrafting = true
+        aiError = nil
+        defer { isDrafting = false }
+        do {
+            let option = try await APIClient.shared.aiDraft(
+                listingId: listingId,
+                type: type,
+                instruction: instruction.nilIfBlank
+            )
+            aiOption = option
+            selectedKey = option.key
+            text = option.text
+            instruction = ""
+            focus = nil
+        } catch {
+            aiError = (error as? APIError)?.errorDescription ?? "Couldn't draft a message. Try again."
+        }
     }
 
     // MARK: - Sending
@@ -204,48 +376,49 @@ struct ContactSheet: View {
             sendError = "This agent has no phone number on file."
             return
         }
-        let launch = ComposerLaunch(
-            recipients: [digits],
-            body: text,
-            secondMessage: selected?.secondMessage?.nilIfBlank
-        )
-        MessageComposer.present(recipients: launch.recipients, body: launch.body) { outcome in
-            handle(outcome, launch: launch)
+        focus = nil
+        let body = text
+        let option = selectedOption
+        MessageComposer.present(recipients: [digits], body: body) { outcome in
+            handle(outcome, body: body, option: option)
         }
     }
 
     /// Only `.sent` records anything. A cancelled sheet means the message never
     /// went out, so the listing must stay exactly as it was.
-    private func handle(_ outcome: MessageComposer.Outcome, launch: ComposerLaunch) {
-        if outcome == .unavailable {
+    private func handle(_ outcome: MessageComposer.Outcome, body: String, option: MessageOption?) {
+        switch outcome {
+        case .unavailable:
             sendError = "This iPhone can't send texts right now."
             return
+        case .cancelled:
+            return
+        case .sent:
+            break
         }
-        guard outcome == .sent else { return }
 
-        if let second = launch.secondMessage {
+        if let second = option?.secondMessage?.nilIfBlank {
             UIPasteboard.general.string = second
         }
 
-        isSending = true
+        isRecording = true
         sendError = nil
         Task {
-            defer { isSending = false }
+            defer { isRecording = false }
             do {
                 try await APIClient.shared.confirmTextSent(
                     listingId: listingId,
                     type: type,
-                    presetId: selected?.presetId ?? "",
-                    variantId: selected?.variantId ?? "",
-                    text: launch.body
+                    presetId: option?.presetId ?? "",
+                    variantId: option?.variantId ?? "",
+                    text: body
                 )
+                MessageOptionsCache.shared.forget(listingId: listingId)
                 await appState.leads.load(force: true)
                 NotificationCenter.default.post(name: .leadsDidChange, object: nil)
                 dismiss()
-            } catch let apiError as APIError {
-                sendError = apiError.errorDescription
             } catch {
-                sendError = error.localizedDescription
+                sendError = (error as? APIError)?.errorDescription ?? error.localizedDescription
             }
         }
     }

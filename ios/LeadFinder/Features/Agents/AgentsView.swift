@@ -201,42 +201,17 @@ enum AgentFilter: String, CaseIterable, Identifiable {
     }
 }
 
-/// One agent in the directory. Mirrors the compact look of the web's agent row:
-/// name, brokerage, phone, and the relationship badge on the right.
+/// One agent in the directory: the shared AgentRow with their brokerage.
 struct AgentDirectoryRow: View {
     let agent: AgentsResponse.Row
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(agent.displayName)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(1)
-
-                if let brokerage = agent.brokerage?.nilIfBlank {
-                    Text(brokerage)
-                        .font(.caption)
-                        .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
-                }
-
-                if let phone = agent.phone?.nilIfBlank {
-                    Text(phone)
-                        .font(.caption)
-                        .foregroundStyle(Theme.tertiaryText)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            if let status = agent.relationshipStatus {
-                BadgeChip(text: status.relationshipLabel, tint: status.relationshipTint)
-            }
-        }
-        .padding(.vertical, 8)
-        .frame(minHeight: 56)
+        AgentRow(
+            name: agent.displayName,
+            phone: agent.phone?.nilIfBlank,
+            subtitle: agent.brokerage?.nilIfBlank,
+            relationshipStatus: agent.relationshipStatus
+        )
     }
 }
 

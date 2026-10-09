@@ -114,17 +114,19 @@ actor APIClient {
     }
 
     /// Asks Gemini for a one-off message for this listing.
-    func aiDraft(listingId: String, type: String, instruction: String?) async throws -> MessageOptionsResponse {
+    /// The server answers `{ option }`, the drafted AI preset.
+    func aiDraft(listingId: String, type: String, instruction: String?) async throws -> MessageOption {
         struct Body: Encodable, Sendable {
             let type: String
             let instruction: String?
         }
+        struct Response: Decodable, Sendable { let option: MessageOption }
         return try await send(
             "POST",
             "api/app/v1/listings/\(listingId)/ai-draft",
             body: Body(type: type, instruction: instruction),
-            as: MessageOptionsResponse.self
-        )
+            as: Response.self
+        ).option
     }
 
     /// Records that the text went out. Called **only** when the Messages sheet

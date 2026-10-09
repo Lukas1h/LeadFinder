@@ -6,6 +6,7 @@ import SwiftUI
 struct FollowUpView: View {
     @Environment(AppState.self) private var appState
     @State private var query = ""
+    @State private var openAgent: Agent?
 
     var body: some View {
         Group {
@@ -20,7 +21,18 @@ struct FollowUpView: View {
         }
         .background(Theme.background)
         .navigationTitle("Follow up")
-        .navigationDestination(for: Agent.self) { FollowUpAgentDetailView(agent: $0) }
+        // The same agent sheet the directory opens, so an agent looks and
+        // behaves the same wherever you tap them.
+        .sheet(item: $openAgent) { agent in
+            AgentDirectoryDetail(agent: AgentsResponse.Row(
+                id: agent.id,
+                name: agent.name,
+                phone: agent.phone,
+                email: agent.email,
+                relationshipStatus: agent.relationshipStatus,
+                lastContactedAt: agent.lastContactedAt
+            ))
+        }
         .refreshable { await appState.followUp.load(force: true) }
         .task { await appState.followUp.load() }
         .searchable(
@@ -83,7 +95,7 @@ struct FollowUpView: View {
     private func groupSection(_ group: FollowUpResponse.Group) -> some View {
         sectionHeader(group.label, count: group.entries.count)
         ForEach(group.entries) { entry in
-            NavigationLink(value: entry.agent) {
+            Button { openAgent = entry.agent } label: {
                 FollowUpAgentRow(agent: entry.agent, lastReplyAt: entry.lastReplyAt)
                     .card()
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -106,27 +118,11 @@ struct FollowUpView: View {
 
     @ViewBuilder
     private func justListedCard(_ item: FollowUpResponse.JustListed) -> some View {
-        NavigationLink(value: item.agent) {
+        Button { openAgent = item.agent } label: {
             VStack(alignment: .leading, spacing: 0) {
                 if let listing = item.listing,
-                   let photoURL = listing.photos?.first.flatMap({ URL(string: $0) }) {
-                    AsyncImage(url: photoURL) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            photoPlaceholder
-                        case .empty:
-                            ZStack {
-                                Theme.cardRaised
-                                ProgressView()
-                            }
-                        @unknown default:
-                            photoPlaceholder
-                        }
-                    }
+                   let photo = listing.photos?.first {
+                    RemoteImage(url: PhotoSize.card.url(photo), size: .card)
                     .frame(height: 168)
                     .frame(maxWidth: .infinity)
                     .clipped()
@@ -158,15 +154,6 @@ struct FollowUpView: View {
             .card(padding: 0)
         }
         .buttonStyle(.plain)
-    }
-
-    private var photoPlaceholder: some View {
-        ZStack {
-            Theme.cardRaised
-            Image(systemName: "photo")
-                .font(.system(size: 22, weight: .light))
-                .foregroundStyle(Theme.tertiaryText)
-        }
     }
 
     private func listingDetail(_ listing: Listing) -> String? {
@@ -250,39 +237,26 @@ struct FollowUpView: View {
 
 // MARK: - Agent row
 
-/// One agent's block in a follow-up card: name, relationship badge,
-/// last-contact line, phone, and the first couple of notes lines.
+/// One agent in a follow-up card: the shared AgentRow, with when you last
+/// heard from them and the start of their notes.
 private struct FollowUpAgentRow: View {
     let agent: Agent
     var lastReplyAt: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Text(agent.displayName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(1)
-                if let status = agent.relationshipStatus?.nilIfBlank {
-                    BadgeChip(text: status.relationshipLabel, tint: status.relationshipTint)
-                }
-                Spacer(minLength: 0)
-            }
-            if let contact = contactLine {
-                Text(contact)
-                    .font(.caption)
-                    .foregroundStyle(Theme.tertiaryText)
-            }
-            if let phone = agent.phone?.nilIfBlank {
-                Text(phone)
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondaryText)
-            }
+            AgentRow(
+                name: agent.displayName,
+                phone: agent.phone?.nilIfBlank,
+                subtitle: contactLine,
+                relationshipStatus: agent.relationshipStatus?.nilIfBlank
+            )
             if let notes = agent.notes?.nilIfBlank {
                 Text(notes)
                     .font(.caption)
                     .foregroundStyle(Theme.secondaryText)
                     .lineLimit(2)
+                    .padding(.leading, 60)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -296,97 +270,6 @@ private struct FollowUpAgentRow: View {
             return "Last reply \(relative)"
         }
         return nil
-    }
-}
-
-// MARK: - Agent detail (read-only, built only from the follow-up payload)
-
-private struct FollowUpAgentDetailView: View {
-    let agent: Agent
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Text(agent.displayName)
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(Theme.primaryText)
-                        if let status = agent.relationshipStatus?.nilIfBlank {
-                            BadgeChip(text: status.relationshipLabel, tint: status.relationshipTint, filled: true)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    if let last = DateFormatting.relative(agent.lastContactedAt).nilIfBlank {
-                        Text("Last contact \(last)")
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.secondaryText)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .card()
-
-                if telURL != nil || mailURL != nil {
-                    VStack(spacing: 10) {
-                        if let telURL, let phone = agent.phone?.nilIfBlank {
-                            contactLink(url: telURL, icon: "phone.fill", text: phone)
-                        }
-                        if let mailURL, let email = agent.email?.nilIfBlank {
-                            contactLink(url: mailURL, icon: "envelope.fill", text: email)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .card()
-                }
-
-                if let notes = agent.notes?.nilIfBlank {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("NOTES")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(Theme.tertiaryText)
-                        Text(notes)
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.secondaryText)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .card()
-                }
-            }
-            .padding(16)
-        }
-        .background(Theme.background)
-        .navigationTitle("Agent")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func contactLink(url: URL, icon: String, text: String) -> some View {
-        Link(destination: url) {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 20)
-                Text(text)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.primaryText)
-                Spacer(minLength: 0)
-                Image(systemName: "arrow.up.forward")
-                    .font(.caption)
-                    .foregroundStyle(Theme.tertiaryText)
-            }
-        }
-    }
-
-    private var telURL: URL? {
-        guard let phone = agent.phone?.nilIfBlank else { return nil }
-        let cleaned = phone.filter { $0.isNumber || $0 == "+" }
-        return cleaned.isEmpty ? nil : URL(string: "tel://\(cleaned)")
-    }
-
-    private var mailURL: URL? {
-        guard let email = agent.email?.nilIfBlank,
-              let url = URL(string: "mailto://\(email)") else { return nil }
-        return url
     }
 }
 
