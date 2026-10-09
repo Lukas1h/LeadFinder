@@ -19,7 +19,7 @@ struct PhotoCarousel: View {
     var size: PhotoSize = .full
     var onTap: (() -> Void)?
 
-    @State private var index = 0
+    @State private var position: Int?
     @State private var swipedAt: Date?
 
     var body: some View {
@@ -43,28 +43,36 @@ struct PhotoCarousel: View {
         }
     }
 
+    /// The page on screen. Optional because that's what `scrollPosition`
+    /// binds; nil before the first scroll means the first photo.
+    private var index: Int { position ?? 0 }
+
     private var image: some View {
-        TabView(selection: $index) {
-            ForEach(photos.indices, id: \.self) { photoIndex in
-                // Only the page on screen and its neighbours load: a card is
-                // five photos, and fetching all of them for every card the
-                // list passes is what made the bottom of Leads so slow.
-                Group {
-                    if abs(photoIndex - index) <= 1 {
-                        RemoteImage(url: size.url(photos[photoIndex]), size: size)
-                    } else {
-                        Theme.cardRaised
-                    }
+        // A paging scroll view rather than a page-style TabView: the TabView
+        // rebuilt its pages mid-swipe whenever what they showed depended on the
+        // index, which is what made swiping flash and bounce. The lazy stack
+        // only builds the page on screen, and its neighbours are prefetched.
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 0) {
+                ForEach(photos.indices, id: \.self) { photoIndex in
+                    RemoteImage(url: size.url(photos[photoIndex]), size: size)
+                        // scaledToFill crops rather than stretches, but only
+                        // once the page is clipped to the frame.
+                        .containerRelativeFrame([.horizontal, .vertical])
+                        .clipped()
+                        .id(photoIndex)
                 }
-                // scaledToFill crops rather than stretches, but only once the
-                // page is clipped to the frame.
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-                .tag(photoIndex)
             }
+            .scrollTargetLayout()
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .onChange(of: index) { _, _ in swipedAt = Date() }
+        .scrollTargetBehavior(.paging)
+        .scrollIndicators(.hidden)
+        .scrollPosition(id: $position)
+        .onAppear { prefetchNeighbours() }
+        .onChange(of: position) { _, _ in
+            swipedAt = Date()
+            prefetchNeighbours()
+        }
         .overlay(alignment: .bottomTrailing) {
             if photos.count > 1, alwaysShowControls { arrows }
         }
@@ -116,9 +124,19 @@ struct PhotoCarousel: View {
 
     private func step(_ delta: Int) {
         withAnimation(.snappy(duration: 0.2)) {
-            index = (index + delta + photos.count) % photos.count
+            position = (index + delta + photos.count) % photos.count
         }
         swipedAt = Date()
+    }
+
+    /// The photos either side of the one on screen, so a swipe lands on a
+    /// photo that's already decoded. Five photos per card, so loading all of
+    /// them for every card the list passes is what this avoids.
+    private func prefetchNeighbours() {
+        let urls = [index - 1, index + 1]
+            .filter { photos.indices.contains($0) }
+            .compactMap { size.url(photos[$0]) }
+        ImagePipeline.shared.prefetch(urls, maxPixel: size.maxPixel)
     }
 }
 
