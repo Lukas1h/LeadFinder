@@ -1,5 +1,5 @@
 import MessageUI
-import SwiftUI
+import UIKit
 
 /// The native Messages sheet (`MFMessageComposeViewController`), the only way
 /// this app can send a text.
@@ -8,14 +8,11 @@ import SwiftUI
 /// and the composer is the user's to read and send. `.sent` is the one signal
 /// that a message actually went out, and it's what tells us to record it — so
 /// there's no "did you send that?" prompt like the web has to ask.
-struct MessageComposer: UIViewControllerRepresentable {
-    let recipients: [String]
-    let body: String
-    /// Copied to the clipboard on send when the preset has a second message, so
-    /// a follow-up text can be pasted straight after.
-    let secondMessage: String?
-    let onFinish: (Outcome) -> Void
-
+///
+/// Presented from UIKit on top of whatever is showing, not through a SwiftUI
+/// `.sheet`: wrapped in a sheet, the composer came up as a blank grey page.
+@MainActor
+final class MessageComposer: NSObject, MFMessageComposeViewControllerDelegate {
     enum Outcome {
         case sent
         /// The user closed the sheet without sending. Nothing is recorded.
@@ -24,44 +21,51 @@ struct MessageComposer: UIViewControllerRepresentable {
         case unavailable
     }
 
-    func makeUIViewController(context: Context) -> MFMessageComposeViewController {
-        let controller = MFMessageComposeViewController()
-        controller.messageComposeDelegate = context.coordinator
-        // Recipients and body are properties, set before the controller is
-        // presented; MessageUI ignores changes made after presentation.
-        controller.recipients = recipients
-        controller.body = body
-        return controller
+    /// The delegate is weak, so the open composer keeps itself alive here.
+    private static var current: MessageComposer?
+
+    private let onFinish: (Outcome) -> Void
+    private var finished = false
+
+    private init(onFinish: @escaping (Outcome) -> Void) {
+        self.onFinish = onFinish
     }
 
-    func updateUIViewController(_ controller: MFMessageComposeViewController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator(onFinish: onFinish) }
-
-    final class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
-        private let onFinish: (Outcome) -> Void
-        private var finished = false
-
-        init(onFinish: @escaping (Outcome) -> Void) {
-            self.onFinish = onFinish
+    static func present(recipients: [String], body: String, onFinish: @escaping (Outcome) -> Void) {
+        guard MFMessageComposeViewController.canSendText(), let top = topViewController() else {
+            onFinish(.unavailable)
+            return
         }
+        let composer = MessageComposer(onFinish: onFinish)
+        let controller = MFMessageComposeViewController()
+        controller.messageComposeDelegate = composer
+        // Set before presentation; MessageUI ignores changes made after.
+        controller.recipients = recipients
+        controller.body = body
+        current = composer
+        top.present(controller, animated: true)
+    }
 
-        func messageComposeViewController(
-            _ controller: MFMessageComposeViewController,
-            didFinishWith result: MessageComposeResult
-        ) {
+    nonisolated func messageComposeViewController(
+        _ controller: MFMessageComposeViewController,
+        didFinishWith result: MessageComposeResult
+    ) {
+        MainActor.assumeIsolated {
+            controller.dismiss(animated: true)
             // The delegate can fire more than once; only the first counts.
             guard !finished else { return }
             finished = true
-
-            switch result {
-            case .sent:
-                onFinish(.sent)
-            case .cancelled, .failed:
-                onFinish(.cancelled)
-            @unknown default:
-                onFinish(.cancelled)
-            }
+            Self.current = nil
+            onFinish(result == .sent ? .sent : .cancelled)
         }
+    }
+
+    private static func topViewController() -> UIViewController? {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        var top = scene?.keyWindow?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        return top
     }
 }

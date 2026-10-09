@@ -27,9 +27,6 @@ struct ContactSheet: View {
     @State private var isSending = false
     @State private var sendError: String?
 
-    @State private var showComposer = false
-    @State private var composerLaunch: ComposerLaunch?
-
     private struct ComposerLaunch {
         let recipients: [String]
         let body: String
@@ -60,18 +57,6 @@ struct ContactSheet: View {
             // leads to is its own sheet.
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-            .sheet(isPresented: $showComposer) {
-                if let launch = composerLaunch {
-                    MessageComposer(
-                        recipients: launch.recipients,
-                        body: launch.body,
-                        secondMessage: launch.secondMessage
-                    ) { outcome in
-                        showComposer = false
-                        handle(outcome, launch: launch)
-                    }
-                }
-            }
         }
     }
 
@@ -219,17 +204,23 @@ struct ContactSheet: View {
             sendError = "This agent has no phone number on file."
             return
         }
-        composerLaunch = ComposerLaunch(
+        let launch = ComposerLaunch(
             recipients: [digits],
             body: text,
             secondMessage: selected?.secondMessage?.nilIfBlank
         )
-        showComposer = true
+        MessageComposer.present(recipients: launch.recipients, body: launch.body) { outcome in
+            handle(outcome, launch: launch)
+        }
     }
 
     /// Only `.sent` records anything. A cancelled sheet means the message never
     /// went out, so the listing must stay exactly as it was.
     private func handle(_ outcome: MessageComposer.Outcome, launch: ComposerLaunch) {
+        if outcome == .unavailable {
+            sendError = "This iPhone can't send texts right now."
+            return
+        }
         guard outcome == .sent else { return }
 
         if let second = launch.secondMessage {
