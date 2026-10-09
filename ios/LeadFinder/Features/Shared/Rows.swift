@@ -15,7 +15,7 @@ struct ListingRow: View {
         HStack(spacing: 12) {
             thumb
             VStack(alignment: .leading, spacing: 1) {
-                Text(listing.address?.nilIfBlank ?? "Unknown address")
+                Text(listing.addressLine.nilIfBlank ?? "Unknown address")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Theme.primaryText)
                     .lineLimit(1)

@@ -41,7 +41,7 @@ struct LeadCard: View {
                 type: "initial_outreach",
                 agentName: group.agentName ?? group.best.agentName,
                 agentPhone: group.agentPhone ?? group.best.agentPhone,
-                agentSubtitle: group.best.address,
+                agentSubtitle: group.best.addressLine.nilIfBlank,
                 relationshipStatus: group.agent?.relationshipStatus
             )
         }
@@ -148,9 +148,12 @@ struct LeadCard: View {
                 onTap: onShowListing
             )
 
-            Text(group.best.address?.nilIfBlank ?? "Unknown address")
-                .font(.subheadline.weight(.semibold))
+            // City in a quieter colour, so the street still reads first.
+            (Text(group.best.address?.nilIfBlank ?? "Unknown address")
                 .foregroundStyle(Theme.primaryText)
+                + Text(group.best.city?.nilIfBlank.map { ", \($0)" } ?? "")
+                .foregroundStyle(Theme.secondaryText))
+                .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.leading)
 

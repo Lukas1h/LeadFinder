@@ -65,7 +65,7 @@ struct LeadDetailView: View {
                 .font(.title2.weight(.bold))
                 .foregroundStyle(Theme.primaryText)
 
-            Text(group.best.address?.nilIfBlank ?? "Unknown address")
+            Text(group.best.addressLine.nilIfBlank ?? "Unknown address")
                 .font(.subheadline)
                 .foregroundStyle(Theme.secondaryText)
 

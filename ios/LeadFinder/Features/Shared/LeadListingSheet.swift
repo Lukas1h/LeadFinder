@@ -51,7 +51,7 @@ struct LeadListingSheet: View {
                 .font(.title2.weight(.bold))
                 .foregroundStyle(Theme.primaryText)
 
-            Text(listing.address?.nilIfBlank ?? "Unknown address")
+            Text(listing.addressLine.nilIfBlank ?? "Unknown address")
                 .font(.subheadline)
                 .foregroundStyle(Theme.secondaryText)
 
