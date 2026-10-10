@@ -11,6 +11,9 @@ struct BookingDetailView: View {
     @State private var fresh: Booking?
     @State private var openContact: AgentsResponse.Row?
     @State private var showEdit = false
+    @State private var showComplete = false
+    @State private var isWorking = false
+    @State private var actionError: String?
 
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -32,6 +35,9 @@ struct BookingDetailView: View {
                         Button("Edit") { showEdit = true }
                     }
                 }
+                .sheet(isPresented: $showComplete) {
+                    CompleteBookingSheet(booking: booking) { Task { await refresh() } }
+                }
                 .sheet(isPresented: $showEdit) {
                     BookingEditSheet(booking: booking) { deleted in
                         Task {
@@ -52,6 +58,7 @@ struct BookingDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header
+                statusActions
                 if hasContact { contact }
                 if hasLineItems { lineItems }
                 if let notes = booking.notes?.nilIfBlank {
@@ -71,6 +78,89 @@ struct BookingDetailView: View {
         }
         .background(Theme.background)
         .sheet(item: $openContact) { AgentDirectoryDetail(agent: $0) }
+    }
+
+    // MARK: - Status actions
+
+    /// Where the job is and the step that comes next, as on the web: upcoming,
+    /// then invoice sent (waiting for payment), then completed. Reopen steps
+    /// back one.
+    private var statusActions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                sectionTitle("Status")
+                Spacer(minLength: 0)
+                BookingStatusBadge(booking: booking)
+            }
+
+            HStack(spacing: 8) {
+                if booking.completedAt == nil {
+                    if booking.invoiceSentAt == nil {
+                        actionButton("Invoice sent", "paperplane.fill") {
+                            await run { try await APIClient.shared.markInvoiceSent(bookingId: booking.id) }
+                        }
+                    }
+                    actionButton("Complete", "checkmark.circle.fill", prominent: true) {
+                        showComplete = true
+                    }
+                }
+                if booking.completedAt != nil || booking.invoiceSentAt != nil {
+                    actionButton("Reopen", "arrow.uturn.backward") {
+                        await run { try await APIClient.shared.reopenBooking(id: booking.id) }
+                    }
+                }
+            }
+            .disabled(isWorking)
+
+            if let actionError {
+                Text(actionError).font(.caption).foregroundStyle(Theme.danger)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+
+    private func actionButton(
+        _ title: String,
+        _ symbol: String,
+        prominent: Bool = false,
+        action: @escaping () async -> Void
+    ) -> some View {
+        Button {
+            Task { await action() }
+        } label: {
+            Label(title, systemImage: symbol)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(
+                    prominent ? Theme.accent : Theme.cardRaised,
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                )
+                .foregroundStyle(prominent ? Theme.background : Theme.primaryText)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func run(_ work: () async throws -> Void) async {
+        isWorking = true
+        actionError = nil
+        defer { isWorking = false }
+        do {
+            try await work()
+            await refresh()
+        } catch {
+            actionError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// After a status change: this screen, the bookings list and the schedule.
+    private func refresh() async {
+        if let updated = try? await APIClient.shared.bookingDetail(booking.id) { fresh = updated }
+        await appState.bookings.load(force: true)
+        await appState.schedule.load(force: true)
     }
 
     // MARK: - Header

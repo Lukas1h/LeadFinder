@@ -321,6 +321,51 @@ actor APIClient {
         _ = try await send("DELETE", "api/app/v1/bookings/\(id)", body: Empty?.none, as: OK.self)
     }
 
+    /// Finishes a job. Nil figures are "not recorded".
+    func completeBooking(
+        id: String,
+        driveHours: Double?,
+        editingHours: Double?,
+        shootingHours: Double?,
+        logisticsHours: Double?,
+        additionalCosts: Int?
+    ) async throws {
+        struct Body: Encodable, Sendable {
+            let driveHours: Double?
+            let editingHours: Double?
+            let shootingHours: Double?
+            let logisticsHours: Double?
+            let additionalCosts: Int?
+        }
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send(
+            "POST",
+            "api/app/v1/bookings/\(id)/complete",
+            body: Body(
+                driveHours: driveHours,
+                editingHours: editingHours,
+                shootingHours: shootingHours,
+                logisticsHours: logisticsHours,
+                additionalCosts: additionalCosts
+            ),
+            as: OK.self
+        )
+    }
+
+    /// The invoice has gone out: the booking waits for payment.
+    func markInvoiceSent(bookingId: String) async throws {
+        struct Empty: Encodable, Sendable {}
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("POST", "api/app/v1/bookings/\(bookingId)/invoice-sent", body: Empty(), as: OK.self)
+    }
+
+    /// Steps a booking back one state; the server decides which.
+    func reopenBooking(id: String) async throws {
+        struct Empty: Encodable, Sendable {}
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("POST", "api/app/v1/bookings/\(id)/reopen", body: Empty(), as: OK.self)
+    }
+
     /// One booking, fresh — what the detail screen shows after an edit.
     func bookingDetail(_ id: String) async throws -> Booking {
         struct Response: Decodable, Sendable { let booking: Booking }
