@@ -7,6 +7,7 @@ import { refreshLeadSections, lastTextByAgent, isRecentlyTexted, LEAD_SECTION_OR
 import { getQueuedListingIds } from "@/lib/queueMessages";
 import type { KnownAgentGroup } from "@/app/KnownAgentLeads";
 import { clientOffices, officeClientFor, type OfficeClient } from "@/lib/clientOffices";
+import { estimateDriveMinutes } from "@/lib/driveTime";
 
 /**
  * Everything the Leads page shows, as data.
@@ -162,13 +163,19 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
   const sections: Record<LeadSection, LeadGroup[]> = { photo: [], video: [], backup: [], texted: [], unlikely: [] };
   for (const g of groups) if (!g.known) sections[g.section].push(g);
 
-  // Within a section: backup and video put agents he has never texted first,
-  // then the priciest listing; texted goes by who has waited longest since his
+  // Within a section: video puts agents he has never texted first, then the
+  // priciest listing. Backup goes nearest first, then priciest: a backup text
+  // is about being the photographer they think of, and the jobs that come of
+  // it pay about twice as much an hour within 45 minutes of home as they do
+  // two hours out (bookings through Oct 2026), while agents answer at the same
+  // rate wherever they are. Texted goes by who has waited longest since his
   // last text; photo and unlikely go by the priority score the pipeline uses
   // (coming soon first, then price-weighted photo opportunity).
   for (const key of LEAD_SECTION_ORDER) {
     sections[key].sort((a, b) =>
-      key === "backup" || key === "video"
+      key === "backup"
+        ? driveBand(a.best.city) - driveBand(b.best.city) || (b.best.price ?? 0) - (a.best.price ?? 0)
+        : key === "video"
         ? (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) || (b.best.price ?? 0) - (a.best.price ?? 0)
         : key === "texted"
           ? (a.textedAt?.getTime() ?? 0) - (b.textedAt?.getTime() ?? 0) || byLeadPriority(a.best, b.best)
@@ -186,6 +193,17 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
   const unscoredCount = openLeads.filter((l) => isUnscored(l) && l.foundAt.getTime() > recent).length;
 
   return { known, sections, openLeadCount: openLeads.length, queuedCount, agentCount, addressById, unscoredCount };
+}
+
+/**
+ * How far a lead is, in the steps that change what a job there is worth:
+ * around home, the Eugene / Medford / Coos Bay ring, the mid-valley, and
+ * everything past it. A city missing from the drive table sorts last.
+ */
+function driveBand(city: string | null): number {
+  const minutes = city ? estimateDriveMinutes(city) : null;
+  if (minutes == null) return 4;
+  return minutes <= 45 ? 0 : minutes <= 100 ? 1 : minutes <= 165 ? 2 : 3;
 }
 
 function contactLine(agent: Agent | null, key: string, textedAt: Date | undefined): string | null {

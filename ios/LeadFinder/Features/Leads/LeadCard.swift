@@ -185,7 +185,8 @@ struct LeadCard: View {
     private var specs: String {
         let beds = group.best.bedrooms.map { Int($0) == 0 ? "— bd" : "\(Int($0)) bd" } ?? "— bd"
         let baths = group.best.bathrooms.map { "\($0.formatted(.number.precision(.fractionLength(0...1)))) ba" } ?? "— ba"
-        return "\(beds) / \(baths)"
+        // "~1h 30m drive" from home, when the server knows the city.
+        return ["\(beds) / \(baths)", group.best.driveTime?.nilIfBlank].compactMap { $0 }.joined(separator: " · ")
     }
 
     private func notesLine(_ notes: String) -> some View {

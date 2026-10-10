@@ -62,6 +62,8 @@ struct Listing: Codable, Sendable, Identifiable, Hashable {
     var redfinUrl: String?
     var bedrooms: Double?
     var bathrooms: Double?
+    /// "~1h 30m drive" from home; nil when the city isn't in the server's table.
+    var driveTime: String?
     /// First photo on list endpoints, all of them on detail endpoints.
     var photos: [String]?
 

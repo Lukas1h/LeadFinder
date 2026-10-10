@@ -3,6 +3,7 @@ import { FEW_PHOTOS_THRESHOLD, isUnscored } from "@/lib/pipeline";
 import { isBuilderListing } from "@/lib/leadSections";
 import { officeClientBadge, agentDeclinedBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, unscoredBadge, type BadgeText } from "@/lib/leadBadges";
 import { sampleCardPhotos } from "@/lib/cardPhotos";
+import { estimateDriveTime } from "@/lib/driveTime";
 import type { BookingWithDetails } from "@/app/booked/BookedList";
 import type { LeadGroup } from "@/app/leads-data";
 
@@ -55,6 +56,7 @@ export function listingJson(l: Listing, photos: "first" | "card" | "all") {
     ...rest,
     bedrooms: numericToNumber(bedrooms),
     bathrooms: numericToNumber(bathrooms),
+    driveTime: l.city ? estimateDriveTime(l.city) : null,
     photos: photosOut,
   };
 }
