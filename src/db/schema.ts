@@ -186,6 +186,11 @@ export const listings = pgTable("listings", {
   // the Follow up page as someone to congratulate.
   marketStatus: text("market_status"),
   marketStatusAt: timestamp("market_status_at", { withTimezone: true }),
+  // When the check first saw the listing under contract or sold. Follow up
+  // compares his last contact against this rather than marketStatusAt: a text
+  // sent after the contract date but before anyone here knew about it wasn't
+  // a congratulation.
+  marketNoticedAt: timestamp("market_noticed_at", { withTimezone: true }),
   marketCheckedAt: timestamp("market_checked_at", { withTimezone: true }),
 });
 
@@ -391,6 +396,16 @@ export const bookings = pgTable("bookings", {
   // complete the booking: that still records the job's hours by hand.
   paidAt: timestamp("paid_at", { withTimezone: true }),
   stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+
+  // Where the home he shot stands on the market — the same nightly check and
+  // the same four fields as on listings (see there). Kept on the booking too
+  // because a job often has only an address and no tracked listing, and a home
+  // going under contract days after his photos went up is the one a client
+  // most wants to hear from him about.
+  marketStatus: text("market_status"),
+  marketStatusAt: timestamp("market_status_at", { withTimezone: true }),
+  marketNoticedAt: timestamp("market_noticed_at", { withTimezone: true }),
+  marketCheckedAt: timestamp("market_checked_at", { withTimezone: true }),
 });
 
 export type Booking = typeof bookings.$inferSelect;

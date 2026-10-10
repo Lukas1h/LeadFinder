@@ -39,10 +39,17 @@ export interface JustListedEntry extends FollowUpEntry {
 }
 
 export interface NewsEntry extends FollowUpEntry {
-  listing: Listing;
+  /** The tracked listing, when there is one. A job booked by address alone has none. */
+  listing: Listing | null;
+  address: string | null;
+  city: string | null;
+  /** A home Lukas photographed: the congratulation that means the most coming from him. */
+  shot: boolean;
   kind: MarketNews;
   /** "Pending since Oct 5" — the words to use, since agents use them precisely. */
   label: string;
+  /** When it went under contract or closed. */
+  at: Date;
 }
 
 /** "1811 NE Alameda Ave" → "1811 alameda". Bookings often aren't linked to a listing, so match by address. */
@@ -57,9 +64,10 @@ function addressKey(address: string | null): string | null {
 /**
  * Everything the Follow up page shows:
  *
- * - news: a listing of someone he knows went under contract or closed (found
- *   by the nightly market check, lib/marketStatus.ts) and he hasn't been in
- *   touch since. Congratulating them is the easiest text there is to send.
+ * - news: a listing of someone he knows, or a home he shot for them, went
+ *   under contract or closed (found by the nightly market check,
+ *   lib/marketStatus.ts) and he hasn't been in touch since the check noticed.
+ *   Congratulating them is the easiest text there is to send.
  * - justListed: a past client or interested agent put up a listing Lukas
  *   hasn't acted on, and he hasn't been in touch since it appeared. A new
  *   listing is the most natural reason to text someone who already knows him.
@@ -82,7 +90,9 @@ export async function getFollowUpBoard(): Promise<{
   const ids = candidates.map((a) => a.id);
   const now = Date.now();
 
-  const [replies, inbound, outbound, fresh, bookedAddresses, moved] = await Promise.all([
+  const newsSince = new Date(now - NEWS_DAYS * DAY);
+
+  const [replies, inbound, outbound, fresh, bookedAddresses, moved, movedJobs] = await Promise.all([
     db
       .select({ agentId: messageSends.agentId, at: max(messageSends.respondedAt) })
       .from(messageSends)
@@ -112,7 +122,12 @@ export async function getFollowUpBoard(): Promise<{
     db
       .select()
       .from(listings)
-      .where(and(inArray(listings.agentId, ids), gt(listings.marketStatusAt, new Date(now - NEWS_DAYS * DAY)))),
+      .where(and(inArray(listings.agentId, ids), gt(listings.marketStatusAt, newsSince))),
+    db
+      .select({ booking: bookings, listing: listings })
+      .from(bookings)
+      .leftJoin(listings, eq(bookings.listingId, listings.id))
+      .where(and(inArray(bookings.contactAgentId, ids), gt(bookings.marketStatusAt, newsSince))),
   ]);
 
   const toMap = (rows: { agentId: string | null; at: Date | null }[]) =>
@@ -142,12 +157,49 @@ export async function getFollowUpBoard(): Promise<{
 
   const rank = (s: string) => (s === "regular" || s === "worked_once" ? 0 : s === "interested" ? 1 : 2);
 
-  // Latest piece of news per agent.
-  const latestNews = new Map<string, Listing>();
+  // One piece of news per agent: a home he shot before anything else of
+  // theirs, then whichever happened most recently.
+  interface Sale {
+    listing: Listing | null;
+    address: string | null;
+    city: string | null;
+    shot: boolean;
+    status: string | null;
+    at: Date;
+    noticedAt: Date | null;
+  }
+  const latestNews = new Map<string, Sale>();
+  const offer = (agentId: string | null, sale: Sale) => {
+    if (!agentId || !marketNews(sale.status)) return;
+    const prev = latestNews.get(agentId);
+    if (!prev || (sale.shot && !prev.shot) || (sale.shot === prev.shot && sale.at > prev.at)) {
+      latestNews.set(agentId, sale);
+    }
+  };
   for (const l of moved) {
-    if (!l.agentId || !l.marketStatusAt || !marketNews(l.marketStatus)) continue;
-    const prev = latestNews.get(l.agentId);
-    if (!prev || l.marketStatusAt > prev.marketStatusAt!) latestNews.set(l.agentId, l);
+    if (!l.marketStatusAt) continue;
+    const key = addressKey(l.address);
+    offer(l.agentId, {
+      listing: l,
+      address: l.address,
+      city: l.city,
+      shot: l.bookingId != null || (key != null && booked.has(key)),
+      status: l.marketStatus,
+      at: l.marketStatusAt,
+      noticedAt: l.marketNoticedAt,
+    });
+  }
+  for (const { booking: b, listing } of movedJobs) {
+    if (!b.marketStatusAt) continue;
+    offer(b.contactAgentId, {
+      listing,
+      address: listing?.address ?? b.address,
+      city: listing?.city ?? b.city,
+      shot: true,
+      status: b.marketStatus,
+      at: b.marketStatusAt,
+      noticedAt: b.marketNoticedAt,
+    });
   }
 
   const news: NewsEntry[] = [];
@@ -157,16 +209,22 @@ export async function getFollowUpBoard(): Promise<{
   for (const agent of candidates) {
     const sale = latestNews.get(agent.id);
     if (sale) {
-      const since = sale.marketStatusAt!.getTime();
+      // Against when the check noticed, not the contract date: a text sent in
+      // between, before anyone here knew, wasn't a congratulation.
+      const since = (sale.noticedAt ?? sale.at).getTime();
       const reachedOut = lastReachedOutAt(agent);
       const snoozed = agent.followUpDismissedAt && agent.followUpDismissedAt.getTime() > since;
       if (!snoozed && (!reachedOut || reachedOut.getTime() < since)) {
-        const kind = marketNews(sale.marketStatus)!;
+        const kind = marketNews(sale.status)!;
         news.push({
           agent,
-          listing: sale,
+          listing: sale.listing,
+          address: sale.address,
+          city: sale.city,
+          shot: sale.shot,
           kind,
-          label: marketNewsLabel(kind, sale.marketStatusAt),
+          label: marketNewsLabel(kind, sale.at),
+          at: sale.at,
           lastReplyAt: lastReplyAt(agent),
         });
         continue;
@@ -193,8 +251,9 @@ export async function getFollowUpBoard(): Promise<{
 
   news.sort(
     (a, b) =>
+      Number(b.shot) - Number(a.shot) ||
       rank(a.agent.relationshipStatus) - rank(b.agent.relationshipStatus) ||
-      b.listing.marketStatusAt!.getTime() - a.listing.marketStatusAt!.getTime()
+      b.at.getTime() - a.at.getTime()
   );
   justListed.sort(
     (a, b) =>

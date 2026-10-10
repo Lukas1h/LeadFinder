@@ -64,16 +64,23 @@ export function FollowUpList({
             Under contract or sold ({congrats.length})
           </h2>
           <p className="text-sm text-muted-foreground mb-3">
-            A listing of theirs just went under contract or closed, and they haven&rsquo;t heard from you since.
-            Congratulate them.
+            A listing of theirs, or a home you shot for them, just went under contract or closed, and they
+            haven&rsquo;t heard from you since. Congratulate them.
           </p>
           <div className="flex flex-col gap-4">
             {congrats.map((e) =>
               card(
                 e,
                 <>
-                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">{e.label}</p>
-                  <ListingRow listing={e.listing} />
+                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                    {e.label}
+                    {e.shot && " · you shot it"}
+                  </p>
+                  {e.listing ? (
+                    <ListingRow listing={e.listing} />
+                  ) : (
+                    <p className="text-sm text-foreground px-2">{[e.address, e.city].filter(Boolean).join(", ")}</p>
+                  )}
                 </>
               )
             )}

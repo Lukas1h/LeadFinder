@@ -213,7 +213,7 @@ All paths are relative to `/api/app/v1`.
 |---|---|---|
 | `GET /ping` | | `{ ok: true, serverTime }`. The app uses it to check its token |
 | `GET /leads` | `getLeadsBoard()` | See below |
-| `GET /follow-up` | `getFollowUpBoard()` + `groups.ts` | `{ news: [{ agent, lastReplyAt, listing, headline }], justListed: [{ agent, lastReplyAt, listing }], groups: [{ label, entries: [{ agent, lastReplyAt }] }] }`. Empty groups are omitted. `news` (added 2026-10-10) is agents with a listing that just went under contract or sold, found by the nightly market check (`lib/marketStatus.ts`); `headline` is the wording to show, e.g. "Pending since Oct 5" |
+| `GET /follow-up` | `getFollowUpBoard()` + `groups.ts` | `{ news: [{ agent, lastReplyAt, listing, headline }], justListed: [{ agent, lastReplyAt, listing }], groups: [{ label, entries: [{ agent, lastReplyAt }] }] }`. Empty groups are omitted. `news` (added 2026-10-10) is agents with a listing, or a home Lukas shot for them, that just went under contract or sold, found by the nightly market check (`lib/marketStatus.ts`); `headline` is the wording to show, e.g. "Pending since Oct 5". `listing` is null for a job booked by address alone, and the headline then carries the address: "753 SE Haynes Ave · Pending since Oct 7 · you shot it" |
 | `GET /schedule` | `loadScheduleItems(todayScheduleDate())` | `{ today, items }`. Each item as-is, but `listing` goes through `listingJson(…,"first")` |
 | `GET /bookings` | `loadBookingsWithDetails()` + `groupBookings()` | `{ upcoming, waitingForPayment, completed }`, each `bookingJson[]` |
 | `GET /bookings/:id` | `getBookingWithDetails`, `getGalleryActivity` | `{ booking, galleryActivity }` |

@@ -17,12 +17,14 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     // A listing of theirs went under contract or closed: same shape as
-    // justListed, plus the words to use ("Pending since Oct 5").
+    // justListed, plus the words to use ("Pending since Oct 5"). A home he
+    // shot that was booked by address alone has no listing, so its address
+    // goes in the headline instead.
     news: news.map((e) => ({
       agent: agentJson(e.agent),
       lastReplyAt: e.lastReplyAt,
-      listing: listingJson(e.listing, "first"),
-      headline: e.label,
+      listing: e.listing ? listingJson(e.listing, "first") : null,
+      headline: [e.listing ? null : e.address, e.label, e.shot ? "you shot it" : null].filter(Boolean).join(" · "),
     })),
     justListed: justListed.map((e) => ({
       agent: agentJson(e.agent),
