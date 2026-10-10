@@ -35,8 +35,10 @@ for endpoint in leads follow-up schedule bookings agents; do
 done
 
 cp LeadFinder/API/APIModels.swift "$WORK/APIModels.swift"
-# APIModels relies on one String helper from the Design layer; stub it so the
-# file compiles on its own.
+# APIModels relies on a String helper and DateFormatting from the Design
+# layer. DateFormatting is a plain Foundation file, so it's compiled in as is;
+# the String helper is stubbed because Theme.swift pulls in SwiftUI.
+cp LeadFinder/Design/DateFormatting.swift "$WORK/DateFormatting.swift"
 cat >> "$WORK/APIModels.swift" <<'EOF'
 
 extension String {
@@ -90,5 +92,5 @@ allOK = check("agents", "\\(dir)/agents.json", AgentsResponse.self) && allOK
 exit(allOK ? 0 : 1)
 EOF
 
-swiftc -O -o "$WORK/check" "$WORK/APIModels.swift" "$WORK/main.swift"
+swiftc -O -o "$WORK/check" "$WORK/APIModels.swift" "$WORK/DateFormatting.swift" "$WORK/main.swift"
 "$WORK/check"
