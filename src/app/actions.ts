@@ -163,6 +163,16 @@ export async function markListingsPassed(listingIds: string[]) {
   revalidatePath("/agents");
 }
 
+/**
+ * A listing's whole gallery, for the listing dialog. Lists that show hundreds
+ * of listings hand each card only the few photos it displays (see
+ * getLeadsBoard), and the dialog asks for the rest when it's opened.
+ */
+export async function getListingPhotos(listingId: string): Promise<string[]> {
+  const [row] = await db.select({ photos: listings.photos }).from(listings).where(eq(listings.id, listingId));
+  return row?.photos ?? [];
+}
+
 /** Free-text note on a listing — edited from the listing detail modal. */
 export async function updateListingNotes(listingId: string, notes: string) {
   await db

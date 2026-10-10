@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ExternalLink, X, UserPlus, Car } from "lucide-react";
 import { LEAD_STATUSES, type Listing, type LeadStatus } from "@/db/schema";
-import { updateListingNotes, updateListingStatus, updateListingFollowUp, findListingSourceUrl } from "./actions";
+import { getListingPhotos, updateListingNotes, updateListingStatus, updateListingFollowUp, findListingSourceUrl } from "./actions";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { STATUS_LABELS } from "./badges";
 import { BookingForm } from "./booked/BookingForm";
@@ -15,6 +15,7 @@ import { LinkAgentForm } from "./LinkAgentForm";
 import { FindLinkButton } from "./FindLinkButton";
 import { formatPrice, formatDate } from "@/lib/format";
 import { estimateDriveTime } from "@/lib/driveTime";
+import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,6 +47,29 @@ export function ListingModal({
   const dirty = notes !== (lead.notes ?? "");
 
   const [bookingFormOpen, setBookingFormOpen] = useState(false);
+
+  // The Leads page hands each listing only the photos its card shows (whole
+  // galleries for 700 listings were a fifth of that page's weight), so the
+  // rest are fetched the first time this opens. Elsewhere the listing already
+  // has them all and this does nothing.
+  const [photos, setPhotos] = useState(lead.photos ?? []);
+  const [photosLoaded, setPhotosLoaded] = useState(false);
+  useEffect(() => {
+    if (!open || photosLoaded) return;
+    const given = lead.photos?.length ?? 0;
+    if (given > CARD_MAX_PHOTOS && given >= (lead.photoCount ?? 0)) return;
+    let cancelled = false;
+    getListingPhotos(lead.id)
+      .then((all) => {
+        if (cancelled) return;
+        setPhotosLoaded(true);
+        if (all.length > given) setPhotos(all);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, photosLoaded, lead.id, lead.photos, lead.photoCount]);
 
   const initialFollowUpAt = lead.followUpAt ? lead.followUpAt.toISOString().slice(0, 10) : "";
   const [followUpAt, setFollowUpAt] = useState(initialFollowUpAt);
@@ -92,7 +116,7 @@ export function ListingModal({
 
         <div className="relative">
           <PhotoCarousel
-            photos={lead.photos ?? []}
+            photos={photos}
             alt={lead.address ?? "Listing photo"}
             alwaysShowControls
           />

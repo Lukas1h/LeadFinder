@@ -34,20 +34,41 @@ export const maxDuration = 300;
  */
 const SCORING_DOWN_COUNT = 10;
 
-export default function LeadsPage() {
+/**
+ * How many cards a section renders before "Show N more". The page was 13 MB
+ * with all ~550 cards on it (each is a dozen kilobytes of markup plus its
+ * data), and every Pass or Text re-renders the lot. Sections are sorted most
+ * worth texting first, so the first sixty are several days of work; the rest
+ * are one tap away (?show=backup), and Unlikely, which starts folded shut
+ * anyway, renders nothing until asked.
+ */
+const SECTION_LIMIT = 60;
+
+type LeadsSearchParams = Promise<{ show?: string | string[] }>;
+
+export default function LeadsPage({ searchParams }: { searchParams: LeadsSearchParams }) {
   return (
     <main className="max-w-3xl mx-auto w-full px-6 py-10">
+      {/* searchParams is request-time data, so it's read below this boundary. */}
       <Suspense fallback={<LeadsSkeleton />}>
-        <LeadsContent />
+        <LeadsContent searchParams={searchParams} />
       </Suspense>
     </main>
   );
 }
 
-async function LeadsContent() {
+async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams }) {
   // Deliberately NOT "use cache" — see the comment in src/app/pipeline/page.tsx.
 
-  const { known, sections, openLeadCount, queuedCount, agentCount, addressById, unscoredCount } = await getLeadsBoard();
+  const { show } = await searchParams;
+  // Sections asked for in full: ?show=backup, ?show=backup,unlikely.
+  const shown = new Set(([] as string[]).concat(show ?? []).flatMap((s) => s.split(",")).filter(Boolean));
+
+  // Cards show a handful of each listing's photos; the listing dialog fetches
+  // the whole gallery when it opens (see ListingModal).
+  const { known, sections, openLeadCount, queuedCount, agentCount, addressById, unscoredCount } = await getLeadsBoard({
+    cardPhotosOnly: true,
+  });
 
   function card(g: LeadGroup) {
     const lead = g.best;
@@ -163,10 +184,13 @@ async function LeadsContent() {
             const items = sections[key];
             if (items.length === 0) return null;
             const isUnlikely = key === "unlikely";
+            const all = shown.has(key);
+            const visible = all ? items : items.slice(0, isUnlikely ? 0 : SECTION_LIMIT);
+            const hidden = items.length - visible.length;
             return (
               <section key={key}>
                 {(index > 0 || known.length > 0) && <Separator className="mb-8" />}
-                <details className="group/details" open={!isUnlikely}>
+                <details className="group/details" open={!isUnlikely || all}>
                   <summary className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
                     <span className="flex items-center gap-1">
                       <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
@@ -176,7 +200,18 @@ async function LeadsContent() {
                       <PassAllListingsButton listingIds={items.flatMap((g) => g.entries.map((e) => e.lead.id))} />
                     )}
                   </summary>
-                  <div className="flex flex-col gap-4 mt-3">{items.map(card)}</div>
+                  <div className="flex flex-col gap-4 mt-3">
+                    {visible.map(card)}
+                    {hidden > 0 && (
+                      <Link
+                        href={`/?show=${[...shown, key].join(",")}`}
+                        scroll={false}
+                        className="self-center rounded-md border px-4 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {visible.length === 0 ? `Show all ${hidden}` : `Show ${hidden} more`}
+                      </Link>
+                    )}
+                  </div>
                 </details>
               </section>
             );
