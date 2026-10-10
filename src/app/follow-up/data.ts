@@ -1,11 +1,15 @@
 import { db } from "@/db";
 import { agents, agentInteractions, bookings, listings, messageSends, type Agent, type Listing } from "@/db/schema";
 import { and, eq, gt, inArray, isNotNull, max } from "drizzle-orm";
+import { marketNews, marketNewsLabel, type MarketNews } from "@/lib/marketStatus";
 
 const DAY = 24 * 60 * 60 * 1000;
 
 /** How long a new listing counts as "just listed". */
 const JUST_LISTED_DAYS = 21;
+
+/** How long after a listing goes under contract or closes it's still worth a congrats. */
+const NEWS_DAYS = 21;
 
 /**
  * Days of silence before someone comes back up. Interested agents asked for
@@ -34,6 +38,13 @@ export interface JustListedEntry extends FollowUpEntry {
   listing: Listing;
 }
 
+export interface NewsEntry extends FollowUpEntry {
+  listing: Listing;
+  kind: MarketNews;
+  /** "Pending since Oct 5" — the words to use, since agents use them precisely. */
+  label: string;
+}
+
 /** "1811 NE Alameda Ave" → "1811 alameda". Bookings often aren't linked to a listing, so match by address. */
 function addressKey(address: string | null): string | null {
   if (!address) return null;
@@ -46,6 +57,9 @@ function addressKey(address: string | null): string | null {
 /**
  * Everything the Follow up page shows:
  *
+ * - news: a listing of someone he knows went under contract or closed (found
+ *   by the nightly market check, lib/marketStatus.ts) and he hasn't been in
+ *   touch since. Congratulating them is the easiest text there is to send.
  * - justListed: a past client or interested agent put up a listing Lukas
  *   hasn't acted on, and he hasn't been in touch since it appeared. A new
  *   listing is the most natural reason to text someone who already knows him.
@@ -54,17 +68,21 @@ function addressKey(address: string | null): string | null {
  * - agents: everyone else he knows who has gone quiet, past clients first,
  *   then interested, then warm, longest silence first.
  */
-export async function getFollowUpBoard(): Promise<{ justListed: JustListedEntry[]; agents: FollowUpEntry[] }> {
+export async function getFollowUpBoard(): Promise<{
+  news: NewsEntry[];
+  justListed: JustListedEntry[];
+  agents: FollowUpEntry[];
+}> {
   const candidates = await db
     .select()
     .from(agents)
     .where(inArray(agents.relationshipStatus, ["regular", "worked_once", "interested", "warm"]));
-  if (candidates.length === 0) return { justListed: [], agents: [] };
+  if (candidates.length === 0) return { news: [], justListed: [], agents: [] };
 
   const ids = candidates.map((a) => a.id);
   const now = Date.now();
 
-  const [replies, inbound, outbound, fresh, bookedAddresses] = await Promise.all([
+  const [replies, inbound, outbound, fresh, bookedAddresses, moved] = await Promise.all([
     db
       .select({ agentId: messageSends.agentId, at: max(messageSends.respondedAt) })
       .from(messageSends)
@@ -91,6 +109,10 @@ export async function getFollowUpBoard(): Promise<{ justListed: JustListedEntry[
         )
       ),
     db.select({ address: bookings.address }).from(bookings).where(isNotNull(bookings.address)),
+    db
+      .select()
+      .from(listings)
+      .where(and(inArray(listings.agentId, ids), gt(listings.marketStatusAt, new Date(now - NEWS_DAYS * DAY)))),
   ]);
 
   const toMap = (rows: { agentId: string | null; at: Date | null }[]) =>
@@ -120,10 +142,37 @@ export async function getFollowUpBoard(): Promise<{ justListed: JustListedEntry[
 
   const rank = (s: string) => (s === "regular" || s === "worked_once" ? 0 : s === "interested" ? 1 : 2);
 
+  // Latest piece of news per agent.
+  const latestNews = new Map<string, Listing>();
+  for (const l of moved) {
+    if (!l.agentId || !l.marketStatusAt || !marketNews(l.marketStatus)) continue;
+    const prev = latestNews.get(l.agentId);
+    if (!prev || l.marketStatusAt > prev.marketStatusAt!) latestNews.set(l.agentId, l);
+  }
+
+  const news: NewsEntry[] = [];
   const justListed: JustListedEntry[] = [];
   const rest: FollowUpEntry[] = [];
 
   for (const agent of candidates) {
+    const sale = latestNews.get(agent.id);
+    if (sale) {
+      const since = sale.marketStatusAt!.getTime();
+      const reachedOut = lastReachedOutAt(agent);
+      const snoozed = agent.followUpDismissedAt && agent.followUpDismissedAt.getTime() > since;
+      if (!snoozed && (!reachedOut || reachedOut.getTime() < since)) {
+        const kind = marketNews(sale.marketStatus)!;
+        news.push({
+          agent,
+          listing: sale,
+          kind,
+          label: marketNewsLabel(kind, sale.marketStatusAt),
+          lastReplyAt: lastReplyAt(agent),
+        });
+        continue;
+      }
+    }
+
     const listing = newestListing.get(agent.id);
     if (listing && rank(agent.relationshipStatus) <= 1) {
       const since = listing.foundAt.getTime();
@@ -142,6 +191,11 @@ export async function getFollowUpBoard(): Promise<{ justListed: JustListedEntry[
     rest.push({ agent, lastReplyAt: lastReplyAt(agent) });
   }
 
+  news.sort(
+    (a, b) =>
+      rank(a.agent.relationshipStatus) - rank(b.agent.relationshipStatus) ||
+      b.listing.marketStatusAt!.getTime() - a.listing.marketStatusAt!.getTime()
+  );
   justListed.sort(
     (a, b) =>
       rank(a.agent.relationshipStatus) - rank(b.agent.relationshipStatus) ||
@@ -153,5 +207,5 @@ export async function getFollowUpBoard(): Promise<{ justListed: JustListedEntry[
     return (lastTouchAt(a.agent)?.getTime() ?? -Infinity) - (lastTouchAt(b.agent)?.getTime() ?? -Infinity);
   });
 
-  return { justListed, agents: rest };
+  return { news, justListed, agents: rest };
 }

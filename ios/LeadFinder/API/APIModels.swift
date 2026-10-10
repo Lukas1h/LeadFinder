@@ -178,10 +178,15 @@ struct FollowUpResponse: Codable, Sendable {
         var agent: Agent
         var lastReplyAt: String?
         var listing: Listing?
+        /// News items only: "Pending since Oct 5", "Sold Oct 5".
+        var headline: String?
 
         var id: String { agent.id }
     }
 
+    /// Agents with a listing that just went under contract or sold. Optional so
+    /// a cached response from before the server sent it still decodes.
+    var news: [JustListed]?
     var justListed: [JustListed]
     var groups: [Group]
 }

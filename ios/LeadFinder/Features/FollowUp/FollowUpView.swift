@@ -46,6 +46,7 @@ struct FollowUpView: View {
 
     @ViewBuilder
     private func content(_ response: FollowUpResponse) -> some View {
+        let news = (response.news ?? []).filter { matches($0.agent) }
         let justListed = response.justListed.filter { matches($0.agent) }
         let groups = response.groups.compactMap { group -> FollowUpResponse.Group? in
             let entries = group.entries.filter { matches($0.agent) }
@@ -53,7 +54,7 @@ struct FollowUpView: View {
             return FollowUpResponse.Group(label: group.label, entries: entries)
         }
 
-        if justListed.isEmpty && groups.isEmpty {
+        if news.isEmpty && justListed.isEmpty && groups.isEmpty {
             emptyState
         } else {
             VStack(alignment: .leading, spacing: 0) {
@@ -66,6 +67,9 @@ struct FollowUpView: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 20) {
+                        if !news.isEmpty {
+                            newsSection(news)
+                        }
                         if !justListed.isEmpty {
                             justListedSection(justListed)
                         }
@@ -80,6 +84,15 @@ struct FollowUpView: View {
                 }
                 .scrollDismissesKeyboard(.immediately)
             }
+        }
+    }
+
+    /// A listing of theirs went under contract or closed: a reason to say congrats.
+    @ViewBuilder
+    private func newsSection(_ items: [FollowUpResponse.JustListed]) -> some View {
+        sectionHeader("Under contract or sold", count: items.count)
+        ForEach(items) { item in
+            justListedCard(item)
         }
     }
 
@@ -129,6 +142,11 @@ struct FollowUpView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
+                    if let headline = item.headline?.nilIfBlank {
+                        Text(headline)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.emerald)
+                    }
                     if let listing = item.listing {
                         Text(listing.priceLine)
                             .font(.title3.weight(.bold))

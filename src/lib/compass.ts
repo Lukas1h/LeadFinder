@@ -63,18 +63,13 @@ function findOffer(node: unknown): { offeredBy: LdPerson | LdPerson[]; price?: n
   return null;
 }
 
-export async function fetchCompassAgent(listing: {
-  address: string | null;
-  city: string | null;
-  price: number | null;
-}): Promise<CompassAgent | null> {
-  if (!listing.address || !listing.city) return null;
-
+/** The Compass listing page for an address, from the address autocomplete. Null unless street and city both match. */
+async function findListingPath(address: string, city: string): Promise<string | null> {
   const suggest = await fetchWithTimeout("https://www.compass.com/api/v3/omnisuggest/autocomplete", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      q: `${listing.address} ${listing.city}`,
+      q: `${address} ${city}`,
       sources: [0, 1, 7, 8, 2, 6, 5, 9, 11, 25, 4, 3, 18, 36],
       preferredUcGeoIdForRanking: "portland_or",
       urlStrategy: 2,
@@ -87,8 +82,8 @@ export async function fetchCompassAgent(listing: {
     categories?: { items?: { text?: string; subText?: string; redirectUrl?: string }[] }[];
   } | null;
   const items = data?.categories?.flatMap((c) => c.items ?? []) ?? [];
-  const wantStreet = streetKey(listing.address);
-  const wantCity = listing.city.toLowerCase();
+  const wantStreet = streetKey(address);
+  const wantCity = city.toLowerCase();
   const match = items.find(
     (i) =>
       i.redirectUrl &&
@@ -96,9 +91,69 @@ export async function fetchCompassAgent(listing: {
       streetKey(i.text) === wantStreet &&
       (i.subText ?? "").toLowerCase().startsWith(wantCity)
   );
-  if (!match?.redirectUrl) return null;
+  return match?.redirectUrl ?? null;
+}
 
-  const page = await fetchWithTimeout(`https://www.compass.com${match.redirectUrl}`, { redirect: "follow" });
+export interface CompassStatus {
+  /** Compass's own wording: "Active", "Pending", "Active Under Contract", "Sold", "Closed"… */
+  status: string;
+  /** When it went under contract, if it has. */
+  contractAt: Date | null;
+  /** When the sale closed, if it has. */
+  closedAt: Date | null;
+}
+
+/**
+ * Where a listing stands on the market, from the same Compass page the agent
+ * lookup reads. The first "localizedStatus" on the page is the listing the
+ * page is about (later ones belong to nearby homes), and the "date" object
+ * right after it carries the contract and closing dates in epoch ms. Null when
+ * Compass doesn't have the address or the page has no status.
+ */
+export async function fetchCompassStatus(listing: {
+  address: string | null;
+  city: string | null;
+}): Promise<CompassStatus | null> {
+  if (!listing.address || !listing.city) return null;
+  const path = await findListingPath(listing.address, listing.city);
+  if (!path) return null;
+
+  const page = await fetchWithTimeout(`https://www.compass.com${path}`, { redirect: "follow" });
+  if (!page) return null;
+  const html = await page.text();
+
+  const marker = '"localizedStatus":"';
+  const at = html.indexOf(marker);
+  if (at < 0) return null;
+  const status = html.slice(at + marker.length, html.indexOf('"', at + marker.length));
+  if (!status) return null;
+
+  let dates: { contract?: number; closed?: number } = {};
+  const dateAt = html.indexOf('"date":{', at);
+  // The date object belongs to this status only if it follows closely; further
+  // on it would be another home's.
+  if (dateAt >= 0 && dateAt - at < 2000) {
+    try {
+      dates = JSON.parse(html.slice(dateAt + '"date":'.length, html.indexOf("}", dateAt) + 1));
+    } catch {
+      dates = {};
+    }
+  }
+  const toDate = (ms: unknown) => (typeof ms === "number" && ms > 0 ? new Date(ms) : null);
+  return { status, contractAt: toDate(dates.contract), closedAt: toDate(dates.closed) };
+}
+
+export async function fetchCompassAgent(listing: {
+  address: string | null;
+  city: string | null;
+  price: number | null;
+}): Promise<CompassAgent | null> {
+  if (!listing.address || !listing.city) return null;
+
+  const path = await findListingPath(listing.address, listing.city);
+  if (!path) return null;
+
+  const page = await fetchWithTimeout(`https://www.compass.com${path}`, { redirect: "follow" });
   if (!page) return null;
   const html = await page.text();
 

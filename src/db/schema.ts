@@ -176,6 +176,17 @@ export const listings = pgTable("listings", {
   // succeed instead of being stuck on a stale miss.
   realtorUrl: text("realtor_url"),
   redfinUrl: text("redfin_url"),
+
+  // What the MLS says about the listing now ("Pending", "Sold"…), read off
+  // its Compass page by the nightly market check (lib/marketStatus.ts) for
+  // listings whose agent Lukas knows. Separate from `status` above, which is
+  // where the listing sits in his own pipeline. marketStatusAt is when that
+  // status took effect (the contract or closing date), not when it was
+  // noticed, and going under contract or closing is what puts the agent on
+  // the Follow up page as someone to congratulate.
+  marketStatus: text("market_status"),
+  marketStatusAt: timestamp("market_status_at", { withTimezone: true }),
+  marketCheckedAt: timestamp("market_checked_at", { withTimezone: true }),
 });
 
 export type Listing = typeof listings.$inferSelect;

@@ -5,15 +5,17 @@ import { HeartHandshake } from "lucide-react";
 import { dismissFollowUpAgent } from "@/app/agents/actions";
 import { AgentCard } from "@/app/agents/AgentCard";
 import { ListingRow } from "@/app/ListingRow";
-import type { FollowUpEntry, JustListedEntry } from "./data";
+import type { FollowUpEntry, JustListedEntry, NewsEntry } from "./data";
 import { FOLLOW_UP_GROUPS } from "./groups";
 
 export function FollowUpList({
+  news,
   justListed,
   agents,
   counts,
   dates,
 }: {
+  news: NewsEntry[];
   justListed: JustListedEntry[];
   agents: FollowUpEntry[];
   counts: Record<string, number>;
@@ -28,10 +30,11 @@ export function FollowUpList({
     startTransition(() => dismissFollowUpAgent(id));
   };
 
+  const congrats = news.filter((e) => !snoozed.has(e.agent.id));
   const listed = justListed.filter((e) => !snoozed.has(e.agent.id));
   const quiet = agents.filter((e) => !snoozed.has(e.agent.id));
 
-  if (listed.length === 0 && quiet.length === 0) {
+  if (congrats.length === 0 && listed.length === 0 && quiet.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
         <HeartHandshake className="size-8" />
@@ -55,6 +58,28 @@ export function FollowUpList({
 
   return (
     <div className="flex flex-col gap-8">
+      {congrats.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Under contract or sold ({congrats.length})
+          </h2>
+          <p className="text-sm text-muted-foreground mb-3">
+            A listing of theirs just went under contract or closed, and they haven&rsquo;t heard from you since.
+            Congratulate them.
+          </p>
+          <div className="flex flex-col gap-4">
+            {congrats.map((e) =>
+              card(
+                e,
+                <>
+                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">{e.label}</p>
+                  <ListingRow listing={e.listing} />
+                </>
+              )
+            )}
+          </div>
+        </section>
+      )}
       {listed.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">

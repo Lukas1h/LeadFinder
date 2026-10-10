@@ -370,8 +370,8 @@ export async function getOrCreateAgentByPhone(
  * here since that page shows them in their own "Just listed" section.
  */
 export async function getFollowUpAgents(): Promise<Agent[]> {
-  const { justListed, agents: quiet } = await getFollowUpBoard();
-  return [...justListed, ...quiet].map((e) => e.agent);
+  const { news, justListed, agents: quiet } = await getFollowUpBoard();
+  return [...news, ...justListed, ...quiet].map((e) => e.agent);
 }
 
 /**
