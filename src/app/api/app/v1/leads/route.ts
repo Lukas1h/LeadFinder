@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   const denied = requireAppAuth(req);
   if (denied) return denied;
 
-  const board = await getLeadsBoard();
+  const board = await getLeadsBoard({ cardPhotosOnly: true });
 
   const known = board.known.map((g) => leadGroupJson(g, board.addressById));
   const sections = LEAD_SECTION_ORDER.map((key) => ({

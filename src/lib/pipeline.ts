@@ -140,6 +140,14 @@ export function findDuplicateAgentContact(agent: Agent | null): Agent | null {
 }
 
 /**
+ * The agent fields that matching a listing to its agent reads. The lookups
+ * below work on anything carrying these, so a page that only needs to know
+ * who is attached can load just these columns for all ~9,000 agents and the
+ * full rows for the few it shows.
+ */
+export type AgentKey = Pick<Agent, "id" | "phone" | "name" | "email" | "lastContactedAt">;
+
+/**
  * Builds the lookups every page needs to answer "who is the agent on this
  * listing, and have I already been talking to them?".
  *
@@ -158,14 +166,14 @@ export function findDuplicateAgentContact(agent: Agent | null): Agent | null {
  * whether the row with the send history or the empty one won — and losing that
  * flip is what showed a contacted realtor as never-contacted.
  */
-export function buildAgentLookups(allAgents: Agent[]): {
-  byId: Map<string, Agent>;
-  byPhone: Map<string, Agent>;
-  byName: Map<string, Agent>;
+export function buildAgentLookups<A extends AgentKey>(allAgents: A[]): {
+  byId: Map<string, A>;
+  byPhone: Map<string, A>;
+  byName: Map<string, A>;
 } {
   const byId = new Map(allAgents.map((a) => [a.id, a]));
 
-  const byPhone = new Map<string, Agent>();
+  const byPhone = new Map<string, A>();
   for (const a of allAgents) {
     if (!a.phone) continue;
     byPhone.set(a.phone, a);
@@ -173,13 +181,13 @@ export function buildAgentLookups(allAgents: Agent[]): {
     if (digits) byPhone.set(digits, a);
   }
 
-  const richer = (a: Agent, b: Agent) => {
+  const richer = (a: A, b: A) => {
     if (!!a.lastContactedAt !== !!b.lastContactedAt) return a.lastContactedAt ? a : b;
     if (!!a.email !== !!b.email) return a.email ? a : b;
     return a;
   };
 
-  const byName = new Map<string, Agent>();
+  const byName = new Map<string, A>();
   for (const a of allAgents) {
     if (!a.name) continue;
     const key = a.name.trim().toLowerCase();
@@ -199,12 +207,12 @@ export function buildAgentLookups(allAgents: Agent[]): {
  * detached anyone who changed their number. agentId is set at import and on
  * first contact, so it should be the answer for anything recent.
  */
-export function findAttachedAgent(
+export function findAttachedAgent<A extends AgentKey = Agent>(
   lead: Pick<Listing, "agentPhone" | "agentName"> & { agentId?: string | null },
-  agentByPhone: Map<string, Agent>,
-  agentByName?: Map<string, Agent>,
-  agentById?: Map<string, Agent>
-): Agent | null {
+  agentByPhone: Map<string, A>,
+  agentByName?: Map<string, A>,
+  agentById?: Map<string, A>
+): A | null {
   if (lead.agentId && agentById) {
     const byId = agentById.get(lead.agentId);
     if (byId) return byId;

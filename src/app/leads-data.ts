@@ -1,13 +1,14 @@
 import { db } from "@/db";
 import { listings, agents, type Agent, type Listing } from "@/db/schema";
-import { desc, eq, inArray } from "drizzle-orm";
-import { withLastContactFromHistory } from "@/lib/agentLastContact";
+import { desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { applyLastContact, lastContactByAgent } from "@/lib/agentLastContact";
 import { byLeadPriority, findAttachedAgent, buildAgentLookups, isUnscored } from "@/lib/pipeline";
 import { refreshLeadSections, lastTextByAgent, isRecentlyTexted, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
 import { getQueuedListingIds } from "@/lib/queueMessages";
 import type { KnownAgentGroup } from "@/app/KnownAgentLeads";
 import { clientOffices, officeClientFor, type OfficeClient } from "@/lib/clientOffices";
 import { estimateDriveMinutes } from "@/lib/driveTime";
+import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
 
 /**
  * Everything the Leads page shows, as data.
@@ -58,31 +59,79 @@ export interface LeadsBoard {
   unscoredCount: number;
 }
 
-export async function getLeadsBoard(): Promise<LeadsBoard> {
+/**
+ * The photos a card shows, picked in the query: the same evenly spaced five
+ * sampleCardPhotos takes (lib/cardPhotos.ts), so that function is a no-op on
+ * the result. Galleries average 41 photos, and their URLs were three quarters
+ * of what this page reads from the database.
+ */
+const cardPhotos = sql<string[] | null>`case
+  when coalesce(array_length(${listings.photos}, 1), 0) <= ${sql.raw(String(CARD_MAX_PHOTOS))} then ${listings.photos}
+  else array(
+    select ${listings.photos}[1 + round(i * (array_length(${listings.photos}, 1) - 1)::numeric / ${sql.raw(String(CARD_MAX_PHOTOS - 1))})::int]
+    from generate_series(0, ${sql.raw(String(CARD_MAX_PHOTOS - 1))}) as i
+    order by i
+  )
+end`;
+
+/**
+ * `cardPhotosOnly` is for callers that never show a listing's whole gallery
+ * (the iPhone app's list): each listing comes back with just the photos its
+ * card uses. The web page opens the full gallery from the card, so it leaves
+ * this off.
+ */
+export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Promise<LeadsBoard> {
   // foundAt is transaction-time, so a batch insert gives every row in it
   // the exact same value — listings.id as a tiebreaker keeps order stable
   // across renders instead of reshuffling ties arbitrarily.
-  // Independent of each other, so run them concurrently instead of paying
-  // for two sequential round trips to Neon.
-  const [leads, allAgents, queuedIds] = await Promise.all([
+  //
+  // Everything that doesn't depend on anything else goes in one round trip.
+  // Matching a listing to its agent (by id, then phone, then name) has to look
+  // at every agent on file, but only at a few fields of each, so those are all
+  // that's loaded for the ~9,000 of them; the full rows are fetched below for
+  // just the few hundred on the board. Loading every full row was 4 MB of the
+  // page's 8, on every load.
+  const [leads, agentKeys, queuedIds, lastContact, offices] = await Promise.all([
     db
-      .select()
+      .select(options?.cardPhotosOnly ? { ...getTableColumns(listings), photos: cardPhotos } : getTableColumns(listings))
       .from(listings)
       .where(eq(listings.status, "new"))
       .orderBy(desc(listings.foundAt), listings.id),
-    db.select().from(agents),
+    db.select({ id: agents.id, phone: agents.phone, name: agents.name, email: agents.email }).from(agents),
     getQueuedListingIds(),
+    lastContactByAgent(),
+    clientOffices(),
   ]);
   // A listing with a message waiting in the Queue has been handled — it lives
   // in the Pipeline's Queued section until that message is sent (see
   // getQueuedListingIds).
   const queuedCount = leads.filter((l) => queuedIds.has(l.id)).length;
   const openLeads = leads.filter((l) => !queuedIds.has(l.id));
-  const contactAgents = await withLastContactFromHistory(allAgents);
-  const { byId: agentById, byPhone: agentByPhone, byName: agentByName } = buildAgentLookups(contactAgents);
+
+  const lookups = buildAgentLookups(applyLastContact(agentKeys, lastContact));
+  const attachedIdByLead = new Map(
+    openLeads.map((l) => [l.id, findAttachedAgent(l, lookups.byPhone, lookups.byName, lookups.byId)?.id ?? null] as const)
+  );
+  const attachedIds = [...new Set([...attachedIdByLead.values()].filter((id): id is string => id != null))];
+
+  // Four sections — see lib/leadSections.ts. The stored section is what the
+  // message dialog's recommendation reads, so settle it first and bucket from
+  // exactly that. refreshLeadSections only writes rows that moved, so this is
+  // cheap per load and self-heals when a score, price cut or text lands.
+  // Queued ones too: their recommendation reads the same stored section.
+  //
+  // lastTexted is when each agent was last texted or called: a week's quiet
+  // before texting them again, the "Texted Oct 5" on the card, and
+  // never-texted agents first.
+  const [attachedRows, sectionById, lastTexted] = await Promise.all([
+    attachedIds.length > 0 ? db.select().from(agents).where(inArray(agents.id, attachedIds)) : Promise.resolve([]),
+    refreshLeadSections(leads.map((l) => l.id)),
+    lastTextByAgent(attachedIds),
+  ]);
+  const agentById = new Map(applyLastContact(attachedRows, lastContact).map((a) => [a.id, a] as const));
 
   // The listing a declined agent turned down, named in their Declined badge.
-  const referencedIds = contactAgents
+  const referencedIds = [...agentById.values()]
     .filter((a) => a.relationshipStatus === "declined")
     .map((a) => a.lastContactedListingId)
     .filter((id): id is string => id != null);
@@ -95,19 +144,6 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
       : [];
   const addressById = new Map(referencedListings.map((l) => [l.id, l.address] as const));
 
-  // Four sections — see lib/leadSections.ts. The stored section is what the
-  // message dialog's recommendation reads, so settle it first and bucket from
-  // exactly that. refreshLeadSections only writes rows that moved, so this is
-  // cheap per load and self-heals when a score, price cut or text lands.
-  // Queued ones too: their recommendation reads the same stored section.
-  const sectionById = await refreshLeadSections(leads.map((l) => l.id));
-  // When each agent was last texted or called: a week's quiet before texting
-  // them again, the "Texted Oct 5" on the card, and never-texted agents first.
-  const offices = await clientOffices();
-  const lastTexted = await lastTextByAgent(
-    openLeads.map((l) => findAttachedAgent(l, agentByPhone, agentByName, agentById)?.id).filter((id): id is string => !!id)
-  );
-
   // One card per agent: outreach is about the person now, and each listing is
   // just a reason to text them. Their best open listing leads the card — the
   // strongest section first (a photo pitch beats video beats backup), then the
@@ -116,7 +152,8 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
   // goes away the next one takes its place.
   const byKey = new Map<string, { agent: Agent | null; entries: LeadGroup["entries"]; textedAt: Date | undefined }>();
   for (const lead of openLeads) {
-    const attached = findAttachedAgent(lead, agentByPhone, agentByName, agentById);
+    const attachedId = attachedIdByLead.get(lead.id);
+    const attached = attachedId ? agentById.get(attachedId) ?? null : null;
     const textedAt = attached ? lastTexted.get(attached.id) : undefined;
     const section = sectionById.get(lead.id) ?? "unlikely";
     const fallback = lead.agentPhone || lead.agentName;

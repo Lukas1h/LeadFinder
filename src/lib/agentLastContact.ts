@@ -15,6 +15,13 @@ import { and, eq, inArray, isNotNull, max } from "drizzle-orm";
  * agents with real history, and badges shown for agents with none.
  */
 export async function withLastContactFromHistory(allAgents: Agent[]): Promise<Agent[]> {
+  return applyLastContact(allAgents, await lastContactByAgent());
+}
+
+export type LastContact = Map<string, { at: Date; listingId: string | null }>;
+
+/** Every agent's latest contact in either direction, from their history (see withLastContactFromHistory). */
+export async function lastContactByAgent(): Promise<LastContact> {
   const [sends, interactions] = await Promise.all([
     db
       .select({ agentId: messageSends.agentId, at: messageSends.sentAt, listingId: messageSends.listingId })
@@ -36,6 +43,14 @@ export async function withLastContactFromHistory(allAgents: Agent[]): Promise<Ag
     }
   }
 
+  return latest;
+}
+
+/** Stamps each agent with their latest contact from history, or null where there is none. */
+export function applyLastContact<A extends { id: string }>(
+  allAgents: A[],
+  latest: LastContact
+): (A & { lastContactedAt: Date | null; lastContactedListingId: string | null })[] {
   return allAgents.map((agent) => {
     const contact = latest.get(agent.id);
     return { ...agent, lastContactedAt: contact?.at ?? null, lastContactedListingId: contact?.listingId ?? null };
