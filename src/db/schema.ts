@@ -605,8 +605,10 @@ export const messagePresets = pgTable("message_presets", {
   // ensureAiDraftPresets in src/app/messageActions.ts.
   aiGenerated: boolean("ai_generated").notNull().default(false),
 
-  // Files attached to every email sent from this preset (e.g. a pricing
-  // sheet, portfolio samples) — only meaningful for channel "email". The
+  // Files sent with every message from this preset: a pricing sheet or
+  // portfolio samples on an email, a vCard or photos on a text. A text's only
+  // go out from the iPhone app, since the web can do no more than open an
+  // sms: link, which can't carry a file. The
   // bytes live right here (base64, see encodeAttachment in
   // src/lib/attachments.ts), not in external storage — every send (bulk or
   // single) reads this same row, so nothing ever re-fetches the file over
@@ -638,15 +640,32 @@ export const messagePresets = pgTable("message_presets", {
   // SMS only. The email the message detail's "Send samples" button sends when
   // someone replies to a text from this preset (see
   // src/app/messaging/replyActions.ts).
+  //
+  // Superseded on 2026-10-10 by quickActionPresetIds below, which was filled
+  // from it. No longer read; kept so a schema push doesn't drop the column.
   followUpEmailPresetId: uuid("follow_up_email_preset_id").references((): AnyPgColumn => messagePresets.id, {
     onDelete: "set null",
   }),
+
+  // The templates offered as one-tap buttons on a message sent from this one,
+  // in the order shown: "Send samples" (an email), "Photo samples" and "Send
+  // contact" (texts with attachments). An email one is sent by the server; a
+  // text one opens Messages on the phone, attachments and all. Ids of other
+  // presets, kept as a list rather than a join table because the order matters
+  // and there are only ever a handful. See lib/quickActions.ts.
+  quickActionPresetIds: jsonb("quick_action_preset_ids").$type<string[]>().notNull().default([]),
+  // A template that exists only to be one of those buttons (the vCard, the
+  // photo samples): left out of the send dialogs, where it would never be the
+  // right first thing to say.
+  quickActionOnly: boolean("quick_action_only").notNull().default(false),
 });
 
 export interface PresetAttachment {
   id: string;
   filename: string;
   content: string; // base64-encoded file bytes
+  /** Set on upload since 2026-10-10; older ones are worked out from the filename. */
+  contentType?: string;
 }
 
 export type MessagePreset = typeof messagePresets.$inferSelect;

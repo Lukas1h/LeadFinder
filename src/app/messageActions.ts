@@ -181,6 +181,8 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
         eq(messagePresets.channel, "sms"),
         eq(messagePresets.enabled, true),
         eq(messagePresets.aiGenerated, false),
+        // The vCard and photo samples are buttons on a sent message, not openers.
+        eq(messagePresets.quickActionOnly, false),
         eq(messagePresetVariants.enabled, true)
       )
     )

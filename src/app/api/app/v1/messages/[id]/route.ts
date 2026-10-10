@@ -21,6 +21,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const detail = await getSendDetail(id);
   if (!detail) return notFound();
 
+  const firstEmail = detail.quickActions.find((a) => a.channel === "email");
+
   return Response.json({
     send: {
       id: detail.id,
@@ -36,8 +38,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // with neither), so both are nullable rather than a 404.
     agent: detail.agent ? agentJson(detail.agent) : null,
     listing: detail.listing ? listingJson(detail.listing, "first") : null,
-    // The preset "Send samples" would email, so the app can name it in its
-    // confirm. Sending is POST ./samples.
-    followUpEmail: detail.followUpEmail,
+    // The buttons for this message, in order: other templates, rendered for
+    // this agent. An email one is sent by POST ./quick-actions/:presetId; a
+    // text one is built in the app's composer (the files come from
+    // /presets/:id/attachments/:attachmentId) and recorded with the same POST
+    // once it has gone.
+    quickActions: detail.quickActions,
+    // For app builds from before quick actions: the first email one, which is
+    // what "Send samples" (POST ./samples) sends.
+    followUpEmail: firstEmail ? { presetId: firstEmail.presetId, name: firstEmail.name } : null,
   });
 }

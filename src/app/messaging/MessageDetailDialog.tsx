@@ -2,8 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ClipboardPaste, Mail, MessageCircle, ThumbsDown, Clock } from "lucide-react";
-import { getSendDetail, markSendReply, sendSamplesForSend, type SendDetail } from "./replyActions";
+import { ClipboardPaste, Mail, MessageCircle, Paperclip, ThumbsDown, Clock } from "lucide-react";
+import {
+  getSendDetail,
+  markSendReply,
+  recordQuickActionText,
+  sendQuickActionEmail,
+  type QuickAction,
+  type SendDetail,
+} from "./replyActions";
 import { AgentRow } from "@/app/AgentRow";
 import { ListingRow } from "@/app/ListingRow";
 import { smsUrl, firstName } from "@/lib/sms";
@@ -29,9 +36,9 @@ function formatWhen(date: Date): string {
 
 /**
  * Opened from a Message history row: the agent, the listing, what was sent,
- * and the reply handled in one tap — Send samples (the template's follow-up
- * email; asks for the address first when none is on file), Keep in touch,
- * Declined, or Text back.
+ * and the reply handled in one tap — the template's quick actions (an email
+ * asks for the address first when none is on file; a text opens Messages),
+ * Keep in touch, Declined, or Text back.
  */
 export function MessageDetailDialog({
   sendId,
@@ -45,7 +52,8 @@ export function MessageDetailDialog({
   const [detail, setDetail] = useState<SendDetail | null>(null);
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [emailOpen, setEmailOpen] = useState(false);
+  // The email quick action waiting on an address.
+  const [emailFor, setEmailFor] = useState<QuickAction | null>(null);
   const [email, setEmail] = useState("");
 
   useEffect(() => {
@@ -67,30 +75,46 @@ export function MessageDetailDialog({
 
   const finish = (message: string) => {
     toast.success(message);
-    setEmailOpen(false);
+    setEmailFor(null);
     setLoadedId(null);
     onOpenChange(false);
   };
 
-  const sendSamples = async (address?: string) => {
+  const sendEmailAction = async (action: QuickAction, address?: string) => {
     if (!shown) return;
-    setBusy("samples");
-    const result = await sendSamplesForSend(shown.id, address);
+    setBusy(action.presetId);
+    const result = await sendQuickActionEmail(shown.id, action.presetId, address);
     setBusy(null);
     if (result.error) {
       toast.error(result.error);
       return;
     }
     if (result.note) toast(result.note);
-    finish(`Samples sent to ${name}`);
+    finish(`${action.name} sent to ${name}`);
   };
 
-  const handleSamples = () => {
-    if (agent?.email) void sendSamples();
-    else {
-      setEmail("");
-      setEmailOpen(true);
+  const runAction = async (action: QuickAction) => {
+    if (!shown) return;
+    if (action.channel === "email") {
+      if (agent?.email) void sendEmailAction(action);
+      else {
+        setEmail("");
+        setEmailFor(action);
+      }
+      return;
     }
+    // A text: recorded as it's handed to Messages, like every text from the
+    // web, and confirmed by the usual "did it go?" prompt.
+    if (!agent?.phone) return;
+    setBusy(action.presetId);
+    const result = await recordQuickActionText(shown.id, action.presetId, action.variantId, false);
+    setBusy(null);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    window.location.href = smsUrl(agent.phone, action.text);
+    finish(`${action.name} opened in Messages`);
   };
 
   const paste = async () => {
@@ -147,12 +171,24 @@ export function MessageDetailDialog({
 
           {shown && (
             <div className="flex flex-col gap-3 min-w-0">
-              {shown.followUpEmail && (
-                <Button className="w-full" onClick={handleSamples} disabled={busy != null}>
-                  <Mail />
-                  {busy === "samples" ? "Sending…" : "Send samples"}
-                </Button>
-              )}
+              {shown.quickActions.map((action, i) => {
+                // An sms: link can't carry a file, so these only go from the phone.
+                const phoneOnly = action.channel === "sms" && action.attachments.length > 0;
+                return (
+                  <Button
+                    key={action.presetId}
+                    variant={i === 0 ? "default" : "outline"}
+                    className="w-full"
+                    onClick={() => runAction(action)}
+                    disabled={busy != null || phoneOnly || (action.channel === "sms" && !agent?.phone)}
+                    title={phoneOnly ? "Has attachments: send it from the iPhone app" : undefined}
+                  >
+                    {action.channel === "email" ? <Mail /> : phoneOnly ? <Paperclip /> : <MessageCircle />}
+                    {busy === action.presetId ? "Sending…" : action.name}
+                    {phoneOnly && <span className="text-xs font-normal opacity-70">iPhone only</span>}
+                  </Button>
+                );
+              })}
               <div className={`grid gap-2 ${agent?.phone ? "grid-cols-3" : "grid-cols-2"}`}>
                 <Button variant="outline" size="sm" className="px-2" onClick={() => mark("keep_in_touch")} disabled={busy != null}>
                   <Clock />
@@ -171,10 +207,11 @@ export function MessageDetailDialog({
                   </Button>
                 )}
               </div>
-              {shown.followUpEmail && (
+              {shown.quickActions.some((q) => q.channel === "email") && (
                 <p className="text-xs text-muted-foreground -mt-1">
-                  Send samples emails &ldquo;{shown.followUpEmail.name}&rdquo;
-                  {agent?.email ? ` to ${agent.email}` : ", you'll paste their email"}. Both it and Keep in touch mark them warm.
+                  {shown.quickActions.find((q) => q.channel === "email")!.name} is emailed
+                  {agent?.email ? ` to ${agent.email}` : ", you'll paste their email"}. A quick action or Keep in touch
+                  marks them warm.
                 </p>
               )}
 
@@ -191,7 +228,7 @@ export function MessageDetailDialog({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={emailOpen} onOpenChange={setEmailOpen}>
+      <Dialog open={emailFor != null} onOpenChange={(o) => !o && setEmailFor(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>{agent?.name ?? "Their"} email</DialogTitle>
@@ -201,7 +238,7 @@ export function MessageDetailDialog({
             className="flex flex-col gap-3"
             onSubmit={(e) => {
               e.preventDefault();
-              if (email.trim()) void sendSamples(email);
+              if (email.trim() && emailFor) void sendEmailAction(emailFor, email);
             }}
           >
             <div className="flex gap-2">
@@ -222,7 +259,7 @@ export function MessageDetailDialog({
             <DialogFooter>
               <Button type="submit" disabled={!email.trim() || busy != null}>
                 <Mail />
-                {busy === "samples" ? "Sending…" : "Send samples"}
+                {busy != null ? "Sending…" : `Send ${emailFor?.name ?? "email"}`}
               </Button>
             </DialogFooter>
           </form>

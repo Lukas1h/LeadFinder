@@ -252,12 +252,12 @@ export function PresetCard({
   preset,
   variants,
   statsByVariant,
-  emailTemplates = [],
+  quickActionChoices = [],
 }: {
   preset: MessagePreset;
   variants: MessagePresetVariant[];
   statsByVariant: Record<string, VariantStats>;
-  emailTemplates?: { id: string; name: string }[];
+  quickActionChoices?: { id: string; name: string; channel: MessagePreset["channel"] }[];
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -326,14 +326,26 @@ export function PresetCard({
           {preset.secondMessage && (
             <p className="text-xs text-muted-foreground/80 mt-0.5">Then: &ldquo;{preset.secondMessage}&rdquo;</p>
           )}
-          {preset.followUpEmailPresetId && (
+          {preset.quickActionPresetIds.length > 0 && (
             <p className="text-xs text-muted-foreground/80 mt-0.5">
-              Replies get: {emailTemplates.find((t) => t.id === preset.followUpEmailPresetId)?.name ?? "an email"}
+              Quick actions:{" "}
+              {preset.quickActionPresetIds
+                .map((id) => quickActionChoices.find((t) => t.id === id)?.name)
+                .filter(Boolean)
+                .join(", ") || "none that still exist"}
             </p>
           )}
-          {preset.channel === "email" && !preset.aiGenerated && (
+          {preset.quickActionOnly && (
+            <p className="text-xs text-muted-foreground/80 mt-0.5">Only a quick action: not in the send dialogs</p>
+          )}
+          {!preset.aiGenerated && (preset.channel === "email" || preset.quickActionOnly || preset.attachments.length > 0) && (
             <div className="mt-2">
               <AttachmentManager presetId={preset.id} attachments={preset.attachments} />
+              {preset.channel === "sms" && preset.attachments.length > 0 && (
+                <p className="text-xs text-muted-foreground/80 mt-1">
+                  Files on a text only go out from the iPhone app.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -344,7 +356,7 @@ export function PresetCard({
           {(!preset.aiGenerated || preset.channel === "sms") && (
             <PresetForm
               preset={preset}
-              emailTemplates={emailTemplates}
+              quickActionChoices={quickActionChoices}
               trigger={
                 <Button variant="ghost" size="icon">
                   <Pencil />

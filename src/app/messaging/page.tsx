@@ -37,13 +37,20 @@ async function MessagingContent() {
   await Promise.all(PRESET_TYPES.map((type) => ensureAiDraftPresets(type)));
   await ensureDefaultEmailPreset();
 
-  const [presets, variants, statsByVariant, messagingStats, recentSends] = await Promise.all([
+  const [storedPresets, variants, statsByVariant, messagingStats, recentSends] = await Promise.all([
     db.select().from(messagePresets).where(isNull(messagePresets.archivedAt)).orderBy(messagePresets.createdAt),
     db.select().from(messagePresetVariants).orderBy(messagePresetVariants.createdAt),
     computeVariantStats(),
     computeMessagingStats(),
     getRecentMessageSends(),
   ]);
+
+  // The cards only name the attachments; the bytes (megabytes of photos and
+  // PDFs) have no business in the page.
+  const presets = storedPresets.map((p) => ({
+    ...p,
+    attachments: p.attachments.map((a) => ({ ...a, content: "" })),
+  }));
 
   const variantsByPreset: Record<string, typeof variants> = {};
   for (const v of variants) {
@@ -52,7 +59,11 @@ async function MessagingContent() {
 
   const smsPresets = presets.filter((p) => p.channel === "sms");
   const emailPresets = presets.filter((p) => p.channel === "email");
-  const emailTemplates = emailPresets.filter((p) => !p.aiGenerated).map((p) => ({ id: p.id, name: p.name }));
+  // What an SMS template can offer as a quick action: a follow-up of either
+  // channel, or a template made only to be one.
+  const quickActionChoices = presets
+    .filter((p) => !p.aiGenerated && !p.protected && p.enabled && (p.type === "follow_up" || p.quickActionOnly))
+    .map((p) => ({ id: p.id, name: p.name, channel: p.channel }));
 
   return (
     <>
@@ -86,7 +97,7 @@ async function MessagingContent() {
         presets={smsPresets}
         variantsByPreset={variantsByPreset}
         statsByVariant={statsByVariant}
-        emailTemplates={emailTemplates}
+        quickActionChoices={quickActionChoices}
       />
 
       <Separator className="my-8" />
@@ -108,15 +119,15 @@ function TemplateSection({
   presets,
   variantsByPreset,
   statsByVariant,
-  emailTemplates,
+  quickActionChoices,
 }: {
   title: string;
   channel: MessageChannel;
   presets: (typeof messagePresets.$inferSelect)[];
   variantsByPreset: Record<string, (typeof messagePresetVariants.$inferSelect)[]>;
   statsByVariant: Awaited<ReturnType<typeof computeVariantStats>>;
-  /** For SMS presets' "email when they reply" choice. */
-  emailTemplates?: { id: string; name: string }[];
+  /** For SMS presets' quick actions. */
+  quickActionChoices?: { id: string; name: string; channel: MessageChannel }[];
 }) {
   return (
     <div>
@@ -138,7 +149,7 @@ function TemplateSection({
               <PresetForm
                 defaultType={type}
                 defaultChannel={channel}
-                emailTemplates={emailTemplates}
+                quickActionChoices={quickActionChoices}
                 trigger={
                   <Button variant="outline" size="sm">
                     <Plus />
@@ -158,7 +169,7 @@ function TemplateSection({
                     preset={preset}
                     variants={variantsByPreset[preset.id] ?? []}
                     statsByVariant={statsByVariant}
-                    emailTemplates={emailTemplates}
+                    quickActionChoices={quickActionChoices}
                   />
                 ))}
               </div>

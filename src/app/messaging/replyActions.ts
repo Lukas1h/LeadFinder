@@ -22,6 +22,8 @@ import {
   type PresetType,
 } from "@/db/schema";
 import { and, count, eq, inArray, ne } from "drizzle-orm";
+import { attachmentMetaSql, withContentTypes, type AttachmentMeta } from "@/lib/attachments";
+import { resolvePendingInteraction, startPendingInteraction } from "@/app/agents/interactionActions";
 import { revalidatePath } from "next/cache";
 import { sendEmail } from "@/lib/mailer";
 import { renderMessageBody, renderSubject } from "@/lib/messageTemplate";
@@ -40,8 +42,92 @@ export interface SendDetail {
   text: string;
   agent: Agent | null;
   listing: Listing | null;
-  /** The email "Send samples" sends, from the preset's follow-up setting. */
-  followUpEmail: { presetId: string; name: string } | null;
+  /** The template's quick actions, in order (see messagePresets.quickActionPresetIds). */
+  quickActions: QuickAction[];
+}
+
+/** One button on a sent message: another template, ready to go to the same agent. */
+export interface QuickAction {
+  presetId: string;
+  name: string;
+  /** An email is sent by the server; a text opens Messages with this filled in. */
+  channel: MessageChannel;
+  variantId: string;
+  /** The body as it reads for this agent and listing. */
+  text: string;
+  subject: string | null;
+  /** No bytes: the phone fetches each file when it builds the text. */
+  attachments: AttachmentMeta[];
+}
+
+/** The enabled variant that has gone out least, ties by label: the same rotation as the send dialogs. */
+async function nextVariants(presetIds: string[]) {
+  if (presetIds.length === 0) return new Map<string, { id: string; subject: string | null; body: string }>();
+  const variants = await db
+    .select({
+      id: messagePresetVariants.id,
+      presetId: messagePresetVariants.presetId,
+      label: messagePresetVariants.label,
+      subject: messagePresetVariants.subject,
+      body: messagePresetVariants.body,
+    })
+    .from(messagePresetVariants)
+    .where(and(inArray(messagePresetVariants.presetId, presetIds), eq(messagePresetVariants.enabled, true)));
+  if (variants.length === 0) return new Map();
+  const counts = await db
+    .select({ variantId: messageSends.variantId, n: count() })
+    .from(messageSends)
+    .where(inArray(messageSends.variantId, variants.map((v) => v.id)))
+    .groupBy(messageSends.variantId);
+  const sent = new Map(counts.map((c) => [c.variantId, c.n]));
+  const next = new Map<string, (typeof variants)[number]>();
+  for (const v of variants) {
+    const best = next.get(v.presetId);
+    const diff = best ? (sent.get(v.id) ?? 0) - (sent.get(best.id) ?? 0) || v.label.localeCompare(best.label) : -1;
+    if (diff < 0) next.set(v.presetId, v);
+  }
+  return next;
+}
+
+/**
+ * A template's quick actions, rendered for one agent. One that has been
+ * switched off, archived or left with no variant is dropped rather than shown
+ * as a button that can't work.
+ */
+async function loadQuickActions(
+  presetIds: string[],
+  who: { agentName: string | null; address: string | null; city: string | null }
+): Promise<QuickAction[]> {
+  if (presetIds.length === 0) return [];
+  const [presets, variants] = await Promise.all([
+    db
+      .select({
+        id: messagePresets.id,
+        name: messagePresets.name,
+        channel: messagePresets.channel,
+        attachments: attachmentMetaSql,
+      })
+      .from(messagePresets)
+      .where(and(inArray(messagePresets.id, presetIds), eq(messagePresets.enabled, true))),
+    nextVariants(presetIds),
+  ]);
+  const byId = new Map(presets.map((p) => [p.id, p]));
+  return presetIds.flatMap((id) => {
+    const preset = byId.get(id);
+    const variant = variants.get(id);
+    if (!preset || !variant) return [];
+    return [
+      {
+        presetId: preset.id,
+        name: preset.name,
+        channel: preset.channel,
+        variantId: variant.id,
+        text: renderMessageBody(variant.body, who.agentName, who.address, who.city),
+        subject: variant.subject ? renderSubject(variant.subject, who.agentName) : null,
+        attachments: withContentTypes(preset.attachments),
+      },
+    ];
+  });
 }
 
 export async function getSendDetail(sendId: string): Promise<SendDetail | null> {
@@ -49,7 +135,7 @@ export async function getSendDetail(sendId: string): Promise<SendDetail | null> 
     .select({
       send: messageSends,
       presetName: messagePresets.name,
-      followUpEmailPresetId: messagePresets.followUpEmailPresetId,
+      quickActionPresetIds: messagePresets.quickActionPresetIds,
       body: messagePresetVariants.body,
       agent: agents,
       listing: listings,
@@ -62,14 +148,12 @@ export async function getSendDetail(sendId: string): Promise<SendDetail | null> 
     .where(eq(messageSends.id, sendId));
   if (!row) return null;
 
-  let followUpEmail: SendDetail["followUpEmail"] = null;
-  if (row.followUpEmailPresetId) {
-    const [preset] = await db
-      .select({ presetId: messagePresets.id, name: messagePresets.name })
-      .from(messagePresets)
-      .where(and(eq(messagePresets.id, row.followUpEmailPresetId), eq(messagePresets.enabled, true)));
-    followUpEmail = preset ?? null;
-  }
+  const who = {
+    agentName: row.agent?.name ?? row.listing?.agentName ?? null,
+    address: row.listing?.address ?? null,
+    city: row.listing?.city ?? null,
+  };
+  const quickActions = await loadQuickActions(row.quickActionPresetIds, who);
 
   return {
     id: row.send.id,
@@ -79,15 +163,10 @@ export async function getSendDetail(sendId: string): Promise<SendDetail | null> 
     respondedAt: row.send.respondedAt,
     result: row.send.result,
     presetName: row.presetName,
-    text: renderMessageBody(
-      row.body,
-      row.agent?.name ?? row.listing?.agentName ?? null,
-      row.listing?.address ?? null,
-      row.listing?.city ?? null
-    ),
+    text: renderMessageBody(row.body, who.agentName, who.address, who.city),
     agent: row.agent,
     listing: row.listing,
-    followUpEmail,
+    quickActions,
   };
 }
 
@@ -109,6 +188,14 @@ async function recordReply(
   note: string
 ) {
   const now = new Date();
+  const [current] = await db
+    .select({ respondedAt: messageSends.respondedAt })
+    .from(messageSends)
+    .where(eq(messageSends.id, send.id));
+  // A second quick action on the same message (photos, then the vCard) is
+  // still answering the one reply, so it isn't logged as another.
+  if (kind === "samples" && current?.respondedAt) return;
+
   await db.insert(agentInteractions).values({
     agentId: agent.id,
     listingId: send.listingId,
@@ -119,10 +206,6 @@ async function recordReply(
     source: "app",
   });
 
-  const [current] = await db
-    .select({ respondedAt: messageSends.respondedAt })
-    .from(messageSends)
-    .where(eq(messageSends.id, send.id));
   await db
     .update(messageSends)
     .set({
@@ -168,7 +251,7 @@ function revalidateAll() {
 
 async function loadSend(sendId: string) {
   const [row] = await db
-    .select({ send: messageSends, agent: agents, followUpEmailPresetId: messagePresets.followUpEmailPresetId })
+    .select({ send: messageSends, agent: agents, quickActionPresetIds: messagePresets.quickActionPresetIds })
     .from(messageSends)
     .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))
     .leftJoin(agents, eq(messageSends.agentId, agents.id))
@@ -194,17 +277,20 @@ export async function markSendReply(
 }
 
 /**
- * "Send samples": emails the preset's follow-up template to the agent, saves
- * the address if it's new, and records the reply. `emailInput` is only read
- * when the agent has no email on file.
+ * An email quick action ("Send samples"): emails that template to the agent,
+ * saves the address if it's new, and records the reply. `emailInput` is only
+ * read when the agent has no email on file.
+ *
+ * **Sends real email.** Only ever called from a button press on the message.
  */
-export async function sendSamplesForSend(
+export async function sendQuickActionEmail(
   sendId: string,
+  presetId: string,
   emailInput?: string
 ): Promise<{ error?: string; note?: string }> {
   const row = await loadSend(sendId);
   if (!row?.agent) return { error: "This message has no agent attached" };
-  if (!row.followUpEmailPresetId) return { error: "This template has no follow-up email set" };
+  if (!row.quickActionPresetIds.includes(presetId)) return { error: "That isn't one of this template's quick actions" };
   const agent = row.agent;
 
   // Forgiving about what got pasted: "Sure! jane@x.com" still finds the address.
@@ -224,26 +310,21 @@ export async function sendSamplesForSend(
   }
 
   const [preset] = await db
-    .select({ id: messagePresets.id, name: messagePresets.name, type: messagePresets.type, attachments: messagePresets.attachments })
+    .select({
+      id: messagePresets.id,
+      name: messagePresets.name,
+      type: messagePresets.type,
+      channel: messagePresets.channel,
+      enabled: messagePresets.enabled,
+      attachments: messagePresets.attachments,
+    })
     .from(messagePresets)
-    .where(eq(messagePresets.id, row.followUpEmailPresetId));
-  if (!preset) return { error: "The follow-up email template is gone" };
+    .where(eq(messagePresets.id, presetId));
+  if (!preset || !preset.enabled) return { error: "That template is gone or switched off" };
+  if (preset.channel !== "email") return { error: `"${preset.name}" is a text, not an email` };
 
-  // Least-sent enabled variant, ties by label — the same rotation as the send dialogs.
-  const variants = await db
-    .select({ id: messagePresetVariants.id, label: messagePresetVariants.label, subject: messagePresetVariants.subject, body: messagePresetVariants.body })
-    .from(messagePresetVariants)
-    .where(and(eq(messagePresetVariants.presetId, preset.id), eq(messagePresetVariants.enabled, true)));
-  if (variants.length === 0) return { error: `"${preset.name}" has no enabled variant` };
-  const counts = await db
-    .select({ variantId: messageSends.variantId, n: count() })
-    .from(messageSends)
-    .where(inArray(messageSends.variantId, variants.map((v) => v.id)))
-    .groupBy(messageSends.variantId);
-  const sent = new Map(counts.map((c) => [c.variantId, c.n]));
-  const variant = [...variants].sort(
-    (a, b) => (sent.get(a.id) ?? 0) - (sent.get(b.id) ?? 0) || a.label.localeCompare(b.label)
-  )[0];
+  const variant = (await nextVariants([preset.id])).get(preset.id);
+  if (!variant) return { error: `"${preset.name}" has no enabled variant` };
 
   const [listing] = row.send.listingId
     ? await db.select({ address: listings.address, city: listings.city }).from(listings).where(eq(listings.id, row.send.listingId))
@@ -258,7 +339,7 @@ export async function sendSamplesForSend(
       attachments: preset.attachments,
     });
   } catch (err) {
-    console.error("sendSamplesForSend: send failed", err);
+    console.error("sendQuickActionEmail: send failed", err);
     return { error: "Couldn't send the email — check the address and try again." };
   }
 
@@ -280,4 +361,61 @@ export async function sendSamplesForSend(
 
   revalidateAll();
   return emailOwner ? { note: `That email is on ${emailOwner}'s record, so it wasn't saved here` } : {};
+}
+
+/**
+ * A text quick action ("Send contact", "Photo samples"): records that it went
+ * out. Nothing is sent from here — the phone opens Messages with the text and
+ * the template's files and calls this once the composer says it was sent
+ * (`confirmed`); the web opens an sms: link and can't know, so its send waits
+ * on the usual "did it go?" prompt.
+ */
+export async function recordQuickActionText(
+  sendId: string,
+  presetId: string,
+  variantId: string,
+  confirmed: boolean
+): Promise<{ error?: string }> {
+  const row = await loadSend(sendId);
+  if (!row?.agent) return { error: "This message has no agent attached" };
+  if (!row.quickActionPresetIds.includes(presetId)) return { error: "That isn't one of this template's quick actions" };
+  const agent = row.agent;
+
+  const [preset] = await db
+    .select({ id: messagePresets.id, name: messagePresets.name, type: messagePresets.type, channel: messagePresets.channel })
+    .from(messagePresets)
+    .where(eq(messagePresets.id, presetId));
+  if (!preset) return { error: "That template is gone" };
+  if (preset.channel !== "sms") return { error: `"${preset.name}" is an email, not a text` };
+  const [variant] = await db
+    .select({ id: messagePresetVariants.id })
+    .from(messagePresetVariants)
+    .where(and(eq(messagePresetVariants.id, variantId), eq(messagePresetVariants.presetId, presetId)));
+  if (!variant) return { error: "That variant doesn't belong to the template" };
+
+  const now = new Date();
+  await db.update(agents).set({ lastContactedAt: now }).where(eq(agents.id, agent.id));
+  const [sent] = await db
+    .insert(messageSends)
+    .values({
+      listingId: row.send.listingId,
+      agentId: agent.id,
+      presetId: preset.id,
+      variantId: variant.id,
+      type: preset.type,
+      channel: "sms",
+      sentAt: now,
+    })
+    .returning({ id: messageSends.id });
+  const interactionId = await startPendingInteraction({
+    agentId: agent.id,
+    listingId: row.send.listingId,
+    channel: "text",
+    messageSendId: sent?.id ?? null,
+  });
+  if (confirmed && interactionId) await resolvePendingInteraction(interactionId, "sent", `Sent "${preset.name}".`);
+  await recordReply(row.send, agent, "samples", `Replied. Sent "${preset.name}".`);
+
+  revalidateAll();
+  return {};
 }

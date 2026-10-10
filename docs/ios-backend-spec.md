@@ -277,6 +277,54 @@ Every write calls the existing function, which already revalidates the web pages
 
 **Why the text endpoints confirm the text at once (`POST /listings/:id/texts`, `POST /agents/:id/texts`):** both mean "the native Messages sheet reported the text was sent". The web parks a text as pending and asks later, because an `sms:` link can't report back. The native composer does report back, so these endpoints confirm the text immediately and nothing lands in the web's "did you send it?" prompt. Put this in a comment.
 
+#### Quick actions and templates (added 2026-10-10)
+
+A text template lists other templates as **quick actions**: the buttons on a message sent from it. This replaces the single "Send samples" email (`followUpEmail` and `POST /messages/:id/samples` still work for older builds, and mean the first email quick action).
+
+`GET /messages/:id` now also returns:
+
+```jsonc
+"quickActions": [            // in the order to show them; may be empty
+  {
+    "presetId": "…", "name": "Send contact",
+    "channel": "sms" | "email",
+    "variantId": "…",
+    "text": "Here's my contact if you want to save it.",   // rendered for this agent and listing
+    "subject": null,                                         // email only
+    "attachments": [{ "id": "…", "filename": "Lukas Hahn.vcf", "contentType": "text/vcard", "size": 240 }]
+  }
+]
+```
+
+| Method & path | Body | What it does |
+|---|---|---|
+| `POST /messages/:id/quick-actions/:presetId` | email: `{ email? }`. sms: `{ variantId }` | **email: sends real email** (`sendQuickActionEmail`) to the address on file, or to `email` when there is none; show a confirm naming the template and address first. **sms: sends nothing**; call it only after `MFMessageComposeViewController` reports `.sent`, to record the text (`recordQuickActionText`). Returns `{ ok, note }` |
+| `GET /presets` | | `{ presets: [PresetSummary] }`, every template that isn't archived (`listPresets`) |
+| `PATCH /presets/:id` | any of `{ name, enabled, secondMessage, quickActionPresetIds }` | `patchPreset`. `quickActionPresetIds` is the whole ordered list. Returns `{ preset }` |
+| `POST /presets/:id/variants` | `{ label, body, subject? }` | `createVariant` |
+| `PATCH /presets/variants/:variantId` | `{ label, body, subject? }` and/or `{ enabled }` | `updateVariant` / `toggleVariant` |
+| `POST /presets/:id/attachments` | **the file's raw bytes** (not JSON). `Content-Type` is the file's type; `X-Filename` is its name, percent-encoded | Adds it. 4 MB max, one file per request. Returns `{ attachments }` |
+| `GET /presets/:id/attachments/:attachmentId` | | The file's bytes. Immutable: cache on disk by attachment id |
+| `DELETE /presets/:id/attachments/:attachmentId` | | Removes it |
+
+```jsonc
+// PresetSummary
+{
+  "id": "…", "name": "Backup Option",
+  "type": "initial_outreach" | "follow_up", "channel": "sms" | "email",
+  "enabled": true, "aiGenerated": false, "protected": false,
+  "secondMessage": "…" | null,
+  "quickActionPresetIds": ["…"],
+  "quickActionOnly": false,       // true: only ever a quick action (the vCard, the photos), never in a send dialog
+  "attachments": [{ "id": "…", "filename": "…", "contentType": "…", "size": 0 }],
+  "variants": [{ "id": "…", "label": "A", "subject": null, "body": "…", "enabled": true }]   // empty for an AI draft
+}
+```
+
+**Sending a text quick action:** fetch each attachment (cache by id), then present the composer with the recipient, `text` as the body, and `addAttachmentData(data, typeIdentifier:, filename:)` for each file. On `.sent`, `POST …/quick-actions/:presetId` with the `variantId`. On cancel, record nothing. A template that is switched off, or has no enabled variant, is left out of `quickActions`, which is how "Photo samples" stays hidden until it has photos and is switched on.
+
+**Which templates can be picked as a quick action:** enabled, not `aiGenerated`, not `protected`, and either `type == "follow_up"` or `quickActionOnly` (the web's rule, `messaging/page.tsx`). Never the template itself.
+
 ---
 
 ## Acceptance (run locally, report the output)

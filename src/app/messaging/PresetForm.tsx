@@ -46,14 +46,14 @@ export function PresetForm({
   preset,
   defaultType,
   defaultChannel,
-  emailTemplates = [],
+  quickActionChoices = [],
   trigger,
 }: {
   preset?: MessagePreset;
   defaultType?: PresetType;
   defaultChannel?: MessageChannel;
-  /** Choices for an SMS preset's follow-up email. */
-  emailTemplates?: { id: string; name: string }[];
+  /** Templates an SMS preset can offer as quick actions on its messages. */
+  quickActionChoices?: { id: string; name: string; channel: MessageChannel }[];
   trigger: React.ReactNode;
 }) {
   const router = useRouter();
@@ -78,7 +78,9 @@ export function PresetForm({
   const [maxPhotoCount, setMaxPhotoCount] = useState(preset?.maxPhotoCount?.toString() ?? "");
   const [pitchesListing, setPitchesListing] = useState(preset?.pitchesListing === false ? "agent" : "listing");
   const [secondMessage, setSecondMessage] = useState(preset?.secondMessage ?? "");
-  const [followUpEmailPresetId, setFollowUpEmailPresetId] = useState(preset?.followUpEmailPresetId ?? "none");
+  // Kept in the order they were ticked, which is the order the buttons show in.
+  const [quickActionIds, setQuickActionIds] = useState<string[]>(preset?.quickActionPresetIds ?? []);
+  const [quickActionOnly, setQuickActionOnly] = useState(preset?.quickActionOnly ?? false);
   const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!preset;
@@ -102,7 +104,8 @@ export function PresetForm({
       comingSoon: comingSoon === "any" ? null : comingSoon === "yes",
       sitting: sitting === "any" ? null : sitting === "yes",
       secondMessage: channel === "sms" ? secondMessage : null,
-      followUpEmailPresetId: channel === "sms" && followUpEmailPresetId !== "none" ? followUpEmailPresetId : null,
+      quickActionPresetIds: channel === "sms" ? quickActionIds : [],
+      quickActionOnly: channel === "sms" && quickActionOnly,
       pitchesListing: pitchesListing === "listing",
     };
 
@@ -215,24 +218,49 @@ export function PresetForm({
                   <p className="text-xs text-muted-foreground">Copied when you send, to paste as a second text.</p>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="follow-up-email">Email when they reply</Label>
-                  <Select value={followUpEmailPresetId} onValueChange={setFollowUpEmailPresetId}>
-                    <SelectTrigger id="follow-up-email" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {emailTemplates.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Quick actions</Label>
+                  {quickActionChoices.filter((t) => t.id !== preset?.id).length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No other templates to offer yet.</p>
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      {quickActionChoices
+                        .filter((t) => t.id !== preset?.id)
+                        .map((t) => (
+                          <label key={t.id} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-primary"
+                              checked={quickActionIds.includes(t.id)}
+                              onChange={(e) =>
+                                setQuickActionIds((ids) =>
+                                  e.target.checked ? [...ids, t.id] : ids.filter((id) => id !== t.id)
+                                )
+                              }
+                            />
+                            {t.name}
+                            <span className="text-xs text-muted-foreground">{t.channel === "email" ? "email" : "text"}</span>
+                          </label>
+                        ))}
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground">
-                    Sent by &ldquo;Send samples&rdquo; in Message history.
+                    One-tap buttons on a message sent from this template, in the order ticked.
                   </p>
                 </div>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 mt-0.5 accent-primary"
+                    checked={quickActionOnly}
+                    onChange={(e) => setQuickActionOnly(e.target.checked)}
+                  />
+                  <span>
+                    Only a quick action
+                    <span className="block text-xs text-muted-foreground">
+                      Leave it out of the send dialogs, like the vCard or photo samples.
+                    </span>
+                  </span>
+                </label>
               </div>
             )}
 
