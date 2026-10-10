@@ -148,6 +148,46 @@ actor APIClient {
         )
     }
 
+    /// Records a text sent to an agent directly, with no listing behind it.
+    /// Called only when the Messages sheet reports `.sent`.
+    func confirmAgentTextSent(agentId: String) async throws {
+        struct Body: Encodable, Sendable {}
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("POST", "api/app/v1/agents/\(agentId)/texts", body: Body(), as: OK.self)
+    }
+
+    /// Logs a call, text or email that happened outside the app — the web's
+    /// Add interaction dialog.
+    func logInteraction(
+        agentId: String,
+        channel: String,
+        direction: String,
+        outcome: String?,
+        note: String?,
+        occurredAt: Date
+    ) async throws {
+        struct Body: Encodable, Sendable {
+            let channel: String
+            let direction: String
+            let outcome: String?
+            let note: String?
+            let occurredAt: String
+        }
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send(
+            "POST",
+            "api/app/v1/agents/\(agentId)/interactions",
+            body: Body(
+                channel: channel,
+                direction: direction,
+                outcome: outcome,
+                note: note,
+                occurredAt: occurredAt.formatted(.iso8601)
+            ),
+            as: OK.self
+        )
+    }
+
     /// Save or Pass. Pass takes every listing in the group so dropping a card
     /// drops the whole agent group, as the web's "Pass all N" does.
     func setListingStatus(listingIds: [String], status: String) async throws {

@@ -228,6 +228,17 @@ struct AgentDirectoryDetail: View {
     @State private var loadError: String?
     @State private var openListing: Listing?
     @State private var openBooking: Booking?
+    @State private var contactError: String?
+    @State private var logSheet: LogRequest?
+    /// Set when Call is tapped, so coming back from the phone call asks how it
+    /// went — the web's "how did it go?" prompt.
+    @State private var callTappedAt: Date?
+    @State private var callStarted = false
+
+    private struct LogRequest: Identifiable {
+        let afterCall: Bool
+        var id: Bool { afterCall }
+    }
 
     var body: some View {
         NavigationStack {
@@ -261,6 +272,22 @@ struct AgentDirectoryDetail: View {
             .sheet(item: $openBooking) { booking in
                 BookingDetailView(booking: booking)
             }
+            .sheet(item: $logSheet) { request in
+                LogInteractionSheet(agentId: agent.id, agentName: agent.displayName, afterCall: request.afterCall) {
+                    Task { await reload() }
+                }
+            }
+            // iOS asks "Call…?" first. Only leaving the app right after the tap
+            // means a call was really placed; cancelling that alert never does.
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                if let callTappedAt, Date().timeIntervalSince(callTappedAt) < 20 { callStarted = true }
+                callTappedAt = nil
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                guard callStarted else { return }
+                callStarted = false
+                logSheet = LogRequest(afterCall: true)
+            }
         }
     }
 
@@ -278,27 +305,94 @@ struct AgentDirectoryDetail: View {
                 relationshipStatus: agent.relationshipStatus
             )
 
-            if let email = agent.email?.nilIfBlank {
-                Link(destination: URL(string: "mailto:\(email)")!) {
-                    Label(email, systemImage: "envelope")
-                        .font(.footnote)
-                        .lineLimit(1)
-                }
+            contactButtons
+
+            if let email {
+                Text(email)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.tertiaryText)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
             }
 
-            if let phone = agent.phone?.nilIfBlank {
-                let digits = phone.filter(\.isNumber)
-                if !digits.isEmpty {
-                    Link(destination: URL(string: "tel://\(digits)")!) {
-                        Label(phone, systemImage: "phone")
-                            .font(.footnote)
-                    }
-                }
+            if let contactError {
+                Text(contactError)
+                    .font(.caption)
+                    .foregroundStyle(Theme.danger)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()
         .padding(.horizontal, 16)
+    }
+
+    // MARK: - Contact
+
+    // The directory row may lack what the detail has (the follow-up board
+    // opens this sheet without an email), so the loaded agent fills in.
+    private var phoneDigits: String? {
+        (agent.phone ?? detail?.agent.phone)?.filter(\.isNumber).nilIfBlank
+    }
+
+    private var email: String? {
+        (agent.email ?? detail?.agent.email)?.nilIfBlank
+    }
+
+    /// Call, text, email — whichever the agent can be reached by.
+    @ViewBuilder
+    private var contactButtons: some View {
+        if phoneDigits != nil || email != nil {
+            HStack(spacing: 8) {
+                if let digits = phoneDigits, let url = URL(string: "tel://\(digits)") {
+                    Button {
+                        callTappedAt = Date()
+                        UIApplication.shared.open(url)
+                    } label: { contactLabel("Call", "phone.fill") }
+                        .buttonStyle(.plain)
+                    Button { text(digits) } label: { contactLabel("Text", "message.fill", prominent: true) }
+                        .buttonStyle(.plain)
+                }
+                if let email, let url = URL(string: "mailto:\(email)") {
+                    Link(destination: url) { contactLabel("Email", "envelope.fill") }
+                }
+            }
+        }
+    }
+
+    private func contactLabel(_ title: String, _ symbol: String, prominent: Bool = false) -> some View {
+        Label(title, systemImage: symbol)
+            .font(.subheadline.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
+            .background(
+                prominent ? Theme.accent : Theme.cardRaised,
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .foregroundStyle(prominent ? Theme.background : Theme.primaryText)
+    }
+
+    /// Opens Messages to this agent with nothing written. Only a text that
+    /// actually went out is recorded, and then the timeline is refreshed.
+    private func text(_ digits: String) {
+        contactError = nil
+        MessageComposer.present(recipients: [digits], body: "") { outcome in
+            switch outcome {
+            case .unavailable:
+                contactError = "This iPhone can't send texts right now."
+            case .cancelled:
+                break
+            case .sent:
+                Task {
+                    do {
+                        try await APIClient.shared.confirmAgentTextSent(agentId: agent.id)
+                        await reload()
+                    } catch {
+                        contactError = "The text went out, but recording it failed: "
+                            + ((error as? APIError)?.errorDescription ?? error.localizedDescription)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Listings and bookings
@@ -342,48 +436,118 @@ struct AgentDirectoryDetail: View {
     @ViewBuilder
     private var timeline: some View {
         let entries = detail?.timeline ?? []
-        if !entries.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
                 sectionTitle("History")
+                Spacer(minLength: 0)
+                Button {
+                    logSheet = LogRequest(afterCall: false)
+                } label: {
+                    Label("Add interaction", systemImage: "plus")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                        .background(Theme.cardRaised, in: Capsule())
+                        .foregroundStyle(Theme.primaryText)
+                }
+                .buttonStyle(.plain)
+            }
 
-                ForEach(entries) { entry in
+            if entries.isEmpty, detail != nil {
+                Text("Nothing logged yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.tertiaryText)
+            }
+
+            ForEach(entries) { entry in
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: icon(entry))
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiaryText)
+                        .frame(width: 18)
+                        .padding(.top, 3)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(summary(entry))
                             .font(.subheadline)
                             .foregroundStyle(Theme.primaryText)
-                        Text(when(entry))
-                            .font(.caption2)
-                            .foregroundStyle(Theme.tertiaryText)
-                        if let note = entry.note?.nilIfBlank {
+                        if let note = (entry.note ?? entry.body)?.nilIfBlank {
                             Text(note)
                                 .font(.caption)
                                 .foregroundStyle(Theme.secondaryText)
+                                .lineLimit(entry.kind == "queued" ? 1 : nil)
                         }
+                        Text(detailLine(entry))
+                            .font(.caption2)
+                            .foregroundStyle(Theme.tertiaryText)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer(minLength: 0)
+                    if let badge = badge(entry) {
+                        BadgeChip(text: badge)
+                    }
                 }
+                .opacity(entry.kind == "queued" ? 0.7 : 1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .card()
-            .padding(.horizontal, 16)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+        .padding(.horizontal, 16)
+    }
+
+    // The wording below is the web's (AgentDetailDialog.tsx): each row reads as
+    // the thing that happened, not as the template that was used.
+
+    private func summary(_ entry: AgentDetailResponse.Entry) -> String {
+        let outbound = entry.direction != "inbound"
+        switch entry.kind {
+        case "send":
+            let verb = entry.channel == "email" ? "Emailed them" : "Texted them"
+            return entry.listingAddress?.nilIfBlank.map { "\(verb) about \($0)" } ?? verb
+        case "queued":
+            let what = entry.channel == "email" ? "Email queued" : "Text queued"
+            return entry.listingAddress?.nilIfBlank.map { "\(what) about \($0)" } ?? what
+        default:
+            let base: String
+            switch entry.channel {
+            case "call": base = outbound ? "Called them" : "They called"
+            case "text": base = outbound ? "Texted them" : "They texted"
+            case "email": return outbound ? "Emailed them" : "They emailed"
+            case "in_person": return "Met in person"
+            default: return "Other"
+            }
+            guard let outcome = entry.outcome?.nilIfBlank else { return base }
+            return "\(base) · \(outcome.replacingOccurrences(of: "_", with: " "))"
         }
     }
 
-    private func summary(_ entry: AgentDetailResponse.Entry) -> String {
+    private func detailLine(_ entry: AgentDetailResponse.Entry) -> String {
         var parts: [String] = []
-
-        switch entry.kind {
-        case "send":
-            parts.append(entry.channel == "email" ? "Emailed" : "Texted")
-            if let preset = entry.presetName?.nilIfBlank { parts.append("“\(preset)”") }
-            if let result = entry.result, result != "pending" { parts.append("· \(result.capitalized)") }
-        default:
-            parts.append(entry.kind.capitalized)
-            if let channel = entry.channel?.nilIfBlank { parts.append("· \(channel)") }
+        if entry.kind == "send" {
+            if let preset = entry.presetName?.nilIfBlank { parts.append(preset) }
+            if let type = entry.type?.nilIfBlank {
+                parts.append(type == "follow_up" ? "Follow-up" : "Initial outreach")
+            }
         }
+        parts.append(when(entry))
+        if entry.kind == "interaction", let address = entry.listingAddress?.nilIfBlank { parts.append(address) }
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
 
-        if let address = entry.listingAddress?.nilIfBlank { parts.append("· \(address)") }
-        return parts.joined(separator: " ")
+    private func icon(_ entry: AgentDetailResponse.Entry) -> String {
+        if entry.kind == "queued" { return "clock" }
+        switch entry.channel {
+        case "call": return entry.direction == "inbound" ? "phone.arrow.down.left" : "phone"
+        case "text", "sms": return "message"
+        case "email": return "envelope"
+        default: return "person.2"
+        }
+    }
+
+    private func badge(_ entry: AgentDetailResponse.Entry) -> String? {
+        if entry.kind == "queued" { return "Queued" }
+        if entry.pending ?? false { return "Unconfirmed" }
+        guard entry.kind == "send" else { return nil }
+        if let result = entry.result, result != "pending" { return result.relationshipLabel }
+        return entry.respondedAt != nil ? "Replied" : nil
     }
 
     private func when(_ entry: AgentDetailResponse.Entry) -> String {
@@ -413,6 +577,11 @@ struct AgentDirectoryDetail: View {
             .font(.caption2.weight(.bold))
             .foregroundStyle(Theme.tertiaryText)
             .kerning(0.6)
+    }
+
+    /// After something was logged: the timeline has a new row.
+    private func reload() async {
+        if let fresh = try? await APIClient.shared.agentDetail(agent.id) { detail = fresh }
     }
 
     private func load() async {

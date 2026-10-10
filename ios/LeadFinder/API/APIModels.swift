@@ -443,6 +443,10 @@ struct AgentDetailResponse: Codable, Sendable {
         var outcome: String?
         var note: String?
         var pending: Bool?
+        /// Interactions only: "outbound" or "inbound".
+        var direction: String?
+        /// Queued messages only: what's waiting to go out.
+        var body: String?
     }
 
     var agent: Agent
