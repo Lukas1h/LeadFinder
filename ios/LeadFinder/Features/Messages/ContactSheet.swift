@@ -318,11 +318,15 @@ struct ContactSheet: View {
         agentName?.nilIfBlank?.split(separator: " ").first.map(String.init) ?? "agent"
     }
 
-    /// The recommended template, as the web's dropdown preselects; never the
-    /// AI placeholder, which would cost a draft just for opening the sheet.
+    /// The recommended template, as the web's dropdown preselects, then Blank
+    /// when nothing is recommended (the first template is an opener, wrong for
+    /// anyone he has texted before); never the AI placeholder, which would
+    /// cost a draft just for opening the sheet.
     private static func defaultOption(in options: [MessageOption]) -> MessageOption? {
         let presets = options.filter { !$0.aiDraft }
-        return presets.first { $0.recommended ?? false } ?? presets.first
+        return presets.first { $0.recommended ?? false }
+            ?? presets.first { $0.blank ?? false }
+            ?? presets.first
     }
 
     private func select(_ option: MessageOption) {

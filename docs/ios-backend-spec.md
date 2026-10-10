@@ -182,6 +182,8 @@ Every handler starts with `const denied = requireAppAuth(req); if (denied) retur
   | `priceCut` | as `PriceCutBadge` | its tooltip text |
   | `fewPhotos` | "Only N photos". Only when `photoCount < FEW_PHOTOS_THRESHOLD` | |
   | `photoScore` | the `PhotoScoreBadge` tier label | `scoreReasoning` |
+  | `unscored` | "Photos not scored". Enough photos to judge but no score, because scoring failed (added 2026-10-10) | why it's under Photo anyway |
+  | `officeClient` | "Same office as Roger" | which job and brokerage |
   | `builder` | Builder (`isBuilderListing`) | |
   | `declined` | as `AgentDeclinedBadge` | the duplicate address |
 
@@ -211,7 +213,7 @@ All paths are relative to `/api/app/v1`.
 |---|---|---|
 | `GET /ping` | | `{ ok: true, serverTime }`. The app uses it to check its token |
 | `GET /leads` | `getLeadsBoard()` | See below |
-| `GET /follow-up` | `getFollowUpBoard()` + `groups.ts` | `{ justListed: [{ agent, lastReplyAt, listing }], groups: [{ label, entries: [{ agent, lastReplyAt }] }] }`. Empty groups are omitted |
+| `GET /follow-up` | `getFollowUpBoard()` + `groups.ts` | `{ news: [{ agent, lastReplyAt, listing, headline }], justListed: [{ agent, lastReplyAt, listing }], groups: [{ label, entries: [{ agent, lastReplyAt }] }] }`. Empty groups are omitted. `news` (added 2026-10-10) is agents with a listing that just went under contract or sold, found by the nightly market check (`lib/marketStatus.ts`); `headline` is the wording to show, e.g. "Pending since Oct 5" |
 | `GET /schedule` | `loadScheduleItems(todayScheduleDate())` | `{ today, items }`. Each item as-is, but `listing` goes through `listingJson(…,"first")` |
 | `GET /bookings` | `loadBookingsWithDetails()` + `groupBookings()` | `{ upcoming, waitingForPayment, completed }`, each `bookingJson[]` |
 | `GET /bookings/:id` | `getBookingWithDetails`, `getGalleryActivity` | `{ booking, galleryActivity }` |
@@ -232,7 +234,8 @@ All paths are relative to `/api/app/v1`.
   "sections": [                                            // display order; empty sections omitted
     { "key": "known", "label": "Agents you know", "collapsed": false, "groups": [/* LeadGroupJson */] },
     { "key": "photo", "label": "Photo opportunities", "collapsed": false, "groups": [] },
-    // … video, backup, then unlikely (collapsed: true), using LEAD_SECTION_LABELS
+    // … video, backup, texted ("Texted before": a cold agent already texted, more than a week ago),
+    // then unlikely (collapsed: true), using LEAD_SECTION_LABELS. Render whatever keys arrive.
   ]
 }
 // LeadGroupJson
@@ -242,7 +245,8 @@ All paths are relative to `/api/app/v1`.
   "contactLine": "Texted Oct 5" | null,
   "knownGroup": "clients" | "interested" | "warm" | null,
   "section": "photo",
-  "best": {/* listingJson first */}, "badges": [/* leadBadges(best) */],
+  "best": {/* listingJson, with the card's sampled photos and "driveTime": "~1h 30m drive" | null */},
+  "badges": [/* leadBadges(best) */],
   "others": [/* listingJson first */],
   "listingIds": ["…"]                                      // every listing in the group, for Pass
 }

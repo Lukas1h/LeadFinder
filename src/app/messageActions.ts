@@ -211,13 +211,19 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   const officeClient = office && office.agentId !== listingAgent?.id && listingAgent?.status !== "declined" ? office : null;
 
   const aiPreset = await getAiPreset(type);
+  const facts = listingMatchFacts(listing);
   const recommendedPresetId = pickRecommendedPreset(
     Array.from(rowsByPreset.values()).map((group) => ({ ...group[0], id: group[0].presetId })),
     aiPreset,
-    listingMatchFacts(listing),
+    facts,
     await isKnownAgent(listing.agentId),
     officeClient != null
   );
+  // Someone he has already texted must not land on an opener, and until there
+  // is a template written for them nothing is recommended. Blank is flagged
+  // instead, because a dialog with no recommendation falls back to whichever
+  // template comes first (the iPhone app does), and that is an opener.
+  const blankForTexted = recommendedPresetId == null && facts.leadSection === "texted";
 
   // An office template is a false statement for anyone else, so it's only offered when it fits.
   const offered = Array.from(rowsByPreset.values()).filter((group) => !group[0].sameOffice || officeClient);
@@ -234,7 +240,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       variantId: picked.variantId,
       variantLabel: picked.label,
       text: renderMessageBody(picked.body, listing.agentName, listing.address, listing.city, officeClient?.name ?? null),
-      recommended: picked.presetId === recommendedPresetId,
+      recommended: picked.presetId === recommendedPresetId || (blankForTexted && picked.protected),
       blank: picked.protected,
       secondMessage: picked.secondMessage,
     };
