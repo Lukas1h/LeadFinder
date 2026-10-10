@@ -222,6 +222,32 @@ actor APIClient {
         ).note
     }
 
+    // MARK: - Editing agents
+
+    struct AgentEdit: Encodable, Sendable {
+        var name: String
+        var phone: String
+        var email: String
+        var relationshipStatus: String
+        var brokerage: String
+        var notes: String
+    }
+
+    /// The web's Edit form. The server validates (a phone or an email is
+    /// required, formats, "another agent already has this number") and answers
+    /// 400 with the reason, which surfaces as the error text.
+    func updateAgent(id: String, _ edit: AgentEdit) async throws {
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("PATCH", "api/app/v1/agents/\(id)", body: edit, as: OK.self)
+    }
+
+    /// Deletes the agent. Their bookings and past sends stay, unlinked.
+    func deleteAgent(id: String) async throws {
+        struct Empty: Encodable, Sendable {}
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("DELETE", "api/app/v1/agents/\(id)", body: Empty?.none, as: OK.self)
+    }
+
     // MARK: - Reminders
 
     struct ReminderInput: Encodable, Sendable {

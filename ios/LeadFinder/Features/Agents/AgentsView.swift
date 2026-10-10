@@ -222,7 +222,26 @@ struct AgentDirectoryRow: View {
 /// away from. Their listings and bookings reuse the shared ListingRow and
 /// BookingRow so an agent, a listing and a job look the same everywhere.
 struct AgentDirectoryDetail: View {
-    let agent: AgentsResponse.Row
+    /// What the opener knew. The loaded detail (and any edit) overrides it.
+    private let initial: AgentsResponse.Row
+
+    init(agent: AgentsResponse.Row) {
+        initial = agent
+    }
+
+    private var agent: AgentsResponse.Row {
+        guard let fresh = detail?.agent else { return initial }
+        var row = initial
+        row.name = fresh.name
+        row.phone = fresh.phone
+        row.email = fresh.email
+        row.relationshipStatus = fresh.relationshipStatus
+        row.brokerage = fresh.brokerage?.nilIfBlank ?? detail?.brokerage ?? initial.brokerage
+        return row
+    }
+
+    @Environment(AppState.self) private var appState
+    @State private var showEdit = false
 
     @State private var detail: AgentDetailResponse?
     @State private var loadError: String?
@@ -264,8 +283,27 @@ struct AgentDirectoryDetail: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { close() }
                 }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Edit") { showEdit = true }
+                        .disabled(detail == nil)
+                }
             }
             .task { await load() }
+            .sheet(isPresented: $showEdit) {
+                if let current = detail?.agent {
+                    EditAgentSheet(agent: current) { deleted in
+                        Task {
+                            if deleted {
+                                await appState.agents.load(force: true)
+                                dismiss()
+                            } else {
+                                await reload()
+                                await appState.agents.load(force: true)
+                            }
+                        }
+                    }
+                }
+            }
             .sheet(item: $openListing) { listing in
                 LeadListingSheet(listing: listing, agent: detail?.agent)
             }

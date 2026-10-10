@@ -18,6 +18,9 @@ struct Agent: Codable, Sendable, Identifiable, Hashable {
     var lastContactedAt: String?
     var notes: String?
     var createdAt: String?
+    /// The hand-entered brokerage (the edit form's field), not the one derived
+    /// from their listings.
+    var brokerage: String?
 
     var displayName: String { name?.nilIfBlank ?? "Unknown agent" }
 }
