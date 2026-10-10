@@ -46,17 +46,28 @@ final class MessageComposer: NSObject, MFMessageComposeViewControllerDelegate {
         top.present(controller, animated: true)
     }
 
+    /// `present`, awaited: returns once the sheet has been sent or closed.
+    static func present(recipients: [String], body: String) async -> Outcome {
+        await withCheckedContinuation { continuation in
+            present(recipients: recipients, body: body) { continuation.resume(returning: $0) }
+        }
+    }
+
     nonisolated func messageComposeViewController(
         _ controller: MFMessageComposeViewController,
         didFinishWith result: MessageComposeResult
     ) {
         MainActor.assumeIsolated {
-            controller.dismiss(animated: true)
             // The delegate can fire more than once; only the first counts.
             guard !finished else { return }
             finished = true
             Self.current = nil
-            onFinish(result == .sent ? .sent : .cancelled)
+            let outcome: Outcome = result == .sent ? .sent : .cancelled
+            // Reported once the sheet is fully gone, so the caller can put up
+            // the next one (a preset's second message) straight away. Presenting
+            // while this one is still animating out silently does nothing.
+            let finish = onFinish
+            controller.dismiss(animated: true) { finish(outcome) }
         }
     }
 

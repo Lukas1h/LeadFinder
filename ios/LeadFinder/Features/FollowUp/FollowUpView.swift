@@ -122,7 +122,7 @@ struct FollowUpView: View {
             VStack(alignment: .leading, spacing: 0) {
                 if let listing = item.listing,
                    let photo = listing.photos?.first {
-                    RemoteImage(url: PhotoSize.card.url(photo), size: .card)
+                    RemoteImage(photo: photo, size: .card)
                     .frame(height: 168)
                     .frame(maxWidth: .infinity)
                     .clipped()

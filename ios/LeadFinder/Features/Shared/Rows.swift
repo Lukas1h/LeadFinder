@@ -40,7 +40,7 @@ struct ListingRow: View {
     private var thumb: some View {
         Group {
             if let urlString = listing.photos?.first {
-                RemoteImage(url: PhotoSize.card.url(urlString), size: .card)
+                RemoteImage(photo: urlString, size: .card)
             } else {
                 ZStack {
                     Theme.cardRaised

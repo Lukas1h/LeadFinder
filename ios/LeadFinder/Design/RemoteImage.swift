@@ -20,6 +20,8 @@ actor ImagePipeline {
         let config = URLSessionConfiguration.default
         config.urlCache = URLCache(memoryCapacity: 32 << 20, diskCapacity: 300 << 20)
         config.requestCachePolicy = .returnCacheDataElseLoad
+        // A stalled download should fail and be retried, not hold a blank frame for a minute.
+        config.timeoutIntervalForRequest = 20
         return URLSession(configuration: config)
     }()
 
@@ -37,8 +39,16 @@ actor ImagePipeline {
 
         let session = self.session
         let task = Task<UIImage?, Never>.detached(priority: .userInitiated) {
-            guard let (data, _) = try? await session.data(from: url) else { return nil }
-            return Self.downsample(data, maxPixel: maxPixel)
+            let request = URLRequest(url: url)
+            guard let (data, response) = try? await session.data(for: request) else { return nil }
+            if (response as? HTTPURLResponse)?.statusCode == 200, let image = Self.downsample(data, maxPixel: maxPixel) {
+                return image
+            }
+            // The session hands back whatever is on disk without asking the
+            // server again, so an error page left there would be this photo
+            // forever. Drop it and let the next try go to the network.
+            session.configuration.urlCache?.removeCachedResponse(for: request)
+            return nil
         }
         inFlight[url] = task
         let image = await task.value
@@ -97,14 +107,43 @@ enum PhotoSize {
 struct RemoteImage: View {
     let url: URL?
     var size: PhotoSize = .full
+    /// Tried when `url` won't load: the original photo behind a smaller rendition.
+    var fallback: URL?
 
-    @State private var image: UIImage?
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var loaded: Loaded?
     @State private var failed = false
+    @State private var attempt = 0
+
+    private struct Loaded {
+        let url: URL
+        let image: UIImage
+    }
+
+    private struct LoadKey: Equatable {
+        let url: URL?
+        let attempt: Int
+    }
+
+    /// A photo by its address, at the size the frame needs, falling back to
+    /// the original if that rendition is missing.
+    init(photo: String, size: PhotoSize = .full) {
+        let original = URL(string: photo)
+        url = size.url(photo)
+        self.size = size
+        fallback = original == url ? nil : original
+    }
+
+    private var current: UIImage? {
+        guard let url else { return nil }
+        if let loaded, loaded.url == url { return loaded.image }
+        return ImagePipeline.shared.cached(url)
+    }
 
     var body: some View {
         ZStack {
-            if let image = image ?? url.flatMap({ ImagePipeline.shared.cached($0) }) {
-                Image(uiImage: image).resizable().scaledToFill()
+            if let current {
+                Image(uiImage: current).resizable().scaledToFill()
             } else {
                 Theme.cardRaised
                 if failed {
@@ -112,11 +151,35 @@ struct RemoteImage: View {
                 }
             }
         }
-        .task(id: url) {
-            guard let url, ImagePipeline.shared.cached(url) == nil else { return }
-            failed = false
-            image = await ImagePipeline.shared.image(for: url, maxPixel: size.maxPixel)
-            failed = image == nil
+        .task(id: LoadKey(url: url, attempt: attempt)) { await load() }
+        // Coming back to the app (or back online) is the moment to try a photo
+        // that never arrived again.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, current == nil { attempt += 1 }
         }
+    }
+
+    private func load() async {
+        guard let url else { return }
+        failed = false
+        // Held in the view's own state even on a cache hit. The memory cache
+        // is emptied whenever the app goes to the background and under memory
+        // pressure, and a photo that lived only there went blank with nothing
+        // left to load it again.
+        if let hit = ImagePipeline.shared.cached(url) {
+            loaded = Loaded(url: url, image: hit)
+            return
+        }
+        for delay in [0.0, 1.0, 3.0] {
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            if Task.isCancelled { return }
+            for candidate in [url, fallback].compactMap({ $0 }) {
+                if let image = await ImagePipeline.shared.image(for: candidate, maxPixel: size.maxPixel) {
+                    loaded = Loaded(url: url, image: image)
+                    return
+                }
+            }
+        }
+        failed = !Task.isCancelled
     }
 }

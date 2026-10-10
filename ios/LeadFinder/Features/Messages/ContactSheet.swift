@@ -238,13 +238,13 @@ struct ContactSheet: View {
         }
     }
 
-    /// The follow-up the preset wants sent after this one. It's copied to the
-    /// clipboard when the text goes out so it can be pasted straight after.
+    /// The follow-up the preset wants sent after this one. Once the first text
+    /// goes out, Messages opens again with this one filled in.
     @ViewBuilder
     private var secondMessageNote: some View {
         if let second = selectedOption?.secondMessage?.nilIfBlank {
             VStack(alignment: .leading, spacing: 6) {
-                Label("Then paste this — copied when you send", systemImage: "doc.on.clipboard")
+                Label("Sent next — Messages opens again with this", systemImage: "text.bubble")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Theme.tertiaryText)
                 Text(second)
@@ -403,15 +403,15 @@ struct ContactSheet: View {
             break
         }
 
-        if let second = option?.secondMessage?.nilIfBlank {
-            UIPasteboard.general.string = second
-        }
+        let second = option?.secondMessage?.nilIfBlank
+        let recipient = phoneDigits
 
         isRecording = true
         sendError = nil
         Task {
             defer { isRecording = false }
-            do {
+            // The first text is recorded while the second is being sent.
+            let recording = Task {
                 try await APIClient.shared.confirmTextSent(
                     listingId: listingId,
                     type: type,
@@ -419,7 +419,19 @@ struct ContactSheet: View {
                     variantId: option?.variantId ?? "",
                     text: body
                 )
+            }
+            // The preset's second message goes out the same way, in its own
+            // Messages sheet. Closing that sheet without sending is fine: the
+            // first text went, and that's the one on record.
+            if let second, let recipient {
+                _ = await MessageComposer.present(recipients: [recipient], body: second)
+            }
+            do {
+                _ = try await recording.value
                 MessageOptionsCache.shared.forget(listingId: listingId)
+                // Reloading takes this lead's card away, and this sheet and
+                // anything on top of it with it — which is why it waits for the
+                // second Messages sheet above.
                 await appState.leads.load(force: true)
                 NotificationCenter.default.post(name: .leadsDidChange, object: nil)
                 dismiss()

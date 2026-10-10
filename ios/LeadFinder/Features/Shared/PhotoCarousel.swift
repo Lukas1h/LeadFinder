@@ -55,7 +55,7 @@ struct PhotoCarousel: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(photos.indices, id: \.self) { photoIndex in
-                    RemoteImage(url: size.url(photos[photoIndex]), size: size)
+                    RemoteImage(photo: photos[photoIndex], size: size)
                         // scaledToFill crops rather than stretches, but only
                         // once the page is clipped to the frame.
                         .containerRelativeFrame([.horizontal, .vertical])
