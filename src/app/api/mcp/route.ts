@@ -47,8 +47,16 @@ export async function POST(req: NextRequest) {
   return handle(req);
 }
 
+// A GET asks for a stream of messages the server starts on its own. This
+// server only ever answers calls, so the stream never carried anything and
+// each one sat open until the 300s limit killed it — about 35 an hour while a
+// client was connected, each logged as a timeout. 405 is the spec's "no stream
+// here", and clients carry on with plain POSTs.
 export async function GET(req: NextRequest) {
-  return handle(req);
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  return new Response(null, { status: 405, headers: { Allow: "POST, DELETE" } });
 }
 
 export async function DELETE(req: NextRequest) {
