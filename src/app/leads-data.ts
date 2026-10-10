@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { listings, agents, type Agent, type Listing } from "@/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
 import { withLastContactFromHistory } from "@/lib/agentLastContact";
-import { byLeadPriority, findAttachedAgent, buildAgentLookups } from "@/lib/pipeline";
+import { byLeadPriority, findAttachedAgent, buildAgentLookups, isUnscored } from "@/lib/pipeline";
 import { refreshLeadSections, lastTextByAgent, isRecentlyTexted, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
 import { getQueuedListingIds } from "@/lib/queueMessages";
 import type { KnownAgentGroup } from "@/app/KnownAgentLeads";
@@ -53,6 +53,8 @@ export interface LeadsBoard {
   agentCount: number;
   /** Addresses of the listings declined agents turned down, named in their Declined badge. */
   addressById: Map<string, string | null>;
+  /** Open leads from the last few days whose photos never got scored — a lot of them means scoring is down. */
+  unscoredCount: number;
 }
 
 export async function getLeadsBoard(): Promise<LeadsBoard> {
@@ -140,7 +142,9 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
       : null;
     const officeClient =
       client && client.agentId !== g.agent?.id && g.agent?.relationshipStatus !== "declined" ? client : null;
-    const group = known ?? (officeClient ? ("office" as const) : undefined);
+    // Once texted, the office intro has been used too, so they move on to
+    // "Texted before" with everyone else who didn't answer.
+    const group = known ?? (officeClient && !g.textedAt ? ("office" as const) : undefined);
     return {
       key,
       ...g,
@@ -155,17 +159,20 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
   });
 
   const known = groups.filter((g) => g.known);
-  const sections: Record<LeadSection, LeadGroup[]> = { photo: [], video: [], backup: [], unlikely: [] };
+  const sections: Record<LeadSection, LeadGroup[]> = { photo: [], video: [], backup: [], texted: [], unlikely: [] };
   for (const g of groups) if (!g.known) sections[g.section].push(g);
 
   // Within a section: backup and video put agents he has never texted first,
-  // then the priciest listing; photo and unlikely go by the priority score the
-  // pipeline uses (coming soon first, then price-weighted photo opportunity).
+  // then the priciest listing; texted goes by who has waited longest since his
+  // last text; photo and unlikely go by the priority score the pipeline uses
+  // (coming soon first, then price-weighted photo opportunity).
   for (const key of LEAD_SECTION_ORDER) {
     sections[key].sort((a, b) =>
       key === "backup" || key === "video"
         ? (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) || (b.best.price ?? 0) - (a.best.price ?? 0)
-        : byLeadPriority(a.best, b.best)
+        : key === "texted"
+          ? (a.textedAt?.getTime() ?? 0) - (b.textedAt?.getTime() ?? 0) || byLeadPriority(a.best, b.best)
+          : byLeadPriority(a.best, b.best)
     );
   }
   known.sort(
@@ -175,7 +182,10 @@ export async function getLeadsBoard(): Promise<LeadsBoard> {
   );
   const agentCount = groups.filter((g) => !g.key.startsWith("listing:")).length;
 
-  return { known, sections, openLeadCount: openLeads.length, queuedCount, agentCount, addressById };
+  const recent = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const unscoredCount = openLeads.filter((l) => isUnscored(l) && l.foundAt.getTime() > recent).length;
+
+  return { known, sections, openLeadCount: openLeads.length, queuedCount, agentCount, addressById, unscoredCount };
 }
 
 function contactLine(agent: Agent | null, key: string, textedAt: Date | undefined): string | null {

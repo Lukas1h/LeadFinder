@@ -25,7 +25,7 @@ function shortMoney(n: number): string {
 }
 
 export interface BadgeText {
-  kind: "new" | "comingSoon" | "priceCut" | "fewPhotos" | "photoScore" | "builder" | "declined" | "officeClient";
+  kind: "new" | "comingSoon" | "priceCut" | "fewPhotos" | "photoScore" | "unscored" | "builder" | "declined" | "officeClient";
   label: string;
   /** Tooltip text, where the badge has one. */
   detail?: string;
@@ -68,6 +68,19 @@ export function photoScoreTier(score: number): { label: string; style: string } 
 
 export function fewPhotosBadge(count: number): BadgeText {
   return { kind: "fewPhotos", label: `Only ${count} photo${count === 1 ? "" : "s"}` };
+}
+
+/**
+ * A listing with enough photos to judge that never got a score, because the
+ * scoring call failed. It sits under Photo opportunities by default, so the
+ * card has to say that's a guess rather than a verdict on the photos.
+ */
+export function unscoredBadge(): BadgeText {
+  return {
+    kind: "unscored",
+    label: "Photos not scored",
+    detail: "Photo scoring didn't run for this listing, so it's listed as a photo opportunity by default. Look at the photos before pitching on them.",
+  };
 }
 
 export function builderBadge(): BadgeText {

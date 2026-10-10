@@ -1,7 +1,7 @@
 import type { AgentRelationshipStatus, PresetType, LeadStatus, Listing, Agent } from "@/db/schema";
 import { naturalStreetName } from "@/lib/sms";
 import { areaPhrase } from "@/lib/areaPhrase";
-import { leadSectionForListing, LEAD_SECTION_LABELS, LEAD_SECTION_BRIEFS } from "@/lib/leadSections";
+import { leadSectionForListing, LEAD_SECTION_LABELS, LEAD_SECTION_BRIEFS, type LeadSection } from "@/lib/leadSections";
 import { fetchImagePart, callGemini } from "@/lib/gemini";
 
 // Gemini 3.5 Flash (not Lite) — this is a low-volume, synchronous,
@@ -159,12 +159,22 @@ const VIDEO_NO_TURNAROUND_RULE = [
 ].join("\n");
 
 /**
+ * The section a draft is written for. Worked out fresh from the listing, except
+ * for "Texted before": that one depends on his history with the agent, which
+ * only the stored section (settled each time the Leads page loads) knows.
+ */
+function draftSection(listing: Listing, relationshipStatus: string | null | undefined): LeadSection {
+  if (listing.status === "new" && listing.leadSection === "texted") return "texted";
+  return leadSectionForListing(listing, relationshipStatus);
+}
+
+/**
  * The "24 hour turnaround is worth including" nudge, omitted when the listing is
  * one we're pitching as video so the model is never handed the claim in the
  * first place for that message.
  */
 function turnaroundNudge(input: DraftMessageInput): string {
-  const section = input.listing ? leadSectionForListing(input.listing, input.agentRelationshipStatus) : null;
+  const section = input.listing ? draftSection(input.listing, input.agentRelationshipStatus) : null;
   if (section === "video") return "";
   return " He can have photos done within 24 hours. Only mention it when speed is the whole angle (a backup for a busy week, a last minute shoot). For a coming soon, missing or poor photos message, leave it out and keep it short.";
 }
@@ -204,7 +214,7 @@ function formatListingFacts(input: DraftMessageInput): string {
   // and pitches photo quality at agents whose photos are already fine — the
   // one thing the backup section exists to avoid saying.
   if (input.listing) {
-    const section = leadSectionForListing(input.listing, input.agentRelationshipStatus);
+    const section = draftSection(input.listing, input.agentRelationshipStatus);
     lines.push(`Leads page section: ${LEAD_SECTION_LABELS[section]} — ${LEAD_SECTION_BRIEFS[section]}`);
   }
   if (input.brokerName) lines.push(`Brokerage: ${input.brokerName}`);

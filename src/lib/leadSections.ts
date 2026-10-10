@@ -15,7 +15,7 @@ import { and, eq, inArray, max } from "drizzle-orm";
 import { db } from "@/db";
 import { agentInteractions, agents, listings, messageSends, type Listing } from "@/db/schema";
 
-export type LeadSection = "photo" | "video" | "backup" | "unlikely";
+export type LeadSection = "photo" | "video" | "backup" | "texted" | "unlikely";
 
 /** "Listed or relisted in the last two weeks, or took a price cut recently." */
 export const LEAD_FRESH_DAYS = 14;
@@ -38,6 +38,7 @@ export const LEAD_SECTION_LABELS: Record<LeadSection, string> = {
   photo: "Photo opportunities",
   video: "Video opportunities",
   backup: "Backup opportunities",
+  texted: "Texted before",
   unlikely: "Unlikely matches",
 };
 
@@ -46,6 +47,7 @@ export const LEAD_SECTION_BRIEFS: Record<LeadSection, string> = {
   photo: "Bad or missing photos — the opening is to offer to shoot the listing properly.",
   video: "High-end listing with good existing photos — the opening is to offer video, not basic photos.",
   backup: "Ordinary listing with photos he's already happy with — do NOT pitch him on photo quality. He's a backup option, and has been: he's busy, his usual person is booked, or he needs a quick turnaround.",
+  texted: "He texted or called this agent before, about another listing, and never heard back. Do NOT introduce him again or reuse a first-contact opener — this is a short second touch that picks up from the earlier text, with this new listing as the reason.",
   unlikely: "Do not text this agent about this listing.",
 };
 
@@ -148,7 +150,11 @@ export function isLeadUnlikely(listing: LeadSectionInput): boolean {
  *
  * The photo boundary is 6: a score of 6 or better counts as photos being fine
  * and belongs in backup/video, and only 5 or below (or unscored) is a photo
- * opportunity. A matching floor of 6 is what the preset targeting uses, so the
+ * opportunity.
+ *
+ * "Texted before" sits between the two contact rules: inside a week the lead
+ * waits in unlikely, and after that a still-cold agent's listings collect in
+ * texted rather than going back among the people who've never heard from him. A matching floor of 6 is what the preset targeting uses, so the
  * two can never disagree about where the line sits.
  */
 export function leadSection(listing: LeadSectionInput): LeadSection {
@@ -159,6 +165,11 @@ export function leadSection(listing: LeadSectionInput): LeadSection {
   const goodPhotos = score != null && score >= LEAD_GOOD_PHOTO_SCORE;
 
   if (isRecentlyTexted(listing.lastContactedAt)) return "unlikely";
+  // A stranger he has already texted can't get an opener again — every template
+  // starts "Hey there, I'm Lukas" and they've had that one. They get their own
+  // section whatever the listing looks like. People who answered are warm or
+  // better by now and keep the section the listing earns.
+  if (listing.lastContactedAt && (listing.relationshipStatus ?? "cold") === "cold") return "texted";
   if (!goodPhotos && fresh) return "photo";
   if (price != null && price > LEAD_VIDEO_PRICE && goodPhotos && fresh) return "video";
   return "backup";
@@ -173,7 +184,7 @@ export function leadSectionForListing(
 }
 
 /** Display order on the Leads page, most actionable first. */
-export const LEAD_SECTION_ORDER: LeadSection[] = ["photo", "video", "backup", "unlikely"];
+export const LEAD_SECTION_ORDER: LeadSection[] = ["photo", "video", "backup", "texted", "unlikely"];
 
 /**
  * Recomputes and stores listings.leadSection for the given ids, and returns

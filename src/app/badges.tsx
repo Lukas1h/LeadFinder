@@ -9,7 +9,7 @@ import { RELATIONSHIP_LABELS } from "./agents/relationshipLabels";
 // The wording lives in lib/leadBadges.ts (a plain module) so the iPhone app's
 // JSON API can render the same labels server-side — a value can't be imported
 // out of a "use client" file — while this file keeps the presentation.
-import { officeClientBadge, agentDeclinedBadge, duplicateAgentBadge, fewPhotosBadge, photoScoreTier, priceCutBadge } from "@/lib/leadBadges";
+import { officeClientBadge, agentDeclinedBadge, duplicateAgentBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, unscoredBadge } from "@/lib/leadBadges";
 
 export function NewBadge() {
   return (
@@ -140,6 +140,20 @@ export function FollowUpBadge({ followUpAt, followUpNote }: { followUpAt: Date; 
     <Tooltip>
       <TooltipTrigger asChild>{badge}</TooltipTrigger>
       <TooltipContent>{followUpNote}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+export function UnscoredBadge() {
+  const badge = unscoredBadge();
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="outline" className="text-muted-foreground">
+          {badge.label}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{badge.detail}</TooltipContent>
     </Tooltip>
   );
 }

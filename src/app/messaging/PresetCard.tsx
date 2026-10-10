@@ -29,6 +29,7 @@ const SECTION_NAMES: Record<string, string> = {
   photo: "photo opportunities",
   video: "video opportunities",
   backup: "backup opportunities",
+  texted: "texted before",
   unlikely: "unlikely matches",
 };
 

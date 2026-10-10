@@ -255,6 +255,7 @@ export function PresetForm({
                         <SelectItem value="photo">Photo opportunities</SelectItem>
                         <SelectItem value="video">Video opportunities</SelectItem>
                         <SelectItem value="backup">Backup opportunities</SelectItem>
+                        <SelectItem value="texted">Texted before</SelectItem>
                         <SelectItem value="unlikely">Unlikely matches</SelectItem>
                       </SelectContent>
                     </Select>

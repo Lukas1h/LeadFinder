@@ -1,7 +1,7 @@
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
-import { FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { FEW_PHOTOS_THRESHOLD, isUnscored } from "@/lib/pipeline";
 import { isBuilderListing } from "@/lib/leadSections";
-import { officeClientBadge, agentDeclinedBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, type BadgeText } from "@/lib/leadBadges";
+import { officeClientBadge, agentDeclinedBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, unscoredBadge, type BadgeText } from "@/lib/leadBadges";
 import { sampleCardPhotos } from "@/lib/cardPhotos";
 import type { BookingWithDetails } from "@/app/booked/BookedList";
 import type { LeadGroup } from "@/app/leads-data";
@@ -83,6 +83,8 @@ export function leadBadges(
 
   if (lead.score != null) {
     badges.push({ kind: "photoScore", label: `${photoScoreTier(lead.score).label} (${lead.score}/10)`, detail: lead.scoreReasoning ?? undefined });
+  } else if (isUnscored(lead)) {
+    badges.push(unscoredBadge());
   }
 
   if (isBuilderListing(lead.brokerName)) badges.push({ kind: "builder", label: "Builder" });

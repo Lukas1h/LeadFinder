@@ -128,7 +128,9 @@ export function pickRecommendedPreset(
   // that intro beats any photo or price pitch (Bryan McKeun said yes within
   // minutes, Oct 8).
   const officePreset = presets.find((p) => p.sameOffice && !p.protected);
-  if (sameOffice && officePreset) return officePreset.id;
+  // It's still an opener ("Hey there, I'm Lukas"), so not for someone he has
+  // already texted.
+  if (sameOffice && officePreset && facts.leadSection !== "texted") return officePreset.id;
   if (knownAgent && aiPreset) return aiPreset.id;
   let recommendedPresetId: string | null = null;
   let bestCriteriaCount = -1;

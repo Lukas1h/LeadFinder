@@ -5,8 +5,8 @@ import { LeadActions } from "./LeadActions";
 import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
-import { NewBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, OfficeClientBadge } from "./badges";
-import { FEW_PHOTOS_THRESHOLD } from "@/lib/pipeline";
+import { NewBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, OfficeClientBadge, UnscoredBadge } from "./badges";
+import { FEW_PHOTOS_THRESHOLD, isUnscored } from "@/lib/pipeline";
 import { isBuilderListing, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER } from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,12 @@ import { getLeadsBoard, type LeadGroup } from "./leads-data";
 // time spent waiting on Zillapi/Gemini.
 export const maxDuration = 300;
 
+/**
+ * This many recent leads without a score means scoring itself is broken, not
+ * that a few photos failed to download (a normal day leaves one at most).
+ */
+const SCORING_DOWN_COUNT = 10;
+
 export default function LeadsPage() {
   return (
     <main className="max-w-3xl mx-auto w-full px-6 py-10">
@@ -41,7 +47,7 @@ export default function LeadsPage() {
 async function LeadsContent() {
   // Deliberately NOT "use cache" — see the comment in src/app/pipeline/page.tsx.
 
-  const { known, sections, openLeadCount, queuedCount, agentCount, addressById } = await getLeadsBoard();
+  const { known, sections, openLeadCount, queuedCount, agentCount, addressById, unscoredCount } = await getLeadsBoard();
 
   function card(g: LeadGroup) {
     const lead = g.best;
@@ -67,6 +73,7 @@ async function LeadsContent() {
               <FewPhotosBadge count={lead.photoCount} />
             )}
             {lead.score != null && <PhotoScoreBadge score={lead.score} reasoning={lead.scoreReasoning} />}
+            {isUnscored(lead) && <UnscoredBadge />}
             {isBuilderListing(lead.brokerName) && <Badge variant="outline">Builder</Badge>}
             {agent?.relationshipStatus === "declined" && (
               <AgentDeclinedBadge
@@ -117,6 +124,20 @@ async function LeadsContent() {
           <RefreshButton />
         </div>
       </header>
+
+      {unscoredCount >= SCORING_DOWN_COUNT && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+          <p className="font-medium">Photo scoring isn&rsquo;t running</p>
+          <p className="mt-1">
+            {unscoredCount} recent listings have no photo score, so they&rsquo;re under Photo opportunities whether
+            their photos are bad or not. The usual cause is the Gemini account running out of credit:{" "}
+            <a href="https://ai.studio/projects" target="_blank" rel="noreferrer" className="underline">
+              top it up
+            </a>
+            , then tap Refresh and they score themselves.
+          </p>
+        </div>
+      )}
 
       {openLeadCount === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">

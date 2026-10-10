@@ -21,6 +21,14 @@ export function isWarmAgentStatus(status: AgentRelationshipStatus): boolean {
 // as a bad photo-quality score — the agent likely hasn't hired anyone yet.
 export const FEW_PHOTOS_THRESHOLD = 5;
 
+/**
+ * Enough photos to judge, but no score: the scoring call failed for this one
+ * (galleries under the threshold are never scored, so those don't count).
+ */
+export function isUnscored(listing: Pick<Listing, "score" | "photoCount">): boolean {
+  return listing.score == null && (listing.photoCount ?? 0) >= FEW_PHOTOS_THRESHOLD;
+}
+
 // A price cut on a listing whose photos are this weak (or that has fewer than
 // FEW_PHOTOS_THRESHOLD photos) is the "relaunch with new photos" pitch, so it
 // goes back in the leads queue even if it was passed on — see

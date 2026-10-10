@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { listings } from "@/db/schema";
 import { inArray } from "drizzle-orm";
 import { fetchFullListing } from "@/lib/zillapi";
-import { insertAndEnrichListings } from "@/lib/sync";
+import { insertAndEnrichListings, retryMissingPhotoScores } from "@/lib/sync";
 import { fetchAgentMailMessage } from "@/lib/agentmail";
 import { applyPriceCutsToExisting, parseEmailPriceCuts } from "@/lib/priceCuts";
 import type { NewListing } from "@/db/schema";
@@ -219,6 +219,11 @@ async function handle(req: Request): Promise<Response> {
 
   // fetchFullListing already asked Zillapi about the agent.
   const inserted = await insertAndEnrichListings(candidates, { agentAlreadyFetched: true });
+
+  // Listings arrive here all day and the sync cron runs once, so this is where
+  // a backlog of unscored listings (scoring was down, then came back) gets
+  // worked off. A few per alert; it stops at once if scoring is still down.
+  await retryMissingPhotoScores(8).catch((error) => console.error("agentmail webhook: score retry failed", error));
 
   if (staleRecommendations.length > 0) {
     console.log("agentmail webhook: skipped stale recommendations", staleRecommendations);

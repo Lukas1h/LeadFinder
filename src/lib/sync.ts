@@ -8,7 +8,7 @@ import { FEW_PHOTOS_THRESHOLD, WARM_AGENT_STATUSES } from "@/lib/pipeline";
 import { linkListingToAgent } from "@/lib/agentIdentity";
 import { refreshLeadSections } from "@/lib/leadSections";
 import { dropDuplicateListings } from "@/lib/listingDedupe";
-import { and, eq, gte, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 const MAX_ITEMS_PER_SOURCE = 50;
@@ -32,8 +32,15 @@ const ENRICHMENT_CONCURRENCY = 2;
 // from runSync, so both the daily cron and the manual Refresh button
 // self-heal recently-failed scores instead of leaving them null until
 // someone notices and fixes it by hand.
-const SCORE_RETRY_WINDOW_DAYS = 3;
-const SCORE_RETRY_LIMIT = 20;
+//
+// Widened on 2026-10-10 after the Gemini account ran out of credit for a day
+// and a half: 120 listings came in unscored, and at 20 a day in no particular
+// order (and nothing older than three days) most of them would never have been
+// picked up. Newest first now, since those are the ones still being worked,
+// and also run from the email-alert webhook so a backlog drains through the
+// day instead of waiting on the one daily cron.
+const SCORE_RETRY_WINDOW_DAYS = 7;
+const SCORE_RETRY_LIMIT = 40;
 
 // Same failure mode as the photo-score retry above, for agent info instead:
 // insertAndEnrichListings only enriches rows it just inserted (Postgres's
@@ -181,21 +188,23 @@ async function retryMissingAgentInfo(): Promise<number> {
  * permanently unscoreable (a dead/broken image URL, say) doesn't burn an
  * OpenAI/Gemini call on every single sync run forever.
  */
-async function retryMissingPhotoScores(): Promise<number> {
+export async function retryMissingPhotoScores(limit = SCORE_RETRY_LIMIT): Promise<number> {
   const cutoff = new Date(Date.now() - SCORE_RETRY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const candidates = await db
     .select({ id: listings.id, photos: listings.photos })
     .from(listings)
-    .where(and(isNull(listings.score), gte(listings.foundAt, cutoff)));
+    .where(and(isNull(listings.score), gte(listings.foundAt, cutoff)))
+    .orderBy(desc(listings.foundAt));
 
   const eligible = candidates
     .filter((row) => (row.photos?.length ?? 0) >= FEW_PHOTOS_THRESHOLD)
-    .slice(0, SCORE_RETRY_LIMIT);
+    .slice(0, limit);
   if (eligible.length === 0) return 0;
 
   let rescored = 0;
   for (let i = 0; i < eligible.length; i += ENRICHMENT_CONCURRENCY) {
     const batch = eligible.slice(i, i + ENRICHMENT_CONCURRENCY);
+    const before = rescored;
     await Promise.all(
       batch.map(async (row) => {
         const result = await scorePhotos(row.photos);
@@ -207,6 +216,10 @@ async function retryMissingPhotoScores(): Promise<number> {
         rescored++;
       })
     );
+    // A whole batch coming back empty means scoring itself is down (out of
+    // credit, a bad key), and the rest would only download photos to fail the
+    // same way.
+    if (rescored === before) break;
   }
 
   if (rescored > 0) {

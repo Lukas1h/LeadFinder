@@ -26,9 +26,9 @@ export function registerListingTools(server: McpServer): void {
         isComingSoon: z.boolean().optional(),
         hasBooking: z.boolean().optional(),
         leadSection: z
-          .enum(["photo", "video", "backup", "unlikely"])
+          .enum(["photo", "video", "backup", "texted", "unlikely"])
           .optional()
-          .describe("The Leads page section (photo/video/backup opportunities, unlikely matches) — only meaningful for status 'new'"),
+          .describe("The Leads page section (photo/video/backup opportunities, texted = a cold agent already texted before with no reply, unlikely matches) — only meaningful for status 'new'"),
         queued: z
           .boolean()
           .optional()
