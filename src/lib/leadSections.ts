@@ -109,17 +109,29 @@ export function isBuilderListing(brokerName: string | null | undefined): boolean
   return !!brokerName && BUILDER_BROKER.test(brokerName);
 }
 
+/**
+ * Brokerages that arrange listing media themselves. Redfin books and pays for
+ * its agents' photos centrally, so the agent has no say in who shoots and
+ * there's nothing to pitch them (Lukas, 2026-10-09).
+ */
+const IN_HOUSE_MEDIA_BROKER = /\bredfin\b/i;
+
+export function hasInHouseMedia(brokerName: string | null | undefined): boolean {
+  return !!brokerName && IN_HOUSE_MEDIA_BROKER.test(brokerName);
+}
+
 /** Texted or called inside the last LEAD_RECENT_CONTACT_DAYS. */
 export function isRecentlyTexted(lastTextedAt: Date | null | undefined): boolean {
   const age = daysSince(lastTextedAt);
   return age != null && age < LEAD_RECENT_CONTACT_DAYS;
 }
 
-/** Under the floor, unreachable, a builder, or the agent already turned us down. */
+/** Under the floor, unreachable, a builder, a brokerage that handles its own media, or the agent already turned us down. */
 export function isLeadUnlikely(listing: LeadSectionInput): boolean {
   if (listing.price != null && listing.price < LEAD_MIN_PRICE) return true;
   if (hasNoAgent(listing)) return true;
   if (isBuilderListing(listing.brokerName)) return true;
+  if (hasInHouseMedia(listing.brokerName)) return true;
   return listing.relationshipStatus === "declined";
 }
 
