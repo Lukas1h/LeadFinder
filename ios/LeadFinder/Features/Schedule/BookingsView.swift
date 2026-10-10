@@ -10,6 +10,7 @@ import SwiftUI
 struct BookingsView: View {
     @Environment(AppState.self) private var appState
     @State private var openBooking: Booking?
+    @State private var newBooking = false
 
     var body: some View {
         Group {
@@ -24,6 +25,19 @@ struct BookingsView: View {
         .background(Theme.background)
         .navigationTitle("Bookings")
         .task { await appState.bookings.load() }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { newBooking = true } label: { Label("Add booking", systemImage: "plus") }
+            }
+        }
+        .sheet(isPresented: $newBooking) {
+            BookingEditSheet { _ in
+                Task {
+                    await appState.bookings.load(force: true)
+                    await appState.schedule.load(force: true)
+                }
+            }
+        }
         .sheet(item: $openBooking) { booking in
             BookingDetailView(booking: booking)
                 .presentationDetents([.large])

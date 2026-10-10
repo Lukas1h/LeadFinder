@@ -248,6 +248,86 @@ actor APIClient {
         _ = try await send("DELETE", "api/app/v1/agents/\(id)", body: Empty?.none, as: OK.self)
     }
 
+    // MARK: - Bookings
+
+    /// Fields left nil are left alone by the server, except `jobDate`, where
+    /// nil is sent as null: no date.
+    struct BookingEdit: Encodable, Sendable {
+        struct Item: Encodable, Sendable {
+            var description: String
+            var amount: Int
+        }
+
+        var address: String?
+        var city: String?
+        var state: String?
+        var contactName: String
+        var contactPhone: String
+        var jobDate: String?
+        var lockboxCode: String
+        var notes: String
+        var invoiceNote: String
+        var lineItems: [Item]
+        var driveHours: Double?
+        var editingHours: Double?
+        var shootingHours: Double?
+        var logisticsHours: Double?
+        var additionalCosts: Int?
+
+        private enum CodingKeys: String, CodingKey {
+            case address, city, state, contactName, contactPhone, jobDate, lockboxCode, notes, invoiceNote
+            case lineItems, driveHours, editingHours, shootingHours, logisticsHours, additionalCosts
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encodeIfPresent(address, forKey: .address)
+            try c.encodeIfPresent(city, forKey: .city)
+            try c.encodeIfPresent(state, forKey: .state)
+            try c.encode(contactName, forKey: .contactName)
+            try c.encode(contactPhone, forKey: .contactPhone)
+            if let jobDate {
+                try c.encode(jobDate, forKey: .jobDate)
+            } else {
+                try c.encodeNil(forKey: .jobDate)
+            }
+            try c.encode(lockboxCode, forKey: .lockboxCode)
+            try c.encode(notes, forKey: .notes)
+            try c.encode(invoiceNote, forKey: .invoiceNote)
+            try c.encode(lineItems, forKey: .lineItems)
+            try c.encodeIfPresent(driveHours, forKey: .driveHours)
+            try c.encodeIfPresent(editingHours, forKey: .editingHours)
+            try c.encodeIfPresent(shootingHours, forKey: .shootingHours)
+            try c.encodeIfPresent(logisticsHours, forKey: .logisticsHours)
+            try c.encodeIfPresent(additionalCosts, forKey: .additionalCosts)
+        }
+    }
+
+    /// A job with no tracked listing behind it. Needs a city.
+    func createBooking(_ edit: BookingEdit) async throws {
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("POST", "api/app/v1/bookings", body: edit, as: OK.self)
+    }
+
+    func updateBooking(id: String, _ edit: BookingEdit) async throws {
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("PATCH", "api/app/v1/bookings/\(id)", body: edit, as: OK.self)
+    }
+
+    /// Cancels the job; its line items go with it.
+    func deleteBooking(id: String) async throws {
+        struct Empty: Encodable, Sendable {}
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("DELETE", "api/app/v1/bookings/\(id)", body: Empty?.none, as: OK.self)
+    }
+
+    /// One booking, fresh — what the detail screen shows after an edit.
+    func bookingDetail(_ id: String) async throws -> Booking {
+        struct Response: Decodable, Sendable { let booking: Booking }
+        let response: Response = try await read("api/app/v1/bookings/\(id)")
+        return response.booking
+    }
+
     // MARK: - Reminders
 
     struct ReminderInput: Encodable, Sendable {

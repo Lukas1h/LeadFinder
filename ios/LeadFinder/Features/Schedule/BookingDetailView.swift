@@ -1,14 +1,54 @@
 import SwiftUI
 
-/// Read-only booking detail: everything the Phase 2 payload carries, plus the
-/// links that only open Maps, the dialer, or Safari. No action buttons — mark
-/// invoice sent / complete / reopen are Phase 3.
+/// One booking: the job, where, the contact, line items and status, plus the
+/// links that open Maps, the dialer or Safari. Edit changes any of it (or
+/// deletes the booking).
 struct BookingDetailView: View {
-    let booking: Booking
+    /// What the opener had. Replaced by a fresh copy after an edit.
+    private let initial: Booking
+    private var booking: Booking { fresh ?? initial }
 
+    @State private var fresh: Booking?
     @State private var openContact: AgentsResponse.Row?
+    @State private var showEdit = false
+
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    init(booking: Booking) {
+        initial = booking
+    }
 
     var body: some View {
+        NavigationStack {
+            detail
+                .navigationTitle("Booking")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Edit") { showEdit = true }
+                    }
+                }
+                .sheet(isPresented: $showEdit) {
+                    BookingEditSheet(booking: booking) { deleted in
+                        Task {
+                            await appState.bookings.load(force: true)
+                            await appState.schedule.load(force: true)
+                            if deleted {
+                                dismiss()
+                            } else if let updated = try? await APIClient.shared.bookingDetail(booking.id) {
+                                fresh = updated
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    private var detail: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header
@@ -31,8 +71,6 @@ struct BookingDetailView: View {
         }
         .background(Theme.background)
         .sheet(item: $openContact) { AgentDirectoryDetail(agent: $0) }
-        .navigationTitle("Booking")
-        .navigationBarTitleDisplayMode(.inline)
     }
 
     // MARK: - Header
