@@ -1,4 +1,17 @@
 export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+const VERTEX_BASE_URL = "https://aiplatform.googleapis.com/v1/publishers/google/models";
+
+/**
+ * Google hands out two kinds of key for the same models, and each is only let
+ * in at its own door: an AI Studio key (prepaid credit, which is what ran dry
+ * on 2026-10-08) at generativelanguage.googleapis.com, and a Google Cloud key
+ * (billed to the Cloud project) at Vertex. They look alike — both start "AQ." —
+ * and the wrong door answers 403 API_KEY_SERVICE_BLOCKED, so the first call
+ * with a key finds out which it is and the rest go straight there. The request
+ * and response are the same either way, which means GEMINI_API_KEY can hold
+ * whichever key has credit and nothing else needs to change.
+ */
+const endpointForKey = new Map<string, string>();
 
 const MAX_ATTEMPTS = 3;
 
@@ -66,17 +79,18 @@ export interface CallGeminiInput {
  * (JSON.parse for a structured response, or use the text as-is).
  */
 export async function callGemini(input: CallGeminiInput): Promise<string | null> {
-  const url = `${GEMINI_BASE_URL}/${input.model}:generateContent`;
+  let base = endpointForKey.get(input.apiKey) ?? GEMINI_BASE_URL;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const res = await fetch(url, {
+    const res = await fetch(`${base}/${input.model}:generateContent`, {
       method: "POST",
       headers: {
         "x-goog-api-key": input.apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents: [{ parts: input.parts }],
+        // Vertex rejects a turn with no role; AI Studio doesn't mind either way.
+        contents: [{ role: "user", parts: input.parts }],
         generationConfig: input.generationConfig,
       }),
     });
@@ -84,6 +98,15 @@ export async function callGemini(input: CallGeminiInput): Promise<string | null>
     if (!res.ok) {
       const isRetryable = res.status === 429 || res.status >= 500;
       const body = await res.text();
+
+      // The key belongs to the other endpoint. Doesn't count as an attempt.
+      if (res.status === 403 && body.includes("API_KEY_SERVICE_BLOCKED") && !endpointForKey.has(input.apiKey)) {
+        base = base === GEMINI_BASE_URL ? VERTEX_BASE_URL : GEMINI_BASE_URL;
+        endpointForKey.set(input.apiKey, base);
+        attempt--;
+        continue;
+      }
+
       console.error(`${input.logLabel}: Gemini ${res.status} (attempt ${attempt}/${MAX_ATTEMPTS})`, body);
 
       if (isRetryable && attempt < MAX_ATTEMPTS) {
@@ -100,6 +123,7 @@ export async function callGemini(input: CallGeminiInput): Promise<string | null>
       return null;
     }
 
+    endpointForKey.set(input.apiKey, base);
     const data = (await res.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
