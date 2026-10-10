@@ -201,12 +201,62 @@ actor APIClient {
 
     /// Records how a message went: "keep_in_touch" or "declined". This is the
     /// web's `markSendReply`, which writes an interaction and moves the agent's
-    /// and listing's status. **It sends nothing** — the two send paths on the web
-    /// (Send samples, Compose) are deliberately not exposed to the phone.
+    /// and listing's status. **It sends nothing**; `sendSamples` is the send.
     func recordMessageReply(id: String, outcome: String) async throws {
         struct Body: Encodable, Sendable { let outcome: String }
         struct OK: Decodable, Sendable { let ok: Bool }
         _ = try await send("POST", "api/app/v1/messages/\(id)/reply", body: Body(outcome: outcome), as: OK.self)
+    }
+
+    /// Emails the template's sample email to the agent: **a real send**, so the
+    /// only caller is the message screen's confirm dialog. `email` is only used
+    /// when the agent has none on file. Returns the server's note, if any.
+    func sendSamples(messageId: String, email: String?) async throws -> String? {
+        struct Body: Encodable, Sendable { let email: String? }
+        struct Result: Decodable, Sendable { let note: String? }
+        return try await send(
+            "POST",
+            "api/app/v1/messages/\(messageId)/samples",
+            body: Body(email: email),
+            as: Result.self
+        ).note
+    }
+
+    // MARK: - Reminders
+
+    struct ReminderInput: Encodable, Sendable {
+        var title: String
+        /// "YYYY-MM-DD"
+        var date: String
+        /// "HH:MM", nil for all day.
+        var time: String?
+        var durationMinutes: Int?
+        var notes: String?
+        var agentId: String?
+        var bookingId: String?
+    }
+
+    func createReminder(_ input: ReminderInput) async throws {
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("POST", "api/app/v1/reminders", body: input, as: OK.self)
+    }
+
+    func updateReminder(id: String, _ input: ReminderInput) async throws {
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("PUT", "api/app/v1/reminders/\(id)", body: input, as: OK.self)
+    }
+
+    /// Ticks a reminder off, or puts it back with `done: false`.
+    func setReminderDone(id: String, done: Bool) async throws {
+        struct Body: Encodable, Sendable { let done: Bool }
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("POST", "api/app/v1/reminders/\(id)/done", body: Body(done: done), as: OK.self)
+    }
+
+    func deleteReminder(id: String) async throws {
+        struct Empty: Encodable, Sendable {}
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("DELETE", "api/app/v1/reminders/\(id)", body: Empty?.none, as: OK.self)
     }
 
     // MARK: - Phase 3+ writes

@@ -11,9 +11,10 @@ import { etagged } from "../helpers";
  * function the web card renders, so the numbers can't disagree between the two
  * surfaces. Same for getRecentMessageSends.
  *
- * Nothing here can send a message. The web's "Send samples" and "Compose" are
- * real SMTP sends and stay on the web; the phone only gets the two actions that
- * record an outcome.
+ * Nothing here sends a message. Each message's own screen has the actions:
+ * record an outcome (./[id]/reply) or email the template's samples
+ * (./[id]/samples, a real send behind a confirm in the app). "Compose" stays on
+ * the web.
  */
 
 /** How many templates the card lists, as on the web. */

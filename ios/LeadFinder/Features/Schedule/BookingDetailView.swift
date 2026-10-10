@@ -6,6 +6,8 @@ import SwiftUI
 struct BookingDetailView: View {
     let booking: Booking
 
+    @State private var openContact: AgentsResponse.Row?
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -28,6 +30,7 @@ struct BookingDetailView: View {
             .padding(16)
         }
         .background(Theme.background)
+        .sheet(item: $openContact) { AgentDirectoryDetail(agent: $0) }
         .navigationTitle("Booking")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -95,9 +98,26 @@ struct BookingDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             sectionTitle("Contact")
             if let name = booking.contactName?.nilIfBlank {
-                Text(name)
-                    .font(.headline)
-                    .foregroundStyle(Theme.primaryText)
+                if let agentId = booking.contactAgentId {
+                    // The contact is an agent: tap through to their screen.
+                    Button {
+                        openContact = AgentsResponse.Row(
+                            id: agentId,
+                            name: name,
+                            phone: booking.contactPhone,
+                            email: nil,
+                            relationshipStatus: nil,
+                            lastContactedAt: nil
+                        )
+                    } label: {
+                        AgentRow(name: name, showsChevron: true)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(name)
+                        .font(.headline)
+                        .foregroundStyle(Theme.primaryText)
+                }
             }
             if let phone = booking.contactPhone?.nilIfBlank {
                 if let telURL {

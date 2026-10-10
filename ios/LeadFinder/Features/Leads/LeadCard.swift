@@ -15,6 +15,7 @@ struct LeadCard: View {
 
     @State private var showOthers = false
     @State private var showContact = false
+    @State private var openListing: Listing?
     @State private var working: Action?
 
     private enum Action: String { case pass }
@@ -35,6 +36,7 @@ struct LeadCard: View {
             if openContactOnAppear { showContact = true }
             #endif
         }
+        .sheet(item: $openListing) { LeadListingSheet(listing: $0, agent: group.agent) }
         .sheet(isPresented: $showContact) {
             ContactSheet(
                 listingId: group.best.id,
@@ -42,7 +44,7 @@ struct LeadCard: View {
                 agentName: group.agentName ?? group.best.agentName,
                 agentPhone: group.agentPhone ?? group.best.agentPhone,
                 agentSubtitle: group.best.addressLine.nilIfBlank,
-                relationshipStatus: group.agent?.relationshipStatus
+                agent: group.agent
             )
         }
     }
@@ -117,7 +119,8 @@ struct LeadCard: View {
     // MARK: - Agent
 
     private var header: some View {
-        AgentRow(
+        TappableAgentRow(
+            agent: group.agent,
             name: group.agentName ?? group.best.agentName,
             // Contact first, as on the web: brokerage names truncate. Only
             // what has actually happened — no "Never texted" on every card.
@@ -125,9 +128,8 @@ struct LeadCard: View {
                 .compactMap { $0 }
                 .joined(separator: " · ")
                 .nilIfBlank,
-            // The web hides the badge on cold agents: it's the neutral
-            // baseline and almost every lead, so it would be noise.
-            relationshipStatus: group.agent?.relationshipStatus.flatMap { $0 == "cold" ? nil : $0 }
+            brokerage: group.brokerName,
+            hidesCold: true
         )
         .padding(.vertical, -6)
     }
@@ -227,7 +229,8 @@ struct LeadCard: View {
 
             if showOthers {
                 ForEach(group.others) { listing in
-                    ListingRow(listing: listing)
+                    Button { openListing = listing } label: { ListingRow(listing: listing, showsChevron: true) }
+                        .buttonStyle(.plain)
                 }
             }
         }

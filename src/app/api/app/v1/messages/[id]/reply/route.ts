@@ -8,9 +8,7 @@ import { badRequest, isUuid, notFound, oneOf, readJson, withErrors } from "../..
  * This is the web's own markSendReply, which is the same pair of buttons on the
  * message dialog. It writes an interaction, stamps the reply time, and moves the
  * agent's relationship status and the listing's status — but **it sends
- * nothing**. No path from this endpoint reaches the mailer: the web's two real
- * send paths ("Send samples" and "Compose") have no API here on purpose, so the
- * phone can never put mail in an agent's inbox by accident.
+ * nothing**. Emailing samples is its own endpoint (`./samples`).
  */
 export const POST = withErrors(async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
   const denied = requireAppAuth(req);

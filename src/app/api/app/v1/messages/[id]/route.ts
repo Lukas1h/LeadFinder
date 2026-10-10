@@ -36,8 +36,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // with neither), so both are nullable rather than a 404.
     agent: detail.agent ? agentJson(detail.agent) : null,
     listing: detail.listing ? listingJson(detail.listing, "first") : null,
-    // Sent so the app can name the preset it *would* have emailed. The phone
-    // never sends it — there's deliberately no send endpoint here.
+    // The preset "Send samples" would email, so the app can name it in its
+    // confirm. Sending is POST ./samples.
     followUpEmail: detail.followUpEmail,
   });
 }

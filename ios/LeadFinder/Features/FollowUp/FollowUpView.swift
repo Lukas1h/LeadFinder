@@ -24,14 +24,7 @@ struct FollowUpView: View {
         // The same agent sheet the directory opens, so an agent looks and
         // behaves the same wherever you tap them.
         .sheet(item: $openAgent) { agent in
-            AgentDirectoryDetail(agent: AgentsResponse.Row(
-                id: agent.id,
-                name: agent.name,
-                phone: agent.phone,
-                email: agent.email,
-                relationshipStatus: agent.relationshipStatus,
-                lastContactedAt: agent.lastContactedAt
-            ))
+            AgentDirectoryDetail(agent: AgentsResponse.Row(agent: agent))
         }
         .refreshable { await appState.followUp.load(force: true) }
         .task { await appState.followUp.load() }
@@ -265,7 +258,6 @@ private struct FollowUpAgentRow: View {
         VStack(alignment: .leading, spacing: 4) {
             AgentRow(
                 name: agent.displayName,
-                phone: agent.phone?.nilIfBlank,
                 subtitle: contactLine,
                 relationshipStatus: agent.relationshipStatus?.nilIfBlank
             )

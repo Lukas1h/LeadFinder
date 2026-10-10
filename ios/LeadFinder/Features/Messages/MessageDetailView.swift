@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// One message in full, with the two actions that are safe to take from a phone.
+/// One message in full, with what can be done about the reply: email the
+/// template's samples, keep in touch, or mark declined.
 ///
-/// "Keep in touch" and "Declined" are the web's own buttons and only record
-/// what happened — an interaction, a reply timestamp, and the agent's and
-/// listing's status. Neither sends anything. The web's "Send samples" is
-/// deliberately not here: it sends real email through SMTP.
+/// "Keep in touch" and "Declined" only record what happened. "Send samples" is
+/// a real email, so it always goes through a confirm that names the template
+/// and the address first.
 struct MessageDetailView: View {
     let send: MessagesResponse.Send
+    /// Opens straight on the "Send samples" confirm, from the history row's
+    /// quick action.
+    var startsSamples = false
 
     @Environment(AppState.self) private var appState
     @State private var detail: MessageDetailResponse?
@@ -15,6 +18,11 @@ struct MessageDetailView: View {
     @State private var error: String?
     @State private var confirmDeclined = false
     @State private var didApply = false
+    @State private var confirmSamples = false
+    @State private var askForEmail = false
+    @State private var typedEmail = ""
+    @State private var samplesResult: String?
+    @State private var openListing: Listing?
 
     var body: some View {
         ScrollView {
@@ -54,17 +62,28 @@ struct MessageDetailView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                 }
-
-                if let followUp = detail?.followUpEmail {
-                    samplesNote(followUp)
-                }
             }
             .padding(.vertical, 12)
         }
         .background(Theme.background)
         .navigationTitle(send.channel == "email" ? "Email" : "Text")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        .task {
+            await load()
+            if startsSamples, canSendSamples, !didApply { beginSamples() }
+        }
+        .sheet(isPresented: $askForEmail) { emailEntry }
+        .sheet(item: $openListing) { LeadListingSheet(listing: $0, agent: detail?.agent) }
+        .confirmationDialog(
+            "Email \(samplesTemplateName) to \(detail?.agent?.email ?? "them")?",
+            isPresented: $confirmSamples,
+            titleVisibility: .visible
+        ) {
+            Button("Send email") { Task { await sendSamples(email: nil) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This emails \(send.recipient) now, from your address.")
+        }
         .confirmationDialog(
             "Mark \(send.recipient) as declined?",
             isPresented: $confirmDeclined,
@@ -127,10 +146,25 @@ struct MessageDetailView: View {
             // Once one of these has been applied the message has an outcome, so
             // offering the other one would contradict what was just recorded.
             if didApply {
-                Label("Recorded.", systemImage: "checkmark.circle")
+                Label(samplesResult ?? "Recorded.", systemImage: "checkmark.circle")
                     .font(.subheadline)
                     .foregroundStyle(Theme.positive)
             } else {
+                if canSendSamples {
+                    Button(action: beginSamples) {
+                        Label("Send samples", systemImage: "envelope.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .foregroundStyle(Theme.background)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isWorking)
+                    Text("Emails \"\(samplesTemplateName)\"")
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiaryText)
+                }
                 HStack(spacing: 10) {
                     actionButton("Keep in touch", "clock") {
                         Task { await apply(.keepInTouch) }
@@ -193,14 +227,8 @@ struct MessageDetailView: View {
                 .foregroundStyle(Theme.tertiaryText)
                 .kerning(0.6)
 
-            // Just a reference: calling and emailing an agent belongs on their
-            // own screen, not on every row that happens to mention them.
-            AgentRow(
-                name: agent.displayName,
-                phone: agent.phone,
-                subtitle: agent.email,
-                relationshipStatus: agent.relationshipStatus
-            )
+            // Tap through to their own screen to call, text or email.
+            TappableAgentRow(agent: agent, subtitle: agent.email)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()
@@ -213,7 +241,8 @@ struct MessageDetailView: View {
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(Theme.tertiaryText)
                 .kerning(0.6)
-            ListingRow(listing: listing)
+            Button { openListing = listing } label: { ListingRow(listing: listing, showsChevron: true) }
+                .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()
@@ -238,20 +267,89 @@ struct MessageDetailView: View {
         .padding(.horizontal, 16)
     }
 
-    /// The web offers to send this preset's sample email. The phone says what it
-    /// would be and leaves the sending to the web, where Compose lives.
-    private func samplesNote(_ followUp: MessageDetailResponse.FollowUpEmail) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label("Sample email: \(followUp.name)", systemImage: "envelope.badge")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Theme.primaryText)
-            Text("Sending email stays on the web, so an agent never gets a surprise from the phone.")
-                .font(.caption)
-                .foregroundStyle(Theme.tertiaryText)
+    // MARK: - Send samples
+
+    private var canSendSamples: Bool {
+        detail?.followUpEmail != nil && detail?.agent != nil
+    }
+
+    private var samplesTemplateName: String {
+        detail?.followUpEmail?.name ?? "the sample email"
+    }
+
+    /// An agent with an address on file is a confirm and one tap; without one
+    /// the address has to be typed (or pasted) first, as on the web.
+    private func beginSamples() {
+        if detail?.agent?.email?.nilIfBlank != nil {
+            confirmSamples = true
+        } else {
+            typedEmail = ""
+            askForEmail = true
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .card()
-        .padding(.horizontal, 16)
+    }
+
+    private var emailEntry: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("agent@example.com", text: $typedEmail)
+                        .keyboardType(.emailAddress)
+                        .textContentType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Button("Paste from clipboard") {
+                        if let pasted = UIPasteboard.general.string { typedEmail = Self.firstEmail(in: pasted) ?? typedEmail }
+                    }
+                } header: {
+                    Text("\(send.recipient) has no email on file")
+                } footer: {
+                    Text("Emails \"\(samplesTemplateName)\" there now, and saves the address to them.")
+                }
+                .listRowBackground(Theme.card)
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .tint(Theme.accent)
+            .navigationTitle("Send samples")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { askForEmail = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Send") {
+                        let email = typedEmail
+                        askForEmail = false
+                        Task { await sendSamples(email: email) }
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(Self.firstEmail(in: typedEmail) == nil)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationBackground(Theme.background)
+    }
+
+    private static func firstEmail(in text: String) -> String? {
+        text.range(of: #"[^\s@<>()\"',;:]+@[^\s@<>()\"',;:]+\.[A-Za-z]{2,}"#, options: .regularExpression)
+            .map { String(text[$0]) }
+    }
+
+    private func sendSamples(email: String?) async {
+        isWorking = true
+        error = nil
+        defer { isWorking = false }
+        do {
+            let note = try await APIClient.shared.sendSamples(messageId: send.id, email: email)
+            samplesResult = note ?? "Samples emailed to \(send.recipient)."
+            didApply = true
+            await appState.messages.load(force: true)
+        } catch let apiError as APIError {
+            error = apiError.errorDescription
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     private func load() async {

@@ -11,6 +11,9 @@ struct MessagesView: View {
     @Environment(AppState.self) private var appState
 
     @State private var openSend: MessagesResponse.Send?
+    /// Set by the row's "Send samples" quick action, so its detail opens
+    /// straight on the confirm.
+    @State private var samplesOnOpen = false
 
     var body: some View {
         NavigationStack {
@@ -26,7 +29,7 @@ struct MessagesView: View {
             .background(Theme.background)
             .navigationTitle("Messages")
             .sheet(item: $openSend) { send in
-                MessageDetailView(send: send)
+                MessageDetailView(send: send, startsSamples: samplesOnOpen)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
@@ -216,10 +219,25 @@ struct MessagesView: View {
                     .padding(.vertical, 8)
             } else {
                 ForEach(sends) { send in
-                    Button { openSend = send } label: {
+                    Button {
+                        samplesOnOpen = false
+                        openSend = send
+                    } label: {
                         MessageHistoryRow(send: send)
                     }
                     .buttonStyle(.plain)
+                    // Quick action: a long press goes straight to emailing
+                    // samples, which still asks before anything is sent.
+                    .contextMenu {
+                        if send.channel == "text", send.result == nil || send.result == "pending" {
+                            Button {
+                                samplesOnOpen = true
+                                openSend = send
+                            } label: {
+                                Label("Send samples…", systemImage: "envelope")
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -2,11 +2,23 @@ import SwiftUI
 
 /// Schedule tab: today first (past-due items stay visible under an "Earlier"
 /// group), then the next ~30 days grouped by day, then the three booking
-/// buckets. Read-only in Phase 2 — checking reminders off arrives later.
+/// buckets. Reminders can be added (+), ticked off (the circle) and edited
+/// (tap the row).
 struct ScheduleView: View {
     @Environment(AppState.self) private var appState
     @State private var path = NavigationPath()
     @State private var openBooking: Booking?
+    @State private var reminderSheet: ReminderTarget?
+    @State private var openAgent: AgentsResponse.Row?
+    @State private var openListing: Listing?
+    /// Reminders whose tick is in flight, so a second tap doesn't undo the first.
+    @State private var toggling: Set<String> = []
+
+    private struct ReminderTarget: Identifiable {
+        let id = UUID()
+        /// Nil to add a new reminder.
+        let item: ScheduleResponse.Item?
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -27,10 +39,24 @@ struct ScheduleView: View {
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
+            .sheet(item: $reminderSheet) { target in
+                ReminderSheet(existing: target.item) {
+                    Task { await appState.schedule.load(force: true) }
+                }
+            }
+            .sheet(item: $openAgent) { AgentDirectoryDetail(agent: $0) }
+            .sheet(item: $openListing) { LeadListingSheet(listing: $0) }
             .navigationDestination(for: BookingsRoute.self) { _ in
                 BookingsView()
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        reminderSheet = ReminderTarget(item: nil)
+                    } label: {
+                        Label("Add reminder", systemImage: "plus")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink(value: BookingsRoute()) {
                         Label("Bookings", systemImage: "list.bullet.rectangle")
@@ -236,25 +262,41 @@ struct ScheduleView: View {
 
     // MARK: - Schedule item rows
 
-    @ViewBuilder
+    /// A tap on the row does what the row is: a job opens its booking, a
+    /// reminder opens to edit, a listing follow-up opens the listing. A gesture
+    /// rather than a Button so the agent link and the tick inside still work.
     private func itemRow(_ item: ScheduleResponse.Item) -> some View {
+        scheduleRow(item)
+            .contentShape(Rectangle())
+            .onTapGesture { open(item) }
+    }
+
+    private func open(_ item: ScheduleResponse.Item) {
         if let booking = item.bookingId.flatMap({ bookingById[$0] }) {
-            Button { openBooking = booking } label: {
-                scheduleRow(item)
-            }
-            .buttonStyle(.plain)
-        } else {
-            scheduleRow(item)
+            openBooking = booking
+        } else if item.kind == "reminder", item.reminderId != nil {
+            reminderSheet = ReminderTarget(item: item)
+        } else if let listing = item.listing {
+            openListing = listing
+        }
+    }
+
+    private func toggleDone(_ item: ScheduleResponse.Item) async {
+        guard let id = item.reminderId, !toggling.contains(item.key) else { return }
+        toggling.insert(item.key)
+        defer { toggling.remove(item.key) }
+        do {
+            try await APIClient.shared.setReminderDone(id: id, done: !item.done)
+            await appState.schedule.load(force: true)
+        } catch {
+            // The row stays as it was, which is what happened.
         }
     }
 
     private func scheduleRow(_ item: ScheduleResponse.Item) -> some View {
         let overdue = DateFormatting.isPastDay(item.date) && !item.done
         return HStack(alignment: .top, spacing: 10) {
-            kindIcon(item)
-                .font(.title3)
-                .foregroundStyle(iconTint(item))
-                .frame(width: 26)
+            leadingIcon(item)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(timeLine(item, overdue: overdue))
@@ -276,9 +318,14 @@ struct ScheduleView: View {
                         .lineLimit(2)
                 }
                 if let agent = item.agent {
-                    Label(agent.displayName, systemImage: "person")
-                        .font(.caption)
-                        .foregroundStyle(Theme.tertiaryText)
+                    Button {
+                        openAgent = AgentsResponse.Row(agent: agent)
+                    } label: {
+                        Label(agent.displayName, systemImage: "person")
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryText)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -289,7 +336,31 @@ struct ScheduleView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Done state is a picture, not a control: Phase 2 can't write it back.
+    /// A reminder's circle ticks it off; the other kinds are just a picture.
+    @ViewBuilder
+    private func leadingIcon(_ item: ScheduleResponse.Item) -> some View {
+        if item.kind == "reminder", item.reminderId != nil {
+            Button {
+                Task { await toggleDone(item) }
+            } label: {
+                kindIcon(item)
+                    .font(.title3)
+                    .foregroundStyle(iconTint(item))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
+                    .opacity(toggling.contains(item.key) ? 0.4 : 1)
+            }
+            .buttonStyle(.plain)
+            .frame(width: 26)
+            .accessibilityLabel(item.done ? "Mark not done" : "Mark done")
+        } else {
+            kindIcon(item)
+                .font(.title3)
+                .foregroundStyle(iconTint(item))
+                .frame(width: 26)
+        }
+    }
+
     private func kindIcon(_ item: ScheduleResponse.Item) -> Image {
         switch item.kind {
         case "booking":

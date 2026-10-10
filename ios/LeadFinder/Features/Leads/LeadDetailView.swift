@@ -13,6 +13,7 @@ struct LeadDetailView: View {
     /// modal shows. Falls back to the card's copy until it lands, and keeps it
     /// if the fetch fails.
     @State private var detail: ListingDetailResponse?
+    @State private var openListing: Listing?
 
     /// The best listing, with every photo once `/listings/:id` has answered.
     private var listing: Listing { detail?.listing ?? group.best }
@@ -33,6 +34,7 @@ struct LeadDetailView: View {
             .padding(.bottom, 12)
         }
         .background(Theme.background)
+        .sheet(item: $openListing) { LeadListingSheet(listing: $0, agent: group.agent) }
         .navigationTitle(group.best.address?.nilIfBlank ?? "Lead")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -144,11 +146,11 @@ struct LeadDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle("Agent")
 
-            AgentRow(
+            TappableAgentRow(
+                agent: group.agent,
                 name: group.agentName ?? group.best.agentName,
-                phone: group.agentPhone ?? group.best.agentPhone,
                 subtitle: group.brokerName ?? group.best.brokerName,
-                relationshipStatus: group.agent?.relationshipStatus
+                brokerage: group.brokerName ?? group.best.brokerName
             )
 
             // Only what has actually happened — the web's line leads with
@@ -170,7 +172,8 @@ struct LeadDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             sectionTitle("Other listings (\(group.others.count))")
             ForEach(group.others) { listing in
-                ListingRow(listing: listing)
+                Button { openListing = listing } label: { ListingRow(listing: listing, showsChevron: true) }
+                    .buttonStyle(.plain)
                 if listing.id != group.others.last?.id {
                     Divider().overlay(Theme.hairline)
                 }

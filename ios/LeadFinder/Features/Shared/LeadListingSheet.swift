@@ -98,11 +98,10 @@ struct LeadListingSheet: View {
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(Theme.tertiaryText)
                 .kerning(0.6)
-            AgentRow(
-                name: agent.displayName,
-                phone: agent.phone,
+            TappableAgentRow(
+                agent: agent,
                 subtitle: listing.brokerName,
-                relationshipStatus: agent.relationshipStatus
+                brokerage: listing.brokerName
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)

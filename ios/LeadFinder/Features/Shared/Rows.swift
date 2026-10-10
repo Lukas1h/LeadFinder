@@ -7,9 +7,19 @@ import SwiftUI
 // exist as separate views here: one 48pt icon-or-thumb, a title line, a
 // subtitle line, and a right-aligned badge.
 
+/// The small ">" on a row that opens something when tapped.
+struct RowChevron: View {
+    var body: some View {
+        Image(systemName: "chevron.right")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(Theme.tertiaryText)
+    }
+}
+
 /// A compact listing reference: thumb, address, "price · listed", status badge.
 struct ListingRow: View {
     let listing: Listing
+    var showsChevron = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -26,6 +36,7 @@ struct ListingRow: View {
             }
             Spacer(minLength: 0)
             if let status = listing.status { ListingStatusBadge(status: status) }
+            if showsChevron { RowChevron() }
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
@@ -63,6 +74,7 @@ struct AgentRow: View {
     var phone: String?
     var subtitle: String?
     var relationshipStatus: String?
+    var showsChevron = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -89,6 +101,7 @@ struct AgentRow: View {
             if let relationshipStatus {
                 BadgeChip(text: relationshipStatus.relationshipLabel, tint: relationshipStatus.relationshipTint)
             }
+            if showsChevron { RowChevron() }
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
@@ -109,6 +122,7 @@ struct AgentRow: View {
 /// A compact booking reference: calendar icon, job date, "total · contact".
 struct BookingRow: View {
     let booking: Booking
+    var showsChevron = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -126,6 +140,7 @@ struct BookingRow: View {
             }
             Spacer(minLength: 0)
             BookingStatusBadge(booking: booking)
+            if showsChevron { RowChevron() }
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
@@ -195,5 +210,61 @@ struct BookingStatusBadge: View {
 extension Int {
     var currencyString: String {
         formatted(.currency(code: "USD").grouping(.automatic))
+    }
+}
+
+extension AgentsResponse.Row {
+    /// The directory row for an agent we only have the card-sized copy of. The
+    /// sheet fills in the rest (email, history, listings) when it loads.
+    init(agent: Agent, brokerage: String? = nil) {
+        self.init(
+            id: agent.id,
+            name: agent.name,
+            phone: agent.phone,
+            email: agent.email,
+            relationshipStatus: agent.relationshipStatus,
+            lastContactedAt: agent.lastContactedAt,
+            brokerage: brokerage,
+            callerNumber: nil,
+            callerLabel: nil
+        )
+    }
+}
+
+/// An agent reference that opens the agent's sheet when tapped. Every place
+/// that names an agent uses this, so they all behave the same. With no agent
+/// record behind it (a listing whose agent was never matched) it is plain text.
+struct TappableAgentRow: View {
+    var agent: Agent?
+    var name: String?
+    var subtitle: String?
+    var brokerage: String?
+    /// The web hides the badge on cold agents on lead cards: it's the baseline
+    /// and nearly every lead, so it would be noise there.
+    var hidesCold = false
+
+    @State private var open: AgentsResponse.Row?
+
+    var body: some View {
+        if let agent, !agent.id.isEmpty {
+            Button {
+                open = AgentsResponse.Row(agent: agent, brokerage: brokerage)
+            } label: {
+                row(showsChevron: true)
+            }
+            .buttonStyle(.plain)
+            .sheet(item: $open) { AgentDirectoryDetail(agent: $0) }
+        } else {
+            row(showsChevron: false)
+        }
+    }
+
+    private func row(showsChevron: Bool) -> some View {
+        AgentRow(
+            name: name ?? agent?.displayName,
+            subtitle: subtitle,
+            relationshipStatus: agent?.relationshipStatus.flatMap { hidesCold && $0 == "cold" ? nil : $0 },
+            showsChevron: showsChevron
+        )
     }
 }

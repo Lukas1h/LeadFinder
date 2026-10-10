@@ -18,7 +18,7 @@ struct ContactSheet: View {
     let agentName: String?
     let agentPhone: String?
     let agentSubtitle: String?
-    let relationshipStatus: String?
+    var agent: Agent?
 
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -48,14 +48,14 @@ struct ContactSheet: View {
         agentName: String?,
         agentPhone: String?,
         agentSubtitle: String? = nil,
-        relationshipStatus: String? = nil
+        agent: Agent? = nil
     ) {
         self.listingId = listingId
         self.type = type
         self.agentName = agentName
         self.agentPhone = agentPhone
         self.agentSubtitle = agentSubtitle
-        self.relationshipStatus = relationshipStatus
+        self.agent = agent
 
         let cached = MessageOptionsCache.shared.cached(listingId: listingId, type: type) ?? []
         let pick = Self.defaultOption(in: cached)
@@ -68,11 +68,10 @@ struct ContactSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    AgentRow(
+                    TappableAgentRow(
+                        agent: agent,
                         name: agentName,
-                        phone: agentPhone,
-                        subtitle: agentSubtitle,
-                        relationshipStatus: relationshipStatus
+                        subtitle: agentSubtitle
                     )
                     .card()
 
