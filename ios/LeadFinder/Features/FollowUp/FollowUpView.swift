@@ -7,6 +7,9 @@ struct FollowUpView: View {
     @Environment(AppState.self) private var appState
     @State private var query = ""
     @State private var openAgent: Agent?
+    /// Hidden the moment they're snoozed, rather than waiting on the reload.
+    @State private var snoozed: Set<String> = []
+    @State private var snoozeError: String?
 
     var body: some View {
         Group {
@@ -25,6 +28,14 @@ struct FollowUpView: View {
         // behaves the same wherever you tap them.
         .sheet(item: $openAgent) { agent in
             AgentDirectoryDetail(agent: AgentsResponse.Row(agent: agent))
+        }
+        .alert(
+            "Couldn't snooze",
+            isPresented: Binding(get: { snoozeError != nil }, set: { if !$0 { snoozeError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(snoozeError ?? "")
         }
         .refreshable { await appState.followUp.load(force: true) }
         .task { await appState.followUp.load() }
@@ -100,12 +111,47 @@ struct FollowUpView: View {
     private func groupSection(_ group: FollowUpResponse.Group) -> some View {
         sectionHeader(group.label, count: group.entries.count)
         ForEach(group.entries) { entry in
-            Button { openAgent = entry.agent } label: {
-                FollowUpAgentRow(agent: entry.agent, lastReplyAt: entry.lastReplyAt)
-                    .card()
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            tappable(entry.agent) {
+                FollowUpAgentRow(
+                    agent: entry.agent,
+                    lastReplyAt: entry.lastReplyAt,
+                    onSnooze: { Task { await snooze(entry.agent) } }
+                )
+                .card()
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Opening and snoozing
+
+    /// Tap opens the agent, long-press offers the snooze. A tap gesture rather
+    /// than a Button, so the row's own snooze button keeps its taps.
+    private func tappable<Content: View>(_ agent: Agent, @ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .contentShape(Rectangle())
+            .onTapGesture { openAgent = agent }
+            .accessibilityAddTraits(.isButton)
+            .contextMenu {
+                Button {
+                    Task { await snooze(agent) }
+                } label: {
+                    Label("Snooze 4 weeks", systemImage: "moon.zzz")
+                }
+            }
+    }
+
+    /// "Not now": takes the agent off Follow up for four weeks, whatever put
+    /// them there (gone quiet, just listed, under contract), as the web's
+    /// snooze does. Nobody is contacted. Put back if the server didn't take it.
+    private func snooze(_ agent: Agent) async {
+        withAnimation(.snappy(duration: 0.22)) { _ = snoozed.insert(agent.id) }
+        do {
+            try await APIClient.shared.snoozeFollowUp(agentId: agent.id)
+            await appState.followUp.load(force: true)
+        } catch {
+            snoozed.remove(agent.id)
+            snoozeError = "\(agent.displayName) is still on the list. Check your connection and try again."
         }
     }
 
@@ -123,7 +169,7 @@ struct FollowUpView: View {
 
     @ViewBuilder
     private func justListedCard(_ item: FollowUpResponse.JustListed) -> some View {
-        Button { openAgent = item.agent } label: {
+        tappable(item.agent) {
             VStack(alignment: .leading, spacing: 0) {
                 if let listing = item.listing,
                    let photo = listing.photos?.first {
@@ -155,15 +201,18 @@ struct FollowUpView: View {
                         }
                     }
 
-                    FollowUpAgentRow(agent: item.agent, lastReplyAt: item.lastReplyAt)
-                        .padding(.top, item.listing == nil ? 0 : 4)
+                    FollowUpAgentRow(
+                        agent: item.agent,
+                        lastReplyAt: item.lastReplyAt,
+                        onSnooze: { Task { await snooze(item.agent) } }
+                    )
+                    .padding(.top, item.listing == nil ? 0 : 4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
             }
             .card(padding: 0)
         }
-        .buttonStyle(.plain)
     }
 
     private func listingDetail(_ listing: Listing) -> String? {
@@ -184,6 +233,7 @@ struct FollowUpView: View {
     }
 
     private func matches(_ agent: Agent) -> Bool {
+        if snoozed.contains(agent.id) { return false }
         let search = trimmedQuery
         guard !search.isEmpty else { return true }
         if agent.displayName.localizedCaseInsensitiveContains(search) { return true }
@@ -252,14 +302,30 @@ struct FollowUpView: View {
 private struct FollowUpAgentRow: View {
     let agent: Agent
     var lastReplyAt: String?
+    /// "Not now": takes the agent off Follow up for four weeks.
+    var onSnooze: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            AgentRow(
-                name: agent.displayName,
-                subtitle: contactLine,
-                relationshipStatus: agent.relationshipStatus?.nilIfBlank
-            )
+            HStack(spacing: 8) {
+                AgentRow(
+                    name: agent.displayName,
+                    subtitle: contactLine,
+                    relationshipStatus: agent.relationshipStatus?.nilIfBlank
+                )
+                if let onSnooze {
+                    // Sized like the Leads card's pass button.
+                    Button(action: onSnooze) {
+                        Image(systemName: "moon.zzz")
+                            .font(.callout)
+                            .foregroundStyle(Theme.tertiaryText)
+                            .frame(width: 38, height: 36)
+                            .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Snooze \(agent.displayName) for 4 weeks")
+                }
+            }
             if let notes = agent.notes?.nilIfBlank {
                 Text(notes)
                     .font(.caption)

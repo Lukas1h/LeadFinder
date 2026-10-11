@@ -156,6 +156,14 @@ actor APIClient {
         _ = try await send("POST", "api/app/v1/agents/\(agentId)/texts", body: Body(), as: OK.self)
     }
 
+    /// "Not now" on a Follow up card: takes the agent off Follow up for four
+    /// weeks, the web's snooze. Contacts nobody and changes nothing else.
+    func snoozeFollowUp(agentId: String) async throws {
+        struct Body: Encodable, Sendable {}
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("POST", "api/app/v1/agents/\(agentId)/snooze", body: Body(), as: OK.self)
+    }
+
     /// Logs a call, text or email that happened outside the app — the web's
     /// Add interaction dialog.
     func logInteraction(
