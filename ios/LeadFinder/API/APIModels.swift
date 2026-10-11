@@ -340,6 +340,43 @@ struct MessagesResponse: Codable, Sendable {
         var email: [DayBucket]
     }
 
+    /// The monthly goal worked backwards into this week's work (the web's
+    /// GoalProgress, lib/goal.ts).
+    struct Goal: Codable, Sendable {
+        var goal: Double
+        var month: String
+        var booked: Double
+        var jobs: Int
+        /// Zero once the goal is met.
+        var gap: Double
+        var avgJob: Double
+        var jobsNeeded: Int
+        var rates: Rates
+        var interested: Interested
+        var thisWeek: ThisWeek
+
+        struct Rates: Codable, Sendable {
+            var reply: Double
+            var interested: Double
+            var book: Double
+            var bookMeasured: Bool
+        }
+
+        struct Interested: Codable, Sendable {
+            var live: Int
+            var needed: Int
+        }
+
+        struct ThisWeek: Codable, Sendable {
+            var textsToGo: Int
+            var repliesToGo: Int
+            var texts: Int
+            var replies: Int
+            var followUps: Int
+            var followUpsDue: Int
+        }
+    }
+
     struct Stats: Codable, Sendable {
         var sms: SendCounts
         var email: SendCounts
@@ -383,6 +420,8 @@ struct MessagesResponse: Codable, Sendable {
         }
     }
 
+    /// Optional so a copy cached before the server sent it still decodes.
+    var goal: Goal?
     var stats: Stats
     var sends: [Send]
 }

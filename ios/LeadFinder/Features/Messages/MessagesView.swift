@@ -73,6 +73,7 @@ struct MessagesView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
+                        if let goal = messages.goal { goalCard(goal) }
                         statsCard(messages.stats)
                         replyByDay(messages.stats)
                         if !messages.stats.templates.isEmpty { topTemplates(messages.stats.templates) }
@@ -85,6 +86,71 @@ struct MessagesView: View {
                 .refreshable { await appState.messages.load(force: true) }
             }
         }
+    }
+
+    // MARK: - Goal card
+
+    /// The web's GoalCard: the monthly goal worked backwards into this week's
+    /// texts, replies and follow-ups.
+    private func goalCard(_ goal: MessagesResponse.Goal) -> some View {
+        let met = goal.gap == 0
+        let week = goal.thisWeek
+        let progress = goal.goal > 0 ? min(1, goal.booked / goal.goal) : 0
+
+        return VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("\(goal.booked.currencyString) of \(goal.goal.currencyString) booked for \(goal.month)")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Theme.primaryText)
+
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Theme.cardRaised)
+                        Capsule()
+                            .fill(Theme.emerald)
+                            .frame(width: proxy.size.width * progress)
+                    }
+                }
+                .frame(height: 8)
+
+                Text(met
+                    ? "Goal met"
+                    : "\(goal.gap.currencyString) to go, about \(goal.jobsNeeded) job\(goal.jobsNeeded == 1 ? "" : "s") at \(goal.avgJob.currencyString)")
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                spacing: 14
+            ) {
+                stat("Text this week", met ? "—" : "\(week.textsToGo) more", "\(week.texts) sent so far")
+                stat("Replies this week", met ? "—" : "\(week.repliesToGo) more", "\(week.replies) so far")
+                stat("Follow-ups due", "\(week.followUpsDue)", "\(week.followUps) sent this week")
+                stat(
+                    "Interested",
+                    "\(goal.interested.live)",
+                    met ? "in touch this month" : "of the \(goal.interested.needed) it takes"
+                )
+            }
+
+            Text(Self.estimateNote(goal.rates))
+                .font(.caption)
+                .foregroundStyle(Theme.tertiaryText)
+                .padding(.top, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .top) { Divider().overlay(Theme.cardRaised) }
+        }
+        .card(padding: 14)
+    }
+
+    /// The web's note, word for word.
+    private static func estimateNote(_ rates: MessagesResponse.Goal.Rates) -> String {
+        let reply = Int((rates.reply * 100).rounded())
+        let interested = Int((rates.interested * 100).rounded())
+        let oneIn = rates.book > 0 ? Int((1 / rates.book).rounded()) : 0
+        let measured = rates.bookMeasured ? " (measured)" : " (a guess until texts start producing bookings)"
+        return "The estimate: \(reply)% of texts get a reply and \(interested)% of those turn interested (both measured), and 1 in \(oneIn) interested agents books\(measured). Work from clients you already have isn't counted on, so this is the cautious end."
     }
 
     // MARK: - Stats card
