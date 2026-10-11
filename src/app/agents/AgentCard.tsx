@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { DropdownMenu } from "radix-ui";
 import { Phone, MessageCircle, Mail, StickyNote, BellOff } from "lucide-react";
 import type { Agent } from "@/db/schema";
 import { resolveAvgDaysBetweenListings } from "./stats";
@@ -10,6 +11,7 @@ import { startPendingInteraction } from "./interactionActions";
 import { RelationshipBadge } from "@/app/badges";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
+import { FOLLOW_UP_SNOOZE_DAYS, snoozeLabel } from "@/app/follow-up/snooze";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -19,6 +21,8 @@ export function AgentCard({
   listingDates,
   followUpDismiss,
   lastReplyAt,
+  lead,
+  textBody,
   children,
 }: {
   agent: Agent;
@@ -26,11 +30,15 @@ export function AgentCard({
   // Just the dates the "~Nd between listings" stat needs. The dialog fetches
   // the agent's full listings itself when it opens.
   listingDates: { listedAt: Date | null; foundAt: Date }[];
-  // When set, shows a "Not now" snooze button (the Follow up section's
-  // dismiss — hides this agent from that list for another 28 days).
-  followUpDismiss?: (agentId: string) => void;
+  // When set, shows a "Not now" snooze button (the Follow up page's dismiss:
+  // hides this agent from that list for the one, two or four weeks picked).
+  followUpDismiss?: (agentId: string, days: number) => void;
   /** Their latest reply, shown on the Follow up page. */
   lastReplyAt?: Date | null;
+  /** A line above the name, e.g. why they're on the Follow up page. */
+  lead?: ReactNode;
+  /** What the Text button opens Messages with. Empty when not given. */
+  textBody?: string;
   /** Full-width extra row under the card, e.g. the listing they just put up. */
   children?: ReactNode;
 }) {
@@ -54,6 +62,7 @@ export function AgentCard({
   return (
     <Card className="flex-row items-start justify-between gap-4 p-4 flex-wrap">
       <div className="min-w-0">
+        {lead && <div className="mb-1">{lead}</div>}
         <div className="flex items-center gap-2 flex-wrap">
           <AgentDetailDialog
             agent={agent}
@@ -89,15 +98,38 @@ export function AgentCard({
 
       <div className="flex items-center gap-2 shrink-0">
         {followUpDismiss && (
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => followUpDismiss(agent.id)}
-            title="Hide from Follow up for another 28 days"
-            aria-label={`Dismiss ${agent.name ?? agent.phone} from follow up for 28 days`}
-          >
-            <BellOff />
-          </Button>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                title="Not now: hide from Follow up for a while"
+                aria-label={`Snooze ${agent.name ?? agent.phone} on Follow up`}
+              >
+                <BellOff />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                align="end"
+                sideOffset={4}
+                className="z-50 min-w-40 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+              >
+                <DropdownMenu.Label className="px-2 py-1.5 text-xs text-muted-foreground">
+                  Hide for (a new listing still brings them back)
+                </DropdownMenu.Label>
+                {FOLLOW_UP_SNOOZE_DAYS.map((days) => (
+                  <DropdownMenu.Item
+                    key={days}
+                    onSelect={() => followUpDismiss(agent.id, days)}
+                    className="cursor-default rounded-sm px-2 py-1.5 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                  >
+                    {snoozeLabel(days)}
+                  </DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         )}
         {callHref && (
           <Button variant="outline" size="icon" asChild>
@@ -114,7 +146,12 @@ export function AgentCard({
           <Button variant="outline" size="icon" asChild>
             <a
               href={smsUrl(agent.phone, "")}
-              onClick={() => logHandoff("text")}
+              onClick={(e) => {
+                // Filled in on the click, not in the markup: the link's shape
+                // depends on the device, which the server can't see.
+                if (textBody) e.currentTarget.href = smsUrl(agent.phone!, textBody);
+                logHandoff("text");
+              }}
               aria-label={`Text ${agent.name ?? agent.phone}`}
             >
               <MessageCircle />

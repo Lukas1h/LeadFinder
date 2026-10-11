@@ -156,12 +156,13 @@ actor APIClient {
         _ = try await send("POST", "api/app/v1/agents/\(agentId)/texts", body: Body(), as: OK.self)
     }
 
-    /// "Not now" on a Follow up card: takes the agent off Follow up for four
-    /// weeks, the web's snooze. Contacts nobody and changes nothing else.
-    func snoozeFollowUp(agentId: String) async throws {
-        struct Body: Encodable, Sendable {}
+    /// "Not now" on a Follow up card: takes the agent off Follow up for 7, 14
+    /// or 28 days, the web's snooze. Something new from them (a listing, a
+    /// sale) still brings them back sooner. Contacts nobody.
+    func snoozeFollowUp(agentId: String, days: Int) async throws {
+        struct Body: Encodable, Sendable { let days: Int }
         struct OK: Decodable, Sendable { let ok: Bool }
-        _ = try await send("POST", "api/app/v1/agents/\(agentId)/snooze", body: Body(), as: OK.self)
+        _ = try await send("POST", "api/app/v1/agents/\(agentId)/snooze", body: Body(days: days), as: OK.self)
     }
 
     /// Logs a call, text or email that happened outside the app — the web's

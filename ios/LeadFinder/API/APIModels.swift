@@ -186,6 +186,9 @@ struct FollowUpResponse: Codable, Sendable {
         var headline: String?
         /// weak_photos, samples, just_listed, news, price_cut or quiet.
         var reason: String?
+        /// A text to start from, written by the server for this reason and
+        /// agent. Fills Messages; nothing is sent until he sends it.
+        var suggestion: String?
         /// Tracked listings, for the card's "12 listings". Optional: a response
         /// cached before the server sent it still decodes.
         var listingCount: Int?
@@ -203,6 +206,20 @@ struct FollowUpResponse: Codable, Sendable {
     /// Follow-ups already done today, of `dailyTarget`.
     var doneToday: Int?
     var dailyTarget: Int?
+
+    /// Someone who isn't due yet, and when they will be.
+    struct Upcoming: Codable, Sendable, Identifiable {
+        var agent: Agent
+        /// Nil once only a listing or sale of theirs brings them back.
+        var dueAt: String?
+        /// Why then: "Last contact Sep 24", "Snoozed".
+        var note: String?
+
+        var id: String { agent.id }
+    }
+
+    /// Everyone else he knows, soonest first. Optional for cached responses.
+    var upcoming: [Upcoming]?
 
     /// Agents with a listing that just went under contract or sold. Optional so
     /// a cached response from before the server sent it still decodes.

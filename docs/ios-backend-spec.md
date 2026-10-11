@@ -352,7 +352,7 @@ A text template lists other templates as **quick actions**: the buttons on a mes
 
 #### The Follow up page (reworked 2026-10-11)
 
-Everyone Lukas knows who is due to hear from him, one entry per agent, already sorted: strongest reason first, then nearest, then whoever lists most. `today` is the next few, enough to bring the day to `dailyTarget` (5); `later` is the rest in the same order. `doneToday` counts people he got back in touch with after a gap, or snoozed, today. Render `today` under "Today (2 of 5 done)" and `later` under "Later"; when `today` is empty and `doneToday >= dailyTarget`, say the day is done.
+Everyone Lukas knows who is due to hear from him, one entry per agent, already sorted: strongest reason first, then nearest, then whoever lists most. `today` is the next few, enough to bring the day to `dailyTarget` (5); `later` is the rest in the same order. `doneToday` counts people he got back in touch with after a gap today; a snooze isn't one, the next person moves up. Render `today` under "Today (2 of 5 done)" and `later` under "Later"; when `today` is empty and `doneToday >= dailyTarget`, say the day is done.
 
 ```jsonc
 // Item
@@ -361,6 +361,7 @@ Everyone Lukas knows who is due to hear from him, one entry per agent, already s
   "listing": {/* listingJson first */} | null,     // the listing the reason is about
   "headline": "Just listed Oct 9 with weak photos", // the reason, in the words to show
   "reason": "weak_photos" | "samples" | "just_listed" | "news" | "price_cut" | "quiet",
+  "suggestion": "Hey Aisha! Saw Flowerdale went pending, congrats!!", // a text to start from; fill Messages with it
   "listingCount": 12,                // tracked listings, for the card's "12 listings"
   "avgDaysBetweenListings": 45 | null
 }
@@ -368,7 +369,13 @@ Everyone Lukas knows who is due to hear from him, one entry per agent, already s
 
 Headlines read "Just listed Oct 9", "Samples sent Oct 3, no word since", "Pending since Oct 7, you shot it", "Price cut Oct 7, weak photos", "Quiet since Sep 20". For a home he shot that was booked by address alone, `listing` is null and the headline leads with the address. Show `quiet` muted and every other reason as a highlight. The rules behind each reason and the timers are in `src/app/follow-up/data.ts`.
 
-`POST /agents/:id/snooze` takes someone off the page for four weeks, whatever put them there.
+`suggestion` is written by the server for the reason and the agent (`src/app/follow-up/suggest.ts`). Show it on the card, and open Messages with it as the body from the card's Text button; he edits and sends it, and a sent text is recorded with `POST /agents/:id/texts` as any other. The reason goes above the name, as on the web.
+
+Nobody is on the page within 10 days of the last contact either way (clients excepted), and samples wait 14 days. The timer is one number per relationship: interested 14 days, warm 21, clients 28.
+
+`upcoming` is everyone else he knows, soonest first: `[{ "agent": {...}, "dueAt": "2026-10-15T…" | null, "note": "Last contact Sep 24" }]`. Show it as a compact "Coming up (N)" list under Later, name, status and note on the left and the date on the right; a null `dueAt` reads "When they list or sell" (they stopped answering, so the timer no longer brings them back).
+
+`POST /agents/:id/snooze` with `{ "days": 7 | 14 | 28 }` (no body: 7) takes someone off the page for that long. A listing or sale of theirs from after the snooze still brings them back early; when it ends, whatever is still current shows again. Offer the three lengths in a menu.
 
 `news`, `justListed` and `groups` carry the same people in the shape builds from before this change read (`news` and `justListed` are Items; `groups` is `[{ label, entries: [{ agent, lastReplyAt }] }]`). New builds ignore them.
 

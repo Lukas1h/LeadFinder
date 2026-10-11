@@ -17,6 +17,7 @@ import {
 import { eq, isNotNull, isNull, sql, desc, and, ne, or, ilike, inArray, max } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getFollowUpBoard } from "@/app/follow-up/data";
+import { FOLLOW_UP_SNOOZE_DAYS } from "@/app/follow-up/snooze";
 import { normalizePhone, normalizeEmail, normalizeName, EMAIL_RE, hasValidPhoneDigitCount } from "@/lib/normalize";
 import { resolveAgentId, setAgentRelationshipStatus } from "@/lib/agentIdentity";
 
@@ -370,14 +371,20 @@ export async function getFollowUpCount(): Promise<number> {
 }
 
 /**
- * "Snooze" an agent out of the Follow up queue for the next 28 days — sets
- * followUpDismissedAt, which stays separate from lastContactedAt so the
- * "Last contacted" date on the card keeps telling the truth about when
- * they were actually reached. Re-appears once this timestamp is itself
- * over 28 days old and the other criteria still hold.
+ * "Snooze" an agent out of the Follow up queue for one, two or four weeks
+ * (FOLLOW_UP_SNOOZE_DAYS; anything else falls back to the first). Sets
+ * followUpDismissedAt and followUpSnoozedUntil, which stay separate from
+ * lastContactedAt so the "Last contacted" date on the card keeps telling the
+ * truth about when they were actually reached. Something new from them (a
+ * listing, a sale) still brings them back early; see getFollowUpBoard.
  */
-export async function dismissFollowUpAgent(id: string) {
-  await db.update(agents).set({ followUpDismissedAt: new Date() }).where(eq(agents.id, id));
+export async function dismissFollowUpAgent(id: string, days: number = FOLLOW_UP_SNOOZE_DAYS[0]) {
+  const length = (FOLLOW_UP_SNOOZE_DAYS as readonly number[]).includes(days) ? days : FOLLOW_UP_SNOOZE_DAYS[0];
+  const now = new Date();
+  await db
+    .update(agents)
+    .set({ followUpDismissedAt: now, followUpSnoozedUntil: new Date(now.getTime() + length * 24 * 60 * 60 * 1000) })
+    .where(eq(agents.id, id));
   revalidatePath("/agents");
   revalidatePath("/follow-up");
 }

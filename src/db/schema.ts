@@ -258,6 +258,9 @@ export const agents = pgTable("agents", {
   // the real contact facts. Null means never dismissed / always eligible
   // based on the rest of the criteria.
   followUpDismissedAt: timestamp("follow_up_dismissed_at", { withTimezone: true }),
+  // How long that snooze lasts: he picks one, two or four weeks. Null on a
+  // snooze from before 2026-10-11, which was always four weeks.
+  followUpSnoozedUntil: timestamp("follow_up_snoozed_until", { withTimezone: true }),
 
   // Free-text, edited from the agent detail dialog — same pattern as
   // listings.notes above.

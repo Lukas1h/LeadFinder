@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const denied = requireAppAuth(req);
   if (denied) return denied;
 
-  const [{ today, later, doneToday, dailyTarget }, counts, dates] = await Promise.all([
+  const [{ today, later, doneToday, dailyTarget, upcoming }, counts, dates] = await Promise.all([
     getFollowUpBoard(),
     listingCountsByAgent(),
     listingDatesByAgent(),
@@ -33,6 +33,7 @@ export async function GET(req: Request) {
     listing: e.listing ? listingJson(e.listing, "first") : null,
     headline: [e.listing ? null : e.address, e.label].filter(Boolean).join(" · "),
     reason: e.reason,
+    suggestion: e.suggestion,
     // The card's "N listings · ~Nd between listings", as the web's AgentCard shows.
     listingCount: counts[e.agent.id] ?? 0,
     avgDaysBetweenListings: resolveAvgDaysBetweenListings(e.agent, dates[e.agent.id] ?? []),
@@ -48,6 +49,8 @@ export async function GET(req: Request) {
     later: later.map(item),
     doneToday,
     dailyTarget,
+    // Everyone not due yet and when they will be; dueAt is null once only a listing or sale brings them back.
+    upcoming: upcoming.map((u) => ({ agent: agentJson(u.agent), dueAt: u.dueAt, note: u.note })),
 
     news: by("news").map(item),
     justListed: by("weak_photos", "just_listed", "price_cut").map(item),

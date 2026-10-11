@@ -12,7 +12,8 @@ import {
 import { and, eq, gt, inArray, isNotNull, or } from "drizzle-orm";
 import { estimateDriveMinutes } from "@/lib/driveTime";
 import { LEAD_GOOD_PHOTO_SCORE } from "@/lib/leadSections";
-import { marketNews, marketNewsLabel } from "@/lib/marketStatus";
+import { marketNews, marketNewsLabel, type MarketNews } from "@/lib/marketStatus";
+import { suggestFollowUpText } from "./suggest";
 
 const DAY = 24 * 60 * 60 * 1000;
 const TZ = "America/Los_Angeles";
@@ -23,37 +24,52 @@ const JUST_LISTED_DAYS = 21;
 const NEWS_DAYS = 21;
 /** How long a price cut stays a reason to get in touch. */
 const PRICE_CUT_DAYS = 14;
-/** Samples went out and nothing came back: worth one "did they come through?" after this long… */
-const SAMPLES_WAIT_DAYS = 7;
+/**
+ * Samples went out and nothing came back: worth one "did they come through?"
+ * after this long. It was a week, and Lukas found a text the week after the
+ * samples too soon to send (2026-10-11), so it matches the two weeks an
+ * interested agent gets.
+ */
+const SAMPLES_WAIT_DAYS = 14;
 /** …and past this it's just someone who has gone quiet. */
-const SAMPLES_MAX_DAYS = 35;
-/** A snooze hides someone for this long. */
-const SNOOZE_DAYS = 28;
+const SAMPLES_MAX_DAYS = 42;
+/** A snooze from before he could pick its length (followUpSnoozedUntil is null) was this long. */
+const LEGACY_SNOOZE_DAYS = 28;
+/**
+ * Nobody comes up within this many days of the last text, call or email
+ * either way, whatever the reason: a listing that went live the week he
+ * texted them waits until it's no longer the same week's conversation. The
+ * reasons all outlast it (two to three weeks), so it delays them, it doesn't
+ * lose them. Clients are exempt; a congrats to someone he's working with
+ * isn't pestering.
+ */
+const MIN_GAP_DAYS = 10;
 /** Someone with a listing in this many days is actively listing. */
 const ACTIVE_LISTER_DAYS = 30;
 /** How many follow-ups a day the page asks for. */
 const DAILY_TARGET = 5;
 
 /**
- * Days of silence before someone comes back up on the timer alone.
+ * Days of silence before someone comes back up on the timer alone: one number
+ * per kind of relationship, so it can be said in a sentence.
  *
- * Reworked 2026-10-11 after looking at how every client was won. All eight
- * booked within 14 days of his last touch, and agents who list at all list
- * about every 15 days, so a flat four weeks for warm agents meant being out of
- * mind for most of the listings they put up; while four weeks for a warm agent
- * with no listing in sight was four weeks too often.
+ * Warm was split for a day (three weeks if they'd listed in the last month,
+ * eight if not), and Lukas found a warm agent untouched for 17 days who wasn't
+ * coming up for another five weeks, with no way to see why (2026-10-11). Fifty
+ * of his 92 warm agents were in that slow lane. The split is gone; people who
+ * stop answering leave through MAX_UNANSWERED instead.
  *
  * Interested stays at two weeks: one was tried and Lukas found a second text
  * inside the same stretch as the first one weird to send, and it's his name on
- * it. Nothing here is shorter than a week for that reason.
+ * it. MIN_GAP_DAYS is the floor under everything for that reason.
+ *
+ * Timing these to each agent's own listing rhythm ("just before their next
+ * one") was looked at the same day and isn't possible yet: listings have only
+ * been tracked since September, 11 of the 145 agents he knows have three or
+ * more on file, and the gaps of those who do are close to random. Reacting to
+ * the listing itself (the reasons above the timer) is what the data supports.
  */
-const QUIET_DAYS = {
-  client: 28,
-  interested: 14,
-  /** Warm, with a listing in the last ACTIVE_LISTER_DAYS. */
-  warmActive: 21,
-  warmIdle: 56,
-};
+const QUIET_DAYS = { client: 28, interested: 14, warm: 21 };
 
 /**
  * Each follow-up that goes unanswered doubles the wait (interested: 2 weeks,
@@ -90,6 +106,17 @@ export interface FollowUpItem extends FollowUpEntry {
   /** For a home he shot that was booked by address alone, which has no listing row. */
   address: string | null;
   city: string | null;
+  /** A text to start from, in his voice (suggestFollowUpText). Fills Messages; he edits and sends. */
+  suggestion: string;
+}
+
+/** Someone who isn't due yet, and when they will be. The page lists them so nobody is ever just missing. */
+export interface FollowUpUpcoming {
+  agent: Agent;
+  /** Null when the timer has stopped bringing them back: only a listing or sale of theirs will. */
+  dueAt: Date | null;
+  /** Why then: "Last contact Sep 24", "Snoozed", "Just listed Oct 9". */
+  note: string;
 }
 
 export interface FollowUpBoard {
@@ -97,9 +124,11 @@ export interface FollowUpBoard {
   today: FollowUpItem[];
   /** Everyone else who is due, in the same order. */
   later: FollowUpItem[];
-  /** Follow-ups already done today: people he got back in touch with after a gap, or snoozed. */
+  /** Follow-ups already done today: people he got back in touch with after a gap. A snooze isn't one; the next person moves up. */
   doneToday: number;
   dailyTarget: number;
+  /** Everyone else he knows, soonest first, the ones with no date last. */
+  upcoming: FollowUpUpcoming[];
 }
 
 /** "1811 NE Alameda Ave" → "1811 alameda". Bookings often aren't linked to a listing, so match by address. */
@@ -156,15 +185,21 @@ function driveBand(city: string | null): number {
  * - quiet: nothing above, and it has been long enough (QUIET_DAYS, doubling
  *   with each unanswered follow-up).
  *
- * Acting on someone anywhere clears them: texting them, passing the listing on
- * Leads, or snoozing them here.
+ * Everyone else he knows is in `upcoming` with the date they'll be due.
+ *
+ * Acting on someone anywhere clears them: texting them, or passing the listing
+ * on Leads. Snoozing hides them for the one, two or four weeks he picks; in
+ * that time only something new brings them back (a listing or sale from after
+ * the snooze), and when it ends whatever is still current shows again.
+ *
+ * Nobody shows within MIN_GAP_DAYS of the last contact either way.
  *
  * Within a reason the order is nearest first, then whoever lists most, then
  * clients before interested before warm, then most recent. It used to be
  * longest silence first, which put the people least likely to answer on top.
  */
 export async function getFollowUpBoard(): Promise<FollowUpBoard> {
-  const empty: FollowUpBoard = { today: [], later: [], doneToday: 0, dailyTarget: DAILY_TARGET };
+  const empty: FollowUpBoard = { today: [], later: [], doneToday: 0, dailyTarget: DAILY_TARGET, upcoming: [] };
   const candidates = await db
     .select()
     .from(agents)
@@ -353,6 +388,7 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
     at: number;
   }
   const due: Ranked[] = [];
+  const upcoming: FollowUpUpcoming[] = [];
   const today = startOfToday(now);
   let doneToday = 0;
 
@@ -361,21 +397,49 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
     const lastOut = h.out.length ? h.out[h.out.length - 1] : 0;
     const lastTouch = Math.max(lastOut, h.lastIn);
     const snoozedAt = agent.followUpDismissedAt?.getTime() ?? 0;
+    const snoozedUntil = agent.followUpSnoozedUntil?.getTime() ?? (snoozedAt ? snoozedAt + LEGACY_SNOOZE_DAYS * DAY : 0);
+    const snoozed = now < snoozedUntil;
     const activity = listed.get(agent.id)?.recent ?? 0;
 
-    // Done today: snoozed, or back in touch after a gap. Someone he first
-    // texted this morning and is still talking to isn't a follow-up.
+    // Done today: back in touch after a gap. Someone he first texted this
+    // morning and is still talking to isn't a follow-up.
     const firstOutToday = h.out.find((t) => t >= today);
     const before = Math.max(h.lastIn < today ? h.lastIn : 0, ...h.out.filter((t) => t < today), 0);
-    if (snoozedAt >= today || (firstOutToday != null && before > 0 && firstOutToday - before >= 5 * DAY)) doneToday++;
+    if (firstOutToday != null && before > 0 && firstOutToday - before >= 5 * DAY) doneToday++;
 
-    /** Something that happened at `since` is still a reason if he hasn't reached out or snoozed them after it. */
-    const open = (since: number) => snoozedAt <= since && lastOut < since;
+    /** The floor: no reason brings someone up before this. */
+    const heldUntil = !isClient(agent) && lastTouch ? lastTouch + MIN_GAP_DAYS * DAY : 0;
+
+    /** While snoozed, only what has happened since the snooze counts. */
+    const shown = (since: number) => !snoozed || since > snoozedAt;
+    /** Something that happened at `since` is still a reason if he hasn't reached out after it. */
+    const open = (since: number) => shown(since) && lastOut < since;
 
     const base = { agent, lastReplyAt: h.lastIn ? new Date(h.lastIn) : null, activity };
     const cityOf = (city: string | null | undefined) => city ?? listed.get(agent.id)?.city ?? null;
-    const push = (item: Omit<Ranked, keyof typeof base | "band" | "shot"> & { shot?: boolean }) =>
-      due.push({ ...base, shot: false, ...item, band: driveBand(cityOf(item.city)) });
+    const push = (
+      item: Omit<Ranked, keyof typeof base | "band" | "shot" | "suggestion"> & { shot?: boolean; kind?: MarketNews }
+    ) => {
+      const { kind, ...rest } = item;
+      if (now < heldUntil) {
+        upcoming.push({ agent, dueAt: new Date(heldUntil), note: item.label });
+        return;
+      }
+      due.push({
+        ...base,
+        shot: false,
+        ...rest,
+        band: driveBand(cityOf(item.city)),
+        suggestion: suggestFollowUpText({
+          agent,
+          reason: item.reason,
+          listing: item.listing,
+          address: item.address,
+          news: kind ? { kind, shot: item.shot ?? false } : undefined,
+          isClient: isClient(agent),
+        }),
+      });
+    };
 
     const fresh = newestListing.get(agent.id);
     const freshOpen = fresh != null && open(fresh.foundAt.getTime());
@@ -401,7 +465,7 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
       samplesAge <= SAMPLES_MAX_DAYS * DAY &&
       h.lastIn <= h.samplesAt + 10 * 60 * 1000 &&
       lastOut <= h.samplesAt + DAY &&
-      snoozedAt <= h.samplesAt
+      shown(h.samplesAt)
     ) {
       push({
         reason: "samples",
@@ -439,6 +503,7 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
         address: sale.address,
         city: sale.city,
         shot: sale.shot,
+        kind: marketNews(sale.status)!,
         at: sale.at.getTime(),
       });
       continue;
@@ -457,15 +522,13 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
       continue;
     }
 
-    // The timer. A snooze only hides this: a reason above still shows if it's newer than the snooze.
-    if (snoozedAt > now - SNOOZE_DAYS * DAY) continue;
+    // The timer. A snooze always hides this; a reason above still shows if it's newer than the snooze.
     let wait = isClient(agent)
       ? QUIET_DAYS.client
       : agent.relationshipStatus === "interested"
         ? QUIET_DAYS.interested
-        : activity > 0
-          ? QUIET_DAYS.warmActive
-          : QUIET_DAYS.warmIdle;
+        : QUIET_DAYS.warm;
+    let stopped = false;
     if (!isClient(agent)) {
       // Follow-ups since they last said anything: his touches after that exchange, a burst counting once.
       const anchor = (h.lastIn || h.out[0] || 0) + SAME_EXCHANGE_DAYS * DAY;
@@ -476,10 +539,35 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
         unanswered++;
         counted = t;
       }
-      if (unanswered >= MAX_UNANSWERED) continue;
+      stopped = unanswered >= MAX_UNANSWERED;
       wait *= 2 ** unanswered;
     }
-    if (lastTouch && now - lastTouch < wait * DAY) continue;
+    if (stopped) {
+      upcoming.push({ agent, dueAt: null, note: `No answer to ${MAX_UNANSWERED} follow-ups` });
+      continue;
+    }
+    const timerDue = lastTouch ? lastTouch + wait * DAY : now;
+    if (snoozed || now < timerDue) {
+      // Samples still waiting on an answer come up for that first, on the day the samples reason starts.
+      const samplesDue = h.samplesAt + SAMPLES_WAIT_DAYS * DAY;
+      const awaitingSamples =
+        !snoozed &&
+        h.samplesAt > 0 &&
+        now < samplesDue &&
+        samplesDue < timerDue &&
+        h.lastIn <= h.samplesAt + 10 * 60 * 1000 &&
+        lastOut <= h.samplesAt + DAY;
+      upcoming.push({
+        agent,
+        dueAt: new Date(awaitingSamples ? samplesDue : Math.max(timerDue, snoozed ? snoozedUntil : 0)),
+        note: snoozed
+          ? "Snoozed"
+          : awaitingSamples
+            ? `Samples sent ${shortDate(new Date(h.samplesAt))}`
+            : `Last contact ${shortDate(new Date(lastTouch))}`,
+      });
+      continue;
+    }
     push({
       reason: "quiet",
       label: lastTouch ? `Quiet since ${shortDate(new Date(lastTouch))}` : "No contact logged yet",
@@ -500,7 +588,7 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
       b.at - a.at
   );
 
-  const items: FollowUpItem[] = due.map(({ agent, lastReplyAt, reason, label, listing, address, city }) => ({
+  const items: FollowUpItem[] = due.map(({ agent, lastReplyAt, reason, label, listing, address, city, suggestion }) => ({
     agent,
     lastReplyAt,
     reason,
@@ -508,7 +596,11 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
     listing,
     address,
     city,
+    suggestion,
   }));
   const slots = Math.max(0, DAILY_TARGET - doneToday);
-  return { today: items.slice(0, slots), later: items.slice(slots), doneToday, dailyTarget: DAILY_TARGET };
+  upcoming.sort(
+    (a, b) => (a.dueAt?.getTime() ?? Infinity) - (b.dueAt?.getTime() ?? Infinity) || rank(a.agent) - rank(b.agent)
+  );
+  return { today: items.slice(0, slots), later: items.slice(slots), doneToday, dailyTarget: DAILY_TARGET, upcoming };
 }

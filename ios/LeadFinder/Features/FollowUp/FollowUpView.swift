@@ -10,6 +10,10 @@ struct FollowUpView: View {
     /// Hidden the moment they're snoozed, rather than waiting on the reload.
     @State private var snoozed: Set<String> = []
     @State private var snoozeError: String?
+    /// The snooze lengths the server takes, in days.
+    fileprivate static let snoozeChoices: [(days: Int, label: String)] = [
+        (7, "1 week"), (14, "2 weeks"), (28, "4 weeks"),
+    ]
     @State private var openListing: Listing?
     @State private var contactError: String?
     /// Set when Call is tapped, so coming back from the call asks how it went,
@@ -76,6 +80,7 @@ struct FollowUpView: View {
             rankedContent(
                 today: today.filter { matches($0.agent) },
                 later: later.filter { matches($0.agent) },
+                upcoming: (response.upcoming ?? []).filter { matches($0.agent) },
                 done: response.doneToday ?? 0,
                 target: response.dailyTarget ?? 5
             )
@@ -90,10 +95,11 @@ struct FollowUpView: View {
     private func rankedContent(
         today: [FollowUpResponse.JustListed],
         later: [FollowUpResponse.JustListed],
+        upcoming: [FollowUpResponse.Upcoming],
         done: Int,
         target: Int
     ) -> some View {
-        if today.isEmpty && later.isEmpty {
+        if today.isEmpty && later.isEmpty && upcoming.isEmpty {
             emptyState
         } else {
             VStack(alignment: .leading, spacing: 0) {
@@ -107,7 +113,7 @@ struct FollowUpView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
                         // The web's header: what the page is and how it picks.
-                        Text("Five a day, strongest reason first: a new listing, samples that got no answer, a sale, a price cut, then anyone who\u{2019}s gone quiet. Each follow-up that goes unanswered doubles the wait. Text one, or snooze them for 4 weeks.")
+                        Text("Agents you know who have a reason to hear from you, best reason first: a new listing, samples that got no answer, a sale, a price cut, then anyone who\u{2019}s gone quiet. Nobody shows up within 10 days of your last text, and each follow-up that goes unanswered doubles the wait.")
                             .font(.footnote)
                             .foregroundStyle(Theme.secondaryText)
 
@@ -119,11 +125,13 @@ struct FollowUpView: View {
 
                         VStack(alignment: .leading, spacing: 12) {
                             webHeading("Today (\(min(done, target)) of \(target) done)")
-                            if today.isEmpty {
-                                Text(done >= target ? "That\u{2019}s today\u{2019}s five. The rest will keep." : "Nobody else is due.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(Theme.secondaryText)
-                            }
+                            Text(
+                                today.isEmpty
+                                    ? (done >= target ? "That\u{2019}s today\u{2019}s five. The rest will keep." : "Nobody else is due.")
+                                    : "The top of the list, \(target) a day. Text one or snooze it and the next moves up."
+                            )
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.secondaryText)
                             ForEach(today) { followUpCard($0) }
                         }
 
@@ -131,6 +139,18 @@ struct FollowUpView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 webHeading("Later (\(later.count))")
                                 ForEach(later) { followUpCard($0) }
+                            }
+                        }
+
+                        // Everyone not due yet, with the date they will be,
+                        // so nobody is ever just missing from the page.
+                        if !upcoming.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                webHeading("Coming up (\(upcoming.count))")
+                                Text("Not due yet. Interested agents come back 2 weeks after your last contact, warm agents after 3, clients after 4, or sooner if they list or sell something.")
+                                    .font(.footnote)
+                                    .foregroundStyle(Theme.secondaryText)
+                                ForEach(upcoming) { upcomingRow($0) }
                             }
                         }
                     }
@@ -144,6 +164,32 @@ struct FollowUpView: View {
         }
     }
 
+    /// One line per person who isn't due yet: who, why then, and the date.
+    private func upcomingRow(_ item: FollowUpResponse.Upcoming) -> some View {
+        Button { openAgent = item.agent } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.agent.displayName)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.primaryText)
+                        .multilineTextAlignment(.leading)
+                    if let note = item.note?.nilIfBlank {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiaryText)
+                    }
+                }
+                Spacer(minLength: 8)
+                Text(DateFormatting.parse(item.dueAt).map { DateFormatting.monthDay.string(from: $0) } ?? "When they list or sell")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     /// The web's section heading: small, bold, uppercase, muted.
     private func webHeading(_ title: String) -> some View {
         Text(title.uppercased())
@@ -154,9 +200,10 @@ struct FollowUpView: View {
 
     // MARK: - Agent card (the web's AgentCard)
 
-    /// Everything the web's card shows, in its order: name and status, phone
-    /// and email, the listing count and dates, notes, then snooze / call / text
-    /// / email, and under them the reason with the listing it is about.
+    /// Everything the web's card shows, in its order: the reason, name and
+    /// status, phone and email, the listing count and dates, notes, then
+    /// snooze / call / text / email, and under them the text to start from
+    /// and the listing the reason is about.
     private func followUpCard(_ item: FollowUpResponse.JustListed) -> some View {
         let agent = item.agent
         let digits = agent.phone?.filter(\.isNumber).nilIfBlank
@@ -164,6 +211,13 @@ struct FollowUpView: View {
 
         return VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
+                // The reason leads: it's what the text will be about. A plain
+                // "quiet" is the absence of one, so it's muted.
+                if let headline = item.headline?.nilIfBlank {
+                    Text(headline)
+                        .font(.subheadline.weight(item.reason == "quiet" ? .regular : .medium))
+                        .foregroundStyle(item.reason == "quiet" ? Theme.secondaryText : Theme.emerald)
+                }
                 HStack(spacing: 8) {
                     Button { openAgent = agent } label: {
                         Text(agent.displayName)
@@ -213,9 +267,18 @@ struct FollowUpView: View {
 
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
-                iconButton("moon.zzz", label: "Snooze \(agent.displayName) for 4 weeks") {
-                    Task { await snooze(agent) }
+                // A menu, so the length is picked rather than assumed.
+                Menu {
+                    Section("Hide for (a new listing still brings them back)") {
+                        ForEach(Self.snoozeChoices, id: \.days) { choice in
+                            Button(choice.label) { Task { await snooze(agent, days: choice.days) } }
+                        }
+                    }
+                } label: {
+                    iconLabel("moon.zzz")
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Snooze \(agent.displayName)")
                 if let digits {
                     iconButton("phone", label: "Call \(agent.displayName)") {
                         if let url = URL(string: "tel://\(digits)") {
@@ -225,7 +288,7 @@ struct FollowUpView: View {
                         }
                     }
                     iconButton("message", label: "Text \(agent.displayName)") {
-                        text(agent, digits: digits)
+                        text(agent, digits: digits, body: item.suggestion ?? "")
                     }
                 }
                 if let email, let url = URL(string: "mailto:\(email)") {
@@ -233,28 +296,8 @@ struct FollowUpView: View {
                 }
             }
 
-            reason(item)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .card(padding: 14)
-        .contextMenu {
-            Button {
-                Task { await snooze(agent) }
-            } label: {
-                Label("Snooze 4 weeks", systemImage: "moon.zzz")
-            }
-        }
-    }
-
-    /// The reason leads: it's what the text will be about. A plain "quiet" is
-    /// the absence of one, so it's muted.
-    @ViewBuilder
-    private func reason(_ item: FollowUpResponse.JustListed) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let headline = item.headline?.nilIfBlank {
-                Text(headline)
-                    .font(.subheadline.weight(item.reason == "quiet" ? .regular : .medium))
-                    .foregroundStyle(item.reason == "quiet" ? Theme.secondaryText : Theme.emerald)
+            if let suggestion = item.suggestion?.nilIfBlank {
+                suggestedText(suggestion, agent: agent, digits: digits)
             }
             if let listing = item.listing {
                 Button { openListing = listing } label: { ListingRow(listing: listing, showsChevron: true) }
@@ -262,19 +305,56 @@ struct FollowUpView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .card(padding: 14)
+        .contextMenu {
+            ForEach(Self.snoozeChoices, id: \.days) { choice in
+                Button {
+                    Task { await snooze(agent, days: choice.days) }
+                } label: {
+                    Label("Snooze \(choice.label)", systemImage: "moon.zzz")
+                }
+            }
+        }
+    }
+
+    /// A text to start from, written by the server for this reason. Tapping it
+    /// opens Messages with it, as the card's Text button does; nothing goes
+    /// out until he sends it.
+    private func suggestedText(_ suggestion: String, agent: Agent, digits: String?) -> some View {
+        Button {
+            if let digits { text(agent, digits: digits, body: suggestion) }
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Suggested text")
+                    .font(.caption)
+                    .foregroundStyle(Theme.tertiaryText)
+                Text(suggestion)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.primaryText)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(digits == nil)
+    }
+
+    private func iconLabel(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.callout)
+            .foregroundStyle(Theme.primaryText)
+            .frame(width: 40, height: 36)
+            .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Theme.border, lineWidth: 0.5))
     }
 
     private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.callout)
-                .foregroundStyle(Theme.primaryText)
-                .frame(width: 40, height: 36)
-                .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Theme.border, lineWidth: 0.5))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
+        Button(action: action) { iconLabel(symbol) }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
     }
 
     /// "12 listings", "Last contacted Sep 2", "Last replied Oct 3",
@@ -296,11 +376,11 @@ struct FollowUpView: View {
         return parts
     }
 
-    /// Opens Messages to this agent with nothing written. Only a text that
-    /// went out is recorded.
-    private func text(_ agent: Agent, digits: String) {
+    /// Opens Messages to this agent with the suggested text written, for him
+    /// to edit and send. Only a text that went out is recorded.
+    private func text(_ agent: Agent, digits: String, body: String) {
         contactError = nil
-        MessageComposer.present(recipients: [digits], body: "") { outcome in
+        MessageComposer.present(recipients: [digits], body: body) { outcome in
             switch outcome {
             case .unavailable:
                 contactError = "This device can't send texts right now."
@@ -390,7 +470,7 @@ struct FollowUpView: View {
                 FollowUpAgentRow(
                     agent: entry.agent,
                     lastReplyAt: entry.lastReplyAt,
-                    onSnooze: { Task { await snooze(entry.agent) } }
+                    onSnooze: { days in Task { await snooze(entry.agent, days: days) } }
                 )
                 .card()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -408,21 +488,23 @@ struct FollowUpView: View {
             .onTapGesture { openAgent = agent }
             .accessibilityAddTraits(.isButton)
             .contextMenu {
-                Button {
-                    Task { await snooze(agent) }
-                } label: {
-                    Label("Snooze 4 weeks", systemImage: "moon.zzz")
+                ForEach(Self.snoozeChoices, id: \.days) { choice in
+                    Button {
+                        Task { await snooze(agent, days: choice.days) }
+                    } label: {
+                        Label("Snooze \(choice.label)", systemImage: "moon.zzz")
+                    }
                 }
             }
     }
 
-    /// "Not now": takes the agent off Follow up for four weeks, whatever put
+    /// "Not now": takes the agent off Follow up for the weeks picked, whatever put
     /// them there (gone quiet, just listed, under contract), as the web's
     /// snooze does. Nobody is contacted. Put back if the server didn't take it.
-    private func snooze(_ agent: Agent) async {
+    private func snooze(_ agent: Agent, days: Int) async {
         withAnimation(.snappy(duration: 0.22)) { _ = snoozed.insert(agent.id) }
         do {
-            try await APIClient.shared.snoozeFollowUp(agentId: agent.id)
+            try await APIClient.shared.snoozeFollowUp(agentId: agent.id, days: days)
             await appState.followUp.load(force: true)
         } catch {
             snoozed.remove(agent.id)
@@ -480,7 +562,7 @@ struct FollowUpView: View {
                     FollowUpAgentRow(
                         agent: item.agent,
                         lastReplyAt: item.lastReplyAt,
-                        onSnooze: { Task { await snooze(item.agent) } }
+                        onSnooze: { days in Task { await snooze(item.agent, days: days) } }
                     )
                     .padding(.top, item.listing == nil ? 0 : 4)
                 }
@@ -578,8 +660,8 @@ struct FollowUpView: View {
 private struct FollowUpAgentRow: View {
     let agent: Agent
     var lastReplyAt: String?
-    /// "Not now": takes the agent off Follow up for four weeks.
-    var onSnooze: (() -> Void)?
+    /// "Not now": takes the agent off Follow up for the number of days picked.
+    var onSnooze: ((Int) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -591,7 +673,11 @@ private struct FollowUpAgentRow: View {
                 )
                 if let onSnooze {
                     // Sized like the Leads card's pass button.
-                    Button(action: onSnooze) {
+                    Menu {
+                        ForEach(FollowUpView.snoozeChoices, id: \.days) { choice in
+                            Button(choice.label) { onSnooze(choice.days) }
+                        }
+                    } label: {
                         Image(systemName: "moon.zzz")
                             .font(.callout)
                             .foregroundStyle(Theme.tertiaryText)
@@ -599,7 +685,7 @@ private struct FollowUpAgentRow: View {
                             .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Snooze \(agent.displayName) for 4 weeks")
+                    .accessibilityLabel("Snooze \(agent.displayName)")
                 }
             }
             if let notes = agent.notes?.nilIfBlank {

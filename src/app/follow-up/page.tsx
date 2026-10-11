@@ -32,9 +32,9 @@ async function FollowUpContent() {
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Follow up</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Five a day, strongest reason first: a new listing, samples that got no answer, a sale, a price cut, then
-          anyone who&rsquo;s gone quiet. Each follow-up that goes unanswered doubles the wait. Text one, or snooze them
-          for 4 weeks.
+          Agents you know who have a reason to hear from you, best reason first: a new listing, samples that got no
+          answer, a sale, a price cut, then anyone who&rsquo;s gone quiet. Nobody shows up within 10 days of your last
+          text, and each follow-up that goes unanswered doubles the wait.
         </p>
       </header>
       <FollowUpList {...board} counts={counts} dates={dates} />
