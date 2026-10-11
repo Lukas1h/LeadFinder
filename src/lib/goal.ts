@@ -19,8 +19,8 @@ import { getFollowUpBoard } from "@/app/follow-up/data";
 /** Dollars of booked work a month. Change it here. */
 export const MONTHLY_GOAL = 3000;
 
-/** Used until the texts have produced enough bookings to measure it. */
-const ASSUMED_BOOK_RATE = 0.1;
+/** Used until the texts have produced enough bookings to measure it. Lukas's own estimate (2026-10-10): about 1 in 50 interested agents. */
+const ASSUMED_BOOK_RATE = 0.02;
 /** Bookings from texted agents before the measured rate replaces the assumed one. */
 const MIN_BOOKINGS_TO_MEASURE = 3;
 /** Fallbacks for a rate with too little behind it to trust. */
