@@ -372,6 +372,15 @@ struct MessagesResponse: Codable, Sendable {
         var rates: Rates
         var interested: Interested
         var thisWeek: ThisWeek
+        /// The steady pace that reaches the goal. Optional so a copy cached
+        /// before the server sent it still decodes.
+        var plan: Plan?
+        struct Plan: Codable, Sendable {
+            var newClientsPerMonth: Double
+            var newClientsThisMonth: Int
+            var textsPerWeek: Int
+            var repliesPerWeek: Int
+        }
         /// The estimate in a sentence, written by the server so it can't drift
         /// from the math. Optional for a response cached from before it existed.
         var note: String?
