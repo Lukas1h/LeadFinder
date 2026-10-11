@@ -201,25 +201,155 @@ actor APIClient {
 
     /// Records how a message went: "keep_in_touch" or "declined". This is the
     /// web's `markSendReply`, which writes an interaction and moves the agent's
-    /// and listing's status. **It sends nothing**; `sendSamples` is the send.
+    /// and listing's status. **It sends nothing**; `sendQuickActionEmail` is the send.
     func recordMessageReply(id: String, outcome: String) async throws {
         struct Body: Encodable, Sendable { let outcome: String }
         struct OK: Decodable, Sendable { let ok: Bool }
         _ = try await send("POST", "api/app/v1/messages/\(id)/reply", body: Body(outcome: outcome), as: OK.self)
     }
 
-    /// Emails the template's sample email to the agent: **a real send**, so the
-    /// only caller is the message screen's confirm dialog. `email` is only used
-    /// when the agent has none on file. Returns the server's note, if any.
-    func sendSamples(messageId: String, email: String?) async throws -> String? {
+    // MARK: - Quick actions
+
+    /// An email quick action: **a real send**, so the only caller is the
+    /// message screen's confirm dialog. `email` is only used when the agent has
+    /// none on file. Returns the server's note, if any.
+    func sendQuickActionEmail(messageId: String, presetId: String, email: String?) async throws -> String? {
         struct Body: Encodable, Sendable { let email: String? }
         struct Result: Decodable, Sendable { let note: String? }
         return try await send(
             "POST",
-            "api/app/v1/messages/\(messageId)/samples",
+            "api/app/v1/messages/\(messageId)/quick-actions/\(presetId)",
             body: Body(email: email),
             as: Result.self
         ).note
+    }
+
+    /// Records a text quick action. **It sends nothing**: called only when the
+    /// Messages sheet reports `.sent`.
+    func recordQuickActionText(messageId: String, presetId: String, variantId: String) async throws {
+        struct Body: Encodable, Sendable { let variantId: String }
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send(
+            "POST",
+            "api/app/v1/messages/\(messageId)/quick-actions/\(presetId)",
+            body: Body(variantId: variantId),
+            as: OK.self
+        )
+    }
+
+    // MARK: - Templates
+
+    /// Every template that isn't archived, with its variants and attachments.
+    func presets() async throws -> [PresetSummary] {
+        let response: PresetsResponse = try await read("api/app/v1/presets")
+        return response.presets
+    }
+
+    /// Only the fields set are changed. `quickActionPresetIds` is the whole
+    /// ordered list; an empty `secondMessage` clears it.
+    struct PresetPatch: Encodable, Sendable {
+        var name: String?
+        var enabled: Bool?
+        var secondMessage: String?
+        var quickActionPresetIds: [String]?
+    }
+
+    func patchPreset(id: String, _ patch: PresetPatch) async throws -> PresetSummary {
+        struct Response: Decodable, Sendable { let preset: PresetSummary }
+        return try await send("PATCH", "api/app/v1/presets/\(id)", body: patch, as: Response.self).preset
+    }
+
+    func createVariant(presetId: String, label: String, body: String, subject: String?) async throws {
+        struct Body: Encodable, Sendable {
+            let label: String
+            let body: String
+            let subject: String?
+        }
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send(
+            "POST",
+            "api/app/v1/presets/\(presetId)/variants",
+            body: Body(label: label, body: body, subject: subject),
+            as: OK.self
+        )
+    }
+
+    /// A variant's wording, all three together, and whether it's in the rotation.
+    func updateVariant(id: String, label: String, body: String, subject: String?, enabled: Bool) async throws {
+        struct Body: Encodable, Sendable {
+            let label: String
+            let body: String
+            let subject: String?
+            let enabled: Bool
+        }
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send(
+            "PATCH",
+            "api/app/v1/presets/variants/\(id)",
+            body: Body(label: label, body: body, subject: subject, enabled: enabled),
+            as: OK.self
+        )
+    }
+
+    /// Attaches a file to a template. The body is the file itself; 4 MB at most.
+    /// Returns the template's attachments afterwards.
+    func uploadAttachment(presetId: String, data: Data, contentType: String, filename: String) async throws -> [PresetAttachment] {
+        struct Response: Decodable, Sendable { let attachments: [PresetAttachment] }
+        var request = try await authorizedRequest("api/app/v1/presets/\(presetId)/attachments")
+        request.httpMethod = "POST"
+        request.httpBody = data
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        // Headers are ASCII; the server decodes this with decodeURIComponent.
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-_.~")
+        request.setValue(
+            filename.addingPercentEncoding(withAllowedCharacters: allowed) ?? "file",
+            forHTTPHeaderField: "X-Filename"
+        )
+        let bytes = try await checked(request)
+        do {
+            return try decoder.decode(Response.self, from: bytes).attachments
+        } catch {
+            throw APIError.decoding(String(describing: error))
+        }
+    }
+
+    func deleteAttachment(presetId: String, attachmentId: String) async throws {
+        struct Empty: Encodable, Sendable {}
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send(
+            "DELETE",
+            "api/app/v1/presets/\(presetId)/attachments/\(attachmentId)",
+            body: Empty?.none,
+            as: OK.self
+        )
+    }
+
+    /// One attachment's bytes. An attachment never changes once uploaded, so
+    /// it's kept on disk by id and only downloaded the first time.
+    func attachmentData(presetId: String, attachmentId: String) async throws -> Data {
+        let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("preset-attachments", isDirectory: true)
+        let file = folder.appendingPathComponent(attachmentId)
+        if let data = try? Data(contentsOf: file), !data.isEmpty { return data }
+
+        var request = try await authorizedRequest("api/app/v1/presets/\(presetId)/attachments/\(attachmentId)")
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+        let data = try await checked(request)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? data.write(to: file, options: .atomic)
+        return data
+    }
+
+    /// Runs a request and returns the body of a 2xx answer.
+    private func checked(_ request: URLRequest) async throws -> Data {
+        let (data, response) = try await send(request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.http(-1, "No response") }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(http.statusCode) else {
+            throw APIError.http(http.statusCode, message(from: data))
+        }
+        return data
     }
 
     // MARK: - Editing agents

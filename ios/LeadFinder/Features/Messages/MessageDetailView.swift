@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// One message in full, with what can be done about the reply: email the
-/// template's samples, keep in touch, or mark declined.
+/// One message in full, with what can be done about the reply: the template's
+/// quick actions, keep in touch, or mark declined.
 ///
-/// "Keep in touch" and "Declined" only record what happened. "Send samples" is
-/// a real email, so it always goes through a confirm that names the template
-/// and the address first.
+/// "Keep in touch" and "Declined" only record what happened. An email quick
+/// action is a real email, so it always goes through a confirm that names the
+/// template and the address first. A text quick action opens the Messages
+/// sheet filled in, and is recorded only if that sheet reports it sent.
 struct MessageDetailView: View {
     let send: MessagesResponse.Send
-    /// Opens straight on the "Send samples" confirm, from the history row's
-    /// quick action.
-    var startsSamples = false
+    /// Opens straight on the quick actions, from the history row's long press:
+    /// the one action if there's only one, a choice otherwise.
+    var startsQuickActions = false
 
     @Environment(AppState.self) private var appState
     @State private var detail: MessageDetailResponse?
@@ -18,10 +19,16 @@ struct MessageDetailView: View {
     @State private var error: String?
     @State private var confirmDeclined = false
     @State private var didApply = false
-    @State private var confirmSamples = false
+    /// The email quick action waiting on its confirm or on an address.
+    @State private var pendingAction: QuickAction?
+    @State private var confirmEmail = false
     @State private var askForEmail = false
     @State private var typedEmail = ""
-    @State private var samplesResult: String?
+    @State private var chooseAction = false
+    /// What each finished quick action did, by template id.
+    @State private var actionNotes: [String: String] = [:]
+    /// The text quick action whose files are being fetched.
+    @State private var preparing: String?
     @State private var openListing: Listing?
 
     var body: some View {
@@ -70,19 +77,32 @@ struct MessageDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await load()
-            if startsSamples, canSendSamples, !didApply { beginSamples() }
+            if startsQuickActions, !didApply {
+                if quickActions.count == 1 {
+                    begin(quickActions[0])
+                } else if quickActions.count > 1 {
+                    chooseAction = true
+                }
+            }
         }
         .sheet(isPresented: $askForEmail) { emailEntry }
         .sheet(item: $openListing) { LeadListingSheet(listing: $0, agent: detail?.agent) }
         .confirmationDialog(
-            "Email \(samplesTemplateName) to \(detail?.agent?.email ?? "them")?",
-            isPresented: $confirmSamples,
-            titleVisibility: .visible
-        ) {
-            Button("Send email") { Task { await sendSamples(email: nil) } }
+            "Email \"\(pendingAction?.name ?? "")\" to \(detail?.agent?.email ?? "them")?",
+            isPresented: $confirmEmail,
+            titleVisibility: .visible,
+            presenting: pendingAction
+        ) { action in
+            Button("Send email") { Task { await sendEmail(action, email: nil) } }
             Button("Cancel", role: .cancel) {}
-        } message: {
+        } message: { _ in
             Text("This emails \(send.recipient) now, from your address.")
+        }
+        .confirmationDialog("Quick actions", isPresented: $chooseAction, titleVisibility: .visible) {
+            ForEach(quickActions) { action in
+                Button(action.isEmail ? "Email \"\(action.name)\"…" : "Text \"\(action.name)\"…") { begin(action) }
+            }
+            Button("Cancel", role: .cancel) {}
         }
         .confirmationDialog(
             "Mark \(send.recipient) as declined?",
@@ -146,25 +166,16 @@ struct MessageDetailView: View {
             // Once one of these has been applied the message has an outcome, so
             // offering the other one would contradict what was just recorded.
             if didApply {
-                Label(samplesResult ?? "Recorded.", systemImage: "checkmark.circle")
+                Label("Recorded.", systemImage: "checkmark.circle")
                     .font(.subheadline)
                     .foregroundStyle(Theme.positive)
             } else {
-                if canSendSamples {
-                    Button(action: beginSamples) {
-                        Label("Send samples", systemImage: "envelope.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .foregroundStyle(Theme.background)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isWorking)
-                    Text("Emails \"\(samplesTemplateName)\"")
-                        .font(.caption)
-                        .foregroundStyle(Theme.tertiaryText)
+                // Several can follow one reply (the photos, then the contact
+                // card), so a finished one is ticked and the rest stay.
+                ForEach(quickActions) { action in
+                    quickActionButton(action)
                 }
+                if actionNotes.isEmpty {
                 HStack(spacing: 10) {
                     actionButton("Keep in touch", "clock") {
                         Task { await apply(.keepInTouch) }
@@ -174,6 +185,7 @@ struct MessageDetailView: View {
                     }
                 }
                 .disabled(isWorking)
+                }
             }
 
             if isWorking {
@@ -267,24 +279,119 @@ struct MessageDetailView: View {
         .padding(.horizontal, 16)
     }
 
-    // MARK: - Send samples
+    // MARK: - Quick actions
 
-    private var canSendSamples: Bool {
-        detail?.followUpEmail != nil && detail?.agent != nil
+    private var quickActions: [QuickAction] {
+        // Without the agent there's nobody to send to.
+        detail?.agent == nil ? [] : detail?.quickActions ?? []
     }
 
-    private var samplesTemplateName: String {
-        detail?.followUpEmail?.name ?? "the sample email"
+    private func quickActionButton(_ action: QuickAction) -> some View {
+        let note = actionNotes[action.presetId]
+        return VStack(alignment: .leading, spacing: 4) {
+            Button { begin(action) } label: {
+                HStack(spacing: 8) {
+                    if preparing == action.presetId {
+                        ProgressView().controlSize(.small).tint(Theme.background)
+                    } else {
+                        Image(systemName: note != nil ? "checkmark" : action.isEmail ? "envelope.fill" : "message.fill")
+                    }
+                    Text(action.name).lineLimit(1)
+                }
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(
+                    note == nil ? Theme.accent : Theme.cardRaised,
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                )
+                .foregroundStyle(note == nil ? Theme.background : Theme.primaryText)
+            }
+            .buttonStyle(.plain)
+            .disabled(isWorking)
+
+            Text(note ?? Self.caption(for: action))
+                .font(.caption)
+                .foregroundStyle(note == nil ? Theme.tertiaryText : Theme.positive)
+        }
     }
 
-    /// An agent with an address on file is a confirm and one tap; without one
-    /// the address has to be typed (or pasted) first, as on the web.
-    private func beginSamples() {
-        if detail?.agent?.email?.nilIfBlank != nil {
-            confirmSamples = true
+    private static func caption(for action: QuickAction) -> String {
+        let files = action.attachments.count
+        let with = files == 0 ? "" : files == 1 ? " with \(action.attachments[0].filename)" : " with \(files) files"
+        return action.isEmail ? "Sends an email\(with)" : "Opens a text\(with)"
+    }
+
+    private func begin(_ action: QuickAction) {
+        guard !isWorking else { return }
+        if action.isEmail {
+            // An agent with an address on file is a confirm and one tap; without
+            // one the address has to be typed (or pasted) first, as on the web.
+            pendingAction = action
+            if detail?.agent?.email?.nilIfBlank != nil {
+                confirmEmail = true
+            } else {
+                typedEmail = ""
+                askForEmail = true
+            }
         } else {
-            typedEmail = ""
-            askForEmail = true
+            Task { await sendText(action) }
+        }
+    }
+
+    /// Fetches the template's files, opens Messages with everything filled in,
+    /// and records the text only if the sheet says it was sent.
+    private func sendText(_ action: QuickAction) async {
+        let phone = detail?.agent?.phone?.nilIfBlank ?? send.agentPhone?.nilIfBlank
+        guard let digits = phone?.filter({ $0.isNumber || $0 == "+" }), !digits.isEmpty else {
+            error = "\(send.recipient) has no phone number on file."
+            return
+        }
+
+        isWorking = true
+        error = nil
+        defer { isWorking = false }
+
+        var files: [MessageComposer.Attachment] = []
+        preparing = action.presetId
+        do {
+            for attachment in action.attachments {
+                let data = try await APIClient.shared.attachmentData(
+                    presetId: action.presetId,
+                    attachmentId: attachment.id
+                )
+                files.append(.init(
+                    data: data,
+                    typeIdentifier: attachment.typeIdentifier,
+                    filename: attachment.filename
+                ))
+            }
+        } catch {
+            preparing = nil
+            self.error = "Couldn't load the attachments: \((error as? APIError)?.errorDescription ?? error.localizedDescription)"
+            return
+        }
+        preparing = nil
+
+        switch await MessageComposer.present(recipients: [digits], body: action.text, attachments: files) {
+        case .cancelled:
+            return
+        case .unavailable:
+            error = files.isEmpty
+                ? "This device can't send texts."
+                : "This device can't send texts with attachments."
+        case .sent:
+            do {
+                try await APIClient.shared.recordQuickActionText(
+                    messageId: send.id,
+                    presetId: action.presetId,
+                    variantId: action.variantId
+                )
+                actionNotes[action.presetId] = "Texted to \(send.recipient)."
+                await appState.messages.load(force: true)
+            } catch {
+                self.error = "The text was sent, but recording it failed: \((error as? APIError)?.errorDescription ?? error.localizedDescription)"
+            }
         }
     }
 
@@ -303,14 +410,14 @@ struct MessageDetailView: View {
                 } header: {
                     Text("\(send.recipient) has no email on file")
                 } footer: {
-                    Text("Emails \"\(samplesTemplateName)\" there now, and saves the address to them.")
+                    Text("Emails \"\(pendingAction?.name ?? "")\" there now, and saves the address to them.")
                 }
                 .listRowBackground(Theme.card)
             }
             .scrollContentBackground(.hidden)
             .background(Theme.background)
             .tint(Theme.accent)
-            .navigationTitle("Send samples")
+            .navigationTitle(pendingAction?.name ?? "Send email")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -320,7 +427,7 @@ struct MessageDetailView: View {
                     Button("Send") {
                         let email = typedEmail
                         askForEmail = false
-                        Task { await sendSamples(email: email) }
+                        if let action = pendingAction { Task { await sendEmail(action, email: email) } }
                     }
                     .fontWeight(.semibold)
                     .disabled(Self.firstEmail(in: typedEmail) == nil)
@@ -336,14 +443,17 @@ struct MessageDetailView: View {
             .map { String(text[$0]) }
     }
 
-    private func sendSamples(email: String?) async {
+    private func sendEmail(_ action: QuickAction, email: String?) async {
         isWorking = true
         error = nil
         defer { isWorking = false }
         do {
-            let note = try await APIClient.shared.sendSamples(messageId: send.id, email: email)
-            samplesResult = note ?? "Samples emailed to \(send.recipient)."
-            didApply = true
+            let note = try await APIClient.shared.sendQuickActionEmail(
+                messageId: send.id,
+                presetId: action.presetId,
+                email: email
+            )
+            actionNotes[action.presetId] = note ?? "Emailed to \(send.recipient)."
             await appState.messages.load(force: true)
         } catch let apiError as APIError {
             error = apiError.errorDescription

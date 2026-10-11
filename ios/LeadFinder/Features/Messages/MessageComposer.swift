@@ -31,8 +31,27 @@ final class MessageComposer: NSObject, MFMessageComposeViewControllerDelegate {
         self.onFinish = onFinish
     }
 
-    static func present(recipients: [String], body: String, onFinish: @escaping (Outcome) -> Void) {
+    /// A file to put in the message: a vCard, a photo.
+    struct Attachment: Sendable {
+        var data: Data
+        /// A uniform type identifier, e.g. "public.vcard" or "public.jpeg".
+        var typeIdentifier: String
+        var filename: String
+    }
+
+    static func present(
+        recipients: [String],
+        body: String,
+        attachments: [Attachment] = [],
+        onFinish: @escaping (Outcome) -> Void
+    ) {
         guard MFMessageComposeViewController.canSendText(), let top = topViewController() else {
+            onFinish(.unavailable)
+            return
+        }
+        // A message whose files were silently dropped isn't the one that was
+        // asked for, so don't open it at all.
+        if !attachments.isEmpty, !MFMessageComposeViewController.canSendAttachments() {
             onFinish(.unavailable)
             return
         }
@@ -42,14 +61,21 @@ final class MessageComposer: NSObject, MFMessageComposeViewControllerDelegate {
         // Set before presentation; MessageUI ignores changes made after.
         controller.recipients = recipients
         controller.body = body
+        for attachment in attachments {
+            controller.addAttachmentData(
+                attachment.data,
+                typeIdentifier: attachment.typeIdentifier,
+                filename: attachment.filename
+            )
+        }
         current = composer
         top.present(controller, animated: true)
     }
 
     /// `present`, awaited: returns once the sheet has been sent or closed.
-    static func present(recipients: [String], body: String) async -> Outcome {
+    static func present(recipients: [String], body: String, attachments: [Attachment] = []) async -> Outcome {
         await withCheckedContinuation { continuation in
-            present(recipients: recipients, body: body) { continuation.resume(returning: $0) }
+            present(recipients: recipients, body: body, attachments: attachments) { continuation.resume(returning: $0) }
         }
     }
 

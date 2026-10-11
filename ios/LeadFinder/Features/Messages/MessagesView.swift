@@ -1,19 +1,19 @@
 import SwiftUI
 
-/// The Messages tab: the web's `/messaging` page, minus everything that sends.
+/// The Messages tab: the web's `/messaging` page.
 ///
 /// Shown here: the stats card, the reply-rate-by-day chart, the top templates,
-/// and the message history with the two outcome actions ("Keep in touch",
-/// "Declined") that only record something — the web's "Send samples" and
-/// "Compose" buttons are deliberately absent, because they put real email in
-/// real people's inboxes.
+/// the message history (each row opens the message, with its quick actions and
+/// the "Keep in touch" / "Declined" outcomes), and the template editor behind
+/// the toolbar button. The web's "Compose" is absent.
 struct MessagesView: View {
     @Environment(AppState.self) private var appState
 
     @State private var openSend: MessagesResponse.Send?
-    /// Set by the row's "Send samples" quick action, so its detail opens
-    /// straight on the confirm.
-    @State private var samplesOnOpen = false
+    /// Set by the row's long press, so its detail opens straight on the quick
+    /// actions.
+    @State private var quickActionsOnOpen = false
+    @State private var showTemplates = false
 
     var body: some View {
         NavigationStack {
@@ -29,10 +29,25 @@ struct MessagesView: View {
             .background(Theme.background)
             .navigationTitle("Messages")
             .sheet(item: $openSend) { send in
-                MessageDetailView(send: send, startsSamples: samplesOnOpen)
+                MessageDetailView(send: send, startsQuickActions: quickActionsOnOpen)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showTemplates = true
+                    } label: {
+                        Label("Templates", systemImage: "text.bubble")
+                    }
+                }
+            }
+            .navigationDestination(isPresented: $showTemplates) { TemplatesView() }
+            #if DEBUG
+            .onAppear {
+                if DebugLaunchArguments.opensTemplates { showTemplates = true }
+            }
+            #endif
             .task { await appState.messages.load() }
         }
     }
@@ -220,21 +235,23 @@ struct MessagesView: View {
             } else {
                 ForEach(sends) { send in
                     Button {
-                        samplesOnOpen = false
+                        quickActionsOnOpen = false
                         openSend = send
                     } label: {
                         MessageHistoryRow(send: send)
                     }
                     .buttonStyle(.plain)
-                    // Quick action: a long press goes straight to emailing
-                    // samples, which still asks before anything is sent.
+                    // A long press goes straight to the template's quick
+                    // actions. Which ones it has comes with the message, so
+                    // they're offered once it has loaded; an email still asks
+                    // before anything is sent.
                     .contextMenu {
-                        if send.channel == "text", send.result == nil || send.result == "pending" {
+                        if send.channel != "email", send.result == nil || send.result == "pending" {
                             Button {
-                                samplesOnOpen = true
+                                quickActionsOnOpen = true
                                 openSend = send
                             } label: {
-                                Label("Send samples…", systemImage: "envelope")
+                                Label("Quick actions…", systemImage: "bolt")
                             }
                         }
                     }

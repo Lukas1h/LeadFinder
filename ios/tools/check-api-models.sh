@@ -7,7 +7,7 @@
 # screen. Neither showed up as a build error, because the app compiles against
 # the model, not against the data.
 #
-# Fetches the five read endpoints and decodes each with the real model types.
+# Fetches the read endpoints and decodes each with the real model types.
 # Read-only: nothing here writes.
 #
 # Usage: ios/tools/check-api-models.sh
@@ -29,10 +29,17 @@ BASE="$(grep '^MOBILE_API_BASE_URL' Config/Base.xcconfig | sed 's/.*= *//; s|/\$
 BASE="${BASE:-https://realestate.lukashahn.art}"
 
 echo "Fetching from $BASE"
-for endpoint in leads follow-up schedule bookings agents; do
+for endpoint in leads follow-up schedule bookings agents messages presets; do
   curl -sf -H "Authorization: Bearer $SECRET" "$BASE/api/app/v1/$endpoint" -o "$WORK/$endpoint.json"
   printf '  %-12s %s bytes\n' "$endpoint" "$(wc -c < "$WORK/$endpoint.json" | tr -d ' ')"
 done
+
+# One message in full, for its quick actions: the newest text in the history.
+MESSAGE_ID="$(python3 -c 'import json,sys; s=[x for x in json.load(open(sys.argv[1]))["sends"] if x["channel"]!="email"]; print(s[0]["id"] if s else "")' "$WORK/messages.json")"
+if [ -n "$MESSAGE_ID" ]; then
+  curl -sf -H "Authorization: Bearer $SECRET" "$BASE/api/app/v1/messages/$MESSAGE_ID" -o "$WORK/message.json"
+  printf '  %-12s %s bytes\n' "message" "$(wc -c < "$WORK/message.json" | tr -d ' ')"
+fi
 
 cp LeadFinder/API/APIModels.swift "$WORK/APIModels.swift"
 # APIModels relies on a String helper and DateFormatting from the Design
@@ -89,6 +96,11 @@ allOK = check("follow-up", "\\(dir)/follow-up.json", FollowUpResponse.self) && a
 allOK = check("schedule", "\\(dir)/schedule.json", ScheduleResponse.self) && allOK
 allOK = check("bookings", "\\(dir)/bookings.json", BookingsResponse.self) && allOK
 allOK = check("agents", "\\(dir)/agents.json", AgentsResponse.self) && allOK
+allOK = check("messages", "\\(dir)/messages.json", MessagesResponse.self) && allOK
+allOK = check("presets", "\\(dir)/presets.json", PresetsResponse.self) && allOK
+if FileManager.default.fileExists(atPath: "\\(dir)/message.json") {
+    allOK = check("message", "\\(dir)/message.json", MessageDetailResponse.self) && allOK
+}
 exit(allOK ? 0 : 1)
 EOF
 

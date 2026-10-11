@@ -113,6 +113,11 @@ enum DebugLaunchArguments {
         ProcessInfo.processInfo.arguments.contains("-agent")
     }
 
+    /// `-templates` opens the Messages tab's template list on arrival.
+    static var opensTemplates: Bool {
+        ProcessInfo.processInfo.arguments.contains("-templates")
+    }
+
     /// `-bookings` opens the Schedule tab's bookings page on arrival.
     static var opensBookings: Bool {
         ProcessInfo.processInfo.arguments.contains("-bookings")

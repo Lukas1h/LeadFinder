@@ -396,13 +396,81 @@ struct MessageDetailResponse: Codable, Sendable {
     var text: String
     var agent: Agent?
     var listing: Listing?
-    /// Present when the preset has an email follow-up. The app shows it as
-    /// information only — sending email stays on the web.
+    /// The first email quick action, kept by the server for older builds.
     var followUpEmail: FollowUpEmail?
+    /// The template's quick actions, in the order to show them. Missing from
+    /// an older server, which reads as none.
+    var quickActions: [QuickAction]?
 
     struct FollowUpEmail: Codable, Sendable, Hashable {
         var presetId: String
         var name: String
+    }
+}
+
+// MARK: - Quick actions and templates (GET /presets)
+
+/// A file on a template. The bytes come one at a time from
+/// /presets/:id/attachments/:attachmentId.
+struct PresetAttachment: Codable, Sendable, Identifiable, Hashable {
+    var id: String
+    var filename: String
+    var contentType: String?
+    var size: Int?
+}
+
+/// One button on a sent message: another template, ready to go to the same
+/// agent. An email is sent by the server; a text opens Messages filled in.
+struct QuickAction: Codable, Sendable, Identifiable, Hashable {
+    var presetId: String
+    var name: String
+    /// "sms" | "email"
+    var channel: String
+    var variantId: String
+    /// The body as it reads for this agent and listing.
+    var text: String
+    var subject: String?
+    var attachments: [PresetAttachment]
+
+    var id: String { presetId }
+    var isEmail: Bool { channel == "email" }
+}
+
+struct PresetsResponse: Codable, Sendable {
+    var presets: [PresetSummary]
+}
+
+/// The web's PresetSummary (src/app/messaging/actions.ts), same fields.
+struct PresetSummary: Codable, Sendable, Identifiable, Hashable {
+    var id: String
+    var name: String
+    /// "initial_outreach" | "follow_up"
+    var type: String
+    /// "sms" | "email"
+    var channel: String
+    var enabled: Bool
+    var aiGenerated: Bool
+    var protected: Bool
+    var secondMessage: String?
+    var quickActionPresetIds: [String]
+    /// Only ever a quick action (the vCard, the photos), never in a send dialog.
+    var quickActionOnly: Bool
+    var attachments: [PresetAttachment]
+    /// Empty for an AI draft.
+    var variants: [Variant]
+
+    struct Variant: Codable, Sendable, Identifiable, Hashable {
+        var id: String
+        var label: String
+        var subject: String?
+        var body: String
+        var enabled: Bool
+    }
+
+    /// The web's rule for what can be picked as a quick action
+    /// (messaging/page.tsx). The caller leaves out the template itself.
+    var canBeQuickAction: Bool {
+        enabled && !aiGenerated && !protected && (type == "follow_up" || quickActionOnly)
     }
 }
 
