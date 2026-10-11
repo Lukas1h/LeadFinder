@@ -5,16 +5,13 @@ import { Card } from "@/components/ui/card";
 import { Stat, Sub } from "../Stat";
 
 const count = (n: number) => n.toLocaleString("en-US");
-const percent = (rate: number) => `${Math.round(rate * 100)}%`;
-const oneIn = (rate: number) => `1 in ${Math.round(1 / rate)}`;
-
 /**
- * The monthly goal worked backwards into this week's texts, replies and
- * follow-ups (lib/goal.ts). Every number is live: it moves as texts go out,
+ * The monthly goal worked backwards into a weekly pace of texts, replies and
+ * new clients (lib/goal.ts). Every number is live: it moves as texts go out,
  * replies come in, agents turn interested and jobs get booked.
  */
 export function GoalCard({ goal }: { goal: GoalProgress }) {
-  const { thisWeek, rates, interested } = goal;
+  const { thisWeek, plan } = goal;
   const met = goal.gap === 0;
 
   return (
@@ -40,12 +37,16 @@ export function GoalCard({ goal }: { goal: GoalProgress }) {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Stat label="Text this week">
-          {met ? "—" : `${count(thisWeek.textsToGo)} more`}
-          <Sub>{count(thisWeek.texts)} sent so far</Sub>
+          {thisWeek.textsToGo === 0 ? "On pace" : `${count(thisWeek.textsToGo)} more`}
+          <Sub>
+            {count(thisWeek.texts)} of {count(plan.textsPerWeek)} sent
+          </Sub>
         </Stat>
         <Stat label="Replies this week">
-          {met ? "—" : `${count(thisWeek.repliesToGo)} more`}
-          <Sub>{count(thisWeek.replies)} so far</Sub>
+          {thisWeek.repliesToGo === 0 ? "On pace" : `${count(thisWeek.repliesToGo)} more`}
+          <Sub>
+            {count(thisWeek.replies)} of {count(plan.repliesPerWeek)}
+          </Sub>
         </Stat>
         <Stat label="Follow-ups due">
           <Link href="/follow-up" className="hover:underline">
@@ -53,18 +54,13 @@ export function GoalCard({ goal }: { goal: GoalProgress }) {
           </Link>
           <Sub>{count(thisWeek.followUps)} sent this week</Sub>
         </Stat>
-        <Stat label="Interested">
-          {count(interested.live)}
-          <Sub>{met ? "in touch this month" : `of the ${count(interested.needed)} it takes`}</Sub>
+        <Stat label="New clients">
+          {count(plan.newClientsThisMonth)} this month
+          <Sub>about {Math.ceil(plan.newClientsPerMonth)} a month needed</Sub>
         </Stat>
       </div>
 
-      <p className="text-xs text-muted-foreground border-t pt-3">
-        The estimate: {percent(rates.reply)} of texts get a reply and {percent(rates.interested)} of those turn
-        interested (both measured), and {oneIn(rates.book)} interested agents books
-        {rates.bookMeasured ? " (measured)" : " (a guess until texts start producing bookings)"}. Work from clients
-        you already have isn&rsquo;t counted on, so this is the cautious end.
-      </p>
+      <p className="text-xs text-muted-foreground border-t pt-3">{goal.note}</p>
     </Card>
   );
 }

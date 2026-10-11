@@ -327,18 +327,28 @@ A text template lists other templates as **quick actions**: the buttons on a mes
 
 #### The goal card (added 2026-10-10)
 
-`GET /messages` now also returns `goal`, the web's GoalCard (`lib/goal.ts`): the monthly goal worked backwards into this week's work. Show it above the stats.
+`GET /messages` also returns `goal`, the web's GoalCard (`lib/goal.ts`): the monthly goal worked backwards into a steady weekly pace. Show it above the stats.
 
 ```jsonc
 "goal": {
   "goal": 3000, "month": "October",
   "booked": 1820, "jobs": 8,            // jobs dated this month and their value
   "gap": 1180, "avgJob": 281, "jobsNeeded": 5,   // gap is 0 once the goal is met
-  "rates": { "reply": 0.29, "interested": 0.24, "book": 0.1, "bookMeasured": false },
-  "interested": { "live": 40, "needed": 50 },
-  "thisWeek": { "textsToGo": 48, "repliesToGo": 14, "texts": 110, "replies": 37, "followUps": 19, "followUpsDue": 40 }
+  "rates": { "reply": 0.29, "interested": 0.24, "book": 0.14, "bookMeasured": true },
+  "bookSample": { "booked": 7, "of": 33 },        // what rates.book rests on
+  "interested": { "live": 39, "needed": 51 },     // in touch in the last 30 days; needed per month
+  "plan": {
+    "repeat": 950,               // this month's work from people who had booked before
+    "newRevenue": 2050,          // what new clients have to bring in a month
+    "firstJob": 297, "newClientsPerMonth": 6.9, "newClientsThisMonth": 3,
+    "textsPerWeek": 171, "repliesPerWeek": 49      // the weekly targets
+  },
+  "note": "The estimate: repeat clients cover $950 of a month, …",   // show as is; don't rebuild it from the rates
+  "thisWeek": { "textsToGo": 61, "repliesToGo": 12, "texts": 110, "replies": 37, "followUps": 20, "followUpsDue": 13 }
 }
 ```
+
+`thisWeek.textsToGo` and `repliesToGo` are the weekly target less what this week has done, 0 once it's met (show "On pace"). The web's fourth stat is new clients (`plan.newClientsThisMonth`, "about N a month needed" from `plan.newClientsPerMonth` rounded up).
 
 ---
 

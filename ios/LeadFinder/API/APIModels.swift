@@ -355,6 +355,9 @@ struct MessagesResponse: Codable, Sendable {
         var rates: Rates
         var interested: Interested
         var thisWeek: ThisWeek
+        /// The estimate in a sentence, written by the server so it can't drift
+        /// from the math. Optional for a response cached from before it existed.
+        var note: String?
 
         struct Rates: Codable, Sendable {
             var reply: Double

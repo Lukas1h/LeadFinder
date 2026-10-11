@@ -134,7 +134,7 @@ struct MessagesView: View {
                 )
             }
 
-            Text(Self.estimateNote(goal.rates))
+            Text(goal.note ?? Self.estimateNote(goal.rates))
                 .font(.caption)
                 .foregroundStyle(Theme.tertiaryText)
                 .padding(.top, 10)
@@ -144,7 +144,7 @@ struct MessagesView: View {
         .card(padding: 14)
     }
 
-    /// The web's note, word for word.
+    /// The note as it read before the server sent its own (`goal.note`).
     private static func estimateNote(_ rates: MessagesResponse.Goal.Rates) -> String {
         let reply = Int((rates.reply * 100).rounded())
         let interested = Int((rates.interested * 100).rounded())
