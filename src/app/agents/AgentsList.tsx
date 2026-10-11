@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, ChevronRight, Loader2 } from "lucide-react";
@@ -7,7 +8,7 @@ import type { Agent, AgentRelationshipStatus } from "@/db/schema";
 import { AgentCard } from "./AgentCard";
 import { RELATIONSHIP_LABELS } from "./relationshipLabels";
 import { AgentDetailDialog } from "./AgentDetailDialog";
-import { getAllColdAgents, searchAllAgents, dismissFollowUpAgent } from "./actions";
+import { getAllColdAgents, searchAllAgents } from "./actions";
 import { COLD_INITIAL_LIMIT } from "./constants";
 import { Input } from "@/components/ui/input";
 
@@ -46,7 +47,7 @@ export function AgentsList({
   counts,
   listingDatesByAgent,
   coldFreshTotal,
-  followUpAgents,
+  followUpCount,
 }: {
   agents: Agent[];
   counts: Record<string, number>;
@@ -55,10 +56,10 @@ export function AgentsList({
   // only carries COLD_INITIAL_LIMIT of them, so the section header and
   // "View all" button need this separately to show the real number.
   coldFreshTotal: number;
-  // Warm/interested agents overdue for contact (see getFollowUpAgents) —
-  // rendered as its own section at the top, once (revalidation does the
-  // updating; the list doesn't need to juggle local removal).
-  followUpAgents: Agent[];
+  // How many people the Follow up page has waiting. The list itself used to
+  // be repeated here; it lives on that page alone now, with its reasons
+  // (under contract, just listed, gone quiet), and this links to it.
+  followUpCount: number;
 }) {
   const [search, setSearch] = useState("");
   // null = no results known yet for the current query (still debouncing or
@@ -120,10 +121,6 @@ export function AgentsList({
     });
   };
 
-  const handleFollowUpDismiss = (agentId: string) => {
-    startSearchTransition(() => dismissFollowUpAgent(agentId));
-  };
-
   // Once "View all" has loaded the full cold bucket, it replaces (not
   // appends to) the initial capped slice already in `agents` — otherwise
   // the first COLD_INITIAL_LIMIT would render twice.
@@ -156,18 +153,6 @@ export function AgentsList({
         agent={agent}
         listingCount={counts[agent.id] ?? 0}
         listingDates={listingDatesByAgent[agent.id] ?? []}
-      />
-    );
-  }
-
-  function followUpCard(agent: Agent) {
-    return (
-      <AgentCard
-        key={agent.id}
-        agent={agent}
-        listingCount={counts[agent.id] ?? 0}
-        listingDates={listingDatesByAgent[agent.id] ?? []}
-        followUpDismiss={handleFollowUpDismiss}
       />
     );
   }
@@ -209,13 +194,16 @@ export function AgentsList({
         )
       ) : (
         <div className="flex flex-col gap-8">
-          {followUpAgents.length > 0 && (
-            <section>
-              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Follow up ({followUpAgents.length})
-              </h2>
-              <div className="flex flex-col gap-4">{followUpAgents.map(followUpCard)}</div>
-            </section>
+          {followUpCount > 0 && (
+            <Link
+              href="/follow-up"
+              className="flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm hover:bg-muted/50"
+            >
+              <span className="font-medium text-foreground">
+                {followUpCount} {followUpCount === 1 ? "agent" : "agents"} to follow up with
+              </span>
+              <span className="text-muted-foreground">Follow up &rarr;</span>
+            </Link>
           )}
 
           <section>

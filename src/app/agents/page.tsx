@@ -3,7 +3,7 @@ import { Plus, Users } from "lucide-react";
 import { db } from "@/db";
 import { agents } from "@/db/schema";
 import { desc, isNotNull, isNull, eq, ne, or, and, sql } from "drizzle-orm";
-import { ensureAgentsBackfilled, listingCountsByAgent, listingDatesByAgent, getFollowUpAgents } from "./actions";
+import { ensureAgentsBackfilled, listingCountsByAgent, listingDatesByAgent, getFollowUpCount } from "./actions";
 import { AgentsList } from "./AgentsList";
 import { COLD_INITIAL_LIMIT } from "./constants";
 import { ImportAgentForm } from "./ImportAgentForm";
@@ -45,7 +45,7 @@ async function AgentsContent() {
     db.select({ count: sql<number>`count(*)::int` }).from(agents).where(isColdAndFresh),
     listingCountsByAgent(),
     listingDatesByAgent(),
-    getFollowUpAgents(),
+    getFollowUpCount(),
   ]);
 
   const all = [...nonColdFresh, ...coldFreshPage];
@@ -81,7 +81,7 @@ async function AgentsContent() {
           counts={counts}
           listingDatesByAgent={agentListings}
           coldFreshTotal={coldFreshTotal[0].count}
-          followUpAgents={followUp}
+          followUpCount={followUp}
         />
       )}
     </>

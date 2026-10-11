@@ -14,6 +14,7 @@
 
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
+import { getFollowUpBoard } from "@/app/follow-up/data";
 
 /** Dollars of booked work a month. Change it here. */
 export const MONTHLY_GOAL = 3000;
@@ -27,8 +28,6 @@ const DEFAULT_REPLY_RATE = 0.25;
 const DEFAULT_INTERESTED_RATE = 0.2;
 /** An interested agent counts toward the goal only if there has been contact, either way, this recently. */
 const LIVE_DAYS = 30;
-/** Interested agents come back on Follow up after this long (follow-up/data.ts). */
-const FOLLOW_UP_DUE_DAYS = 7;
 /** The rest of the month is never treated as shorter than this, so the last week doesn't ask for a month of texts. */
 const MIN_WEEKS_LEFT = 2;
 
@@ -62,13 +61,13 @@ export interface GoalProgress {
     texts: number;
     replies: number;
     followUps: number;
-    /** Interested agents with nothing from him in a week: the follow-ups waiting. */
+    /** Everyone waiting on the Follow up page: the same list, so the two can't disagree. */
     followUpsDue: number;
   };
 }
 
 export async function computeGoalProgress(): Promise<GoalProgress> {
-  const result = await db.execute(sql`
+  const [board, result] = await Promise.all([getFollowUpBoard(), db.execute(sql`
     with bounds as (
       select
         date_trunc('month', now() at time zone ${TZ}) at time zone ${TZ} as month_start,
@@ -115,9 +114,6 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
       (select count(*) from agents a left join last_inbound i on i.agent_id = a.id
         where a.relationship_status = 'interested'
           and greatest(a.last_contacted_at, i.at) > now() - make_interval(days => ${LIVE_DAYS}))::int as interested_live,
-      (select count(*) from agents a
-        where a.relationship_status = 'interested'
-          and (a.last_contacted_at is null or a.last_contacted_at < now() - make_interval(days => ${FOLLOW_UP_DUE_DAYS})))::int as follow_ups_due,
       (select count(*) from outreach, bounds where sent_at >= week_start)::int as week_texts,
       (select count(*) from outreach, bounds where responded_at >= week_start)::int as week_replies,
       -- A text to someone he had already texted before this week began.
@@ -127,7 +123,7 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
             select 1 from agent_interactions y
             where y.agent_id = x.agent_id and y.direction = 'outbound' and y.occurred_at < week_start
           ))::int as week_follow_ups
-  `);
+  `)]);
   const r = result.rows[0] as Record<string, number | string | null>;
   const n = (key: string) => Number(r[key] ?? 0);
 
@@ -166,7 +162,7 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
       texts: n("week_texts"),
       replies: n("week_replies"),
       followUps: n("week_follow_ups"),
-      followUpsDue: n("follow_ups_due"),
+      followUpsDue: board.news.length + board.justListed.length + board.agents.length,
     },
   };
 }

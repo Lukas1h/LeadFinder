@@ -363,15 +363,10 @@ export async function getOrCreateAgentByPhone(
   return agent;
 }
 
-/**
- * The "Follow up" queue for the top of the Agents tab: past clients, then
- * interested, then warm agents who have gone quiet. See getFollowUpBoard,
- * which the Follow up page also uses; agents with a fresh listing come first
- * here since that page shows them in their own "Just listed" section.
- */
-export async function getFollowUpAgents(): Promise<Agent[]> {
+/** How many people the Follow up page has waiting: the number the Agents tab and the goal card link to it with. */
+export async function getFollowUpCount(): Promise<number> {
   const { news, justListed, agents: quiet } = await getFollowUpBoard();
-  return [...news, ...justListed, ...quiet].map((e) => e.agent);
+  return news.length + justListed.length + quiet.length;
 }
 
 /**

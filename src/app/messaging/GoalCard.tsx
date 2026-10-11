@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { GoalProgress } from "@/lib/goal";
 import { formatPrice } from "@/lib/format";
 import { Card } from "@/components/ui/card";
@@ -47,7 +48,9 @@ export function GoalCard({ goal }: { goal: GoalProgress }) {
           <Sub>{count(thisWeek.replies)} so far</Sub>
         </Stat>
         <Stat label="Follow-ups due">
-          {count(thisWeek.followUpsDue)}
+          <Link href="/follow-up" className="hover:underline">
+            {count(thisWeek.followUpsDue)}
+          </Link>
           <Sub>{count(thisWeek.followUps)} sent this week</Sub>
         </Stat>
         <Stat label="Interested">

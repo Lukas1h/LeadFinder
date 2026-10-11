@@ -16,15 +16,15 @@ const NEWS_DAYS = 21;
  * samples or pricing, so they're the warmest people Lukas has after his
  * clients and are worth a nudge sooner than the merely warm.
  *
- * A week for them, down from two (2026-10-10): 99% of the replies he has ever
- * had to a text came inside a day, so a week of quiet after the samples went
- * out is already an answer, and nobody who said "sure, send them" in the first
- * 48 had booked. The second touch is where those are won.
+ * Two weeks for them. It was briefly one (2026-10-10, on the argument that 99%
+ * of replies come inside a day, so a week of quiet is already an answer), but
+ * Lukas found a second text inside the same stretch as the first one weird to
+ * send, and it's his name on it.
  */
 const QUIET_DAYS: Record<string, number> = {
   regular: 28,
   worked_once: 28,
-  interested: 7,
+  interested: 14,
   warm: 28,
 };
 

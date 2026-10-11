@@ -35,7 +35,7 @@ async function FollowUpContent() {
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Follow up</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Sales and new listings from people who know you, then anyone who&rsquo;s gone quiet: interested agents after
-          a week, everyone else after 4. Text one, or snooze them for 4 weeks.
+          2 weeks, everyone else after 4. Text one, or snooze them for 4 weeks.
         </p>
       </header>
       <FollowUpList news={news} justListed={justListed} agents={agents} counts={counts} dates={dates} />
