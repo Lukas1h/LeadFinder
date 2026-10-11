@@ -28,8 +28,9 @@ struct FollowUpView: View {
         }
         .refreshable { await appState.followUp.load(force: true) }
         .task { await appState.followUp.load() }
-        .searchField(
+        .searchable(
             text: $query,
+            placement: .navigationBarDrawer(displayMode: .always),
             prompt: "Search name, notes, phone"
         )
     }

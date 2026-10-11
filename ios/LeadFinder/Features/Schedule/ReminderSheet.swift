@@ -77,7 +77,7 @@ struct ReminderSheet: View {
             .background(Theme.background)
             .tint(Theme.accent)
             .navigationTitle(existing == nil ? "New reminder" : "Reminder")
-            .titleDisplay(.inline)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

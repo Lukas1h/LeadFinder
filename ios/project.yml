@@ -4,7 +4,6 @@ options:
   bundleIdPrefix: art.lukashahn
   deploymentTarget:
     iOS: "18.0"
-    macOS: "14.0"
   createIntermediateGroups: true
   developmentLanguage: en
 
@@ -60,38 +59,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: art.lukashahn.LeadFinder
-
-  # The Mac app. Same Swift files as the iPhone app (API, Store, Design,
-  # Features) plus `Mac/`, which holds the window chrome and the NSSharingService
-  # message composer. Anything iOS-only — UIKit, MessageUI, PhotosUI, Call
-  # Directory — sits behind `#if os(iOS)` or in a platform folder.
-  LeadFinderMac:
-    type: application
-    platform: macOS
-    sources:
-      - path: LeadFinder
-      - path: Mac
-    info:
-      path: Mac/Info.plist
-      properties:
-        CFBundleDisplayName: LeadFinder
-        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
-        ITSAppUsesNonExemptEncryption: false
-        # Same keys the iPhone app reads, filled in from the same xcconfig.
-        MOBILE_API_BASE_URL: $(MOBILE_API_BASE_URL)
-        MOBILE_API_SECRET: $(MOBILE_API_SECRET)
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-        NSHumanReadableCopyright: ""
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: art.lukashahn.LeadFinderMac
-        TARGETED_DEVICE_FAMILY: "2"
-        # Ad-hoc: the Mac app isn't sandboxed and has no capabilities that need
-        # a provisioning profile, so it signs and runs locally without one.
-        CODE_SIGN_IDENTITY: "-"
-        CODE_SIGN_STYLE: Manual
-        DEVELOPMENT_TEAM: ""
 
   # Call Directory extension: labels incoming calls from agents. Switched on
   # once in Settings › Apps › Phone › Call Blocking & Identification.

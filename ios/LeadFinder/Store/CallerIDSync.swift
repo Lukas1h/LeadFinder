@@ -1,5 +1,3 @@
-#if os(iOS)
-
 import CallKit
 import Foundation
 
@@ -7,8 +5,6 @@ import Foundation
 ///
 /// The extension downloads the table itself; this only checks the `version`
 /// so a launch with nothing new doesn't make iOS rebuild ~6,000 entries.
-/// iPhone only — the Call Directory is an iOS feature, so the Mac app has no
-/// equivalent to keep in step.
 enum CallerIDSync {
     static let extensionID = "art.lukashahn.LeadFinder.CallerID"
     private static let versionKey = "callerIDVersion"
@@ -26,5 +22,3 @@ enum CallerIDSync {
         }
     }
 }
-
-#endif

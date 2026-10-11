@@ -33,7 +33,7 @@ struct TemplatesView: View {
         }
         .background(Theme.background)
         .navigationTitle("Templates")
-        .titleDisplay(.inline)
+        .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
     }
 
@@ -149,7 +149,7 @@ struct TemplateEditor: View {
     @State private var variants: [VariantDraft]
     @State private var attachments: [PresetAttachment]
 
-    @State private var isReordering = false
+    @State private var editMode: EditMode = .inactive
     @State private var isSaving = false
     @State private var error: String?
     @State private var pickedPhotos: [PhotosPickerItem] = []
@@ -258,12 +258,12 @@ struct TemplateEditor: View {
 
             attachmentsSection
         }
-        .reorderMode($isReordering)
+        .environment(\.editMode, $editMode)
         .scrollContentBackground(.hidden)
         .background(Theme.background)
         .tint(Theme.accent)
         .navigationTitle(preset.name)
-        .titleDisplay(.inline)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 if isSaving {
@@ -345,8 +345,8 @@ struct TemplateEditor: View {
                 Text("Quick actions")
                 Spacer()
                 if quickActionIds.count > 1 {
-                    Button(isReordering ? "Done" : "Reorder") {
-                        withAnimation { isReordering.toggle() }
+                    Button(editMode.isEditing ? "Done" : "Reorder") {
+                        withAnimation { editMode = editMode.isEditing ? .inactive : .active }
                     }
                     .font(.caption)
                     .textCase(nil)
@@ -563,19 +563,31 @@ enum AttachmentPrep {
     }
 
     private static func shrink(_ data: Data) -> Data? {
-        guard let image = PlatformImage(data: data) else { return nil }
+        guard let image = UIImage(data: data) else { return nil }
         // A little under the cap, so there's no arguing over a few bytes.
         let limit = maxBytes - 200_000
 
         for longEdge in [2048.0, 1600.0, 1280.0] {
-            let resized = image.resized(longEdge: longEdge)
+            let resized = resize(image, longEdge: longEdge)
             for quality in [0.85, 0.7, 0.55] {
-                if let jpeg = resized.encodedJPEG(quality: quality), jpeg.count <= limit {
+                if let jpeg = resized.jpegData(compressionQuality: quality), jpeg.count <= limit {
                     return jpeg
                 }
             }
         }
         return nil
+    }
+
+    /// Drawn through a renderer, which also bakes in the photo's orientation.
+    private static func resize(_ image: UIImage, longEdge: CGFloat) -> UIImage {
+        let scale = min(1, longEdge / max(image.size.width, image.size.height))
+        let size = CGSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
     }
 }
 

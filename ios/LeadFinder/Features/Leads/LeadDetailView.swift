@@ -36,7 +36,7 @@ struct LeadDetailView: View {
         .background(Theme.background)
         .sheet(item: $openListing) { LeadListingSheet(listing: $0, agent: group.agent) }
         .navigationTitle(group.best.address?.nilIfBlank ?? "Lead")
-        .titleDisplay(.inline)
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             detail = try? await APIClient.shared.listingDetail(group.best.id)
         }

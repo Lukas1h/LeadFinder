@@ -1,71 +1,108 @@
-import Foundation
+import MessageUI
+import UIKit
 
-/// The shared shape of "put this text in front of the user so they can send it".
+/// The native Messages sheet (`MFMessageComposeViewController`), the only way
+/// this app can send a text.
 ///
-/// Both platforms fill in the recipient and the message and then hand over to
-/// the system's own composer. Nothing is ever sent from inside this app: the
-/// composer window is the user's to read and send, and what comes back decides
-/// whether anything is recorded.
+/// The app never sends anything itself: it fills in the recipient and body,
+/// and the composer is the user's to read and send. `.sent` is the one signal
+/// that a message actually went out, and it's what tells us to record it — so
+/// there's no "did you send that?" prompt like the web has to ask.
 ///
-/// iOS uses `MFMessageComposeViewController` (see `MessageComposer+iOS.swift`);
-/// the Mac uses the Messages share sheet (see `MessageComposer+macOS.swift`).
+/// Presented from UIKit on top of whatever is showing, not through a SwiftUI
+/// `.sheet`: wrapped in a sheet, the composer came up as a blank grey page.
 @MainActor
-enum MessageComposer {
+final class MessageComposer: NSObject, MFMessageComposeViewControllerDelegate {
     enum Outcome {
-        /// The user sent it. The only outcome that records anything.
         case sent
-        /// The composer was closed without sending. Nothing is recorded.
+        /// The user closed the sheet without sending. Nothing is recorded.
         case cancelled
-        /// There is no way to compose on this machine right now.
+        /// Messages isn't set up for this device or can't send text.
         case unavailable
     }
 
-    /// A file to put in the message: a vCard, a photo, a price sheet.
+    /// The delegate is weak, so the open composer keeps itself alive here.
+    private static var current: MessageComposer?
+
+    private let onFinish: (Outcome) -> Void
+    private var finished = false
+
+    private init(onFinish: @escaping (Outcome) -> Void) {
+        self.onFinish = onFinish
+    }
+
+    /// A file to put in the message: a vCard, a photo.
     struct Attachment: Sendable {
         var data: Data
         /// A uniform type identifier, e.g. "public.vcard" or "public.jpeg".
-        /// iOS needs it to tell MessageUI what the file is; the Mac goes by
-        /// the filename's extension, so this is only used there to check the
-        /// file can be written at all.
         var typeIdentifier: String
         var filename: String
     }
 
-    /// Shows the system composer with everything filled in, and calls back when
-    /// it has been sent or dismissed.
     static func present(
         recipients: [String],
         body: String,
         attachments: [Attachment] = [],
         onFinish: @escaping (Outcome) -> Void
     ) {
-        #if os(iOS)
-        MessageComposerIOS.present(recipients: recipients, body: body, attachments: attachments, onFinish: onFinish)
-        #else
-        MessageComposerMac.present(recipients: recipients, body: body, attachments: attachments, onFinish: onFinish)
-        #endif
+        guard MFMessageComposeViewController.canSendText(), let top = topViewController() else {
+            onFinish(.unavailable)
+            return
+        }
+        // A message whose files were silently dropped isn't the one that was
+        // asked for, so don't open it at all.
+        if !attachments.isEmpty, !MFMessageComposeViewController.canSendAttachments() {
+            onFinish(.unavailable)
+            return
+        }
+        let composer = MessageComposer(onFinish: onFinish)
+        let controller = MFMessageComposeViewController()
+        controller.messageComposeDelegate = composer
+        // Set before presentation; MessageUI ignores changes made after.
+        controller.recipients = recipients
+        controller.body = body
+        for attachment in attachments {
+            controller.addAttachmentData(
+                attachment.data,
+                typeIdentifier: attachment.typeIdentifier,
+                filename: attachment.filename
+            )
+        }
+        current = composer
+        top.present(controller, animated: true)
     }
 
-    /// `present`, awaited: returns once the composer has been sent or closed.
-    static func present(
-        recipients: [String],
-        body: String,
-        attachments: [Attachment] = []
-    ) async -> Outcome {
+    /// `present`, awaited: returns once the sheet has been sent or closed.
+    static func present(recipients: [String], body: String, attachments: [Attachment] = []) async -> Outcome {
         await withCheckedContinuation { continuation in
-            present(recipients: recipients, body: body, attachments: attachments) { outcome in
-                continuation.resume(returning: outcome)
-            }
+            present(recipients: recipients, body: body, attachments: attachments) { continuation.resume(returning: $0) }
         }
     }
 
-    /// Whether this machine can open a composer at all. Used to disable the
-    /// send buttons rather than failing after the tap.
-    static var isAvailable: Bool {
-        #if os(iOS)
-        return MessageComposerIOS.isAvailable
-        #else
-        return MessageComposerMac.isAvailable
-        #endif
+    nonisolated func messageComposeViewController(
+        _ controller: MFMessageComposeViewController,
+        didFinishWith result: MessageComposeResult
+    ) {
+        MainActor.assumeIsolated {
+            // The delegate can fire more than once; only the first counts.
+            guard !finished else { return }
+            finished = true
+            Self.current = nil
+            let outcome: Outcome = result == .sent ? .sent : .cancelled
+            // Reported once the sheet is fully gone, so the caller can put up
+            // the next one (a preset's second message) straight away. Presenting
+            // while this one is still animating out silently does nothing.
+            let finish = onFinish
+            controller.dismiss(animated: true) { finish(outcome) }
+        }
+    }
+
+    private static func topViewController() -> UIViewController? {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        var top = scene?.keyWindow?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        return top
     }
 }

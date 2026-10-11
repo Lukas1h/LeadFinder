@@ -38,7 +38,7 @@ struct AgentsView: View {
             // Follow up lives here rather than as a tab of its own: it is a view
             // over agents, so it belongs under the directory.
             .toolbar {
-                ToolbarItem(placement: .trailingBar) {
+                ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink(value: FollowUpRoute()) {
                         Label("Follow up", systemImage: "arrow.triangle.2.circlepath")
                     }
@@ -57,8 +57,9 @@ struct AgentsView: View {
                 }
                 #endif
             }
-            .searchField(
+            .searchable(
                 text: $query,
+                placement: .navigationBarDrawer(displayMode: .always),
                 prompt: "Name, brokerage or phone"
             )
             .safeAreaInset(edge: .top) { filterBar }
@@ -224,9 +225,8 @@ struct AgentDirectoryDetail: View {
     /// What the opener knew. The loaded detail (and any edit) overrides it.
     private let initial: AgentsResponse.Row
 
-    init(agent: AgentsResponse.Row, isInDetailColumn: Bool = false) {
+    init(agent: AgentsResponse.Row) {
         initial = agent
-        self.isInDetailColumn = isInDetailColumn
     }
 
     private var agent: AgentsResponse.Row {
@@ -259,114 +259,106 @@ struct AgentDirectoryDetail: View {
         var id: Bool { afterCall }
     }
 
-    /// True when this fills the Mac window's detail column rather than a phone
-    /// sheet. Drops the `NavigationStack` and the Done button, which only mean
-    /// anything in a sheet; the content is identical either way.
-    var isInDetailColumn = false
-
     var body: some View {
-        screen
-            .navigationStackIfNeeded(isInDetailColumn)
-    }
-
-    private var screen: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                if let error = loadError {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(Theme.danger)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    if let error = loadError {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(Theme.danger)
+                    }
+                    listings
+                    bookings
+                    timeline
+                    callerID
                 }
-                listings
-                bookings
-                timeline
-                callerID
+                .padding(.vertical, 12)
             }
-            .padding(.vertical, 12)
-        }
-        .background(Theme.background)
-        .navigationTitle(agent.displayName)
-        .titleDisplay(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                if !isInDetailColumn { Button("Done") { close() } }
+            .background(Theme.background)
+            .navigationTitle(agent.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { close() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Edit") { showEdit = true }
+                        .disabled(detail == nil)
+                }
             }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Edit") { showEdit = true }
-                    .disabled(detail == nil)
-            }
-        }
-        .task { await load() }
-        .sheet(isPresented: $showEdit) {
-            if let current = detail?.agent {
-                EditAgentSheet(agent: current) { deleted in
-                    Task {
-                        if deleted {
-                            await appState.agents.load(force: true)
-                            dismiss()
-                        } else {
-                            await reload()
-                            await appState.agents.load(force: true)
+            .task { await load() }
+            .sheet(isPresented: $showEdit) {
+                if let current = detail?.agent {
+                    EditAgentSheet(agent: current) { deleted in
+                        Task {
+                            if deleted {
+                                await appState.agents.load(force: true)
+                                dismiss()
+                            } else {
+                                await reload()
+                                await appState.agents.load(force: true)
+                            }
                         }
                     }
                 }
             }
-        }
-        .sheet(item: $openListing) { listing in
-            LeadListingSheet(listing: listing, agent: detail?.agent)
-        }
-        .sheet(item: $openBooking) { booking in
-            BookingDetailView(booking: booking)
-        }
-        .sheet(item: $logSheet) { request in
-            LogInteractionSheet(agentId: agent.id, agentName: agent.displayName, afterCall: request.afterCall) {
-                Task { await reload() }
+            .sheet(item: $openListing) { listing in
+                LeadListingSheet(listing: listing, agent: detail?.agent)
+            }
+            .sheet(item: $openBooking) { booking in
+                BookingDetailView(booking: booking)
+            }
+            .sheet(item: $logSheet) { request in
+                LogInteractionSheet(agentId: agent.id, agentName: agent.displayName, afterCall: request.afterCall) {
+                    Task { await reload() }
+                }
+            }
+            // iOS asks "Call…?" first. Only leaving the app right after the tap
+            // means a call was really placed; cancelling that alert never does.
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                if let callTappedAt, Date().timeIntervalSince(callTappedAt) < 20 { callStarted = true }
+                callTappedAt = nil
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                guard callStarted else { return }
+                callStarted = false
+                logSheet = LogRequest(afterCall: true)
             }
         }
-        // iOS asks "Call…?" first. Only leaving the app right after the tap
-        // means a call was really placed; cancelling that alert never does.
-        .onReceive(NotificationCenter.default.publisher(for: Platform.didLeaveForeground)) { _ in
-            if let callTappedAt, Date().timeIntervalSince(callTappedAt) < 20 { callStarted = true }
-            callTappedAt = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Platform.didEnterForeground)) { _ in
-            guard callStarted else { return }
-            callStarted = false
-            logSheet = LogRequest(afterCall: true)
-        }
     }
 
-@Environment(\.dismiss) private var dismiss
-private func close() { dismiss() }
+    @Environment(\.dismiss) private var dismiss
+    private func close() { dismiss() }
 
-// MARK: - Header
+    // MARK: - Header
 
-private var header: some View {
-    VStack(alignment: .leading, spacing: 8) {
-        AgentRow(
-            name: agent.displayName,
-            phone: agent.phone,
-            subtitle: detail?.brokerage ?? agent.brokerage,
-            relationshipStatus: agent.relationshipStatus
-        )
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AgentRow(
+                name: agent.displayName,
+                phone: agent.phone,
+                subtitle: detail?.brokerage ?? agent.brokerage,
+                relationshipStatus: agent.relationshipStatus
+            )
 
-        contactButtons
+            contactButtons
 
-        if let email {
-            Text(email)
-                .font(.footnote)
-                .foregroundStyle(Theme.tertiaryText)
-                .lineLimit(1)
-                .textSelection(.enabled)
+            if let email {
+                Text(email)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.tertiaryText)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+            }
+
+            if let contactError {
+                Text(contactError)
+                    .font(.caption)
+                    .foregroundStyle(Theme.danger)
+            }
         }
-
-        if let contactError {
-            Text(contactError)
-                .font(.caption)
-                .foregroundStyle(Theme.danger)
-        }
-    }
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()
         .padding(.horizontal, 16)
@@ -392,7 +384,7 @@ private var header: some View {
                 if let digits = phoneDigits, let url = URL(string: "tel://\(digits)") {
                     Button {
                         callTappedAt = Date()
-                        Platform.open(url)
+                        UIApplication.shared.open(url)
                     } label: { contactLabel("Call", "phone.fill") }
                         .buttonStyle(.plain)
                     Button { text(digits) } label: { contactLabel("Text", "message.fill", prominent: true) }

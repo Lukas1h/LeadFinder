@@ -40,14 +40,14 @@ struct EditAgentSheet: View {
             Form {
                 Section("Contact") {
                     TextField("Name", text: $name)
-                        .contentType(.name)
+                        .textContentType(.name)
                     TextField("Phone", text: $phone)
-                        .keyboard(.phone)
-                        .contentType(.phone)
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
                     TextField("Email", text: $email)
-                        .keyboard(.email)
-                        .contentType(.email)
-                        .autocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                        .textContentType(.emailAddress)
+                        .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextField("Brokerage", text: $brokerage)
                 }
@@ -82,7 +82,7 @@ struct EditAgentSheet: View {
             .background(Theme.background)
             .tint(Theme.accent)
             .navigationTitle("Edit agent")
-            .titleDisplay(.inline)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

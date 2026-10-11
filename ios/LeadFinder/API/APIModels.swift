@@ -198,8 +198,7 @@ struct FollowUpResponse: Codable, Sendable {
 
 struct ScheduleResponse: Codable, Sendable {
     /// Reminders and listing follow-ups, the same items as the web Schedule.
-    /// Hashable because the Mac shows them in a selectable `List`.
-    struct Item: Codable, Sendable, Identifiable, Hashable {
+    struct Item: Codable, Sendable, Identifiable {
         var key: String
         var kind: String
         var date: String

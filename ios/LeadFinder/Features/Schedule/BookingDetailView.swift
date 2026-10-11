@@ -8,12 +8,6 @@ struct BookingDetailView: View {
     private let initial: Booking
     private var booking: Booking { fresh ?? initial }
 
-    /// True when this fills the Mac window's detail column rather than a phone
-    /// sheet. The column brings its own navigation, so the screen drops the
-    /// `NavigationStack` and the Done button, which only means anything in a
-    /// sheet. Everything inside is identical either way.
-    var isInDetailColumn = false
-
     @State private var fresh: Booking?
     @State private var openContact: AgentsResponse.Row?
     @State private var showEdit = false
@@ -24,45 +18,40 @@ struct BookingDetailView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
-    init(booking: Booking, isInDetailColumn: Bool = false) {
+    init(booking: Booking) {
         initial = booking
-        self.isInDetailColumn = isInDetailColumn
     }
 
     var body: some View {
-        screen
-            .navigationStackIfNeeded(isInDetailColumn)
-    }
-
-    private var screen: some View {
-        detail
-            .navigationTitle("Booking")
-            .titleDisplay(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    // Nothing to dismiss in the Mac's detail column.
-                    if !isInDetailColumn { Button("Done") { dismiss() } }
+        NavigationStack {
+            detail
+                .navigationTitle("Booking")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Edit") { showEdit = true }
+                    }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Edit") { showEdit = true }
+                .sheet(isPresented: $showComplete) {
+                    CompleteBookingSheet(booking: booking) { Task { await refresh() } }
                 }
-            }
-            .sheet(isPresented: $showComplete) {
-                CompleteBookingSheet(booking: booking) { Task { await refresh() } }
-            }
-            .sheet(isPresented: $showEdit) {
-                BookingEditSheet(booking: booking) { deleted in
-                    Task {
-                        await appState.bookings.load(force: true)
-                        await appState.schedule.load(force: true)
-                        if deleted {
-                            dismiss()
-                        } else if let updated = try? await APIClient.shared.bookingDetail(booking.id) {
-                            fresh = updated
+                .sheet(isPresented: $showEdit) {
+                    BookingEditSheet(booking: booking) { deleted in
+                        Task {
+                            await appState.bookings.load(force: true)
+                            await appState.schedule.load(force: true)
+                            if deleted {
+                                dismiss()
+                            } else if let updated = try? await APIClient.shared.bookingDetail(booking.id) {
+                                fresh = updated
+                            }
                         }
                     }
                 }
-            }
+        }
     }
 
     private var detail: some View {

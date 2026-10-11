@@ -131,7 +131,7 @@ struct LogInteractionSheet: View {
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.background)
             .navigationTitle(afterCall ? "Call with \(firstName)" : "Log an interaction")
-            .titleDisplay(.inline)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(afterCall ? "Skip" : "Cancel") { dismiss() }
