@@ -66,7 +66,7 @@ function addressKey(address: string | null): string | null {
  *
  * - news: a listing of someone he knows, or a home he shot for them, went
  *   under contract or closed (found by the nightly market check,
- *   lib/marketStatus.ts) and he hasn't been in touch since the check noticed.
+ *   lib/marketStatus.ts) and he hasn't been in touch since it happened.
  *   Congratulating them is the easiest text there is to send.
  * - justListed: a past client or interested agent put up a listing Lukas
  *   hasn't acted on, and he hasn't been in touch since it appeared. A new
@@ -166,7 +166,6 @@ export async function getFollowUpBoard(): Promise<{
     shot: boolean;
     status: string | null;
     at: Date;
-    noticedAt: Date | null;
   }
   const latestNews = new Map<string, Sale>();
   const offer = (agentId: string | null, sale: Sale) => {
@@ -186,7 +185,6 @@ export async function getFollowUpBoard(): Promise<{
       shot: l.bookingId != null || (key != null && booked.has(key)),
       status: l.marketStatus,
       at: l.marketStatusAt,
-      noticedAt: l.marketNoticedAt,
     });
   }
   for (const { booking: b, listing } of movedJobs) {
@@ -198,7 +196,6 @@ export async function getFollowUpBoard(): Promise<{
       shot: true,
       status: b.marketStatus,
       at: b.marketStatusAt,
-      noticedAt: b.marketNoticedAt,
     });
   }
 
@@ -209,9 +206,10 @@ export async function getFollowUpBoard(): Promise<{
   for (const agent of candidates) {
     const sale = latestNews.get(agent.id);
     if (sale) {
-      // Against when the check noticed, not the contract date: a text sent in
-      // between, before anyone here knew, wasn't a congratulation.
-      const since = (sale.noticedAt ?? sale.at).getTime();
+      // Against the date it happened, not the date the check noticed: if he
+      // has been in touch since it went under contract, the moment has passed,
+      // whether or not that text mentioned it.
+      const since = sale.at.getTime();
       const reachedOut = lastReachedOutAt(agent);
       const snoozed = agent.followUpDismissedAt && agent.followUpDismissedAt.getTime() > since;
       if (!snoozed && (!reachedOut || reachedOut.getTime() < since)) {
