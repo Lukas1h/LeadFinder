@@ -34,7 +34,7 @@ struct MessagesView: View {
                     .presentationDragIndicator(.visible)
             }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .trailingBar) {
                     Button {
                         showTemplates = true
                     } label: {

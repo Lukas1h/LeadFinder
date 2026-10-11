@@ -19,6 +19,10 @@ struct ContactSheet: View {
     let agentPhone: String?
     let agentSubtitle: String?
     var agent: Agent?
+    /// Called after a text goes out, so the Mac can drop the lead from its
+    /// list. The phone dismisses itself and the enclosing list reloads on its
+    /// own, so it has no use for it.
+    var onChange: (() -> Void)? = nil
 
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -48,7 +52,8 @@ struct ContactSheet: View {
         agentName: String?,
         agentPhone: String?,
         agentSubtitle: String? = nil,
-        agent: Agent? = nil
+        agent: Agent? = nil,
+        onChange: (() -> Void)? = nil
     ) {
         self.listingId = listingId
         self.type = type
@@ -56,6 +61,7 @@ struct ContactSheet: View {
         self.agentPhone = agentPhone
         self.agentSubtitle = agentSubtitle
         self.agent = agent
+        self.onChange = onChange
 
         let cached = MessageOptionsCache.shared.cached(listingId: listingId, type: type) ?? []
         let pick = Self.defaultOption(in: cached)
@@ -96,7 +102,7 @@ struct ContactSheet: View {
             .background(Theme.background)
             .safeAreaInset(edge: .bottom) { sendBar }
             .navigationTitle("Text \(firstName)")
-            .navigationBarTitleDisplayMode(.inline)
+            .titleDisplay(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
@@ -437,6 +443,7 @@ struct ContactSheet: View {
                 // second Messages sheet above.
                 await appState.leads.load(force: true)
                 NotificationCenter.default.post(name: .leadsDidChange, object: nil)
+                onChange?()
                 dismiss()
             } catch {
                 sendError = (error as? APIError)?.errorDescription ?? error.localizedDescription

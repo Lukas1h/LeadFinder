@@ -42,7 +42,7 @@ struct CompleteBookingSheet: View {
             .background(Theme.background)
             .tint(Theme.accent)
             .navigationTitle("Complete job")
-            .navigationBarTitleDisplayMode(.inline)
+            .titleDisplay(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -64,7 +64,7 @@ struct CompleteBookingSheet: View {
             Text(title)
             Spacer()
             TextField("—", text: value)
-                .keyboardType(whole ? .numberPad : .decimalPad)
+                .keyboard(whole ? .number : .decimal)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 90)
         }

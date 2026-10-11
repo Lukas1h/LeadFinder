@@ -72,10 +72,10 @@ struct BookingEditSheet: View {
                 if !hasListing {
                     Section("Where") {
                         TextField("Street address", text: $address)
-                            .textContentType(.streetAddressLine1)
+                            .contentType(.streetAddress)
                         TextField("City", text: $city)
                         TextField("State", text: $state)
-                            .textInputAutocapitalization(.characters)
+                            .autocapitalization(.characters)
                     }
                     .listRowBackground(Theme.card)
                 }
@@ -91,10 +91,10 @@ struct BookingEditSheet: View {
 
                 Section {
                     TextField("Name", text: $contactName)
-                        .textContentType(.name)
+                        .contentType(.name)
                     TextField("Phone", text: $contactPhone)
-                        .keyboardType(.phonePad)
-                        .textContentType(.telephoneNumber)
+                        .keyboard(.phone)
+                        .contentType(.phone)
                 } header: {
                     Text("Contact")
                 } footer: {
@@ -107,7 +107,7 @@ struct BookingEditSheet: View {
                         HStack(spacing: 10) {
                             TextField("Description", text: $item.description)
                             TextField("$", text: $item.amount)
-                                .keyboardType(.numberPad)
+                                .keyboard(.number)
                                 .multilineTextAlignment(.trailing)
                                 .frame(width: 80)
                         }
@@ -166,7 +166,7 @@ struct BookingEditSheet: View {
             .background(Theme.background)
             .tint(Theme.accent)
             .navigationTitle(booking == nil ? "New booking" : "Edit booking")
-            .navigationBarTitleDisplayMode(.inline)
+            .titleDisplay(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -194,7 +194,7 @@ struct BookingEditSheet: View {
             Text(title)
             Spacer()
             TextField("—", text: value)
-                .keyboardType(.decimalPad)
+                .keyboard(.decimal)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 90)
         }
