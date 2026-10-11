@@ -10,6 +10,14 @@ struct FollowUpView: View {
     /// Hidden the moment they're snoozed, rather than waiting on the reload.
     @State private var snoozed: Set<String> = []
     @State private var snoozeError: String?
+    @State private var openListing: Listing?
+    @State private var contactError: String?
+    /// Set when Call is tapped, so coming back from the call asks how it went,
+    /// as the web's card does on its way back from the dialer.
+    @State private var callAgent: Agent?
+    @State private var callTappedAt: Date?
+    @State private var callStarted = false
+    @State private var logAgent: Agent?
 
     var body: some View {
         Group {
@@ -28,6 +36,21 @@ struct FollowUpView: View {
         // behaves the same wherever you tap them.
         .sheet(item: $openAgent) { agent in
             AgentDirectoryDetail(agent: AgentsResponse.Row(agent: agent))
+        }
+        .sheet(item: $openListing) { LeadListingSheet(listing: $0) }
+        .sheet(item: $logAgent) { agent in
+            LogInteractionSheet(agentId: agent.id, agentName: agent.displayName, afterCall: true) {
+                Task { await appState.followUp.load(force: true) }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Platform.didLeaveForeground)) { _ in
+            if let callTappedAt, Date().timeIntervalSince(callTappedAt) < 20 { callStarted = true }
+            callTappedAt = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Platform.didEnterForeground)) { _ in
+            guard callStarted else { return }
+            callStarted = false
+            logAgent = callAgent
         }
         .alert(
             "Couldn't snooze",
@@ -82,26 +105,32 @@ struct FollowUpView: View {
                 .padding(.top, 8)
 
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 20) {
-                        HStack(spacing: 8) {
-                            Text("Today")
-                                .font(.headline)
-                                .foregroundStyle(Theme.primaryText)
-                            BadgeChip(text: "\(min(done, target)) of \(target) done", tint: Theme.secondaryText)
-                            Spacer(minLength: 0)
+                    LazyVStack(alignment: .leading, spacing: 24) {
+                        // The web's header: what the page is and how it picks.
+                        Text("Five a day, strongest reason first: a new listing, samples that got no answer, a sale, a price cut, then anyone who\u{2019}s gone quiet. Each follow-up that goes unanswered doubles the wait. Text one, or snooze them for 4 weeks.")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.secondaryText)
+
+                        if let contactError {
+                            Text(contactError)
+                                .font(.caption)
+                                .foregroundStyle(Theme.danger)
                         }
-                        if today.isEmpty {
-                            Text(done >= target ? "That's today's five. The rest will keep." : "Nobody else is due.")
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.secondaryText)
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            webHeading("Today (\(min(done, target)) of \(target) done)")
+                            if today.isEmpty {
+                                Text(done >= target ? "That\u{2019}s today\u{2019}s five. The rest will keep." : "Nobody else is due.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(Theme.secondaryText)
+                            }
+                            ForEach(today) { followUpCard($0) }
                         }
-                        ForEach(today) { item in
-                            justListedCard(item)
-                        }
+
                         if !later.isEmpty {
-                            sectionHeader("Later", count: later.count)
-                            ForEach(later) { item in
-                                justListedCard(item)
+                            VStack(alignment: .leading, spacing: 12) {
+                                webHeading("Later (\(later.count))")
+                                ForEach(later) { followUpCard($0) }
                             }
                         }
                     }
@@ -111,6 +140,182 @@ struct FollowUpView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .scrollDismissesKeyboard(.immediately)
+            }
+        }
+    }
+
+    /// The web's section heading: small, bold, uppercase, muted.
+    private func webHeading(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Theme.secondaryText)
+            .kerning(0.5)
+    }
+
+    // MARK: - Agent card (the web's AgentCard)
+
+    /// Everything the web's card shows, in its order: name and status, phone
+    /// and email, the listing count and dates, notes, then snooze / call / text
+    /// / email, and under them the reason with the listing it is about.
+    private func followUpCard(_ item: FollowUpResponse.JustListed) -> some View {
+        let agent = item.agent
+        let digits = agent.phone?.filter(\.isNumber).nilIfBlank
+        let email = agent.email?.nilIfBlank
+
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Button { openAgent = agent } label: {
+                        Text(agent.displayName)
+                            .font(.headline)
+                            .foregroundStyle(Theme.primaryText)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .buttonStyle(.plain)
+                    if let status = agent.relationshipStatus?.nilIfBlank {
+                        BadgeChip(text: status.relationshipLabel, tint: status.relationshipTint)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                if let phone = agent.phone?.nilIfBlank {
+                    Text(phone)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(Theme.secondaryText)
+                }
+                if let email {
+                    Text(email)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(Theme.secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                let facts = Self.facts(for: item)
+                if !facts.isEmpty {
+                    Text(facts.joined(separator: "  \u{00B7}  "))
+                        .font(.footnote)
+                        .foregroundStyle(Theme.secondaryText)
+                        .padding(.top, 2)
+                }
+
+                if let notes = agent.notes?.nilIfBlank {
+                    Label {
+                        Text(notes).lineLimit(2)
+                    } icon: {
+                        Image(systemName: "note.text")
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(Theme.secondaryText)
+                    .padding(.top, 4)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                iconButton("moon.zzz", label: "Snooze \(agent.displayName) for 4 weeks") {
+                    Task { await snooze(agent) }
+                }
+                if let digits {
+                    iconButton("phone", label: "Call \(agent.displayName)") {
+                        if let url = URL(string: "tel://\(digits)") {
+                            callAgent = agent
+                            callTappedAt = Date()
+                            Platform.open(url)
+                        }
+                    }
+                    iconButton("message", label: "Text \(agent.displayName)") {
+                        text(agent, digits: digits)
+                    }
+                }
+                if let email, let url = URL(string: "mailto:\(email)") {
+                    iconButton("envelope", label: "Email \(agent.displayName)") { Platform.open(url) }
+                }
+            }
+
+            reason(item)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card(padding: 14)
+        .contextMenu {
+            Button {
+                Task { await snooze(agent) }
+            } label: {
+                Label("Snooze 4 weeks", systemImage: "moon.zzz")
+            }
+        }
+    }
+
+    /// The reason leads: it's what the text will be about. A plain "quiet" is
+    /// the absence of one, so it's muted.
+    @ViewBuilder
+    private func reason(_ item: FollowUpResponse.JustListed) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let headline = item.headline?.nilIfBlank {
+                Text(headline)
+                    .font(.subheadline.weight(item.reason == "quiet" ? .regular : .medium))
+                    .foregroundStyle(item.reason == "quiet" ? Theme.secondaryText : Theme.emerald)
+            }
+            if let listing = item.listing {
+                Button { openListing = listing } label: { ListingRow(listing: listing, showsChevron: true) }
+                    .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.callout)
+                .foregroundStyle(Theme.primaryText)
+                .frame(width: 40, height: 36)
+                .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Theme.border, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    /// "12 listings", "Last contacted Sep 2", "Last replied Oct 3",
+    /// "~45d between listings" — the web card's stats line.
+    private static func facts(for item: FollowUpResponse.JustListed) -> [String] {
+        var parts: [String] = []
+        if let count = item.listingCount {
+            parts.append("\(count) listing\(count == 1 ? "" : "s")")
+        }
+        if let date = DateFormatting.parse(item.agent.lastContactedAt) {
+            parts.append("Last contacted \(DateFormatting.monthDay.string(from: date))")
+        }
+        if let date = DateFormatting.parse(item.lastReplyAt) {
+            parts.append("Last replied \(DateFormatting.monthDay.string(from: date))")
+        }
+        if let days = item.avgDaysBetweenListings {
+            parts.append("~\(days)d between listings")
+        }
+        return parts
+    }
+
+    /// Opens Messages to this agent with nothing written. Only a text that
+    /// went out is recorded.
+    private func text(_ agent: Agent, digits: String) {
+        contactError = nil
+        MessageComposer.present(recipients: [digits], body: "") { outcome in
+            switch outcome {
+            case .unavailable:
+                contactError = "This device can't send texts right now."
+            case .cancelled:
+                break
+            case .sent:
+                Task {
+                    do {
+                        try await APIClient.shared.confirmAgentTextSent(agentId: agent.id)
+                        await appState.followUp.load(force: true)
+                    } catch {
+                        contactError = "The text went out, but recording it failed: "
+                            + ((error as? APIError)?.errorDescription ?? error.localizedDescription)
+                    }
+                }
             }
         }
     }

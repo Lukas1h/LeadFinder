@@ -186,6 +186,11 @@ struct FollowUpResponse: Codable, Sendable {
         var headline: String?
         /// weak_photos, samples, just_listed, news, price_cut or quiet.
         var reason: String?
+        /// Tracked listings, for the card's "12 listings". Optional: a response
+        /// cached before the server sent it still decodes.
+        var listingCount: Int?
+        /// Their usual gap between listings, in days, when it can be worked out.
+        var avgDaysBetweenListings: Int?
 
         var id: String { agent.id }
     }

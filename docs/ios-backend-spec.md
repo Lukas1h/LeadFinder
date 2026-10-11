@@ -360,7 +360,9 @@ Everyone Lukas knows who is due to hear from him, one entry per agent, already s
   "agent": {/* Agent */}, "lastReplyAt": "…" | null,
   "listing": {/* listingJson first */} | null,     // the listing the reason is about
   "headline": "Just listed Oct 9 with weak photos", // the reason, in the words to show
-  "reason": "weak_photos" | "samples" | "just_listed" | "news" | "price_cut" | "quiet"
+  "reason": "weak_photos" | "samples" | "just_listed" | "news" | "price_cut" | "quiet",
+  "listingCount": 12,                // tracked listings, for the card's "12 listings"
+  "avgDaysBetweenListings": 45 | null
 }
 ```
 

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAppAuth } from "@/lib/appApiAuth";
 import { getFollowUpBoard, type FollowUpItem } from "@/app/follow-up/data";
 import { FOLLOW_UP_GROUPS } from "@/app/follow-up/groups";
+import { listingCountsByAgent, listingDatesByAgent } from "@/app/agents/actions";
+import { resolveAvgDaysBetweenListings } from "@/app/agents/stats";
 import { agentJson, listingJson } from "../serialize";
 
 /**
@@ -16,7 +18,11 @@ export async function GET(req: Request) {
   const denied = requireAppAuth(req);
   if (denied) return denied;
 
-  const { today, later, doneToday, dailyTarget } = await getFollowUpBoard();
+  const [{ today, later, doneToday, dailyTarget }, counts, dates] = await Promise.all([
+    getFollowUpBoard(),
+    listingCountsByAgent(),
+    listingDatesByAgent(),
+  ]);
 
   // `headline` is the reason, in the words to use ("Pending since Oct 5"). A
   // home he shot that was booked by address alone has no listing, so its
@@ -27,6 +33,9 @@ export async function GET(req: Request) {
     listing: e.listing ? listingJson(e.listing, "first") : null,
     headline: [e.listing ? null : e.address, e.label].filter(Boolean).join(" · "),
     reason: e.reason,
+    // The card's "N listings · ~Nd between listings", as the web's AgentCard shows.
+    listingCount: counts[e.agent.id] ?? 0,
+    avgDaysBetweenListings: resolveAvgDaysBetweenListings(e.agent, dates[e.agent.id] ?? []),
   });
   const entry = (e: FollowUpItem) => ({ agent: agentJson(e.agent), lastReplyAt: e.lastReplyAt });
 
