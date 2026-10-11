@@ -325,6 +325,21 @@ A text template lists other templates as **quick actions**: the buttons on a mes
 
 **Which templates can be picked as a quick action:** enabled, not `aiGenerated`, not `protected`, and either `type == "follow_up"` or `quickActionOnly` (the web's rule, `messaging/page.tsx`). Never the template itself.
 
+#### The goal card (added 2026-10-10)
+
+`GET /messages` now also returns `goal`, the web's GoalCard (`lib/goal.ts`): the monthly goal worked backwards into this week's work. Show it above the stats.
+
+```jsonc
+"goal": {
+  "goal": 3000, "month": "October",
+  "booked": 1820, "jobs": 8,            // jobs dated this month and their value
+  "gap": 1180, "avgJob": 281, "jobsNeeded": 5,   // gap is 0 once the goal is met
+  "rates": { "reply": 0.29, "interested": 0.24, "book": 0.1, "bookMeasured": false },
+  "interested": { "live": 40, "needed": 50 },
+  "thisWeek": { "textsToGo": 48, "repliesToGo": 14, "texts": 110, "replies": 37, "followUps": 19, "followUpsDue": 40 }
+}
+```
+
 ---
 
 ## Acceptance (run locally, report the output)

@@ -1,5 +1,6 @@
 import { requireAppAuth } from "@/lib/appApiAuth";
 import { computeMessagingStats, getRecentMessageSends, type MessagingStats } from "@/lib/messageStats";
+import { computeGoalProgress } from "@/lib/goal";
 import { etagged } from "../helpers";
 
 /**
@@ -41,7 +42,7 @@ export async function GET(req: Request) {
   const denied = requireAppAuth(req);
   if (denied) return denied;
 
-  const [stats, sends] = await Promise.all([computeMessagingStats(), getRecentMessageSends(100)]);
+  const [stats, sends, goal] = await Promise.all([computeMessagingStats(), getRecentMessageSends(100), computeGoalProgress()]);
 
   const body = JSON.stringify({
     stats: {
@@ -52,6 +53,9 @@ export async function GET(req: Request) {
       byDay: stats.byDay,
     },
     sends,
+    // The monthly goal worked back into this week's texts, replies and
+    // follow-ups — the web's GoalCard, same numbers (lib/goal.ts).
+    goal,
   });
 
   return etagged(body, req.headers.get("if-none-match"));

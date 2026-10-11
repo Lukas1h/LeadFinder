@@ -10,6 +10,8 @@ import { PresetCard } from "./PresetCard";
 import { PresetForm } from "./PresetForm";
 import { ComposeEmailDialog } from "./ComposeEmailDialog";
 import { MessagingStatsCard } from "./MessagingStatsCard";
+import { GoalCard } from "./GoalCard";
+import { computeGoalProgress } from "@/lib/goal";
 import { MessageHistoryCard } from "./MessageHistoryCard";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -37,12 +39,13 @@ async function MessagingContent() {
   await Promise.all(PRESET_TYPES.map((type) => ensureAiDraftPresets(type)));
   await ensureDefaultEmailPreset();
 
-  const [storedPresets, variants, statsByVariant, messagingStats, recentSends] = await Promise.all([
+  const [storedPresets, variants, statsByVariant, messagingStats, recentSends, goal] = await Promise.all([
     db.select().from(messagePresets).where(isNull(messagePresets.archivedAt)).orderBy(messagePresets.createdAt),
     db.select().from(messagePresetVariants).orderBy(messagePresetVariants.createdAt),
     computeVariantStats(),
     computeMessagingStats(),
     getRecentMessageSends(),
+    computeGoalProgress(),
   ]);
 
   // The cards only name the attachments; the bytes (megabytes of photos and
@@ -85,6 +88,7 @@ async function MessagingContent() {
       </header>
 
       <div className="flex flex-col gap-6 mb-8">
+        <GoalCard goal={goal} />
         <MessagingStatsCard stats={messagingStats} />
         <MessageHistoryCard sends={recentSends} />
       </div>
