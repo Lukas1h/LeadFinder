@@ -258,7 +258,7 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
       texts: n("week_texts"),
       replies: n("week_replies"),
       followUps: n("week_follow_ups"),
-      followUpsDue: board.news.length + board.justListed.length + board.agents.length,
+      followUpsDue: board.today.length + board.later.length,
     },
   };
 }

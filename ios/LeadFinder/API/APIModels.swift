@@ -176,16 +176,28 @@ struct FollowUpResponse: Codable, Sendable {
         var id: String { label }
     }
 
-    /// Just-listed agents, each with the listing that brought them back.
+    /// One agent who is due, with the listing the reason is about, if any.
     struct JustListed: Codable, Sendable, Identifiable {
         var agent: Agent
         var lastReplyAt: String?
         var listing: Listing?
-        /// News items only: "Pending since Oct 5", "Sold Oct 5".
+        /// Why they're here, in a line: "Just listed Oct 9", "Pending since
+        /// Oct 5", "Samples sent Oct 3, no word since".
         var headline: String?
+        /// weak_photos, samples, just_listed, news, price_cut or quiet.
+        var reason: String?
 
         var id: String { agent.id }
     }
+
+    /// The page since 2026-10-11: today's few, then everyone else who is due,
+    /// strongest reason first. Optional so a response cached from before the
+    /// server sent them still decodes, and the sections below are shown instead.
+    var today: [JustListed]?
+    var later: [JustListed]?
+    /// Follow-ups already done today, of `dailyTarget`.
+    var doneToday: Int?
+    var dailyTarget: Int?
 
     /// Agents with a listing that just went under contract or sold. Optional so
     /// a cached response from before the server sent it still decodes.

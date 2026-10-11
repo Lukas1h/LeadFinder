@@ -5,12 +5,10 @@ import { getFollowUpBoard } from "./data";
 import { FollowUpList } from "./FollowUpList";
 
 /**
- * Agents due for a check-in: anyone he knows with a listing that just went
- * under contract or sold, clients and interested agents who just listed,
- * then everyone Lukas knows who has gone quiet (see getFollowUpBoard). The same list sits at the
- * top of the Agents tab; this is its own page so it can take Pipeline's place
- * next to Leads on mobile — the work is keeping relationships warm now, not
- * moving properties through stages.
+ * Everyone Lukas knows who is due to hear from him, strongest reason first,
+ * five a day (see getFollowUpBoard). Its own page so it can take Pipeline's
+ * place next to Leads on mobile — the work is keeping relationships warm now,
+ * not moving properties through stages.
  */
 export default function FollowUpPage() {
   return (
@@ -23,7 +21,7 @@ export default function FollowUpPage() {
 }
 
 async function FollowUpContent() {
-  const [{ news, justListed, agents }, counts, dates] = await Promise.all([
+  const [board, counts, dates] = await Promise.all([
     getFollowUpBoard(),
     listingCountsByAgent(),
     listingDatesByAgent(),
@@ -34,11 +32,12 @@ async function FollowUpContent() {
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Follow up</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Sales and new listings from people who know you, then anyone who&rsquo;s gone quiet: interested agents after
-          2 weeks, everyone else after 4. Text one, or snooze them for 4 weeks.
+          Five a day, strongest reason first: a new listing, samples that got no answer, a sale, a price cut, then
+          anyone who&rsquo;s gone quiet. Each follow-up that goes unanswered doubles the wait. Text one, or snooze them
+          for 4 weeks.
         </p>
       </header>
-      <FollowUpList news={news} justListed={justListed} agents={agents} counts={counts} dates={dates} />
+      <FollowUpList {...board} counts={counts} dates={dates} />
     </>
   );
 }

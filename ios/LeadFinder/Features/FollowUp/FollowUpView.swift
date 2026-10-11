@@ -49,6 +49,76 @@ struct FollowUpView: View {
 
     @ViewBuilder
     private func content(_ response: FollowUpResponse) -> some View {
+        if let today = response.today, let later = response.later {
+            rankedContent(
+                today: today.filter { matches($0.agent) },
+                later: later.filter { matches($0.agent) },
+                done: response.doneToday ?? 0,
+                target: response.dailyTarget ?? 5
+            )
+        } else {
+            sectionedContent(response)
+        }
+    }
+
+    /// Today's few, then everyone else who is due, in the server's order:
+    /// strongest reason first. Each card leads with its reason.
+    @ViewBuilder
+    private func rankedContent(
+        today: [FollowUpResponse.JustListed],
+        later: [FollowUpResponse.JustListed],
+        done: Int,
+        target: Int
+    ) -> some View {
+        if today.isEmpty && later.isEmpty {
+            emptyState
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                ErrorBanner(
+                    message: appState.followUp.error,
+                    onRetry: { Task { await appState.followUp.load(force: true) } }
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 20) {
+                        HStack(spacing: 8) {
+                            Text("Today")
+                                .font(.headline)
+                                .foregroundStyle(Theme.primaryText)
+                            BadgeChip(text: "\(min(done, target)) of \(target) done", tint: Theme.secondaryText)
+                            Spacer(minLength: 0)
+                        }
+                        if today.isEmpty {
+                            Text(done >= target ? "That's today's five. The rest will keep." : "Nobody else is due.")
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.secondaryText)
+                        }
+                        ForEach(today) { item in
+                            justListedCard(item)
+                        }
+                        if !later.isEmpty {
+                            sectionHeader("Later", count: later.count)
+                            ForEach(later) { item in
+                                justListedCard(item)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 28)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .scrollDismissesKeyboard(.immediately)
+            }
+        }
+    }
+
+    /// The page as it was before the server ranked it: sections by kind. Only
+    /// reached from a response cached before 2026-10-11.
+    @ViewBuilder
+    private func sectionedContent(_ response: FollowUpResponse) -> some View {
         let news = (response.news ?? []).filter { matches($0.agent) }
         let justListed = response.justListed.filter { matches($0.agent) }
         let groups = response.groups.compactMap { group -> FollowUpResponse.Group? in
@@ -181,9 +251,10 @@ struct FollowUpView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     if let headline = item.headline?.nilIfBlank {
+                        // A reason to text is green; "quiet" is only the lack of one.
                         Text(headline)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Theme.emerald)
+                            .foregroundStyle(item.reason == "quiet" ? Theme.secondaryText : Theme.emerald)
                     }
                     if let listing = item.listing {
                         Text(listing.priceLine)

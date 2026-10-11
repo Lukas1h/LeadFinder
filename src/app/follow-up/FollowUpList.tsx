@@ -1,23 +1,24 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition } from "react";
 import { HeartHandshake } from "lucide-react";
 import { dismissFollowUpAgent } from "@/app/agents/actions";
 import { AgentCard } from "@/app/agents/AgentCard";
 import { ListingRow } from "@/app/ListingRow";
-import type { FollowUpEntry, JustListedEntry, NewsEntry } from "./data";
-import { FOLLOW_UP_GROUPS } from "./groups";
+import type { FollowUpItem } from "./data";
 
 export function FollowUpList({
-  news,
-  justListed,
-  agents,
+  today,
+  later,
+  doneToday,
+  dailyTarget,
   counts,
   dates,
 }: {
-  news: NewsEntry[];
-  justListed: JustListedEntry[];
-  agents: FollowUpEntry[];
+  today: FollowUpItem[];
+  later: FollowUpItem[];
+  doneToday: number;
+  dailyTarget: number;
   counts: Record<string, number>;
   dates: Record<string, { listedAt: Date | null; foundAt: Date }[]>;
 }) {
@@ -30,11 +31,10 @@ export function FollowUpList({
     startTransition(() => dismissFollowUpAgent(id));
   };
 
-  const congrats = news.filter((e) => !snoozed.has(e.agent.id));
-  const listed = justListed.filter((e) => !snoozed.has(e.agent.id));
-  const quiet = agents.filter((e) => !snoozed.has(e.agent.id));
+  const now = today.filter((e) => !snoozed.has(e.agent.id));
+  const next = later.filter((e) => !snoozed.has(e.agent.id));
 
-  if (congrats.length === 0 && listed.length === 0 && quiet.length === 0) {
+  if (now.length === 0 && next.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
         <HeartHandshake className="size-8" />
@@ -43,7 +43,7 @@ export function FollowUpList({
     );
   }
 
-  const card = (e: FollowUpEntry, extra?: ReactNode) => (
+  const card = (e: FollowUpItem) => (
     <AgentCard
       key={e.agent.id}
       agent={e.agent}
@@ -52,66 +52,46 @@ export function FollowUpList({
       followUpDismiss={dismiss}
       lastReplyAt={e.lastReplyAt}
     >
-      {extra}
+      {/* The reason leads: it's what the text will be about. A plain "quiet" is the absence of one, so it's muted. */}
+      <p
+        className={
+          e.reason === "quiet"
+            ? "text-sm text-muted-foreground"
+            : "text-sm font-medium text-emerald-700 dark:text-emerald-400"
+        }
+      >
+        {e.label}
+      </p>
+      {e.listing ? (
+        <ListingRow listing={e.listing} />
+      ) : (
+        e.address && <p className="text-sm text-foreground px-2">{[e.address, e.city].filter(Boolean).join(", ")}</p>
+      )}
     </AgentCard>
   );
 
   return (
     <div className="flex flex-col gap-8">
-      {congrats.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Under contract or sold ({congrats.length})
-          </h2>
-          <p className="text-sm text-muted-foreground mb-3">
-            A listing of theirs, or a home you shot for them, just went under contract or closed, and they
-            haven&rsquo;t heard from you since. Congratulate them.
+      <section>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Today ({Math.min(doneToday, dailyTarget)} of {dailyTarget} done)
+        </h2>
+        {now.length > 0 ? (
+          <div className="flex flex-col gap-4 mt-3">{now.map(card)}</div>
+        ) : (
+          <p className="text-sm text-muted-foreground mt-1">
+            {doneToday >= dailyTarget ? "That\u2019s today\u2019s five. The rest will keep." : "Nobody else is due."}
           </p>
-          <div className="flex flex-col gap-4">
-            {congrats.map((e) =>
-              card(
-                e,
-                <>
-                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                    {e.label}
-                    {e.shot && " · you shot it"}
-                  </p>
-                  {e.listing ? (
-                    <ListingRow listing={e.listing} />
-                  ) : (
-                    <p className="text-sm text-foreground px-2">{[e.address, e.city].filter(Boolean).join(", ")}</p>
-                  )}
-                </>
-              )
-            )}
-          </div>
+        )}
+      </section>
+      {next.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            Later ({next.length})
+          </h2>
+          <div className="flex flex-col gap-4">{next.map(card)}</div>
         </section>
       )}
-      {listed.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Just listed ({listed.length})
-          </h2>
-          <p className="text-sm text-muted-foreground mb-3">
-            A client or interested agent put up a new listing and hasn&rsquo;t heard from you since.
-          </p>
-          <div className="flex flex-col gap-4">
-            {listed.map((e) => card(e, <ListingRow listing={e.listing} />))}
-          </div>
-        </section>
-      )}
-      {FOLLOW_UP_GROUPS.map(({ label, match }) => {
-        const group = quiet.filter((e) => match(e.agent));
-        if (group.length === 0) return null;
-        return (
-          <section key={label}>
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-              {label} ({group.length})
-            </h2>
-            <div className="flex flex-col gap-4">{group.map((e) => card(e))}</div>
-          </section>
-        );
-      })}
     </div>
   );
 }

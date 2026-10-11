@@ -213,7 +213,7 @@ All paths are relative to `/api/app/v1`.
 |---|---|---|
 | `GET /ping` | | `{ ok: true, serverTime }`. The app uses it to check its token |
 | `GET /leads` | `getLeadsBoard()` | See below |
-| `GET /follow-up` | `getFollowUpBoard()` + `groups.ts` | `{ news: [{ agent, lastReplyAt, listing, headline }], justListed: [{ agent, lastReplyAt, listing }], groups: [{ label, entries: [{ agent, lastReplyAt }] }] }`. Empty groups are omitted. `news` (added 2026-10-10) is agents with a listing, or a home Lukas shot for them, that just went under contract or sold, found by the nightly market check (`lib/marketStatus.ts`); `headline` is the wording to show, e.g. "Pending since Oct 5". `listing` is null for a job booked by address alone, and the headline then carries the address: "753 SE Haynes Ave · Pending since Oct 7 · you shot it" |
+| `GET /follow-up` | `getFollowUpBoard()` | `{ today: [Item], later: [Item], doneToday, dailyTarget, news, justListed, groups }`. See "The Follow up page" below |
 | `GET /schedule` | `loadScheduleItems(todayScheduleDate())` | `{ today, items }`. Each item as-is, but `listing` goes through `listingJson(…,"first")` |
 | `GET /bookings` | `loadBookingsWithDetails()` + `groupBookings()` | `{ upcoming, waitingForPayment, completed }`, each `bookingJson[]` |
 | `GET /bookings/:id` | `getBookingWithDetails`, `getGalleryActivity` | `{ booking, galleryActivity }` |
@@ -349,6 +349,26 @@ A text template lists other templates as **quick actions**: the buttons on a mes
 ```
 
 `thisWeek.textsToGo` and `repliesToGo` are the weekly target less what this week has done, 0 once it's met (show "On pace"). The web's fourth stat is new clients (`plan.newClientsThisMonth`, "about N a month needed" from `plan.newClientsPerMonth` rounded up).
+
+#### The Follow up page (reworked 2026-10-11)
+
+Everyone Lukas knows who is due to hear from him, one entry per agent, already sorted: strongest reason first, then nearest, then whoever lists most. `today` is the next few, enough to bring the day to `dailyTarget` (5); `later` is the rest in the same order. `doneToday` counts people he got back in touch with after a gap, or snoozed, today. Render `today` under "Today (2 of 5 done)" and `later` under "Later"; when `today` is empty and `doneToday >= dailyTarget`, say the day is done.
+
+```jsonc
+// Item
+{
+  "agent": {/* Agent */}, "lastReplyAt": "…" | null,
+  "listing": {/* listingJson first */} | null,     // the listing the reason is about
+  "headline": "Just listed Oct 9 with weak photos", // the reason, in the words to show
+  "reason": "weak_photos" | "samples" | "just_listed" | "news" | "price_cut" | "quiet"
+}
+```
+
+Headlines read "Just listed Oct 9", "Samples sent Oct 3, no word since", "Pending since Oct 7, you shot it", "Price cut Oct 7, weak photos", "Quiet since Sep 20". For a home he shot that was booked by address alone, `listing` is null and the headline leads with the address. Show `quiet` muted and every other reason as a highlight. The rules behind each reason and the timers are in `src/app/follow-up/data.ts`.
+
+`POST /agents/:id/snooze` takes someone off the page for four weeks, whatever put them there.
+
+`news`, `justListed` and `groups` carry the same people in the shape builds from before this change read (`news` and `justListed` are Items; `groups` is `[{ label, entries: [{ agent, lastReplyAt }] }]`). New builds ignore them.
 
 ---
 

@@ -365,8 +365,8 @@ export async function getOrCreateAgentByPhone(
 
 /** How many people the Follow up page has waiting: the number the Agents tab and the goal card link to it with. */
 export async function getFollowUpCount(): Promise<number> {
-  const { news, justListed, agents: quiet } = await getFollowUpBoard();
-  return news.length + justListed.length + quiet.length;
+  const { today, later } = await getFollowUpBoard();
+  return today.length + later.length;
 }
 
 /**

@@ -106,7 +106,13 @@ private struct Sidebar: View {
             let count = appState.leads.value?.counts.listings ?? 0
             return count > 0 ? "\(count)" : nil
         case .followUp:
-            let count = appState.followUp.value?.groups.reduce(0) { $0 + $1.entries.count } ?? 0
+            // Everyone due: today's few plus the rest. The groups are only what
+            // a response cached from before the page was ranked still has.
+            let response = appState.followUp.value
+            let ranked = (response?.today?.count ?? 0) + (response?.later?.count ?? 0)
+            let count = response?.today != nil
+                ? ranked
+                : response?.groups.reduce(0) { $0 + $1.entries.count } ?? 0
             return count > 0 ? "\(count)" : nil
         default:
             return nil

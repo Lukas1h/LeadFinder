@@ -1,32 +1,79 @@
 import { db } from "@/db";
-import { agents, agentInteractions, bookings, listings, messageSends, type Agent, type Listing } from "@/db/schema";
-import { and, eq, gt, inArray, isNotNull, max } from "drizzle-orm";
-import { marketNews, marketNewsLabel, type MarketNews } from "@/lib/marketStatus";
+import {
+  agents,
+  agentInteractions,
+  bookings,
+  listings,
+  messagePresets,
+  messageSends,
+  type Agent,
+  type Listing,
+} from "@/db/schema";
+import { and, eq, gt, inArray, isNotNull, or } from "drizzle-orm";
+import { estimateDriveMinutes } from "@/lib/driveTime";
+import { LEAD_GOOD_PHOTO_SCORE } from "@/lib/leadSections";
+import { marketNews, marketNewsLabel } from "@/lib/marketStatus";
 
 const DAY = 24 * 60 * 60 * 1000;
+const TZ = "America/Los_Angeles";
 
 /** How long a new listing counts as "just listed". */
 const JUST_LISTED_DAYS = 21;
-
 /** How long after a listing goes under contract or closes it's still worth a congrats. */
 const NEWS_DAYS = 21;
+/** How long a price cut stays a reason to get in touch. */
+const PRICE_CUT_DAYS = 14;
+/** Samples went out and nothing came back: worth one "did they come through?" after this long… */
+const SAMPLES_WAIT_DAYS = 7;
+/** …and past this it's just someone who has gone quiet. */
+const SAMPLES_MAX_DAYS = 35;
+/** A snooze hides someone for this long. */
+const SNOOZE_DAYS = 28;
+/** Someone with a listing in this many days is actively listing. */
+const ACTIVE_LISTER_DAYS = 30;
+/** How many follow-ups a day the page asks for. */
+const DAILY_TARGET = 5;
 
 /**
- * Days of silence before someone comes back up. Interested agents asked for
- * samples or pricing, so they're the warmest people Lukas has after his
- * clients and are worth a nudge sooner than the merely warm.
+ * Days of silence before someone comes back up on the timer alone.
  *
- * Two weeks for them. It was briefly one (2026-10-10, on the argument that 99%
- * of replies come inside a day, so a week of quiet is already an answer), but
- * Lukas found a second text inside the same stretch as the first one weird to
- * send, and it's his name on it.
+ * Reworked 2026-10-11 after looking at how every client was won. All eight
+ * booked within 14 days of his last touch, and agents who list at all list
+ * about every 15 days, so a flat four weeks for warm agents meant being out of
+ * mind for most of the listings they put up; while four weeks for a warm agent
+ * with no listing in sight was four weeks too often.
+ *
+ * Interested stays at two weeks: one was tried and Lukas found a second text
+ * inside the same stretch as the first one weird to send, and it's his name on
+ * it. Nothing here is shorter than a week for that reason.
  */
-const QUIET_DAYS: Record<string, number> = {
-  regular: 28,
-  worked_once: 28,
+const QUIET_DAYS = {
+  client: 28,
   interested: 14,
-  warm: 28,
+  /** Warm, with a listing in the last ACTIVE_LISTER_DAYS. */
+  warmActive: 21,
+  warmIdle: 56,
 };
+
+/**
+ * Each follow-up that goes unanswered doubles the wait (interested: 2 weeks,
+ * then 4, then 8), and after this many the timer stops bringing them back at
+ * all. A reason still does: a new listing, a sale, a price cut. Without this
+ * nobody ever left the list, and at a few hundred agents it would have asked
+ * for a hundred texts a week to people who had stopped answering. Clients are
+ * exempt.
+ */
+const MAX_UNANSWERED = 3;
+/** Touches this close together are one follow-up, and this soon after their reply are still the same exchange. */
+const SAME_EXCHANGE_DAYS = 2;
+
+/**
+ * Why someone is on the list, strongest first. This order is the page's sort:
+ * a reason to text beats a timer, and the reasons that are about work he could
+ * still win come before the ones that are only a hello.
+ */
+export const FOLLOW_UP_REASONS = ["weak_photos", "samples", "just_listed", "news", "price_cut", "quiet"] as const;
+export type FollowUpReason = (typeof FOLLOW_UP_REASONS)[number];
 
 export interface FollowUpEntry {
   agent: Agent;
@@ -34,22 +81,25 @@ export interface FollowUpEntry {
   lastReplyAt: Date | null;
 }
 
-export interface JustListedEntry extends FollowUpEntry {
-  listing: Listing;
-}
-
-export interface NewsEntry extends FollowUpEntry {
-  /** The tracked listing, when there is one. A job booked by address alone has none. */
+export interface FollowUpItem extends FollowUpEntry {
+  reason: FollowUpReason;
+  /** Why they're here, in a line: "Just listed Oct 9 with weak photos", "Pending since Oct 7". The words to use, too: agents use the sale ones precisely. */
+  label: string;
+  /** The listing the reason is about, when there is one. */
   listing: Listing | null;
+  /** For a home he shot that was booked by address alone, which has no listing row. */
   address: string | null;
   city: string | null;
-  /** A home Lukas photographed: the congratulation that means the most coming from him. */
-  shot: boolean;
-  kind: MarketNews;
-  /** "Pending since Oct 5" — the words to use, since agents use them precisely. */
-  label: string;
-  /** When it went under contract or closed. */
-  at: Date;
+}
+
+export interface FollowUpBoard {
+  /** The next few to do, enough to bring today's total to dailyTarget. Empty once that's met. */
+  today: FollowUpItem[];
+  /** Everyone else who is due, in the same order. */
+  later: FollowUpItem[];
+  /** Follow-ups already done today: people he got back in touch with after a gap, or snoozed. */
+  doneToday: number;
+  dailyTarget: number;
 }
 
 /** "1811 NE Alameda Ave" → "1811 alameda". Bookings often aren't linked to a listing, so match by address. */
@@ -61,101 +111,194 @@ function addressKey(address: string | null): string | null {
   return number && street ? `${number} ${street}` : null;
 }
 
+/** "Oct 5", Pacific: this runs on the server, which is on UTC. */
+function shortDate(date: Date): string {
+  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: TZ });
+}
+
+/** Midnight today, Pacific. */
+function startOfToday(now: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ,
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(now));
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0) % 24;
+  return now - ((part("hour") * 60 + part("minute")) * 60 + part("second")) * 1000;
+}
+
+/** Nearest first, in the Leads page's bands: local, a short drive, a long one, a trip, unknown. */
+function driveBand(city: string | null): number {
+  const minutes = city ? estimateDriveMinutes(city) : null;
+  if (minutes == null) return 4;
+  return minutes <= 45 ? 0 : minutes <= 100 ? 1 : minutes <= 165 ? 2 : 3;
+}
+
 /**
- * Everything the Follow up page shows:
+ * The Follow up page: everyone Lukas knows (clients, interested, warm) who is
+ * due to hear from him, one entry each, strongest reason first.
  *
- * - news: a listing of someone he knows, or a home he shot for them, went
- *   under contract or closed (found by the nightly market check,
- *   lib/marketStatus.ts) and he hasn't been in touch since it happened.
- *   Congratulating them is the easiest text there is to send.
- * - justListed: a past client or interested agent put up a listing Lukas
- *   hasn't acted on, and he hasn't been in touch since it appeared. A new
- *   listing is the most natural reason to text someone who already knows him.
- *   Acting on it anywhere (texting them, passing the listing on Leads,
- *   snoozing them here) clears it.
- * - agents: everyone else he knows who has gone quiet, past clients first,
- *   then interested, then warm, longest silence first.
+ * The reasons, in order (FOLLOW_UP_REASONS):
+ *
+ * - weak_photos: they put up a listing whose photos scored as amateur, and he
+ *   hasn't been in touch since. The one case where the listing itself is work.
+ * - samples: he emailed them samples a week or more ago and neither side has
+ *   said anything since. That email is where most conversations stopped.
+ * - just_listed: they put up a listing he hasn't acted on. A new listing is the
+ *   most natural reason to text someone who already knows him. Warm agents
+ *   count too now; it used to be clients and interested only.
+ * - news: a listing of theirs, or a home he shot for them, went under contract
+ *   or closed (the nightly market check, lib/marketStatus.ts) since he was
+ *   last in touch. Congratulating them is the easiest text there is to send.
+ * - price_cut: one of their listings with weak photos just dropped its price.
+ * - quiet: nothing above, and it has been long enough (QUIET_DAYS, doubling
+ *   with each unanswered follow-up).
+ *
+ * Acting on someone anywhere clears them: texting them, passing the listing on
+ * Leads, or snoozing them here.
+ *
+ * Within a reason the order is nearest first, then whoever lists most, then
+ * clients before interested before warm, then most recent. It used to be
+ * longest silence first, which put the people least likely to answer on top.
  */
-export async function getFollowUpBoard(): Promise<{
-  news: NewsEntry[];
-  justListed: JustListedEntry[];
-  agents: FollowUpEntry[];
-}> {
+export async function getFollowUpBoard(): Promise<FollowUpBoard> {
+  const empty: FollowUpBoard = { today: [], later: [], doneToday: 0, dailyTarget: DAILY_TARGET };
   const candidates = await db
     .select()
     .from(agents)
     .where(inArray(agents.relationshipStatus, ["regular", "worked_once", "interested", "warm"]));
-  if (candidates.length === 0) return { news: [], justListed: [], agents: [] };
+  if (candidates.length === 0) return empty;
 
   const ids = candidates.map((a) => a.id);
   const now = Date.now();
-
+  const justListedSince = new Date(now - JUST_LISTED_DAYS * DAY);
   const newsSince = new Date(now - NEWS_DAYS * DAY);
+  const cutSince = new Date(now - PRICE_CUT_DAYS * DAY);
 
-  const [replies, inbound, outbound, fresh, bookedAddresses, moved, movedJobs] = await Promise.all([
+  const [sends, interactions, eventful, allListings, bookedAddresses, movedJobs, presets] = await Promise.all([
     db
-      .select({ agentId: messageSends.agentId, at: max(messageSends.respondedAt) })
+      .select({
+        agentId: messageSends.agentId,
+        presetId: messageSends.presetId,
+        sentAt: messageSends.sentAt,
+        respondedAt: messageSends.respondedAt,
+      })
       .from(messageSends)
-      .where(and(inArray(messageSends.agentId, ids), isNotNull(messageSends.respondedAt)))
-      .groupBy(messageSends.agentId),
+      .where(inArray(messageSends.agentId, ids)),
     db
-      .select({ agentId: agentInteractions.agentId, at: max(agentInteractions.occurredAt) })
+      .select({
+        agentId: agentInteractions.agentId,
+        direction: agentInteractions.direction,
+        at: agentInteractions.occurredAt,
+      })
       .from(agentInteractions)
-      .where(and(inArray(agentInteractions.agentId, ids), eq(agentInteractions.direction, "inbound")))
-      .groupBy(agentInteractions.agentId),
-    db
-      .select({ agentId: agentInteractions.agentId, at: max(agentInteractions.occurredAt) })
-      .from(agentInteractions)
-      .where(and(inArray(agentInteractions.agentId, ids), eq(agentInteractions.direction, "outbound")))
-      .groupBy(agentInteractions.agentId),
+      .where(inArray(agentInteractions.agentId, ids)),
+    // Full rows only for the listings something has just happened to.
     db
       .select()
       .from(listings)
       .where(
         and(
           inArray(listings.agentId, ids),
-          inArray(listings.status, ["new", "saved"]),
-          gt(listings.foundAt, new Date(now - JUST_LISTED_DAYS * DAY))
+          or(
+            and(inArray(listings.status, ["new", "saved"]), gt(listings.foundAt, justListedSince)),
+            gt(listings.marketStatusAt, newsSince),
+            gt(listings.priceCutAt, cutSince)
+          )
         )
       ),
-    db.select({ address: bookings.address }).from(bookings).where(isNotNull(bookings.address)),
+    // And the bare facts of the rest, for how often and where each agent lists.
     db
-      .select()
+      .select({ agentId: listings.agentId, city: listings.city, listedAt: listings.listedAt, foundAt: listings.foundAt })
       .from(listings)
-      .where(and(inArray(listings.agentId, ids), gt(listings.marketStatusAt, newsSince))),
+      .where(inArray(listings.agentId, ids)),
+    db.select({ address: bookings.address }).from(bookings).where(isNotNull(bookings.address)),
     db
       .select({ booking: bookings, listing: listings })
       .from(bookings)
       .leftJoin(listings, eq(bookings.listingId, listings.id))
       .where(and(inArray(bookings.contactAgentId, ids), gt(bookings.marketStatusAt, newsSince))),
+    // Named columns: a preset row carries its attachments' bytes.
+    db
+      .select({ id: messagePresets.id, channel: messagePresets.channel, quickActions: messagePresets.quickActionPresetIds })
+      .from(messagePresets),
   ]);
 
-  const toMap = (rows: { agentId: string | null; at: Date | null }[]) =>
-    new Map(rows.filter((r) => r.agentId && r.at).map((r) => [r.agentId!, r.at!]));
-  const replyBySend = toMap(replies);
-  const inboundBy = toMap(inbound);
-  const outboundBy = toMap(outbound);
-  const booked = new Set(bookedAddresses.map((b) => addressKey(b.address)).filter(Boolean));
+  // "Samples" are the emails offered as a quick action on a text (see
+  // messagePresets.quickActionPresetIds), whatever the template is called.
+  const quickActionIds = new Set(presets.flatMap((p) => p.quickActions));
+  const samplePresets = new Set(presets.filter((p) => p.channel === "email" && quickActionIds.has(p.id)).map((p) => p.id));
 
-  const latest = (...dates: (Date | null | undefined)[]): Date | null => {
-    const times = dates.filter((d): d is Date => d != null).map((d) => d.getTime());
-    return times.length ? new Date(Math.max(...times)) : null;
-  };
-  const lastReplyAt = (a: Agent) => latest(replyBySend.get(a.id), inboundBy.get(a.id));
-  const lastReachedOutAt = (a: Agent) => latest(a.lastContactedAt, outboundBy.get(a.id));
-  const lastTouchAt = (a: Agent) => latest(lastReachedOutAt(a), lastReplyAt(a));
-
-  // Newest qualifying listing per agent.
-  const newestListing = new Map<string, Listing>();
-  for (const l of fresh) {
-    if (!l.agentId || l.bookingId) continue;
-    const key = addressKey(l.address);
-    if (key && booked.has(key)) continue;
-    const prev = newestListing.get(l.agentId);
-    if (!prev || l.foundAt > prev.foundAt) newestListing.set(l.agentId, l);
+  interface History {
+    /** Every time he reached out, oldest first. */
+    out: number[];
+    lastIn: number;
+    samplesAt: number;
+  }
+  const history = new Map<string, History>(candidates.map((a) => [a.id, { out: [], lastIn: 0, samplesAt: 0 }]));
+  for (const s of sends) {
+    const h = s.agentId ? history.get(s.agentId) : null;
+    if (!h) continue;
+    h.out.push(s.sentAt.getTime());
+    if (s.respondedAt) h.lastIn = Math.max(h.lastIn, s.respondedAt.getTime());
+    if (samplePresets.has(s.presetId)) h.samplesAt = Math.max(h.samplesAt, s.sentAt.getTime());
+  }
+  for (const i of interactions) {
+    const h = i.agentId ? history.get(i.agentId) : null;
+    if (!h) continue;
+    if (i.direction === "outbound") h.out.push(i.at.getTime());
+    else h.lastIn = Math.max(h.lastIn, i.at.getTime());
+  }
+  for (const a of candidates) {
+    const h = history.get(a.id)!;
+    if (a.lastContactedAt) h.out.push(a.lastContactedAt.getTime());
+    h.out.sort((x, y) => x - y);
   }
 
-  const rank = (s: string) => (s === "regular" || s === "worked_once" ? 0 : s === "interested" ? 1 : 2);
+  // How often and where each of them lists.
+  const activeSince = now - ACTIVE_LISTER_DAYS * DAY;
+  const listed = new Map<string, { recent: number; city: string | null; latest: number }>();
+  for (const l of allListings) {
+    if (!l.agentId) continue;
+    const at = (l.listedAt ?? l.foundAt).getTime();
+    const entry = listed.get(l.agentId) ?? { recent: 0, city: null, latest: 0 };
+    if (at > activeSince) entry.recent++;
+    if (l.city && at >= entry.latest) {
+      entry.city = l.city;
+      entry.latest = at;
+    }
+    listed.set(l.agentId, entry);
+  }
+
+  const booked = new Set(bookedAddresses.map((b) => addressKey(b.address)).filter(Boolean));
+  const shotByHim = (l: Listing) => {
+    const key = addressKey(l.address);
+    return l.bookingId != null || (key != null && booked.has(key));
+  };
+
+  // Newest open listing per agent that isn't one of his jobs, and their latest price cut.
+  const newestListing = new Map<string, Listing>();
+  const latestCut = new Map<string, Listing>();
+  for (const l of eventful) {
+    if (!l.agentId || shotByHim(l)) continue;
+    // By the date it went on the market: an alert can turn up a listing that has been for sale since July.
+    if ((l.status === "new" || l.status === "saved") && l.foundAt > justListedSince && (l.listedAt ?? l.foundAt) > justListedSince) {
+      const prev = newestListing.get(l.agentId);
+      if (!prev || l.foundAt > prev.foundAt) newestListing.set(l.agentId, l);
+    }
+    // Only where the photos are known to be weak: a cut is when an agent
+    // relaunches a listing, and new photos are the obvious thing to relaunch
+    // with. On a listing that already looks professional it's no reason to
+    // text, and those were ten of the first twenty-four people on this list.
+    // A cut on a home that has since gone under contract is news, not a cut.
+    const weakPhotos = l.score != null && l.score < LEAD_GOOD_PHOTO_SCORE;
+    if (l.priceCutAt && l.priceCutAt > cutSince && weakPhotos && !marketNews(l.marketStatus) && l.status !== "booked") {
+      const prev = latestCut.get(l.agentId);
+      if (!prev || l.priceCutAt > prev.priceCutAt!) latestCut.set(l.agentId, l);
+    }
+  }
 
   // One piece of news per agent: a home he shot before anything else of
   // theirs, then whichever happened most recently.
@@ -175,14 +318,13 @@ export async function getFollowUpBoard(): Promise<{
       latestNews.set(agentId, sale);
     }
   };
-  for (const l of moved) {
-    if (!l.marketStatusAt) continue;
-    const key = addressKey(l.address);
+  for (const l of eventful) {
+    if (!l.marketStatusAt || l.marketStatusAt <= newsSince) continue;
     offer(l.agentId, {
       listing: l,
       address: l.address,
       city: l.city,
-      shot: l.bookingId != null || (key != null && booked.has(key)),
+      shot: shotByHim(l),
       status: l.marketStatus,
       at: l.marketStatusAt,
     });
@@ -199,70 +341,174 @@ export async function getFollowUpBoard(): Promise<{
     });
   }
 
-  const news: NewsEntry[] = [];
-  const justListed: JustListedEntry[] = [];
-  const rest: FollowUpEntry[] = [];
+  const isClient = (a: Agent) => a.relationshipStatus === "regular" || a.relationshipStatus === "worked_once";
+  const rank = (a: Agent) => (isClient(a) ? 0 : a.relationshipStatus === "interested" ? 1 : 2);
+
+  interface Ranked extends FollowUpItem {
+    /** News about a home he shot goes first among the news. */
+    shot: boolean;
+    band: number;
+    activity: number;
+    /** What the reason is dated by; newest first within everything else. */
+    at: number;
+  }
+  const due: Ranked[] = [];
+  const today = startOfToday(now);
+  let doneToday = 0;
 
   for (const agent of candidates) {
+    const h = history.get(agent.id)!;
+    const lastOut = h.out.length ? h.out[h.out.length - 1] : 0;
+    const lastTouch = Math.max(lastOut, h.lastIn);
+    const snoozedAt = agent.followUpDismissedAt?.getTime() ?? 0;
+    const activity = listed.get(agent.id)?.recent ?? 0;
+
+    // Done today: snoozed, or back in touch after a gap. Someone he first
+    // texted this morning and is still talking to isn't a follow-up.
+    const firstOutToday = h.out.find((t) => t >= today);
+    const before = Math.max(h.lastIn < today ? h.lastIn : 0, ...h.out.filter((t) => t < today), 0);
+    if (snoozedAt >= today || (firstOutToday != null && before > 0 && firstOutToday - before >= 5 * DAY)) doneToday++;
+
+    /** Something that happened at `since` is still a reason if he hasn't reached out or snoozed them after it. */
+    const open = (since: number) => snoozedAt <= since && lastOut < since;
+
+    const base = { agent, lastReplyAt: h.lastIn ? new Date(h.lastIn) : null, activity };
+    const cityOf = (city: string | null | undefined) => city ?? listed.get(agent.id)?.city ?? null;
+    const push = (item: Omit<Ranked, keyof typeof base | "band" | "shot"> & { shot?: boolean }) =>
+      due.push({ ...base, shot: false, ...item, band: driveBand(cityOf(item.city)) });
+
+    const fresh = newestListing.get(agent.id);
+    const freshOpen = fresh != null && open(fresh.foundAt.getTime());
+    if (fresh && freshOpen && fresh.score != null && fresh.score < LEAD_GOOD_PHOTO_SCORE) {
+      push({
+        reason: "weak_photos",
+        label: `Just listed ${shortDate(fresh.listedAt ?? fresh.foundAt)} with weak photos`,
+        listing: fresh,
+        address: fresh.address,
+        city: fresh.city,
+        at: fresh.foundAt.getTime(),
+      });
+      continue;
+    }
+
+    // "No word since" starts a little after the email: the reply that asked
+    // for the samples is logged a moment after it goes, and a text he sent
+    // alongside it that day is the same exchange, not a follow-up.
+    const samplesAge = now - h.samplesAt;
+    if (
+      h.samplesAt > 0 &&
+      samplesAge >= SAMPLES_WAIT_DAYS * DAY &&
+      samplesAge <= SAMPLES_MAX_DAYS * DAY &&
+      h.lastIn <= h.samplesAt + 10 * 60 * 1000 &&
+      lastOut <= h.samplesAt + DAY &&
+      snoozedAt <= h.samplesAt
+    ) {
+      push({
+        reason: "samples",
+        label: `Samples sent ${shortDate(new Date(h.samplesAt))}, no word since`,
+        listing: null,
+        address: null,
+        city: null,
+        at: h.samplesAt,
+      });
+      continue;
+    }
+
+    if (fresh && freshOpen) {
+      const when = shortDate(fresh.listedAt ?? fresh.foundAt);
+      push({
+        reason: "just_listed",
+        label: fresh.isComingSoon ? `Coming soon, seen ${shortDate(fresh.foundAt)}` : `Just listed ${when}`,
+        listing: fresh,
+        address: fresh.address,
+        city: fresh.city,
+        at: fresh.foundAt.getTime(),
+      });
+      continue;
+    }
+
+    // Against the date it happened, not the date the check noticed: if he has
+    // been in touch since it went under contract, the moment has passed,
+    // whether or not that text mentioned it.
     const sale = latestNews.get(agent.id);
-    if (sale) {
-      // Against the date it happened, not the date the check noticed: if he
-      // has been in touch since it went under contract, the moment has passed,
-      // whether or not that text mentioned it.
-      const since = sale.at.getTime();
-      const reachedOut = lastReachedOutAt(agent);
-      const snoozed = agent.followUpDismissedAt && agent.followUpDismissedAt.getTime() > since;
-      if (!snoozed && (!reachedOut || reachedOut.getTime() < since)) {
-        const kind = marketNews(sale.status)!;
-        news.push({
-          agent,
-          listing: sale.listing,
-          address: sale.address,
-          city: sale.city,
-          shot: sale.shot,
-          kind,
-          label: marketNewsLabel(kind, sale.at),
-          at: sale.at,
-          lastReplyAt: lastReplyAt(agent),
-        });
-        continue;
-      }
+    if (sale && open(sale.at.getTime())) {
+      push({
+        reason: "news",
+        label: marketNewsLabel(marketNews(sale.status)!, sale.at) + (sale.shot ? ", you shot it" : ""),
+        listing: sale.listing,
+        address: sale.address,
+        city: sale.city,
+        shot: sale.shot,
+        at: sale.at.getTime(),
+      });
+      continue;
     }
 
-    const listing = newestListing.get(agent.id);
-    if (listing && rank(agent.relationshipStatus) <= 1) {
-      const since = listing.foundAt.getTime();
-      const reachedOut = lastReachedOutAt(agent);
-      const snoozed = agent.followUpDismissedAt && agent.followUpDismissedAt.getTime() > since;
-      if (!snoozed && (!reachedOut || reachedOut.getTime() < since)) {
-        justListed.push({ agent, listing, lastReplyAt: lastReplyAt(agent) });
-        continue;
-      }
+    const cut = latestCut.get(agent.id);
+    if (cut && open(cut.priceCutAt!.getTime())) {
+      push({
+        reason: "price_cut",
+        label: `Price cut ${shortDate(cut.priceCutAt!)}, weak photos`,
+        listing: cut,
+        address: cut.address,
+        city: cut.city,
+        at: cut.priceCutAt!.getTime(),
+      });
+      continue;
     }
 
-    const cutoff = now - (QUIET_DAYS[agent.relationshipStatus] ?? 28) * DAY;
-    if (agent.followUpDismissedAt && agent.followUpDismissedAt.getTime() > now - 28 * DAY) continue;
-    const touched = lastTouchAt(agent);
-    if (touched && touched.getTime() >= cutoff) continue;
-    rest.push({ agent, lastReplyAt: lastReplyAt(agent) });
+    // The timer. A snooze only hides this: a reason above still shows if it's newer than the snooze.
+    if (snoozedAt > now - SNOOZE_DAYS * DAY) continue;
+    let wait = isClient(agent)
+      ? QUIET_DAYS.client
+      : agent.relationshipStatus === "interested"
+        ? QUIET_DAYS.interested
+        : activity > 0
+          ? QUIET_DAYS.warmActive
+          : QUIET_DAYS.warmIdle;
+    if (!isClient(agent)) {
+      // Follow-ups since they last said anything: his touches after that exchange, a burst counting once.
+      const anchor = (h.lastIn || h.out[0] || 0) + SAME_EXCHANGE_DAYS * DAY;
+      let unanswered = 0;
+      let counted = 0;
+      for (const t of h.out) {
+        if (t <= anchor || t - counted <= SAME_EXCHANGE_DAYS * DAY) continue;
+        unanswered++;
+        counted = t;
+      }
+      if (unanswered >= MAX_UNANSWERED) continue;
+      wait *= 2 ** unanswered;
+    }
+    if (lastTouch && now - lastTouch < wait * DAY) continue;
+    push({
+      reason: "quiet",
+      label: lastTouch ? `Quiet since ${shortDate(new Date(lastTouch))}` : "No contact logged yet",
+      listing: null,
+      address: null,
+      city: null,
+      at: h.lastIn || lastTouch,
+    });
   }
 
-  news.sort(
+  due.sort(
     (a, b) =>
+      FOLLOW_UP_REASONS.indexOf(a.reason) - FOLLOW_UP_REASONS.indexOf(b.reason) ||
       Number(b.shot) - Number(a.shot) ||
-      rank(a.agent.relationshipStatus) - rank(b.agent.relationshipStatus) ||
-      b.at.getTime() - a.at.getTime()
+      a.band - b.band ||
+      b.activity - a.activity ||
+      rank(a.agent) - rank(b.agent) ||
+      b.at - a.at
   );
-  justListed.sort(
-    (a, b) =>
-      rank(a.agent.relationshipStatus) - rank(b.agent.relationshipStatus) ||
-      b.listing.foundAt.getTime() - a.listing.foundAt.getTime()
-  );
-  rest.sort((a, b) => {
-    const diff = rank(a.agent.relationshipStatus) - rank(b.agent.relationshipStatus);
-    if (diff !== 0) return diff;
-    return (lastTouchAt(a.agent)?.getTime() ?? -Infinity) - (lastTouchAt(b.agent)?.getTime() ?? -Infinity);
-  });
 
-  return { news, justListed, agents: rest };
+  const items: FollowUpItem[] = due.map(({ agent, lastReplyAt, reason, label, listing, address, city }) => ({
+    agent,
+    lastReplyAt,
+    reason,
+    label,
+    listing,
+    address,
+    city,
+  }));
+  const slots = Math.max(0, DAILY_TARGET - doneToday);
+  return { today: items.slice(0, slots), later: items.slice(slots), doneToday, dailyTarget: DAILY_TARGET };
 }
