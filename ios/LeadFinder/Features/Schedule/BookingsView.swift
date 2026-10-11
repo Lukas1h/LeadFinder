@@ -26,7 +26,7 @@ struct BookingsView: View {
         .navigationTitle("Bookings")
         .task { await appState.bookings.load() }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .trailingBar) {
                 Button { newBooking = true } label: { Label("Add booking", systemImage: "plus") }
             }
         }

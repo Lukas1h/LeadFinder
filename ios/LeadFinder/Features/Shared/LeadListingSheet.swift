@@ -27,7 +27,7 @@ struct LeadListingSheet: View {
             }
             .background(Theme.background)
             .navigationTitle(listing.address?.nilIfBlank ?? "Listing")
-            .navigationBarTitleDisplayMode(.inline)
+            .titleDisplay(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }

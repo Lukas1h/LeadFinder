@@ -50,14 +50,14 @@ struct ScheduleView: View {
                 BookingsView()
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .leadingBar) {
                     Button {
                         reminderSheet = ReminderTarget(item: nil)
                     } label: {
                         Label("Add reminder", systemImage: "plus")
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .trailingBar) {
                     NavigationLink(value: BookingsRoute()) {
                         Label("Bookings", systemImage: "list.bullet.rectangle")
                     }

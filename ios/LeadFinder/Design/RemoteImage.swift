@@ -1,6 +1,5 @@
 import ImageIO
 import SwiftUI
-import UIKit
 
 /// Listing photos, loaded once and kept.
 ///
@@ -14,8 +13,8 @@ actor ImagePipeline {
     static let shared = ImagePipeline()
 
     // NSCache is thread-safe, so the synchronous memory check can skip the actor.
-    nonisolated(unsafe) private let memory = NSCache<NSURL, UIImage>()
-    private var inFlight: [URL: Task<UIImage?, Never>] = [:]
+    nonisolated(unsafe) private let memory = NSCache<NSURL, PlatformImage>()
+    private var inFlight: [URL: Task<PlatformImage?, Never>] = [:]
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.urlCache = URLCache(memoryCapacity: 32 << 20, diskCapacity: 300 << 20)
@@ -29,19 +28,20 @@ actor ImagePipeline {
         memory.totalCostLimit = 120 << 20
     }
 
-    nonisolated func cached(_ url: URL) -> UIImage? {
+    nonisolated func cached(_ url: URL) -> PlatformImage? {
         memory.object(forKey: url as NSURL)
     }
 
-    func image(for url: URL, maxPixel: CGFloat) async -> UIImage? {
+    func image(for url: URL, maxPixel: CGFloat) async -> PlatformImage? {
         if let hit = memory.object(forKey: url as NSURL) { return hit }
         if let task = inFlight[url] { return await task.value }
 
         let session = self.session
-        let task = Task<UIImage?, Never>.detached(priority: .userInitiated) {
+        let task = Task<PlatformImage?, Never>.detached(priority: .userInitiated) {
             let request = URLRequest(url: url)
             guard let (data, response) = try? await session.data(for: request) else { return nil }
-            if (response as? HTTPURLResponse)?.statusCode == 200, let image = Self.downsample(data, maxPixel: maxPixel) {
+            if (response as? HTTPURLResponse)?.statusCode == 200,
+               let image = PlatformImage.downsampling(data, maxPixel: maxPixel) {
                 return image
             }
             // The session hands back whatever is on disk without asking the
@@ -54,7 +54,8 @@ actor ImagePipeline {
         let image = await task.value
         inFlight[url] = nil
         if let image {
-            let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
+            let pixels = image.pixelSize
+            let cost = Int(pixels.width * pixels.height * 4)
             memory.setObject(image, forKey: url as NSURL, cost: cost)
         }
         return image
@@ -66,19 +67,6 @@ actor ImagePipeline {
         for url in urls where cached(url) == nil {
             Task(priority: .utility) { _ = await image(for: url, maxPixel: maxPixel) }
         }
-    }
-
-    private static func downsample(_ data: Data, maxPixel: CGFloat) -> UIImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
-        else { return nil }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
-        ]
-        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
-        return UIImage(cgImage: cg)
     }
 }
 
@@ -117,7 +105,7 @@ struct RemoteImage: View {
 
     private struct Loaded {
         let url: URL
-        let image: UIImage
+        let image: PlatformImage
     }
 
     private struct LoadKey: Equatable {
@@ -134,7 +122,7 @@ struct RemoteImage: View {
         fallback = original == url ? nil : original
     }
 
-    private var current: UIImage? {
+    private var current: PlatformImage? {
         guard let url else { return nil }
         if let loaded, loaded.url == url { return loaded.image }
         return ImagePipeline.shared.cached(url)
@@ -143,7 +131,7 @@ struct RemoteImage: View {
     var body: some View {
         ZStack {
             if let current {
-                Image(uiImage: current).resizable().scaledToFill()
+                current.swiftUIImage.resizable().scaledToFill()
             } else {
                 Theme.cardRaised
                 if failed {

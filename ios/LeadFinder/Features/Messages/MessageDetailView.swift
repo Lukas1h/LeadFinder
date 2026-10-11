@@ -74,7 +74,7 @@ struct MessageDetailView: View {
         }
         .background(Theme.background)
         .navigationTitle(send.channel == "email" ? "Email" : "Text")
-        .navigationBarTitleDisplayMode(.inline)
+        .titleDisplay(.inline)
         .task {
             await load()
             if startsQuickActions, !didApply {
@@ -400,12 +400,12 @@ struct MessageDetailView: View {
             Form {
                 Section {
                     TextField("agent@example.com", text: $typedEmail)
-                        .keyboardType(.emailAddress)
-                        .textContentType(.emailAddress)
-                        .textInputAutocapitalization(.never)
+                        .keyboard(.email)
+                        .contentType(.email)
+                        .autocapitalization(.never)
                         .autocorrectionDisabled()
                     Button("Paste from clipboard") {
-                        if let pasted = UIPasteboard.general.string { typedEmail = Self.firstEmail(in: pasted) ?? typedEmail }
+                        if let pasted = Platform.pasteboardString { typedEmail = Self.firstEmail(in: pasted) ?? typedEmail }
                     }
                 } header: {
                     Text("\(send.recipient) has no email on file")
@@ -418,7 +418,7 @@ struct MessageDetailView: View {
             .background(Theme.background)
             .tint(Theme.accent)
             .navigationTitle(pendingAction?.name ?? "Send email")
-            .navigationBarTitleDisplayMode(.inline)
+            .titleDisplay(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { askForEmail = false }
