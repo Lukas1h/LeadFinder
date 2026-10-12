@@ -81,6 +81,11 @@ struct FollowUpView: View {
                 today: today.filter { matches($0.agent) },
                 later: later.filter { matches($0.agent) },
                 upcoming: (response.upcoming ?? []).filter { matches($0.agent) },
+                droneOffers: (response.droneOffers ?? []).compactMap { group in
+                    var group = group
+                    group.items = group.items.filter { matches($0.agent) }
+                    return group.items.isEmpty && (group.heldBack ?? 0) == 0 ? nil : group
+                },
                 done: response.doneToday ?? 0,
                 target: response.dailyTarget ?? 5
             )
@@ -96,10 +101,11 @@ struct FollowUpView: View {
         today: [FollowUpResponse.JustListed],
         later: [FollowUpResponse.JustListed],
         upcoming: [FollowUpResponse.Upcoming],
+        droneOffers: [FollowUpResponse.DroneOfferGroup],
         done: Int,
         target: Int
     ) -> some View {
-        if today.isEmpty && later.isEmpty && upcoming.isEmpty {
+        if today.isEmpty && later.isEmpty && upcoming.isEmpty && droneOffers.isEmpty {
             emptyState
         } else {
             VStack(alignment: .leading, spacing: 0) {
@@ -121,6 +127,29 @@ struct FollowUpView: View {
                             Text(contactError)
                                 .font(.caption)
                                 .foregroundStyle(Theme.danger)
+                        }
+
+                        // The free drone shots trial: who to offer them to,
+                        // by where he'll be this week.
+                        if !droneOffers.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                webHeading("Free drone shots this week")
+                                Text("Agents you know near where you\u{2019}re already driving, who haven\u{2019}t had the offer yet. One free shoot each.")
+                                    .font(.footnote)
+                                    .foregroundStyle(Theme.secondaryText)
+                                ForEach(droneOffers) { group in
+                                    Text(group.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(Theme.primaryText)
+                                        .padding(.top, 4)
+                                    ForEach(group.items) { followUpCard($0) }
+                                    if let held = group.heldBack, held > 0 {
+                                        Text("\(group.items.isEmpty ? "\(held)" : "\(held) more") you know here heard from you in the last 10 days.")
+                                            .font(.footnote)
+                                            .foregroundStyle(Theme.secondaryText)
+                                    }
+                                }
+                            }
                         }
 
                         VStack(alignment: .leading, spacing: 12) {

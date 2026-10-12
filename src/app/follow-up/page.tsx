@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { listingCountsByAgent, listingDatesByAgent } from "@/app/agents/actions";
 import { AgentsSkeleton } from "@/app/agents/loading";
 import { getFollowUpBoard } from "./data";
+import { getDroneOffers } from "./droneOffers";
 import { FollowUpList } from "./FollowUpList";
 
 /**
@@ -21,8 +22,9 @@ export default function FollowUpPage() {
 }
 
 async function FollowUpContent() {
-  const [board, counts, dates] = await Promise.all([
+  const [board, droneOffers, counts, dates] = await Promise.all([
     getFollowUpBoard(),
+    getDroneOffers(),
     listingCountsByAgent(),
     listingDatesByAgent(),
   ]);
@@ -37,7 +39,7 @@ async function FollowUpContent() {
           text, and each follow-up that goes unanswered doubles the wait.
         </p>
       </header>
-      <FollowUpList {...board} counts={counts} dates={dates} />
+      <FollowUpList {...board} droneOffers={droneOffers} counts={counts} dates={dates} />
     </>
   );
 }

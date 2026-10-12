@@ -10,6 +10,11 @@ import { RelationshipBadge } from "@/app/badges";
 import { formatDate } from "@/lib/format";
 import { ListingRow } from "@/app/ListingRow";
 import type { FollowUpItem, FollowUpUpcoming } from "./data";
+import type { DroneOfferGroup } from "./droneOffers";
+
+/** What a card needs: a follow-up, or a drone offer (which has no reason or listing). */
+type CardItem = Pick<FollowUpItem, "agent" | "lastReplyAt" | "label" | "suggestion"> &
+  Partial<Pick<FollowUpItem, "reason" | "listing" | "address" | "city">>;
 
 export function FollowUpList({
   today,
@@ -17,6 +22,7 @@ export function FollowUpList({
   doneToday,
   dailyTarget,
   upcoming,
+  droneOffers,
   counts,
   dates,
 }: {
@@ -25,6 +31,7 @@ export function FollowUpList({
   doneToday: number;
   dailyTarget: number;
   upcoming: FollowUpUpcoming[];
+  droneOffers: DroneOfferGroup[];
   counts: Record<string, number>;
   dates: Record<string, { listedAt: Date | null; foundAt: Date }[]>;
 }) {
@@ -47,53 +54,7 @@ export function FollowUpList({
   const now = today.filter((e) => !snoozed.has(e.agent.id));
   const next = later.filter((e) => !snoozed.has(e.agent.id));
 
-  // Everyone who isn't due yet, with the date they will be, so nobody is ever just missing from the page.
-  const comingUp = upcoming.length > 0 && (
-    <details>
-      <summary className="text-sm font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none">
-        Coming up ({upcoming.length})
-      </summary>
-      <p className="text-sm text-muted-foreground mt-1">
-        Not due yet. Interested agents come back 2 weeks after your last contact, warm agents after 3, clients after
-        4, or sooner if they list or sell something.
-      </p>
-      <ul className="mt-3 divide-y rounded-lg border">
-        {upcoming.map((u) => (
-          <li key={u.agent.id} className="flex items-center justify-between gap-3 px-3 py-2">
-            <div className="flex items-center gap-2 min-w-0 flex-wrap">
-              <AgentDetailDialog
-                agent={u.agent}
-                trigger={
-                  <button type="button" className="text-sm font-medium text-foreground hover:underline text-left">
-                    {u.agent.name ?? "Unknown name"}
-                  </button>
-                }
-              />
-              <RelationshipBadge status={u.agent.relationshipStatus} agentName={u.agent.name} className="shrink-0" />
-              <span className="text-xs text-muted-foreground">{u.note}</span>
-            </div>
-            <span className="text-sm text-muted-foreground shrink-0">
-              {u.dueAt ? formatDate(u.dueAt) : "When they list or sell"}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
-
-  if (now.length === 0 && next.length === 0) {
-    return (
-      <div className="flex flex-col gap-8">
-        <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
-          <HeartHandshake className="size-8" />
-          <p>Everyone you know has heard from you recently.</p>
-        </div>
-        {comingUp}
-      </div>
-    );
-  }
-
-  const card = (e: FollowUpItem) => (
+  const card = (e: CardItem) => (
     <AgentCard
       key={e.agent.id}
       agent={e.agent}
@@ -138,8 +99,81 @@ export function FollowUpList({
     </AgentCard>
   );
 
+  // The free drone shots trial (see droneOffers.ts): who to offer them to, by where he'll be this week.
+  const offers = droneOffers
+    .map((g) => ({ ...g, items: g.items.filter((e) => !snoozed.has(e.agent.id)) }))
+    .filter((g) => g.items.length > 0 || g.heldBack > 0);
+  const drone = offers.length > 0 && (
+    <section className="rounded-xl border border-emerald-600/30 bg-emerald-500/5 p-4">
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Free drone shots this week</h2>
+      <p className="text-sm text-muted-foreground mt-1">
+        Agents you know near where you&rsquo;re already driving, who haven&rsquo;t had the offer yet. One free shoot
+        each. To email it instead, pick the &ldquo;Follow-up: free drone shots&rdquo; template.
+      </p>
+      {offers.map((g) => (
+        <div key={g.title} className="mt-4">
+          <h3 className="text-sm font-medium text-foreground">{g.title}</h3>
+          {g.items.length > 0 && <div className="flex flex-col gap-4 mt-2">{g.items.map(card)}</div>}
+          {g.heldBack > 0 && (
+            <p className="text-sm text-muted-foreground mt-2">
+              {g.items.length > 0 ? `${g.heldBack} more` : g.heldBack} you know here heard from you in the last 10 days.
+            </p>
+          )}
+        </div>
+      ))}
+    </section>
+  );
+
+  // Everyone who isn't due yet, with the date they will be, so nobody is ever just missing from the page.
+  const comingUp = upcoming.length > 0 && (
+    <details>
+      <summary className="text-sm font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none">
+        Coming up ({upcoming.length})
+      </summary>
+      <p className="text-sm text-muted-foreground mt-1">
+        Not due yet. Interested agents come back 2 weeks after your last contact, warm agents after 3, clients after
+        4, or sooner if they list or sell something.
+      </p>
+      <ul className="mt-3 divide-y rounded-lg border">
+        {upcoming.map((u) => (
+          <li key={u.agent.id} className="flex items-center justify-between gap-3 px-3 py-2">
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+              <AgentDetailDialog
+                agent={u.agent}
+                trigger={
+                  <button type="button" className="text-sm font-medium text-foreground hover:underline text-left">
+                    {u.agent.name ?? "Unknown name"}
+                  </button>
+                }
+              />
+              <RelationshipBadge status={u.agent.relationshipStatus} agentName={u.agent.name} className="shrink-0" />
+              <span className="text-xs text-muted-foreground">{u.note}</span>
+            </div>
+            <span className="text-sm text-muted-foreground shrink-0">
+              {u.dueAt ? formatDate(u.dueAt) : "When they list or sell"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+
+  if (now.length === 0 && next.length === 0) {
+    return (
+      <div className="flex flex-col gap-8">
+        {drone}
+        <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
+          <HeartHandshake className="size-8" />
+          <p>Everyone you know has heard from you recently.</p>
+        </div>
+        {comingUp}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-8">
+      {drone}
       <section>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Today ({Math.min(doneToday, dailyTarget)} of {dailyTarget} done)

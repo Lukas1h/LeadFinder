@@ -373,6 +373,8 @@ Headlines read "Just listed Oct 9", "Samples sent Oct 3, no word since", "Pendin
 
 Nobody is on the page within 10 days of the last contact either way (clients excepted), and samples wait 14 days. The timer is one number per relationship: interested 14 days, warm 21, clients 28.
 
+`droneOffers` is a trial section for the top of the page (he may drop it; `src/app/follow-up/droneOffers.ts`): `[{ "title": "Thu, Oct 15 · Klamath Falls trip (through Grants Pass, Medford)", "heldBack": 6, "items": [/* shaped like today's items, reason "drone", listing null */] }]`. Render it above Today under "Free drone shots this week", one sub-heading per group with the same cards, and when `heldBack` > 0 a line "N more you know here heard from you in the last 10 days." Omit the section when the array is empty or missing.
+
 `upcoming` is everyone else he knows, soonest first: `[{ "agent": {...}, "dueAt": "2026-10-15T…" | null, "note": "Last contact Sep 24" }]`. Show it as a compact "Coming up (N)" list under Later, name, status and note on the left and the date on the right; a null `dueAt` reads "When they list or sell" (they stopped answering, so the timer no longer brings them back).
 
 `POST /agents/:id/snooze` with `{ "days": 7 | 14 | 28 }` (no body: 7) takes someone off the page for that long. A listing or sale of theirs from after the snooze still brings them back early; when it ends, whatever is still current shows again. Offer the three lengths in a menu.

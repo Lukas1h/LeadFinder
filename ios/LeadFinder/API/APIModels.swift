@@ -221,6 +221,19 @@ struct FollowUpResponse: Codable, Sendable {
     /// Everyone else he knows, soonest first. Optional for cached responses.
     var upcoming: [Upcoming]?
 
+    /// One place he'll be this week, and who there to offer free drone shots.
+    struct DroneOfferGroup: Codable, Sendable, Identifiable {
+        var title: String
+        var items: [JustListed]
+        /// People he knows there who heard from him too recently to ask.
+        var heldBack: Int?
+
+        var id: String { title }
+    }
+
+    /// The free drone shots trial: the page's top section. Optional, and may go away.
+    var droneOffers: [DroneOfferGroup]?
+
     /// Agents with a listing that just went under contract or sold. Optional so
     /// a cached response from before the server sent it still decodes.
     var news: [JustListed]?

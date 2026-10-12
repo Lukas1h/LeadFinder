@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAppAuth } from "@/lib/appApiAuth";
 import { getFollowUpBoard, type FollowUpItem } from "@/app/follow-up/data";
+import { getDroneOffers } from "@/app/follow-up/droneOffers";
 import { FOLLOW_UP_GROUPS } from "@/app/follow-up/groups";
 import { listingCountsByAgent, listingDatesByAgent } from "@/app/agents/actions";
 import { resolveAvgDaysBetweenListings } from "@/app/agents/stats";
@@ -18,8 +19,9 @@ export async function GET(req: Request) {
   const denied = requireAppAuth(req);
   if (denied) return denied;
 
-  const [{ today, later, doneToday, dailyTarget, upcoming }, counts, dates] = await Promise.all([
+  const [{ today, later, doneToday, dailyTarget, upcoming }, droneOffers, counts, dates] = await Promise.all([
     getFollowUpBoard(),
+    getDroneOffers(),
     listingCountsByAgent(),
     listingDatesByAgent(),
   ]);
@@ -51,6 +53,21 @@ export async function GET(req: Request) {
     dailyTarget,
     // Everyone not due yet and when they will be; dueAt is null once only a listing or sale brings them back.
     upcoming: upcoming.map((u) => ({ agent: agentJson(u.agent), dueAt: u.dueAt, note: u.note })),
+    // The free drone shots trial (droneOffers.ts): the page's top section, items shaped like today's.
+    droneOffers: droneOffers.map((g) => ({
+      title: g.title,
+      heldBack: g.heldBack,
+      items: g.items.map((e) => ({
+        agent: agentJson(e.agent),
+        lastReplyAt: e.lastReplyAt,
+        listing: null,
+        headline: e.label,
+        reason: "drone",
+        suggestion: e.suggestion,
+        listingCount: counts[e.agent.id] ?? 0,
+        avgDaysBetweenListings: resolveAvgDaysBetweenListings(e.agent, dates[e.agent.id] ?? []),
+      })),
+    })),
 
     news: by("news").map(item),
     justListed: by("weak_photos", "just_listed", "price_cut").map(item),
