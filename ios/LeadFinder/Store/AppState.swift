@@ -74,9 +74,23 @@ final class AppState {
     func warmCache() async {
         // Pull everything once at launch so tab switches are instant and the
         // two big payloads are already decoded when their tab opens.
+        AppNotifications.configure()
+        // Small, and what the reminder and booking alerts are built from, so
+        // they're current even if the Schedule tab is never opened.
+        await schedule.load()
+        await bookings.load()
+        await syncNotifications()
+
         await leads.load()
         #if os(iOS)
         await CallerIDSync.syncIfChanged()
         #endif
+    }
+
+    /// Rebuilds the reminder and booking alerts from what's loaded now. Called
+    /// at launch and again whenever either list reloads (an edit, a tick, a
+    /// pull to refresh).
+    func syncNotifications() async {
+        await AppNotifications.sync(schedule: schedule.value, bookings: bookings.value)
     }
 }

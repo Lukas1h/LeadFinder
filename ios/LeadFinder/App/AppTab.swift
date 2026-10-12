@@ -59,6 +59,9 @@ struct RootTabView: View {
                 .tag(AppTab.agents)
         }
         .tint(Theme.accent)
+        // Whenever the schedule or the bookings reload, re-plan the alerts.
+        .onChange(of: appState.schedule.fetchedAt) { Task { await appState.syncNotifications() } }
+        .onChange(of: appState.bookings.fetchedAt) { Task { await appState.syncNotifications() } }
         .task {
             #if DEBUG
             // `-tab 2` or `-tab:2` opens straight to a tab, so a build can be
