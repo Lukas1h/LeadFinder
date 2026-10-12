@@ -87,14 +87,18 @@ const shortDate = (d: Date) => d.toLocaleDateString("en-US", { month: "short", d
 const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: TZ });
 
 export async function getDroneOffers(): Promise<DroneOfferGroup[]> {
+  const known = await db
+    .select()
+    .from(agents)
+    .where(and(inArray(agents.relationshipStatus, ["interested", "warm"]), isNull(agents.declinedAt)));
+  if (known.length === 0) return [];
+  const ids = known.map((a) => a.id);
+  // Read after the first query, not before: the clock can't be read ahead of
+  // request-time data while the page is prerendered (the build fails on it).
   const now = Date.now();
   const todayKey = dayKey(new Date(now));
 
-  const [known, trips] = await Promise.all([
-    db
-      .select()
-      .from(agents)
-      .where(and(inArray(agents.relationshipStatus, ["interested", "warm"]), isNull(agents.declinedAt))),
+  const [trips, cities, sends, interactions, booked] = await Promise.all([
     // Jobs still to shoot in the coming week: where he'll be.
     db
       .select({ jobDate: bookings.jobDate, city: sql<string | null>`coalesce(${bookings.city}, ${listings.city})` })
@@ -107,11 +111,6 @@ export async function getDroneOffers(): Promise<DroneOfferGroup[]> {
           lt(bookings.jobDate, new Date(now + LOOKAHEAD_DAYS * DAY))
         )
       ),
-  ]);
-  if (known.length === 0) return [];
-  const ids = known.map((a) => a.id);
-
-  const [cities, sends, interactions, booked] = await Promise.all([
     db
       .select({ agentId: listings.agentId, city: listings.city, at: sql<Date>`max(coalesce(${listings.listedAt}, ${listings.foundAt}))` })
       .from(listings)
