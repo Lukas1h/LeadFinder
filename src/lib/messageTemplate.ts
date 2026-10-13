@@ -9,6 +9,9 @@ import { areaPhrase } from "@/lib/areaPhrase";
 // functions.
 export const AI_DRAFT_VARIANT_SENTINEL = "draft";
 
+/** Where an email variant's inline photos go (messagePresetVariants.inlinePhotos). Taken out of anything sent without them. */
+export const PHOTOS_MARKER = "{{photos}}";
+
 /**
  * Renders a preset variant body, substituting {{firstName}}, {{street}},
  * {{city}} and {{area}} — the per-city "where I work" phrase the AI drafts

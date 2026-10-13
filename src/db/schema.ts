@@ -671,6 +671,19 @@ export interface PresetAttachment {
   contentType?: string;
 }
 
+/**
+ * Photos an email variant shows in its body rather than attaching: the first
+ * `count` images on another template (so they stay whatever that template has
+ * now), placed where the body says {{photos}}. `dropAttachments` are files on
+ * this variant's own template to leave off, by filename, because the photos
+ * replace them.
+ */
+export interface VariantInlinePhotos {
+  fromPresetId: string;
+  count: number;
+  dropAttachments?: string[];
+}
+
 export type MessagePreset = typeof messagePresets.$inferSelect;
 export type NewMessagePreset = typeof messagePresets.$inferInsert;
 
@@ -688,6 +701,9 @@ export const messagePresetVariants = pgTable("message_preset_variants", {
   body: text("body").notNull(),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Email only, and the one case where an email isn't plain text: see
+  // VariantInlinePhotos and lib/emailPhotos.ts. Null for every other variant.
+  inlinePhotos: jsonb("inline_photos").$type<VariantInlinePhotos>(),
 });
 
 export type MessagePresetVariant = typeof messagePresetVariants.$inferSelect;

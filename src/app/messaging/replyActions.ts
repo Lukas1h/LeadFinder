@@ -26,7 +26,8 @@ import { attachmentMetaSql, withContentTypes, type AttachmentMeta } from "@/lib/
 import { resolvePendingInteraction, startPendingInteraction } from "@/app/agents/interactionActions";
 import { revalidatePath } from "next/cache";
 import { sendEmail } from "@/lib/mailer";
-import { renderMessageBody, renderSubject } from "@/lib/messageTemplate";
+import { PHOTOS_MARKER, renderMessageBody, renderSubject } from "@/lib/messageTemplate";
+import { emailFilesFor } from "@/lib/emailPhotos";
 import { normalizeEmail, EMAIL_RE } from "@/lib/normalize";
 import { setAgentRelationshipStatus } from "@/lib/agentIdentity";
 
@@ -70,6 +71,7 @@ async function nextVariants(presetIds: string[]) {
       label: messagePresetVariants.label,
       subject: messagePresetVariants.subject,
       body: messagePresetVariants.body,
+      inlinePhotos: messagePresetVariants.inlinePhotos,
     })
     .from(messagePresetVariants)
     .where(and(inArray(messagePresetVariants.presetId, presetIds), eq(messagePresetVariants.enabled, true)));
@@ -122,9 +124,15 @@ async function loadQuickActions(
         name: preset.name,
         channel: preset.channel,
         variantId: variant.id,
-        text: renderMessageBody(variant.body, who.agentName, who.address, who.city),
+        // A preview: the email itself shows the photos where the marker is.
+        text: renderMessageBody(variant.body, who.agentName, who.address, who.city).replaceAll(
+          PHOTOS_MARKER,
+          variant.inlinePhotos ? `[${variant.inlinePhotos.count} photos shown here]` : ""
+        ),
         subject: variant.subject ? renderSubject(variant.subject, who.agentName) : null,
-        attachments: withContentTypes(preset.attachments),
+        attachments: withContentTypes(preset.attachments).filter(
+          (a) => !variant.inlinePhotos?.dropAttachments?.includes(a.filename)
+        ),
       },
     ];
   });
@@ -336,7 +344,7 @@ export async function sendQuickActionEmail(
       toName: agent.name,
       subject: renderSubject(variant.subject ?? "", agent.name),
       text: renderMessageBody(variant.body, agent.name, listing?.address ?? null, listing?.city ?? null),
-      attachments: preset.attachments,
+      ...(await emailFilesFor(variant.id, preset.attachments)),
     });
   } catch (err) {
     console.error("sendQuickActionEmail: send failed", err);

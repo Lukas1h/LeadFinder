@@ -24,6 +24,7 @@ import {
   AI_DRAFT_VARIANT_SENTINEL,
 } from "@/lib/messageTemplate";
 import { sendEmail } from "@/lib/mailer";
+import { emailFilesFor } from "@/lib/emailPhotos";
 import { draftEmailMessage } from "@/lib/draftMessage";
 import type { PresetOption, MessageOptions } from "@/app/messageActions";
 import { isKnownAgent, listingAgeDays, listingMatchFacts, pickRecommendedPreset } from "@/lib/presetCriteria";
@@ -414,7 +415,13 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
     .where(eq(messagePresets.id, input.presetId));
 
   try {
-    await sendEmail({ to: email, toName: input.agentName, subject, text: body, attachments: preset?.attachments });
+    await sendEmail({
+      to: email,
+      toName: input.agentName,
+      subject,
+      text: body,
+      ...(await emailFilesFor(input.variantId, preset?.attachments)),
+    });
   } catch (err) {
     console.error("sendListingEmail: SMTP send failed", err);
     return { error: "Failed to send — check the address and try again." };
@@ -581,7 +588,13 @@ export async function sendComposeEmail(input: SendComposeEmailInput): Promise<{ 
     .where(eq(messagePresets.id, input.presetId));
 
   try {
-    await sendEmail({ to: email, toName: name, subject, text: body, attachments: preset?.attachments });
+    await sendEmail({
+      to: email,
+      toName: name,
+      subject,
+      text: body,
+      ...(await emailFilesFor(input.variantId, preset?.attachments)),
+    });
   } catch (err) {
     console.error("sendComposeEmail: SMTP send failed", err);
     return { error: "Failed to send — check the address and try again." };

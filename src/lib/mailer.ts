@@ -5,6 +5,8 @@ import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agents } from "@/db/schema";
 import { UnsubscribedError } from "@/lib/unsubscribe";
+import { contentTypeFor } from "@/lib/attachments";
+import { PHOTOS_MARKER } from "@/lib/messageTemplate";
 
 let transporter: ReturnType<typeof nodemailer.createTransport> | undefined;
 
@@ -39,6 +41,39 @@ export interface SendEmailInput {
   // makes a network call for its attachment(s), whether it's one send or
   // a bulk batch of 40.
   attachments?: { filename: string; content: string }[];
+  // Photos to show in the body, where the text says {{photos}} (or at the end
+  // when it doesn't). Giving any makes this the one kind of email that isn't
+  // plain text: see lib/emailPhotos.ts for which emails get them and why.
+  inlinePhotos?: { filename: string; content: string; contentType?: string }[];
+}
+
+const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** The text with the photos marker taken out, for the plain part and for every email without photos. */
+function withoutPhotosMarker(text: string): string {
+  return text.includes(PHOTOS_MARKER) ? text.replace(/\n*\{\{photos\}\}\n*/g, "\n\n").trim() : text;
+}
+
+/**
+ * The same words as the plain text, with the photos in place. No fonts,
+ * colours or layout, so it still looks like an email someone typed: the mail
+ * app's own text style, line breaks where he put them, links clickable.
+ */
+export function htmlWithPhotos(text: string, cids: string[]): string {
+  const words = (part: string) =>
+    escapeHtml(part.trim())
+      .replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)]/g, (url) => `<a href="${url}">${url}</a>`)
+      .replace(/\n/g, "<br>\n");
+  const photos = cids
+    .map(
+      (cid, i) =>
+        `<img src="cid:${cid}" alt="Photo ${i + 1}" width="560" style="display:block;max-width:100%;height:auto;border:0;margin:0 0 12px 0">`
+    )
+    .join("\n");
+  const [before, ...rest] = text.split(PHOTOS_MARKER);
+  const after = rest.join("");
+  const parts = [words(before), photos, after.trim() ? words(after) : ""].filter(Boolean);
+  return `<div dir="ltr">${parts.join("<br><br>\n")}</div>`;
 }
 
 /**
@@ -115,12 +150,24 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
   if (optedOut) throw new UnsubscribedError(input.to);
 
   const from = process.env.ICLOUD_EMAIL;
+  const photos = (input.inlinePhotos ?? []).map((p, i) => ({ ...p, cid: `photo${i + 1}.${crypto.randomUUID()}@hahnmedia` }));
   const mailOptions = {
     from,
     to: input.toName ? `"${input.toName.replace(/"/g, "")}" <${input.to}>` : input.to,
     subject: input.subject,
-    text: input.text,
-    attachments: input.attachments?.map((a) => ({ filename: a.filename, content: a.content, encoding: "base64" as const })),
+    text: withoutPhotosMarker(input.text),
+    ...(photos.length > 0 ? { html: htmlWithPhotos(input.text, photos.map((p) => p.cid)) } : {}),
+    attachments: [
+      ...(input.attachments ?? []).map((a) => ({ filename: a.filename, content: a.content, encoding: "base64" as const })),
+      ...photos.map((p) => ({
+        filename: p.filename,
+        content: p.content,
+        encoding: "base64" as const,
+        cid: p.cid,
+        contentType: p.contentType || contentTypeFor(p.filename),
+        contentDisposition: "inline" as const,
+      })),
+    ],
   };
 
   await getTransporter().sendMail(mailOptions);
