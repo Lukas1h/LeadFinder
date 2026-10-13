@@ -1,23 +1,37 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { messagePresets, messagePresetVariants, type PresetAttachment } from "@/db/schema";
+import { messagePresetVariants, type PresetAttachment, type VariantInlinePhotos } from "@/db/schema";
 import { contentTypeFor } from "@/lib/attachments";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** What mail apps show in a message body. HEIC isn't one of them. */
 const SHOWN_INLINE = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
-export interface EmailFiles {
-  /** Sent as attachments. */
-  attachments: PresetAttachment[];
-  /** Shown in the body, in order. Empty for nearly every email. */
-  inlinePhotos: PresetAttachment[];
+/** A photo a mail app can show in the body. Takes metadata or the full attachment. */
+export function isInlinePhoto(a: { filename: string; contentType?: string | null }): boolean {
+  return SHOWN_INLINE.includes(a.contentType || contentTypeFor(a.filename));
+}
+
+/**
+ * Splits a template's attachments the way one of its variants wants them
+ * (messagePresetVariants.inlinePhotos): which go as files, and which photos go
+ * in the body.
+ */
+export function splitEmailFiles<T extends { filename: string; contentType?: string | null }>(
+  attachments: T[],
+  config: VariantInlinePhotos | null | undefined
+): { attachments: T[]; inlinePhotos: T[] } {
+  if (!config) return { attachments, inlinePhotos: [] };
+  const drop = new Set(config.dropAttachments ?? []);
+  return {
+    attachments: attachments.filter((a) => !isInlinePhoto(a) && !drop.has(a.filename)),
+    inlinePhotos: config.place === "inline" ? attachments.filter(isInlinePhoto) : [],
+  };
 }
 
 /**
  * The files for an email sent from this variant: its template's attachments,
- * and for a variant set up with inline photos (messagePresetVariants.
- * inlinePhotos), those photos, minus the attachments they replace.
+ * with the photos moved into the body for a variant set up that way.
  *
  * Every other variant gets its attachments back untouched and stays plain
  * text. That is deliberate: Lukas's emails read as one person writing to
@@ -27,27 +41,12 @@ export interface EmailFiles {
 export async function emailFilesFor(
   variantId: string | null | undefined,
   attachments: PresetAttachment[] | null | undefined
-): Promise<EmailFiles> {
-  const plain: EmailFiles = { attachments: attachments ?? [], inlinePhotos: [] };
-  if (!variantId || !UUID.test(variantId)) return plain;
-
+): Promise<{ attachments: PresetAttachment[]; inlinePhotos: PresetAttachment[] }> {
+  const files = attachments ?? [];
+  if (!variantId || !UUID.test(variantId)) return { attachments: files, inlinePhotos: [] };
   const [variant] = await db
     .select({ inlinePhotos: messagePresetVariants.inlinePhotos })
     .from(messagePresetVariants)
     .where(eq(messagePresetVariants.id, variantId));
-  const config = variant?.inlinePhotos;
-  if (!config) return plain;
-
-  const [source] = await db
-    .select({ attachments: messagePresets.attachments })
-    .from(messagePresets)
-    .where(eq(messagePresets.id, config.fromPresetId));
-  const photos = (source?.attachments ?? [])
-    .filter((a) => SHOWN_INLINE.includes(a.contentType || contentTypeFor(a.filename)))
-    .slice(0, config.count);
-  // The photos are gone from that template: send it as it always was.
-  if (photos.length === 0) return plain;
-
-  const drop = new Set(config.dropAttachments ?? []);
-  return { attachments: plain.attachments.filter((a) => !drop.has(a.filename)), inlinePhotos: photos };
+  return splitEmailFiles(files, variant?.inlinePhotos);
 }

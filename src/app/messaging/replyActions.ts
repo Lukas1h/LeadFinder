@@ -27,7 +27,7 @@ import { resolvePendingInteraction, startPendingInteraction } from "@/app/agents
 import { revalidatePath } from "next/cache";
 import { sendEmail } from "@/lib/mailer";
 import { PHOTOS_MARKER, renderMessageBody, renderSubject } from "@/lib/messageTemplate";
-import { emailFilesFor } from "@/lib/emailPhotos";
+import { emailFilesFor, splitEmailFiles } from "@/lib/emailPhotos";
 import { normalizeEmail, EMAIL_RE } from "@/lib/normalize";
 import { setAgentRelationshipStatus } from "@/lib/agentIdentity";
 
@@ -118,6 +118,7 @@ async function loadQuickActions(
     const preset = byId.get(id);
     const variant = variants.get(id);
     if (!preset || !variant) return [];
+    const files = splitEmailFiles(withContentTypes(preset.attachments), variant.inlinePhotos);
     return [
       {
         presetId: preset.id,
@@ -127,12 +128,10 @@ async function loadQuickActions(
         // A preview: the email itself shows the photos where the marker is.
         text: renderMessageBody(variant.body, who.agentName, who.address, who.city).replaceAll(
           PHOTOS_MARKER,
-          variant.inlinePhotos ? `[${variant.inlinePhotos.count} photos shown here]` : ""
+          files.inlinePhotos.length > 0 ? `[${files.inlinePhotos.length} photos shown here]` : ""
         ),
         subject: variant.subject ? renderSubject(variant.subject, who.agentName) : null,
-        attachments: withContentTypes(preset.attachments).filter(
-          (a) => !variant.inlinePhotos?.dropAttachments?.includes(a.filename)
-        ),
+        attachments: files.attachments,
       },
     ];
   });

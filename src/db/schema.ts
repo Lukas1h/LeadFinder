@@ -672,15 +672,14 @@ export interface PresetAttachment {
 }
 
 /**
- * Photos an email variant shows in its body rather than attaching: the first
- * `count` images on another template (so they stay whatever that template has
- * now), placed where the body says {{photos}}. `dropAttachments` are files on
- * this variant's own template to leave off, by filename, because the photos
- * replace them.
+ * What an email variant does with the photos attached to its template:
+ * "inline" shows them in the body where it says {{photos}}, "omit" leaves them
+ * off (the plain version of the same email). `dropAttachments` are other files
+ * on the template to leave off, by filename. A variant with none of this
+ * attaches everything, photos included, like any email.
  */
 export interface VariantInlinePhotos {
-  fromPresetId: string;
-  count: number;
+  place: "inline" | "omit";
   dropAttachments?: string[];
 }
 
