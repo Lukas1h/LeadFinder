@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { agents, bookings, listings, reminders } from "@/db/schema";
-import { and, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import {
   compareScheduleItems,
   hoursAgo,
@@ -32,7 +32,10 @@ export async function loadScheduleItems(today: string): Promise<ScheduleItem[]> 
     db
       .select()
       .from(bookings)
-      .where(and(isNotNull(bookings.jobDate), gte(bookings.jobDate, bookingCutoff))),
+      // Not the tentative ones: their date is a placeholder, and a job that
+      // isn't settled shouldn't sit on the calendar looking like it is. They
+      // have their own section on the Booked page.
+      .where(and(isNotNull(bookings.jobDate), gte(bookings.jobDate, bookingCutoff), eq(bookings.dateTentative, false))),
     // Full rows: tapping a follow-up opens the listing's ListingModal.
     db.select().from(listings).where(isNotNull(listings.followUpAt)),
   ]);

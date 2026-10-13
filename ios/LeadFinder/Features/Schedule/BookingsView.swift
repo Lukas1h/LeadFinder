@@ -99,7 +99,7 @@ struct BookingsView: View {
     /// and don't get forgotten.
     static func sections(from response: BookingsResponse) -> [BookingSection] {
         [
-            BookingSection(title: "Waiting on a date", bookings: response.tentative ?? []),
+            BookingSection(title: "Tentative", bookings: response.tentative ?? []),
             BookingSection(title: "Upcoming", bookings: response.upcoming.filter { $0.dateTentative != true }),
             BookingSection(title: "Waiting for payment", bookings: response.waitingForPayment),
             BookingSection(title: "Completed", bookings: response.completed),

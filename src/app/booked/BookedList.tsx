@@ -108,7 +108,7 @@ export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
       <BookingStats completed={completed} />
 
       <BookingSection
-        title="Waiting on a date"
+        title="Tentative"
         hint="They&rsquo;ve said yes, but the day isn&rsquo;t settled. Longest since you were last in touch first."
         bookings={tentative}
         defaultOpen

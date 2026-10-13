@@ -50,7 +50,8 @@ enum AppNotifications {
         }
         if let bookings {
             stale += await pending(withPrefix: bookingPrefix)
-            wanted += bookingRequests(bookings.upcoming, now: now)
+            // Not the tentative ones: their date is a placeholder, and they're off the schedule too.
+            wanted += bookingRequests(bookings.upcoming.filter { $0.dateTentative != true }, now: now)
         }
 
         // Replaced by identifier below; this clears the ones that no longer exist.
