@@ -407,15 +407,17 @@ struct ReplyByDayChart: View {
             }
             .frame(height: 70, alignment: .bottom)
 
-            Text("Faded days have too few sends to tell yet.")
+            Text("Adjusted for which templates went out each day. Faded days have too few sends to tell yet.")
                 .font(.caption2)
                 .foregroundStyle(Theme.tertiaryText)
         }
     }
 
+    /// The server's template-adjusted rate, or the plain one from a server
+    /// that doesn't send it yet.
     private func rate(_ bucket: MessagesResponse.DayBucket) -> Double {
         guard bucket.sent > 0 else { return 0 }
-        return Double(bucket.replied) / Double(bucket.sent)
+        return bucket.adjustedRate ?? Double(bucket.replied) / Double(bucket.sent)
     }
 
     private func barHeight(_ bucket: MessagesResponse.DayBucket, maxRate: Double) -> CGFloat {
@@ -424,7 +426,10 @@ struct ReplyByDayChart: View {
     }
 
     private static func rate(_ bucket: MessagesResponse.DayBucket) -> String {
-        MessagesView.rate(bucket.replied, bucket.sent)
+        guard bucket.sent > 0, let adjusted = bucket.adjustedRate else {
+            return MessagesView.rate(bucket.replied, bucket.sent)
+        }
+        return "\(Int((adjusted * 100).rounded()))%"
     }
 }
 

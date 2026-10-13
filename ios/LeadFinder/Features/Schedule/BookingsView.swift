@@ -94,10 +94,13 @@ struct BookingsView: View {
         }
     }
 
-    /// The web's three buckets, in its order, with empty ones dropped.
+    /// The web's buckets, in its order, with empty ones dropped. Jobs the
+    /// agent has agreed to but not dated lead, so they don't read as scheduled
+    /// and don't get forgotten.
     static func sections(from response: BookingsResponse) -> [BookingSection] {
         [
-            BookingSection(title: "Upcoming", bookings: response.upcoming),
+            BookingSection(title: "Waiting on a date", bookings: response.tentative ?? []),
+            BookingSection(title: "Upcoming", bookings: response.upcoming.filter { $0.dateTentative != true }),
             BookingSection(title: "Waiting for payment", bookings: response.waitingForPayment),
             BookingSection(title: "Completed", bookings: response.completed),
         ]

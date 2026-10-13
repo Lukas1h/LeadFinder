@@ -29,7 +29,10 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       ? db.select().from(listings).where(inArray(listings.id, listingIds))
       : Promise.resolve([]),
     agentIds.length > 0
-      ? db.select({ id: agents.id, name: agents.name, phone: agents.phone }).from(agents).where(inArray(agents.id, agentIds))
+      ? db
+          .select({ id: agents.id, name: agents.name, phone: agents.phone, lastContactedAt: agents.lastContactedAt })
+          .from(agents)
+          .where(inArray(agents.id, agentIds))
       : Promise.resolve([]),
     bookingIds.length > 0
       ? db
@@ -69,6 +72,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       state,
       listing: linkedListing ?? null,
       jobDate: b.jobDate,
+      dateTentative: b.dateTentative,
       lockboxCode: b.lockboxCode,
       notes: b.notes,
       invoiceNote: b.invoiceNote,
@@ -82,6 +86,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       createdAt: b.createdAt,
       contactName: contact?.name ?? null,
       contactPhone: contact?.phone ?? null,
+      contactLastContactedAt: contact?.lastContactedAt ?? null,
       lineItems: lineItemsByBookingId.get(b.id) ?? [],
       driveTime: city ? estimateDriveTime(city) : null,
       invoiceNumber: b.invoiceNumber,
@@ -96,15 +101,17 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
 }
 
 export interface GroupedBookings {
-  /** Not completed and no invoice sent yet. */
+  /** Not completed and no invoice sent yet. Includes the tentative ones: the iPhone app reads this list as "everything still to shoot". */
   upcoming: BookingWithDetails[];
+  /** The part of `upcoming` whose date isn't settled, longest since he was last in touch first: the one to chase is on top. */
+  tentative: BookingWithDetails[];
   /** Invoice sent, not yet paid — longest-waiting first, so the one to chase is on top. */
   waiting: BookingWithDetails[];
   completed: BookingWithDetails[];
 }
 
 /**
- * The three-way split BookedList renders, as a plain function so the API can
+ * The split BookedList renders, as a plain function so the API can
  * return the same buckets instead of re-deciding what "waiting" means.
  */
 export function groupBookings(bookings: BookingWithDetails[]): GroupedBookings {
@@ -123,5 +130,7 @@ export function groupBookings(bookings: BookingWithDetails[]): GroupedBookings {
   const completed = bookings
     .filter((b) => b.completedAt)
     .sort((a, b) => b.completedAt!.getTime() - a.completedAt!.getTime());
-  return { upcoming, waiting, completed };
+  const lastTouch = (b: BookingWithDetails) => (b.contactLastContactedAt ?? b.createdAt).getTime();
+  const tentative = upcoming.filter((b) => b.dateTentative).sort((a, b) => lastTouch(a) - lastTouch(b));
+  return { upcoming, tentative, waiting, completed };
 }

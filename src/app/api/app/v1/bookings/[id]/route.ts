@@ -61,6 +61,7 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
     contactName: text("contactName", current.contactName),
     contactPhone: text("contactPhone", current.contactPhone),
     jobDate: body.jobDate === undefined ? current.jobDate : optionalDate(body.jobDate, "jobDate"),
+    ...(typeof body.dateTentative === "boolean" ? { dateTentative: body.dateTentative } : {}),
     lockboxCode: text("lockboxCode", current.lockboxCode),
     notes: text("notes", current.notes),
     invoiceNote: text("invoiceNote", current.invoiceNote),

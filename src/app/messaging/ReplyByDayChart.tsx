@@ -5,7 +5,9 @@ import { formatRate } from "@/lib/format";
 const MIN_EXPECTED_REPLIES = 5;
 
 /**
- * Reply rate by the weekday a text went out. Plain divs rather than a chart
+ * Reply rate by the weekday a text went out, with the template mix taken out
+ * (DayBucket.adjustedRate): a great template tried on a Monday used to make
+ * Monday look like the best day to text. Plain divs rather than a chart
  * library — it's one row of bars. Bars too thin to trust are faded, since a few
  * dozen texts a day can make any weekday look best; hovering one shows the counts
  * behind it.
@@ -19,7 +21,8 @@ export function ReplyByDayChart({ days }: { days: DayBucket[] }) {
   const replied = days.reduce((n, d) => n + d.replied, 0);
   const minSent = replied > 0 ? (MIN_EXPECTED_REPLIES * sent) / replied : Infinity;
 
-  const rate = (d: DayBucket) => (d.sent > 0 ? d.replied / d.sent : 0);
+  const rate = (d: DayBucket) => d.adjustedRate ?? 0;
+  const percent = (r: number) => `${Math.round(r * 100)}%`;
   const max = Math.max(...days.map(rate), 0);
   const solid = days.filter((d) => d.sent >= minSent);
   const best = solid.length > 0 ? solid.reduce((a, b) => (rate(b) > rate(a) ? b : a)) : null;
@@ -32,9 +35,9 @@ export function ReplyByDayChart({ days }: { days: DayBucket[] }) {
           <div
             key={d.label}
             className="flex flex-1 min-w-0 flex-col items-center gap-0.5"
-            title={`${d.replied} of ${d.sent.toLocaleString("en-US")} replied`}
+            title={`${d.replied} of ${d.sent.toLocaleString("en-US")} replied (${formatRate(d.replied, d.sent)} before adjusting)`}
           >
-            <span className="text-[10px] tabular-nums text-muted-foreground">{formatRate(d.replied, d.sent)}</span>
+            <span className="text-[10px] tabular-nums text-muted-foreground">{d.sent > 0 ? percent(rate(d)) : "—"}</span>
             <div className="flex h-10 w-full max-w-8 items-end">
               <div
                 className={`w-full min-h-0.5 rounded-t-sm ${d === best ? "bg-primary" : "bg-primary/45"} ${d.sent < minSent ? "opacity-35" : ""}`}
@@ -45,7 +48,9 @@ export function ReplyByDayChart({ days }: { days: DayBucket[] }) {
           </div>
         ))}
       </div>
-      <p className="text-[11px] text-muted-foreground">Faded days have too few sends to tell yet.</p>
+      <p className="text-[11px] text-muted-foreground">
+        Adjusted for which templates went out each day. Faded days have too few sends to tell yet.
+      </p>
     </div>
   );
 }

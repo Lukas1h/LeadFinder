@@ -333,6 +333,11 @@ export const bookings = pgTable("bookings", {
   messageSendId: uuid("message_send_id").references((): AnyPgColumn => messageSends.id, { onDelete: "set null" }),
 
   jobDate: timestamp("job_date", { withTimezone: true }),
+  // The agent has said yes to the job but not to a day: jobDate is a
+  // placeholder, or empty. These get their own section on the Booked page so
+  // they don't read as scheduled and don't get forgotten. Used to live only as
+  // "TENTATIVE" typed into the notes.
+  dateTentative: boolean("date_tentative").notNull().default(false),
   lockboxCode: text("lockbox_code"),
   // Internal notes — shown in the app and calendar, never on the invoice.
   notes: text("notes"),

@@ -273,7 +273,11 @@ struct ScheduleResponse: Codable, Sendable {
 // MARK: - GET /bookings
 
 struct BookingsResponse: Codable, Sendable {
+    /// Everything still to shoot, including the ones with no settled date.
     var upcoming: [Booking]
+    /// The part of `upcoming` whose date isn't settled, the one to chase
+    /// first on top. Optional: a cached response from before the server sent it.
+    var tentative: [Booking]?
     var waitingForPayment: [Booking]
     var completed: [Booking]
 }
@@ -292,6 +296,10 @@ struct Booking: Codable, Sendable, Identifiable, Hashable {
     var state: String?
     var listing: Listing?
     var jobDate: String?
+    /// Booked, but the day isn't settled: `jobDate` is a placeholder or nil.
+    var dateTentative: Bool?
+    /// When he last reached out to the contact, for chasing a date.
+    var contactLastContactedAt: String?
     var lockboxCode: String?
     var notes: String?
     var invoiceNote: String?
@@ -381,6 +389,10 @@ struct MessagesResponse: Codable, Sendable {
         var label: String
         var sent: Int
         var replied: Int
+        /// The day's reply rate with the template mix taken out, 0...1: a day
+        /// that only looks good because a strong template went out on it lands
+        /// back at the average. Nil from a server that doesn't send it yet.
+        var adjustedRate: Double?
     }
 
     struct ByDay: Codable, Sendable {

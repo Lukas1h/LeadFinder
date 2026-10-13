@@ -126,6 +126,14 @@ export interface DayBucket {
   label: string;
   sent: number;
   replied: number;
+  /**
+   * The day's reply rate with the template mix taken out: what the channel's
+   * average would have been if this day's sends had done as well against their
+   * own templates' usual rates as they did. A day that only looks good because
+   * a strong template happened to go out on it lands back at the average.
+   * Null with no sends.
+   */
+  adjustedRate: number | null;
 }
 
 export interface MessagingStats {
@@ -151,6 +159,16 @@ const sentDow = sql<number>`extract(isodow from ${messageSends.sentAt} at time z
  * Aggregated in SQL: there are thousands of cold-email sends.
  */
 export async function computeMessagingStats(): Promise<MessagingStats> {
+  // Each template's own reply rate, all days together.
+  const templateRates = db
+    .select({
+      presetId: messageSends.presetId,
+      rate: sql<number>`(count(${messageSends.respondedAt})::float / count(*))`.as("rate"),
+    })
+    .from(messageSends)
+    .groupBy(messageSends.presetId)
+    .as("template_rates");
+
   const [rows, [revenueRow], dayRows] = await Promise.all([
     db
       .select({
@@ -179,21 +197,38 @@ export async function computeMessagingStats(): Promise<MessagingStats> {
       .from(bookings)
       .innerJoin(bookingLineItems, eq(bookingLineItems.bookingId, bookings.id))
       .where(isNotNull(bookings.messageSendId)),
+    // `expected` is the replies the day would have had if each send had done
+    // exactly as well as its template does overall.
     db
       .select({
         channel: messageSends.channel,
         dow: sentDow,
         sent: sql<number>`count(*)::int`,
         replied: sql<number>`count(${messageSends.respondedAt})::int`,
+        expected: sql<number>`coalesce(sum(${templateRates.rate}), 0)::float`,
       })
       .from(messageSends)
+      .innerJoin(templateRates, eq(templateRates.presetId, messageSends.presetId))
       .groupBy(messageSends.channel, sentDow),
   ]);
 
-  const emptyWeek = () => DAY_LABELS.map((label) => ({ label, sent: 0, replied: 0 }));
+  const emptyWeek = (): DayBucket[] => DAY_LABELS.map((label) => ({ label, sent: 0, replied: 0, adjustedRate: null }));
   const byDay: Record<MessageChannel, DayBucket[]> = { sms: emptyWeek(), email: emptyWeek() };
+  const channelTotals = new Map<MessageChannel, { sent: number; replied: number }>();
   for (const row of dayRows) {
-    byDay[row.channel][row.dow - 1] = { label: DAY_LABELS[row.dow - 1], sent: row.sent, replied: row.replied };
+    const t = channelTotals.get(row.channel) ?? { sent: 0, replied: 0 };
+    channelTotals.set(row.channel, { sent: t.sent + row.sent, replied: t.replied + row.replied });
+  }
+  for (const row of dayRows) {
+    const t = channelTotals.get(row.channel)!;
+    const overall = t.sent > 0 ? t.replied / t.sent : 0;
+    byDay[row.channel][row.dow - 1] = {
+      label: DAY_LABELS[row.dow - 1],
+      sent: row.sent,
+      replied: row.replied,
+      // A day whose templates never get replies has nothing to compare against: fall back to the plain rate.
+      adjustedRate: row.expected > 0 ? overall * (row.replied / row.expected) : row.sent > 0 ? row.replied / row.sent : null,
+    };
   }
 
   const empty = (): SendCounts => ({ sent: 0, sentRecent: 0, replied: 0, booked: 0 });

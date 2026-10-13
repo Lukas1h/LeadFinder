@@ -215,7 +215,7 @@ All paths are relative to `/api/app/v1`.
 | `GET /leads` | `getLeadsBoard()` | See below |
 | `GET /follow-up` | `getFollowUpBoard()` | `{ today: [Item], later: [Item], doneToday, dailyTarget, news, justListed, groups }`. See "The Follow up page" below |
 | `GET /schedule` | `loadScheduleItems(todayScheduleDate())` | `{ today, items }`. Each item as-is, but `listing` goes through `listingJson(…,"first")` |
-| `GET /bookings` | `loadBookingsWithDetails()` + `groupBookings()` | `{ upcoming, waitingForPayment, completed }`, each `bookingJson[]` |
+| `GET /bookings` | `loadBookingsWithDetails()` + `groupBookings()` | `{ upcoming, tentative, waitingForPayment, completed }`, each `bookingJson[]`. `tentative` is the part of `upcoming` with `dateTentative: true` (the agent said yes but no day is settled; `jobDate` is a placeholder or null), longest since `contactLastContactedAt` first. Show it as "Waiting on a date" above Upcoming and leave those out of Upcoming. `PATCH /bookings/:id` and `POST /bookings` take `dateTentative` (boolean) |
 | `GET /bookings/:id` | `getBookingWithDetails`, `getGalleryActivity` | `{ booking, galleryActivity }` |
 | `GET /bookings/:id/invoice` | the `GET` exported by `src/app/api/bookings/[id]/invoice/route.ts` | Its HTML response, unchanged. Comment: like the web's "Create invoice", opening it assigns the invoice number the first time |
 | `GET /agents` | `agents` + latest `brokerName` per agent | `{ agents: [{ id, name, phone, email, relationshipStatus, lastContactedAt, brokerage, callerNumber, callerLabel }] }`, sorted by name (nulls last). Sets `ETag` (sha1 of the body). Returns `304` when `If-None-Match` matches |

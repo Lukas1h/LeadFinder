@@ -26,6 +26,8 @@ export interface BookingWithDetails {
   // null for a manual booking with no tracked listing at all.
   listing: Listing | null;
   jobDate: Date | null;
+  // Booked, but the day isn't settled: jobDate is a placeholder or empty.
+  dateTentative: boolean;
   lockboxCode: string | null;
   notes: string | null;
   invoiceNote: string | null;
@@ -41,6 +43,8 @@ export interface BookingWithDetails {
   createdAt: Date;
   contactName: string | null;
   contactPhone: string | null;
+  // When he last reached out to the contact, for chasing a date.
+  contactLastContactedAt: Date | null;
   lineItems: { description: string; amount: number }[];
   // Rough "~1h 15m drive" from the home location set in Settings — see
   // src/lib/driveTime.ts. Null if either city isn't in its coordinate
@@ -68,7 +72,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
   // The split lives in ./data so the iPhone app's GET /bookings returns the
   // same buckets rather than a second opinion on what "waiting" means.
-  const { upcoming, waiting, completed } = useMemo(() => groupBookings(bookings), [bookings]);
+  const { upcoming, tentative, waiting, completed } = useMemo(() => groupBookings(bookings), [bookings]);
+  const scheduled = useMemo(() => upcoming.filter((b) => !b.dateTentative), [upcoming]);
 
   if (bookings.length === 0) {
     return (
@@ -102,7 +107,13 @@ export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
 
       <BookingStats completed={completed} />
 
-      <BookingSection title="In progress" bookings={upcoming} defaultOpen />
+      <BookingSection
+        title="Waiting on a date"
+        hint="They&rsquo;ve said yes, but the day isn&rsquo;t settled. Longest since you were last in touch first."
+        bookings={tentative}
+        defaultOpen
+      />
+      <BookingSection title="In progress" bookings={scheduled} defaultOpen />
       <BookingSection title="Invoice sent" bookings={waiting} />
       <BookingSection title="Completed" bookings={completed} />
     </div>
@@ -111,10 +122,12 @@ export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
 
 function BookingSection({
   title,
+  hint,
   bookings,
   defaultOpen = false,
 }: {
   title: string;
+  hint?: string;
   bookings: BookingWithDetails[];
   defaultOpen?: boolean;
 }) {
@@ -126,6 +139,7 @@ function BookingSection({
         {title} ({bookings.length})
         <span className="ml-auto text-foreground">{formatPrice(sumProfit(bookings))}</span>
       </summary>
+      {hint && <p className="text-xs text-muted-foreground mt-1.5 ml-4.5">{hint}</p>}
       <div className="flex flex-col gap-4 mt-3">
         {bookings.map((booking) => (
           <BookingCard key={booking.id} booking={booking} />

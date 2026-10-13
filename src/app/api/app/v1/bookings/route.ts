@@ -14,10 +14,12 @@ export async function GET(req: Request) {
   const denied = requireAppAuth(req);
   if (denied) return denied;
 
-  const { upcoming, waiting, completed } = groupBookings(await loadBookingsWithDetails());
+  const { upcoming, tentative, waiting, completed } = groupBookings(await loadBookingsWithDetails());
 
   return NextResponse.json({
     upcoming: upcoming.map(bookingJson),
+    // The part of `upcoming` with no settled date (dateTentative), longest since last contact first.
+    tentative: tentative.map(bookingJson),
     waitingForPayment: waiting.map(bookingJson),
     completed: completed.map(bookingJson),
   });
@@ -42,6 +44,7 @@ export const POST = withErrors(async (req: Request) => {
     contactName: optionalString(body.contactName, "contactName") ?? "",
     contactPhone: optionalString(body.contactPhone, "contactPhone") ?? "",
     jobDate: optionalDate(body.jobDate, "jobDate"),
+    dateTentative: body.dateTentative === true,
     lockboxCode: optionalString(body.lockboxCode, "lockboxCode"),
     notes: optionalString(body.notes, "notes"),
     invoiceNote: optionalString(body.invoiceNote, "invoiceNote"),

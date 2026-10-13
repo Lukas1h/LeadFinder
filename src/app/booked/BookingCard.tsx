@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CalendarDays, KeyRound, StickyNote, Phone, Car } from "lucide-react";
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import { bookingProfit } from "./bookingMath";
-import { formatPrice, formatDateTime, formatPhone } from "@/lib/format";
+import { formatPrice, formatDate, formatDateTime, formatPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import type { BookingWithDetails } from "./BookedList";
 
@@ -18,6 +18,8 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
   const [detailOpen, setDetailOpen] = useState(false);
 
   const profit = bookingProfit(booking);
+  // Only while it's still to shoot: once the job is done the day is no longer in question.
+  const tentative = booking.dateTentative && !booking.completedAt && !booking.invoiceSentAt;
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
 
   return (
@@ -32,7 +34,19 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
             <div className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
               <CalendarDays className="size-3.5" />
               {booking.jobDate ? formatDateTime(booking.jobDate) : "No job date set"}
+              {tentative && booking.jobDate && (
+                <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                  not confirmed
+                </span>
+              )}
             </div>
+            {tentative && (
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {booking.contactLastContactedAt
+                  ? `Last in touch ${formatDate(booking.contactLastContactedAt)}`
+                  : "No contact logged"}
+              </div>
+            )}
             {booking.driveTime && (
               <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
                 <Car className="size-3.5" />

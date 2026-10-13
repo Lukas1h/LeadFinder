@@ -146,6 +146,9 @@ export function bookingJson(b: BookingWithDetails) {
     state: b.state,
     listing: b.listing ? listingJson(b.listing, "first") : null,
     jobDate: b.jobDate,
+    // Booked, but the day isn't settled: jobDate is a placeholder or null.
+    dateTentative: b.dateTentative,
+    contactLastContactedAt: b.contactLastContactedAt,
     lockboxCode: b.lockboxCode,
     notes: b.notes,
     invoiceNote: b.invoiceNote,

@@ -128,13 +128,14 @@ export function registerBookingTools(server: McpServer): void {
         contactName: z.string().default(""),
         contactPhone: z.string().default(""),
         jobDate: z.string().datetime({ offset: true }).optional().describe("When the shoot is. ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
+        dateTentative: z.boolean().optional().describe("True when the agent has agreed to the job but the day isn't settled (\"I'll let you know when\", \"probably mid-November\"): jobDate is then only a placeholder, or omitted. Set this instead of writing TENTATIVE in the notes; it puts the booking under \"Waiting on a date\" on the Booked page. Set it to false once the day is confirmed."),
         lockboxCode: z.string().optional(),
         notes: z.string().optional().describe("Internal notes — never shown to the client."),
         invoiceNote: z.string().optional().describe("Client-facing note printed on the invoice."),
         lineItems: z.array(lineItemSchema).default([]),
       },
     },
-    async ({ listingId, address, city, state, contactName, contactPhone, jobDate, lockboxCode, notes, invoiceNote, lineItems }) => {
+    async ({ listingId, address, city, state, contactName, contactPhone, jobDate, dateTentative, lockboxCode, notes, invoiceNote, lineItems }) => {
       if (!listingId && !city?.trim()) return errorText("Enter at least a city for a booking with no linked listing");
 
       const contactAgentId =
@@ -149,6 +150,7 @@ export function registerBookingTools(server: McpServer): void {
           state: listingId ? null : state?.trim() || null,
           contactAgentId,
           jobDate: jobDate ? new Date(jobDate) : null,
+          dateTentative: dateTentative ?? false,
           lockboxCode: lockboxCode?.trim() || null,
           notes: notes?.trim() || null,
           invoiceNote: invoiceNote?.trim() || null,
@@ -190,13 +192,14 @@ export function registerBookingTools(server: McpServer): void {
         city: z.string().optional(),
         state: z.string().optional(),
         jobDate: z.string().datetime({ offset: true }).nullable().optional().describe("When the shoot is, or null to clear. ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
+        dateTentative: z.boolean().optional().describe("True when the agent has agreed to the job but the day isn't settled (\"I'll let you know when\", \"probably mid-November\"): jobDate is then only a placeholder, or omitted. Set this instead of writing TENTATIVE in the notes; it puts the booking under \"Waiting on a date\" on the Booked page. Set it to false once the day is confirmed."),
         lockboxCode: z.string().optional(),
         notes: z.string().optional().describe("Internal notes — never shown to the client."),
         invoiceNote: z.string().optional().describe("Client-facing note printed on the invoice."),
         lineItems: z.array(lineItemSchema).optional(),
       },
     },
-    async ({ id, contactName, contactPhone, address, city, state, jobDate, lockboxCode, notes, invoiceNote, lineItems }) => {
+    async ({ id, contactName, contactPhone, address, city, state, jobDate, dateTentative, lockboxCode, notes, invoiceNote, lineItems }) => {
       const [existing] = await db.select().from(bookings).where(eq(bookings.id, id));
       if (!existing) return errorText("No booking with that id");
 
@@ -205,6 +208,7 @@ export function registerBookingTools(server: McpServer): void {
       if (city !== undefined) patch.city = city.trim() || null;
       if (state !== undefined) patch.state = state.trim() || null;
       if (jobDate !== undefined) patch.jobDate = jobDate ? new Date(jobDate) : null;
+      if (dateTentative !== undefined) patch.dateTentative = dateTentative;
       if (lockboxCode !== undefined) patch.lockboxCode = lockboxCode.trim() || null;
       if (notes !== undefined) patch.notes = notes.trim() || null;
       if (invoiceNote !== undefined) patch.invoiceNote = invoiceNote.trim() || null;

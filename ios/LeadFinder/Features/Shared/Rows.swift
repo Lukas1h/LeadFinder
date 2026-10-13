@@ -201,6 +201,8 @@ struct BookingStatusBadge: View {
             BadgeChip(text: "Completed", tint: Theme.emerald)
         } else if booking.invoiceSentAt != nil {
             BadgeChip(text: "Awaiting payment", tint: Theme.amber)
+        } else if booking.dateTentative == true {
+            BadgeChip(text: "Date not confirmed", tint: Theme.amber)
         } else {
             BadgeChip(text: "Upcoming", tint: Theme.sky)
         }

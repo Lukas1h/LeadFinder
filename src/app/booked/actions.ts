@@ -29,6 +29,8 @@ export interface CreateBookingInput {
   contactName: string;
   contactPhone: string;
   jobDate: Date | null;
+  /** The day isn't settled yet (bookings.dateTentative). Omitted = no on create, unchanged on update. */
+  dateTentative?: boolean;
   lockboxCode: string | null;
   notes: string | null;
   invoiceNote: string | null;
@@ -52,6 +54,8 @@ export interface UpdateBookingInput {
   contactName: string;
   contactPhone: string;
   jobDate: Date | null;
+  /** The day isn't settled yet (bookings.dateTentative). Omitted = no on create, unchanged on update. */
+  dateTentative?: boolean;
   lockboxCode: string | null;
   notes: string | null;
   invoiceNote: string | null;
@@ -122,6 +126,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
       state: input.listingId ? null : input.state?.trim() || null,
       contactAgentId,
       jobDate: input.jobDate,
+      dateTentative: input.dateTentative ?? false,
       lockboxCode: input.lockboxCode?.trim() || null,
       notes: input.notes?.trim() || null,
       invoiceNote: input.invoiceNote?.trim() || null,
@@ -187,6 +192,7 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
       state: input.state?.trim() || null,
       contactAgentId,
       jobDate: input.jobDate,
+      ...(input.dateTentative != null ? { dateTentative: input.dateTentative } : {}),
       lockboxCode: input.lockboxCode?.trim() || null,
       notes: input.notes?.trim() || null,
       invoiceNote: input.invoiceNote?.trim() || null,
@@ -227,7 +233,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
       : Promise.resolve(null),
     booking.contactAgentId
       ? db
-          .select({ name: agents.name, phone: agents.phone })
+          .select({ name: agents.name, phone: agents.phone, lastContactedAt: agents.lastContactedAt })
           .from(agents)
           .where(eq(agents.id, booking.contactAgentId))
           .then((r) => r[0] ?? null)
@@ -250,6 +256,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     state,
     listing: linkedListing,
     jobDate: booking.jobDate,
+    dateTentative: booking.dateTentative,
     lockboxCode: booking.lockboxCode,
     notes: booking.notes,
     invoiceNote: booking.invoiceNote,
@@ -263,6 +270,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     createdAt: booking.createdAt,
     contactName: contact?.name ?? null,
     contactPhone: contact?.phone ?? null,
+    contactLastContactedAt: contact?.lastContactedAt ?? null,
     lineItems,
     driveTime: city ? estimateDriveTime(city) : null,
     invoiceNumber: booking.invoiceNumber,
@@ -305,7 +313,10 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       })
       .from(bookingLineItems)
       .where(inArray(bookingLineItems.bookingId, bookingIds)),
-    db.select({ name: agents.name, phone: agents.phone }).from(agents).where(eq(agents.id, agentId)),
+    db
+      .select({ name: agents.name, phone: agents.phone, lastContactedAt: agents.lastContactedAt })
+      .from(agents)
+      .where(eq(agents.id, agentId)),
   ]);
 
   const listingById = new Map(linkedListings.map((l) => [l.id, l]));
@@ -329,6 +340,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       state,
       listing: linkedListing ?? null,
       jobDate: b.jobDate,
+      dateTentative: b.dateTentative,
       lockboxCode: b.lockboxCode,
       notes: b.notes,
       invoiceNote: b.invoiceNote,
@@ -342,6 +354,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       createdAt: b.createdAt,
       contactName: agent?.name ?? null,
       contactPhone: agent?.phone ?? null,
+      contactLastContactedAt: agent?.lastContactedAt ?? null,
       driveTime: city ? estimateDriveTime(city) : null,
       lineItems: lineItemsByBookingId.get(b.id) ?? [],
       invoiceNumber: b.invoiceNumber,

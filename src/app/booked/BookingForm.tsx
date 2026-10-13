@@ -108,6 +108,7 @@ export function BookingForm({
   const [contactName, setContactName] = useState(booking?.contactName ?? agentName ?? "");
   const [contactPhone, setContactPhone] = useState(booking?.contactPhone ?? agentPhone ?? "");
   const [jobDate, setJobDate] = useState(toDateTimeInputValue(booking?.jobDate ?? null));
+  const [dateTentative, setDateTentative] = useState(booking?.dateTentative ?? false);
   const [lockboxCode, setLockboxCode] = useState(booking?.lockboxCode ?? "");
   const [notes, setNotes] = useState(booking?.notes ?? "");
   const [invoiceNote, setInvoiceNote] = useState(booking?.invoiceNote ?? "");
@@ -161,6 +162,7 @@ export function BookingForm({
     setContactName(booking?.contactName ?? agentName ?? "");
     setContactPhone(booking?.contactPhone ?? agentPhone ?? "");
     setJobDate(toDateTimeInputValue(booking?.jobDate ?? null));
+    setDateTentative(booking?.dateTentative ?? false);
     setLockboxCode(booking?.lockboxCode ?? "");
     setNotes(booking?.notes ?? "");
     setInvoiceNote(booking?.invoiceNote ?? "");
@@ -184,6 +186,7 @@ export function BookingForm({
       contactName,
       contactPhone,
       jobDate: jobDate ? new Date(jobDate) : null,
+      dateTentative,
       lockboxCode,
       notes,
       invoiceNote,
@@ -317,6 +320,15 @@ export function BookingForm({
                 value={jobDate}
                 onChange={(e) => setJobDate(e.target.value)}
               />
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={dateTentative}
+                  onChange={(e) => setDateTentative(e.target.checked)}
+                  className="size-4"
+                />
+                Date not confirmed yet
+              </label>
             </div>
 
             <div className="flex flex-col gap-1.5">
