@@ -2,7 +2,7 @@
 
 import SwiftUI
 
-/// The iPhone app: four tabs in a `TabView`, one window, portrait only.
+/// The iPhone app: five tabs in a `TabView`, one window, portrait only.
 ///
 /// The Mac app's entry point is `Mac/LeadFinderMacApp.swift`. Both compile the
 /// same `LeadFinder/` sources, so this file plus `AppTab.swift` is the whole of

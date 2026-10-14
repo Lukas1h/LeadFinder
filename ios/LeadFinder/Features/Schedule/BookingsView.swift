@@ -66,7 +66,10 @@ struct BookingsView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 20) {
+                        // On the iPhone the money numbers are on the Home tab.
+                        #if os(macOS)
                         BookingStatsView(completed: response.completed)
+                        #endif
 
                         ForEach(sections) { section in
                             VStack(alignment: .leading, spacing: 10) {

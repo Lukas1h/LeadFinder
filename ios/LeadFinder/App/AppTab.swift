@@ -1,15 +1,17 @@
 import SwiftUI
 
-/// The iPhone's tab bar contents: Leads, Schedule, Messages, Agents.
+/// The iPhone's tab bar contents: Home, Leads, Schedule, Messages, Agents.
 ///
 /// iOS only — the Mac app has a sidebar (`Mac/Sidebar.swift`) rather than tabs,
 /// and a `TabView` is not what a Mac window wants. `AppTab` itself is shared,
 /// because the Mac sidebar's order and names are the same four things.
 ///
 /// Follow up is deliberately not a tab: it is a board over agents, so it hangs
-/// off the Agents tab's header; bookings hang off Schedule's. Four is already
-/// the most the tab bar should carry on a phone.
+/// off the Agents tab's header; bookings hang off Schedule's. Home (added
+/// 2026-10-14) gathers the stat cards that used to be split across Messages
+/// and Bookings. Five is the most a phone's tab bar holds before "More".
 enum AppTab: Int, Hashable, CaseIterable {
+    case home
     case leads
     case schedule
     case messages
@@ -17,6 +19,7 @@ enum AppTab: Int, Hashable, CaseIterable {
 
     var title: String {
         switch self {
+        case .home: "Home"
         case .leads: "Leads"
         case .schedule: "Schedule"
         case .messages: "Messages"
@@ -26,6 +29,7 @@ enum AppTab: Int, Hashable, CaseIterable {
 
     var icon: String {
         switch self {
+        case .home: "square.grid.2x2"
         case .leads: "sparkles"
         case .schedule: "calendar"
         case .messages: "paperplane"
@@ -38,10 +42,14 @@ enum AppTab: Int, Hashable, CaseIterable {
 
 struct RootTabView: View {
     @Environment(AppState.self) private var appState
-    @State private var selection: AppTab = .leads
+    @State private var selection: AppTab = .home
 
     var body: some View {
         TabView(selection: $selection) {
+            HomeView(selection: $selection)
+                .tabItem { Label(AppTab.home.title, systemImage: AppTab.home.icon) }
+                .tag(AppTab.home)
+
             LeadsView()
                 .tabItem { Label(AppTab.leads.title, systemImage: AppTab.leads.icon) }
                 .tag(AppTab.leads)
