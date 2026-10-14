@@ -76,6 +76,9 @@ struct BookingsView: View {
                                         .foregroundStyle(Theme.primaryText)
                                     BadgeChip(text: "\(section.bookings.count)", tint: Theme.secondaryText)
                                     Spacer(minLength: 0)
+                                    Text(section.total.currencyString)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(Theme.primaryText)
                                 }
                                 ForEach(section.bookings) { booking in
                                     BookingCard(booking: booking, openBooking: { openBooking = $0 })
@@ -100,7 +103,8 @@ struct BookingsView: View {
     static func sections(from response: BookingsResponse) -> [BookingSection] {
         [
             BookingSection(title: "Tentative", bookings: response.tentative ?? []),
-            BookingSection(title: "Upcoming", bookings: response.upcoming.filter { $0.dateTentative != true }),
+            BookingSection(title: "Upcoming", bookings: response.upcoming.filter { $0.dateTentative != true && $0.shotAt == nil }),
+            BookingSection(title: "Editing", bookings: response.editing ?? []),
             BookingSection(title: "Waiting for payment", bookings: response.waitingForPayment),
             BookingSection(title: "Completed", bookings: response.completed),
         ]
@@ -191,6 +195,12 @@ struct BookingSection: Identifiable {
     let bookings: [Booking]
 
     var id: String { title }
+
+    /// What the section is worth, as on the web: each job's line items minus
+    /// any additional costs recorded on completion.
+    var total: Int {
+        bookings.reduce(0) { $0 + BookingStatsView.profit($1) }
+    }
 }
 /// The four numbers the web's Booked page leads with (BookingStats in
 /// BookedList.tsx), ported from src/app/booked/bookingMath.ts so the two agree.
@@ -266,7 +276,7 @@ struct BookingStatsView: View {
 
     /// bookingProfit: the line-item total minus any additional costs recorded
     /// when the job was completed.
-    private static func profit(_ booking: Booking) -> Int {
+    static func profit(_ booking: Booking) -> Int {
         booking.total - (booking.additionalCosts ?? 0)
     }
 

@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, Clock, CalendarPlus, MapPin } from "lucide-react";
-import { markInvoiceSent, reopenBooking } from "./actions";
+import { Camera, CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, Clock, CalendarPlus, MapPin } from "lucide-react";
+import { markBookingShot, markInvoiceSent, reopenBooking } from "./actions";
 import { CompleteBookingDialog } from "./CompleteBookingDialog";
 import { COMPLETION_FIELDS, bookingProfit, profitPerHour } from "./bookingMath";
 import { BookingForm } from "./BookingForm";
@@ -44,6 +44,14 @@ export function BookingDetailDialog({
     startTransition(async () => {
       await markInvoiceSent(booking.id);
       toast.success("Marked invoice sent");
+      router.refresh();
+    });
+  };
+
+  const handleShot = () => {
+    startTransition(async () => {
+      await markBookingShot(booking.id);
+      toast.success("Moved to Editing");
       router.refresh();
     });
   };
@@ -88,8 +96,14 @@ export function BookingDetailDialog({
         </DialogHeader>
 
         <div className="flex flex-wrap gap-2">
+          {!booking.completedAt && !booking.invoiceSentAt && !booking.shotAt && (
+            <Button size="sm" onClick={handleShot} disabled={isPending}>
+              <Camera />
+              Mark shot
+            </Button>
+          )}
           {!booking.completedAt && !booking.invoiceSentAt && (
-            <Button size="sm" onClick={handleInvoiceSent} disabled={isPending}>
+            <Button size="sm" variant={booking.shotAt ? "default" : "outline"} onClick={handleInvoiceSent} disabled={isPending}>
               <Send />
               Mark invoice sent
             </Button>
@@ -105,7 +119,7 @@ export function BookingDetailDialog({
               Mark completed
             </Button>
           )}
-          {(booking.completedAt || booking.invoiceSentAt) && (
+          {(booking.completedAt || booking.invoiceSentAt || booking.shotAt) && (
             <Button variant="outline" size="sm" onClick={handleReopen} disabled={isPending}>
               <RotateCcw />
               Reopen

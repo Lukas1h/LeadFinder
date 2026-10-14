@@ -192,7 +192,7 @@ struct ListingStatusBadge: View {
 }
 
 /// The booking's state, from BookingStatusBadge on the web: completed once
-/// done, awaiting payment once the invoice is out but unpaid.
+/// done, awaiting payment once the invoice is out but unpaid, editing once shot.
 struct BookingStatusBadge: View {
     let booking: Booking
 
@@ -201,6 +201,8 @@ struct BookingStatusBadge: View {
             BadgeChip(text: "Completed", tint: Theme.emerald)
         } else if booking.invoiceSentAt != nil {
             BadgeChip(text: "Awaiting payment", tint: Theme.amber)
+        } else if booking.shotAt != nil {
+            BadgeChip(text: "Editing", tint: Theme.accent)
         } else if booking.dateTentative == true {
             BadgeChip(text: "Date not confirmed", tint: Theme.amber)
         } else {

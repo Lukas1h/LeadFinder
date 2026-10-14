@@ -68,3 +68,12 @@ export function fromCompletionDraft(draft: CompletionDraft): Record<CompletionKe
     additionalCosts: draft.additionalCosts.trim() ? Math.round(Number(draft.additionalCosts)) || 0 : null,
   };
 }
+
+type StepFields = { completedAt: Date | null; invoiceSentAt: Date | null; shotAt: Date | null };
+
+/** What "Reopen" clears: the latest step the booking has reached (Completed, then Invoice sent, then Shot). */
+export function reopenStep(booking: StepFields): Partial<StepFields> {
+  if (booking.completedAt) return { completedAt: null };
+  if (booking.invoiceSentAt) return { invoiceSentAt: null };
+  return { shotAt: null };
+}

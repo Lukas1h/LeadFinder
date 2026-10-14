@@ -8,7 +8,7 @@ import type { BookingWithDetails } from "./BookedList";
  * The Booked page's data, as data.
  *
  * Lifted out of page.tsx so the iPhone app's GET /bookings gets the identical
- * join — and so the "in progress / invoice sent / completed" split exists
+ * join — and so the "upcoming / editing / invoice sent / completed" split exists
  * once, as a plain function both the list component and the API call, rather
  * than as a useMemo the client can only run for itself.
  */
@@ -77,6 +77,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       notes: b.notes,
       invoiceNote: b.invoiceNote,
       completedAt: b.completedAt,
+      shotAt: b.shotAt,
       invoiceSentAt: b.invoiceSentAt,
       driveHours: b.driveHours,
       editingHours: b.editingHours,
@@ -101,10 +102,12 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
 }
 
 export interface GroupedBookings {
-  /** Not completed and no invoice sent yet. Includes the tentative ones: the iPhone app reads this list as "everything still to shoot". */
+  /** Not shot yet. Includes the tentative ones: the iPhone app reads this list as "everything still to shoot". */
   upcoming: BookingWithDetails[];
   /** The part of `upcoming` whose date isn't settled, longest since he was last in touch first: the one to chase is on top. */
   tentative: BookingWithDetails[];
+  /** Shot, no invoice out yet: the photos are still being edited. Longest-waiting first. */
+  editing: BookingWithDetails[];
   /** Invoice sent, not yet paid — longest-waiting first, so the one to chase is on top. */
   waiting: BookingWithDetails[];
   completed: BookingWithDetails[];
@@ -116,7 +119,7 @@ export interface GroupedBookings {
  */
 export function groupBookings(bookings: BookingWithDetails[]): GroupedBookings {
   const upcoming = bookings
-    .filter((b) => !b.completedAt && !b.invoiceSentAt)
+    .filter((b) => !b.completedAt && !b.invoiceSentAt && !b.shotAt)
     .sort((a, b) => {
       // No job date yet sinks to the bottom rather than sorting first.
       if (!a.jobDate && !b.jobDate) return b.createdAt.getTime() - a.createdAt.getTime();
@@ -124,6 +127,9 @@ export function groupBookings(bookings: BookingWithDetails[]): GroupedBookings {
       if (!b.jobDate) return -1;
       return a.jobDate.getTime() - b.jobDate.getTime();
     });
+  const editing = bookings
+    .filter((b) => !b.completedAt && !b.invoiceSentAt && b.shotAt)
+    .sort((a, b) => a.shotAt!.getTime() - b.shotAt!.getTime());
   const waiting = bookings
     .filter((b) => !b.completedAt && b.invoiceSentAt)
     .sort((a, b) => a.invoiceSentAt!.getTime() - b.invoiceSentAt!.getTime());
@@ -132,5 +138,5 @@ export function groupBookings(bookings: BookingWithDetails[]): GroupedBookings {
     .sort((a, b) => b.completedAt!.getTime() - a.completedAt!.getTime());
   const lastTouch = (b: BookingWithDetails) => (b.contactLastContactedAt ?? b.createdAt).getTime();
   const tentative = upcoming.filter((b) => b.dateTentative).sort((a, b) => lastTouch(a) - lastTouch(b));
-  return { upcoming, tentative, waiting, completed };
+  return { upcoming, tentative, editing, waiting, completed };
 }

@@ -491,6 +491,13 @@ actor APIClient {
         )
     }
 
+    /// Shot, photos still being edited: the booking moves to Editing.
+    func markBookingShot(bookingId: String) async throws {
+        struct Empty: Encodable, Sendable {}
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("POST", "api/app/v1/bookings/\(bookingId)/shot", body: Empty(), as: OK.self)
+    }
+
     /// The invoice has gone out: the booking waits for payment.
     func markInvoiceSent(bookingId: String) async throws {
         struct Empty: Encodable, Sendable {}

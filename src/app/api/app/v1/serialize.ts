@@ -153,6 +153,8 @@ export function bookingJson(b: BookingWithDetails) {
     notes: b.notes,
     invoiceNote: b.invoiceNote,
     completedAt: b.completedAt,
+    // Shot, photos still being edited (the "Editing" section).
+    shotAt: b.shotAt,
     invoiceSentAt: b.invoiceSentAt,
     driveHours: b.driveHours,
     editingHours: b.editingHours,

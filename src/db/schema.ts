@@ -348,6 +348,9 @@ export const bookings = pgTable("bookings", {
   // upcoming or waiting for payment, see invoiceSentAt). Set via a "Mark
   // completed" action.
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  // Shot, but the photos aren't edited and delivered yet. Set via "Mark shot";
+  // the booking sits in "Editing" until the invoice goes out.
+  shotAt: timestamp("shot_at", { withTimezone: true }),
   // Set via a "Mark invoice sent" action once the invoice has actually gone
   // out to the client — the booking then sits in "Waiting for payment" until
   // completedAt is set. Distinct from invoicedAt below, which only records

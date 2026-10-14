@@ -278,6 +278,9 @@ struct BookingsResponse: Codable, Sendable {
     /// The part of `upcoming` whose date isn't settled, the one to chase
     /// first on top. Optional: a cached response from before the server sent it.
     var tentative: [Booking]?
+    /// Shot, no invoice out yet: the photos are still being edited. Optional:
+    /// a cached response from before the server sent it.
+    var editing: [Booking]?
     var waitingForPayment: [Booking]
     var completed: [Booking]
 }
@@ -304,6 +307,8 @@ struct Booking: Codable, Sendable, Identifiable, Hashable {
     var notes: String?
     var invoiceNote: String?
     var completedAt: String?
+    /// Shot, photos still being edited (the "Editing" section).
+    var shotAt: String?
     var invoiceSentAt: String?
     var driveHours: Double?
     var editingHours: Double?

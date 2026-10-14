@@ -112,7 +112,7 @@ struct ScheduleView: View {
     private var bookingById: [String: Booking] {
         guard let bookings = appState.bookings.value else { return [:] }
         var map: [String: Booking] = [:]
-        for booking in bookings.upcoming + bookings.waitingForPayment + bookings.completed {
+        for booking in bookings.upcoming + (bookings.editing ?? []) + bookings.waitingForPayment + bookings.completed {
             map[booking.id] = booking
         }
         return map

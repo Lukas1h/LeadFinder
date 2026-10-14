@@ -3,6 +3,7 @@
 import { randomBytes } from "crypto";
 import { db } from "@/db";
 import { bookings, bookingLineItems, listings, agents, galleryViews, type GalleryEvent, type NewBookingLineItem } from "@/db/schema";
+import { reopenStep } from "./bookingMath";
 import { eq, inArray, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
@@ -261,6 +262,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     notes: booking.notes,
     invoiceNote: booking.invoiceNote,
     completedAt: booking.completedAt,
+    shotAt: booking.shotAt,
     invoiceSentAt: booking.invoiceSentAt,
     driveHours: booking.driveHours,
     editingHours: booking.editingHours,
@@ -345,6 +347,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       notes: b.notes,
       invoiceNote: b.invoiceNote,
       completedAt: b.completedAt,
+      shotAt: b.shotAt,
       invoiceSentAt: b.invoiceSentAt,
       driveHours: b.driveHours,
       editingHours: b.editingHours,
@@ -450,6 +453,13 @@ export async function markBookingCompleted(bookingId: string, completion: Comple
   revalidatePath("/agents");
 }
 
+/** Shot, photos still being edited: moves the booking into "Editing" until the invoice goes out. */
+export async function markBookingShot(bookingId: string) {
+  await db.update(bookings).set({ shotAt: new Date() }).where(eq(bookings.id, bookingId));
+  revalidatePath("/booked");
+  revalidatePath("/agents");
+}
+
 /** Moves a booking into "Waiting for payment" — it isn't completed until it's paid. */
 export async function markInvoiceSent(bookingId: string) {
   await db.update(bookings).set({ invoiceSentAt: new Date() }).where(eq(bookings.id, bookingId));
@@ -457,13 +467,11 @@ export async function markInvoiceSent(bookingId: string) {
   revalidatePath("/agents");
 }
 
-/** Steps a booking back one state: Completed → Waiting for payment (or In progress if no invoice was sent), Waiting for payment → In progress. */
+/** Steps a booking back one state: Completed → Invoice sent → Editing → Upcoming, skipping any it never went through. */
 export async function reopenBooking(bookingId: string) {
-  const [existing] = await db.select({ completedAt: bookings.completedAt }).from(bookings).where(eq(bookings.id, bookingId));
-  await db
-    .update(bookings)
-    .set(existing?.completedAt ? { completedAt: null } : { invoiceSentAt: null })
-    .where(eq(bookings.id, bookingId));
+  const [existing] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
+  if (!existing) return;
+  await db.update(bookings).set(reopenStep(existing)).where(eq(bookings.id, bookingId));
   revalidatePath("/booked");
   revalidatePath("/agents");
 }

@@ -14,12 +14,14 @@ export async function GET(req: Request) {
   const denied = requireAppAuth(req);
   if (denied) return denied;
 
-  const { upcoming, tentative, waiting, completed } = groupBookings(await loadBookingsWithDetails());
+  const { upcoming, tentative, editing, waiting, completed } = groupBookings(await loadBookingsWithDetails());
 
   return NextResponse.json({
     upcoming: upcoming.map(bookingJson),
     // The part of `upcoming` with no settled date (dateTentative), longest since last contact first.
     tentative: tentative.map(bookingJson),
+    // Shot, no invoice out yet: the photos are still being edited.
+    editing: editing.map(bookingJson),
     waitingForPayment: waiting.map(bookingJson),
     completed: completed.map(bookingJson),
   });

@@ -1,20 +1,27 @@
-import { CheckCircle2, Clock, Send } from "lucide-react";
+import { Camera, CheckCircle2, Clock, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-type BookingStatus = "in_progress" | "completed" | "invoice_sent";
+type BookingStatus = "in_progress" | "editing" | "completed" | "invoice_sent";
+type StatusFields = { completedAt: Date | null; invoiceSentAt: Date | null; shotAt: Date | null };
 
-/** In progress → Invoice sent (waiting for payment) → Completed (paid). Completed wins over an earlier invoice-sent. */
-export function getBookingStatus(booking: { completedAt: Date | null; invoiceSentAt: Date | null }): BookingStatus {
+/** Upcoming → Editing (shot) → Invoice sent (waiting for payment) → Completed (paid). The latest step wins. */
+export function getBookingStatus(booking: StatusFields): BookingStatus {
   if (booking.completedAt) return "completed";
   if (booking.invoiceSentAt) return "invoice_sent";
+  if (booking.shotAt) return "editing";
   return "in_progress";
 }
 
 const STATUS_BADGES: Record<BookingStatus, { label: string; icon: typeof Clock; style: string }> = {
   in_progress: {
-    label: "In progress",
+    label: "Upcoming",
     icon: Clock,
     style: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-900",
+  },
+  editing: {
+    label: "Editing",
+    icon: Camera,
+    style: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900",
   },
   completed: {
     label: "Completed",
@@ -28,7 +35,7 @@ const STATUS_BADGES: Record<BookingStatus, { label: string; icon: typeof Clock; 
   },
 };
 
-export function BookingStatusBadge({ booking }: { booking: { completedAt: Date | null; invoiceSentAt: Date | null } }) {
+export function BookingStatusBadge({ booking }: { booking: StatusFields }) {
   const { label, icon: Icon, style } = STATUS_BADGES[getBookingStatus(booking)];
   return (
     <Badge className={style}>

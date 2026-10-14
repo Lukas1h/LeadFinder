@@ -32,6 +32,8 @@ export interface BookingWithDetails {
   notes: string | null;
   invoiceNote: string | null;
   completedAt: Date | null;
+  // Shot, still editing: the photos haven't gone out yet.
+  shotAt: Date | null;
   // Set once the invoice has been sent to the client (implies completedAt).
   invoiceSentAt: Date | null;
   // Recorded on completion — see CompleteBookingDialog.
@@ -72,7 +74,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
   // The split lives in ./data so the iPhone app's GET /bookings returns the
   // same buckets rather than a second opinion on what "waiting" means.
-  const { upcoming, tentative, waiting, completed } = useMemo(() => groupBookings(bookings), [bookings]);
+  const { upcoming, tentative, editing, waiting, completed } = useMemo(() => groupBookings(bookings), [bookings]);
   const scheduled = useMemo(() => upcoming.filter((b) => !b.dateTentative), [upcoming]);
 
   if (bookings.length === 0) {
@@ -113,7 +115,13 @@ export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
         bookings={tentative}
         defaultOpen
       />
-      <BookingSection title="In progress" bookings={scheduled} defaultOpen />
+      <BookingSection title="Upcoming" bookings={scheduled} defaultOpen />
+      <BookingSection
+        title="Editing"
+        hint="Shot, but the photos haven&rsquo;t gone out yet. Longest waiting first."
+        bookings={editing}
+        defaultOpen
+      />
       <BookingSection title="Invoice sent" bookings={waiting} />
       <BookingSection title="Completed" bookings={completed} />
     </div>

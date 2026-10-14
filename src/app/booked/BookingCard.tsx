@@ -19,7 +19,7 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
 
   const profit = bookingProfit(booking);
   // Only while it's still to shoot: once the job is done the day is no longer in question.
-  const tentative = booking.dateTentative && !booking.completedAt && !booking.invoiceSentAt;
+  const tentative = booking.dateTentative && !booking.completedAt && !booking.invoiceSentAt && !booking.shotAt;
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
 
   return (

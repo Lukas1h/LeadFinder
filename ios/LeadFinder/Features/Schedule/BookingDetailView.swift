@@ -94,8 +94,8 @@ struct BookingDetailView: View {
     // MARK: - Status actions
 
     /// Where the job is and the step that comes next, as on the web: upcoming,
-    /// then invoice sent (waiting for payment), then completed. Reopen steps
-    /// back one.
+    /// then editing (shot), then invoice sent (waiting for payment), then
+    /// completed. Reopen steps back one.
     private var statusActions: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -106,6 +106,11 @@ struct BookingDetailView: View {
 
             HStack(spacing: 8) {
                 if booking.completedAt == nil {
+                    if booking.invoiceSentAt == nil && booking.shotAt == nil {
+                        actionButton("Shot", "camera.fill") {
+                            await run { try await APIClient.shared.markBookingShot(bookingId: booking.id) }
+                        }
+                    }
                     if booking.invoiceSentAt == nil {
                         actionButton("Invoice sent", "paperplane.fill") {
                             await run { try await APIClient.shared.markInvoiceSent(bookingId: booking.id) }
@@ -115,7 +120,7 @@ struct BookingDetailView: View {
                         showComplete = true
                     }
                 }
-                if booking.completedAt != nil || booking.invoiceSentAt != nil {
+                if booking.completedAt != nil || booking.invoiceSentAt != nil || booking.shotAt != nil {
                     actionButton("Reopen", "arrow.uturn.backward") {
                         await run { try await APIClient.shared.reopenBooking(id: booking.id) }
                     }
@@ -391,6 +396,9 @@ struct BookingDetailView: View {
         }
         if let value = stamp(booking.invoiceSentAt) {
             rows.append(DetailRow(label: "Invoice sent", value: value))
+        }
+        if let value = stamp(booking.shotAt) {
+            rows.append(DetailRow(label: "Shot", value: value))
         }
         if let number = booking.invoiceNumber {
             rows.append(DetailRow(label: "Invoice #", value: "\(number)"))
