@@ -276,7 +276,7 @@ struct BookingStatsView: View {
 
     /// bookingProfit: the line-item total minus any additional costs recorded
     /// when the job was completed.
-    static func profit(_ booking: Booking) -> Int {
+    nonisolated static func profit(_ booking: Booking) -> Int {
         booking.total - (booking.additionalCosts ?? 0)
     }
 
