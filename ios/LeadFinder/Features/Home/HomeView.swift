@@ -2,8 +2,8 @@
 
 import SwiftUI
 
-/// The iPhone's first tab: two cards, Outreach and Bookings, each with its
-/// stats on top and what today asks for underneath. It reads the feeds the
+/// The iPhone's first tab: Outreach, then Bookings, each as a grid of stat
+/// tiles with today's quota underneath. It reads the feeds the
 /// other tabs already load, so it has no endpoint of its own and can't
 /// disagree with them.
 ///
@@ -47,10 +47,10 @@ struct HomeView: View {
 
     private var content: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 ErrorBanner(message: firstError, onRetry: { Task { await reload() } })
-                if let messages = appState.messages.value { outreachCard(messages) }
-                if let bookings = appState.bookings.value { bookingsCard(bookings) }
+                if let messages = appState.messages.value { outreachSection(messages) }
+                if let bookings = appState.bookings.value { bookingsSection(bookings) }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -68,110 +68,114 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Cards
+    // MARK: - Sections
 
     /// Texting stats, then today's texts and follow-ups.
-    private func outreachCard(_ messages: MessagesResponse) -> some View {
+    @ViewBuilder
+    private func outreachSection(_ messages: MessagesResponse) -> some View {
         let stats = messages.stats
-        return card("Outreach") {
-            grid {
-                StatTile("Last 30 days", "\(stats.sms.sentRecent) sent", "texts")
-                StatTile(
-                    "Text replies",
-                    MessagesView.rate(stats.sms.replied, stats.sms.sent),
-                    "\(stats.sms.replied) of \(stats.sms.sent) texts"
-                )
-                StatTile(
-                    "Booked",
-                    "\(stats.sms.booked + stats.email.booked)",
-                    "\(stats.revenue.currencyString) revenue"
-                )
+        sectionHeading("Outreach")
+        grid {
+            StatTile("Texts sent", "\(stats.sms.sentRecent)", "last 30 days").tile()
+            StatTile(
+                "Reply rate",
+                MessagesView.rate(stats.sms.replied, stats.sms.sent),
+                "\(stats.sms.replied) of \(stats.sms.sent) texts"
+            ).tile()
+            StatTile("Booked", "\(stats.sms.booked + stats.email.booked)", "jobs from outreach").tile()
+            StatTile("Revenue", stats.revenue.currencyString, "from outreach").tile()
+        }
+        if stats.sms.sent > 0 {
+            ReplyByDayChart(buckets: stats.byDay.sms).tile()
+        }
+
+        todayHeading
+        grid {
+            if let today = messages.goal?.today {
+                Button { selection = .leads } label: {
+                    quota("Texts", done: today.texts, of: today.textsTarget)
+                }
+                .buttonStyle(.plain)
             }
-        } today: {
-            grid {
-                if let today = messages.goal?.today {
-                    Button { selection = .leads } label: {
-                        quota("Texts", done: today.texts, of: today.textsTarget)
-                    }
-                    .buttonStyle(.plain)
+            if let followUp = appState.followUp.value, let target = followUp.dailyTarget {
+                NavigationLink(value: FollowUpRoute()) {
+                    quota("Follow-ups", done: followUp.doneToday ?? 0, of: target)
                 }
-                if let followUp = appState.followUp.value, let target = followUp.dailyTarget {
-                    NavigationLink(value: FollowUpRoute()) {
-                        quota("Follow-ups", done: followUp.doneToday ?? 0, of: target)
-                    }
-                    .buttonStyle(.plain)
-                }
+                .buttonStyle(.plain)
             }
         }
     }
 
     /// Money from finished jobs, then the next shoot and what's left to edit.
-    private func bookingsCard(_ bookings: BookingsResponse) -> some View {
+    @ViewBuilder
+    private func bookingsSection(_ bookings: BookingsResponse) -> some View {
+        let stats = BookingStatsView.stats(bookings.completed)
         let next = Self.nextShoot(bookings)
         let editing = bookings.editing ?? []
-        return card("Bookings") {
-            BookingStatsView(completed: bookings.completed, standalone: false)
-        } today: {
-            grid {
-                Button { if let next { openBooking = next } } label: {
-                    StatTile(
-                        "Next shoot",
-                        next.flatMap { DateFormatting.parse($0.jobDate) }.map(Self.day) ?? "None booked",
-                        next.map(Self.timeAndPlace) ?? "nothing on the calendar"
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(next == nil)
 
-                NavigationLink(value: BookingsRoute()) {
-                    StatTile(
-                        "To edit",
-                        "\(editing.count)",
-                        editing.isEmpty ? "all delivered" : "shot, not delivered"
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+        sectionHeading("Bookings")
+        grid {
+            StatTile("Last 30 days", stats.recentProfit.currencyString, Self.count(stats.recentCount, "booking")).tile()
+            StatTile("All time", stats.allTimeProfit.currencyString, Self.count(stats.allTimeCount, "booking")).tile()
+            StatTile("Avg per booking", stats.average.map { $0.currencyString } ?? "—", "profit").tile()
+            StatTile(
+                "Avg per hour",
+                stats.perHour.map { "\($0.currencyString)/hr" } ?? "—",
+                stats.perHour != nil ? "profit" : "no hours recorded"
+            ).tile()
+        }
+
+        todayHeading
+        grid {
+            Button { if let next { openBooking = next } } label: {
+                StatTile(
+                    "Next shoot",
+                    next.flatMap { DateFormatting.parse($0.jobDate) }.map(Self.day) ?? "None booked",
+                    next.map(Self.timeAndPlace) ?? "nothing on the calendar"
+                )
+                .tile(highlighted: true)
             }
+            .buttonStyle(.plain)
+            .disabled(next == nil)
+
+            NavigationLink(value: BookingsRoute()) {
+                StatTile("To edit", "\(editing.count)", editing.isEmpty ? "all delivered" : "shot, not delivered")
+                    .tile(highlighted: true)
+            }
+            .buttonStyle(.plain)
         }
     }
 
     // MARK: - Building blocks
 
-    /// A titled card: stats, a divider, then "Today" and its quota.
-    private func card<Stats: View, Today: View>(
-        _ title: String,
-        @ViewBuilder stats: () -> Stats,
-        @ViewBuilder today: () -> Today
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(Theme.primaryText)
-            stats()
-            Divider().overlay(Theme.cardRaised)
-            Text("Today")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.secondaryText)
-                .textCase(.uppercase)
-            today()
-        }
-        .card(padding: 14)
+    private func sectionHeading(_ title: String) -> some View {
+        Text(title)
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(Theme.primaryText)
+            .padding(.top, 8)
+    }
+
+    private var todayHeading: some View {
+        Text("Today")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Theme.secondaryText)
+            .textCase(.uppercase)
+            .padding(.top, 4)
     }
 
     private func grid<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         LazyVGrid(
             columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-            spacing: 14,
+            spacing: 12,
             content: content
         )
     }
 
-    /// "12 of 20" with what's left underneath, green once it's met.
+    /// "12 of 20" over a progress bar, green once it's met.
     private func quota(_ label: String, done: Int, of target: Int) -> some View {
         let met = done >= target
-        return VStack(alignment: .leading, spacing: 3) {
+        let progress = target > 0 ? min(1, Double(done) / Double(target)) : 1
+        return VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(Theme.secondaryText)
@@ -185,12 +189,25 @@ struct HomeView: View {
                         .foregroundStyle(Theme.emerald)
                 }
             }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.cardRaised)
+                    Capsule()
+                        .fill(met ? Theme.emerald : Theme.accent.opacity(0.7))
+                        .frame(width: proxy.size.width * progress)
+                }
+            }
+            .frame(height: 6)
             Text(met ? "done for today" : "\(target - done) more")
                 .font(.caption2)
                 .foregroundStyle(Theme.tertiaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
+        .tile(highlighted: true)
+    }
+
+    private static func count(_ n: Int, _ noun: String) -> String {
+        "\(n) \(noun)\(n == 1 ? "" : "s")"
     }
 
     // MARK: - Next shoot
@@ -220,6 +237,24 @@ struct HomeView: View {
     private static func timeAndPlace(_ booking: Booking) -> String {
         let time = DateFormatting.parse(booking.jobDate).map { DateFormatting.time.string(from: $0) }
         return [time, booking.city?.nilIfBlank].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
+private extension View {
+    /// One stat in its own small card. Highlighted for the "Today" quota, so
+    /// what's left to do stands apart from the numbers above it.
+    func tile(highlighted: Bool = false) -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(
+                highlighted ? Theme.accent.opacity(0.07) : Theme.card,
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(highlighted ? Theme.accent.opacity(0.3) : Theme.border, lineWidth: 0.5)
+            )
+            .contentShape(Rectangle())
     }
 }
 

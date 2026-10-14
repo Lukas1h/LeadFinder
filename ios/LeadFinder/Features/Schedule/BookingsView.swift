@@ -214,19 +214,10 @@ struct BookingSection: Identifiable {
 /// backfilled; a booking with no job date falls back to its completed date.
 struct BookingStatsView: View {
     let completed: [Booking]
-    /// False when it sits inside another card (Home's Bookings card).
-    var standalone = true
 
     var body: some View {
-        if standalone {
-            grid.card(padding: 14)
-        } else {
-            grid
-        }
-    }
-
-    private var grid: some View {
-        LazyVGrid(
+        let stats = Self.stats(completed)
+        return LazyVGrid(
             columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
             spacing: 14
         ) {
@@ -239,6 +230,7 @@ struct BookingStatsView: View {
                 stats.perHour != nil ? "profit" : "no hours recorded"
             )
         }
+        .card(padding: 14)
     }
 
     private func stat(_ label: String, _ value: String, _ sub: String) -> some View {
@@ -260,7 +252,8 @@ struct BookingStatsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var stats: Stats {
+    /// The four numbers, for Home to lay out as tiles of its own.
+    static func stats(_ completed: [Booking]) -> Stats {
         let cutoff = Date().addingTimeInterval(-30 * 24 * 60 * 60)
         let recent = completed.filter { booking in
             let when = DateFormatting.parse(booking.jobDate) ?? DateFormatting.parse(booking.completedAt)
@@ -277,7 +270,7 @@ struct BookingStatsView: View {
         )
     }
 
-    private struct Stats {
+    struct Stats {
         var recentCount: Int
         var recentProfit: Int
         var allTimeCount: Int
