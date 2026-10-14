@@ -66,10 +66,7 @@ struct BookingsView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 20) {
-                        // On the iPhone the money numbers are on the Home tab.
-                        #if os(macOS)
                         BookingStatsView(completed: response.completed)
-                        #endif
 
                         ForEach(sections) { section in
                             VStack(alignment: .leading, spacing: 10) {
@@ -252,8 +249,7 @@ struct BookingStatsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The four numbers, for Home to lay out as tiles of its own.
-    static func stats(_ completed: [Booking]) -> Stats {
+    private static func stats(_ completed: [Booking]) -> Stats {
         let cutoff = Date().addingTimeInterval(-30 * 24 * 60 * 60)
         let recent = completed.filter { booking in
             let when = DateFormatting.parse(booking.jobDate) ?? DateFormatting.parse(booking.completedAt)
@@ -270,7 +266,7 @@ struct BookingStatsView: View {
         )
     }
 
-    struct Stats {
+    private struct Stats {
         var recentCount: Int
         var recentProfit: Int
         var allTimeCount: Int

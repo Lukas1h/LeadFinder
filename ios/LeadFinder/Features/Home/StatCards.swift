@@ -1,6 +1,6 @@
 import SwiftUI
 
-// The Messages page's goal and outreach cards, and the tile Home builds on.
+// The goal and outreach cards: on the Messages page, and again on Home.
 
 /// One number with a label above and a line of context below.
 struct StatTile: View {

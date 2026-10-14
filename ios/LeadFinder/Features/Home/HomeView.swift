@@ -2,13 +2,12 @@
 
 import SwiftUI
 
-/// The iPhone's first tab: Outreach, then Bookings, each as a grid of stat
-/// tiles with today's quota underneath. It reads the feeds the
-/// other tabs already load, so it has no endpoint of its own and can't
-/// disagree with them.
+/// The iPhone's first tab: every stat card the app has, in one place, a
+/// section at a time. Each section shows its stats exactly as they look on
+/// their own page, then what's left to do today for it.
 ///
-/// iPhone only: the Mac's sidebar mirrors the web, whose Messaging and Booked
-/// pages carry these numbers themselves.
+/// The cards are the same views the Messages and Bookings pages use, fed by
+/// the same cached feeds, so the numbers can't disagree with those pages.
 struct HomeView: View {
     @Environment(AppState.self) private var appState
     @Binding var selection: AppTab
@@ -49,8 +48,23 @@ struct HomeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 ErrorBanner(message: firstError, onRetry: { Task { await reload() } })
-                if let messages = appState.messages.value { outreachSection(messages) }
-                if let bookings = appState.bookings.value { bookingsSection(bookings) }
+
+                if let messages = appState.messages.value {
+                    if let goal = messages.goal {
+                        heading("Monthly goal")
+                        GoalCard(goal: goal)
+                    }
+
+                    heading("Outreach")
+                    OutreachStatsCard(stats: messages.stats)
+                    outreachToDo(messages)
+                }
+
+                if let bookings = appState.bookings.value {
+                    heading("Bookings")
+                    BookingStatsView(completed: bookings.completed)
+                    bookingsToDo(bookings)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -68,79 +82,46 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Sections
+    // MARK: - What's left to do
 
-    /// Texting stats, then today's texts and follow-ups.
-    @ViewBuilder
-    private func outreachSection(_ messages: MessagesResponse) -> some View {
-        let stats = messages.stats
-        sectionHeading("Outreach")
-        grid {
-            StatTile("Texts sent", "\(stats.sms.sentRecent)", "last 30 days").tile()
-            StatTile(
-                "Reply rate",
-                MessagesView.rate(stats.sms.replied, stats.sms.sent),
-                "\(stats.sms.replied) of \(stats.sms.sent) texts"
-            ).tile()
-            StatTile("Booked", "\(stats.sms.booked + stats.email.booked)", "jobs from outreach").tile()
-            StatTile("Revenue", stats.revenue.currencyString, "from outreach").tile()
-        }
-        if stats.sms.sent > 0 {
-            ReplyByDayChart(buckets: stats.byDay.sms).tile()
-        }
-
-        todayHeading
-        grid {
+    /// Today's texts (this week's leftover spread over the days left) and
+    /// today's follow-ups.
+    private func outreachToDo(_ messages: MessagesResponse) -> some View {
+        toDoCard {
             if let today = messages.goal?.today {
                 Button { selection = .leads } label: {
-                    quota("Texts", done: today.texts, of: today.textsTarget)
+                    quota("Texts today", done: today.texts, of: today.textsTarget)
                 }
                 .buttonStyle(.plain)
             }
             if let followUp = appState.followUp.value, let target = followUp.dailyTarget {
                 NavigationLink(value: FollowUpRoute()) {
-                    quota("Follow-ups", done: followUp.doneToday ?? 0, of: target)
+                    quota("Follow-ups today", done: followUp.doneToday ?? 0, of: target)
                 }
                 .buttonStyle(.plain)
             }
         }
     }
 
-    /// Money from finished jobs, then the next shoot and what's left to edit.
-    @ViewBuilder
-    private func bookingsSection(_ bookings: BookingsResponse) -> some View {
-        let stats = BookingStatsView.stats(bookings.completed)
+    /// The next shoot, and the jobs shot but not delivered.
+    private func bookingsToDo(_ bookings: BookingsResponse) -> some View {
         let next = Self.nextShoot(bookings)
         let editing = bookings.editing ?? []
-
-        sectionHeading("Bookings")
-        grid {
-            StatTile("Last 30 days", stats.recentProfit.currencyString, Self.count(stats.recentCount, "booking")).tile()
-            StatTile("All time", stats.allTimeProfit.currencyString, Self.count(stats.allTimeCount, "booking")).tile()
-            StatTile("Avg per booking", stats.average.map { $0.currencyString } ?? "—", "profit").tile()
-            StatTile(
-                "Avg per hour",
-                stats.perHour.map { "\($0.currencyString)/hr" } ?? "—",
-                stats.perHour != nil ? "profit" : "no hours recorded"
-            ).tile()
-        }
-
-        todayHeading
-        grid {
+        return toDoCard {
             Button { if let next { openBooking = next } } label: {
                 StatTile(
                     "Next shoot",
                     next.flatMap { DateFormatting.parse($0.jobDate) }.map(Self.day) ?? "None booked",
                     next.map(Self.timeAndPlace) ?? "nothing on the calendar"
                 )
-                .tile(highlighted: true)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(next == nil)
 
             NavigationLink(value: BookingsRoute()) {
                 StatTile("To edit", "\(editing.count)", editing.isEmpty ? "all delivered" : "shot, not delivered")
-                    .tile(highlighted: true)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -148,34 +129,33 @@ struct HomeView: View {
 
     // MARK: - Building blocks
 
-    private func sectionHeading(_ title: String) -> some View {
+    private func heading(_ title: String) -> some View {
         Text(title)
-            .font(.title3.weight(.semibold))
+            .font(.headline)
             .foregroundStyle(Theme.primaryText)
             .padding(.top, 8)
     }
 
-    private var todayHeading: some View {
-        Text("Today")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(Theme.secondaryText)
-            .textCase(.uppercase)
-            .padding(.top, 4)
+    /// A stat card like the others, headed "To do".
+    private func toDoCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("To do")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.secondaryText)
+                .textCase(.uppercase)
+            LazyVGrid(
+                columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                spacing: 14,
+                content: content
+            )
+        }
+        .card(padding: 14)
     }
 
-    private func grid<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        LazyVGrid(
-            columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-            spacing: 12,
-            content: content
-        )
-    }
-
-    /// "12 of 20" over a progress bar, green once it's met.
+    /// "12 of 20" and what's left, green with a check once it's met.
     private func quota(_ label: String, done: Int, of target: Int) -> some View {
         let met = done >= target
-        let progress = target > 0 ? min(1, Double(done) / Double(target)) : 1
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 3) {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(Theme.secondaryText)
@@ -183,31 +163,21 @@ struct HomeView: View {
                 Text("\(done) of \(target)")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(met ? Theme.emerald : Theme.primaryText)
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
                 if met {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.subheadline)
                         .foregroundStyle(Theme.emerald)
                 }
             }
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.cardRaised)
-                    Capsule()
-                        .fill(met ? Theme.emerald : Theme.accent.opacity(0.7))
-                        .frame(width: proxy.size.width * progress)
-                }
-            }
-            .frame(height: 6)
             Text(met ? "done for today" : "\(target - done) more")
                 .font(.caption2)
                 .foregroundStyle(Theme.tertiaryText)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .tile(highlighted: true)
-    }
-
-    private static func count(_ n: Int, _ noun: String) -> String {
-        "\(n) \(noun)\(n == 1 ? "" : "s")"
+        .contentShape(Rectangle())
     }
 
     // MARK: - Next shoot
@@ -237,24 +207,6 @@ struct HomeView: View {
     private static func timeAndPlace(_ booking: Booking) -> String {
         let time = DateFormatting.parse(booking.jobDate).map { DateFormatting.time.string(from: $0) }
         return [time, booking.city?.nilIfBlank].compactMap { $0 }.joined(separator: " · ")
-    }
-}
-
-private extension View {
-    /// One stat in its own small card. Highlighted for the "Today" quota, so
-    /// what's left to do stands apart from the numbers above it.
-    func tile(highlighted: Bool = false) -> some View {
-        frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(
-                highlighted ? Theme.accent.opacity(0.07) : Theme.card,
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(highlighted ? Theme.accent.opacity(0.3) : Theme.border, lineWidth: 0.5)
-            )
-            .contentShape(Rectangle())
     }
 }
 
