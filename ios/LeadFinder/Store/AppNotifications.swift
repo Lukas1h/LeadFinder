@@ -178,7 +178,7 @@ enum AppNotifications {
     }
 
     /// "~10 min drive" → 10, "~2h 45m drive" → 165, "~1h drive" → 60.
-    static func driveMinutes(_ text: String) -> Int? {
+    nonisolated static func driveMinutes(_ text: String) -> Int? {
         func number(before unit: String) -> Int? {
             guard let range = text.range(of: #"(\d+)\s*"# + unit, options: .regularExpression) else { return nil }
             return Int(text[range].filter(\.isNumber))

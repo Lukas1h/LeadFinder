@@ -201,10 +201,23 @@ struct BookingDetailView: View {
                 lockboxBanner(code)
             }
 
-            if mapsURL != nil || galleryURL != nil {
+            if mapsURL != nil || galleryURL != nil || booking.jobDate != nil {
                 HStack(spacing: 10) {
                     if let mapsURL {
                         linkButton("Directions", icon: "map.fill", url: mapsURL)
+                    }
+                    if booking.jobDate != nil {
+                        Button {
+                            _ = FileHandoff.addToCalendar(booking)
+                        } label: {
+                            Label("Add to calendar", systemImage: "calendar.badge.plus")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(Theme.accent.opacity(0.18), in: Capsule())
+                                .foregroundStyle(Theme.accent)
+                        }
+                        .buttonStyle(.plain)
                     }
                     if let galleryURL {
                         linkButton("Gallery", icon: "photo.on.rectangle", url: galleryURL)

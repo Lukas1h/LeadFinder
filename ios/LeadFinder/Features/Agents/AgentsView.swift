@@ -353,6 +353,8 @@ private var header: some View {
 
         contactButtons
 
+        lookupButtons
+
         if let email {
             Text(email)
                 .font(.footnote)
@@ -403,6 +405,34 @@ private var header: some View {
                 }
             }
         }
+    }
+
+    /// The web's Google and Save contact buttons. Google is a plain link, so
+    /// it opens in the browser rather than inside the app.
+    @ViewBuilder
+    private var lookupButtons: some View {
+        let name = agent.name?.nilIfBlank
+        let canSave = phoneDigits != nil || email != nil
+        if name != nil || canSave {
+            HStack(spacing: 8) {
+                if let name, let url = Self.googleURL(for: name) {
+                    Link(destination: url) { contactLabel("Google", "magnifyingglass") }
+                }
+                if canSave {
+                    Button {
+                        FileHandoff.saveContact(name: name, phone: agent.phone ?? detail?.agent.phone, email: email)
+                    } label: { contactLabel("Save contact", "person.crop.circle.badge.plus") }
+                        .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    /// "<name> real estate oregon", as the web searches.
+    private static func googleURL(for name: String) -> URL? {
+        var components = URLComponents(string: "https://www.google.com/search")
+        components?.queryItems = [URLQueryItem(name: "q", value: "\(name) real estate oregon")]
+        return components?.url
     }
 
     private func contactLabel(_ title: String, _ symbol: String, prominent: Bool = false) -> some View {
