@@ -4,9 +4,9 @@ import SwiftUI
 ///
 /// Shown here: the message history (each row opens the message, with its
 /// quick actions and the "Keep in touch" / "Declined" outcomes), and the
-/// template editor behind the toolbar button. The goal and stats cards are on
-/// the Home tab on the iPhone and stay here on the Mac (see StatCards.swift).
-/// The web's "Compose" is absent.
+/// template editor behind the toolbar button, under the goal and stats cards
+/// (StatCards.swift; Home shows the headline numbers). The web's "Compose" is
+/// absent.
 struct MessagesView: View {
     @Environment(AppState.self) private var appState
 
@@ -74,12 +74,8 @@ struct MessagesView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
-                        // On the iPhone these live on the Home tab with the
-                        // rest of the numbers; the Mac mirrors the web page.
-                        #if os(macOS)
                         if let goal = messages.goal { GoalCard(goal: goal) }
                         if messages.stats.sms.sent > 0 { OutreachStatsCard(stats: messages.stats) }
-                        #endif
                         history(messages.sends)
                     }
                     .padding(.horizontal, 16)

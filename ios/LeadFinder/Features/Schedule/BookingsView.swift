@@ -214,8 +214,18 @@ struct BookingSection: Identifiable {
 /// backfilled; a booking with no job date falls back to its completed date.
 struct BookingStatsView: View {
     let completed: [Booking]
+    /// False when it sits inside another card (Home's Bookings card).
+    var standalone = true
 
     var body: some View {
+        if standalone {
+            grid.card(padding: 14)
+        } else {
+            grid
+        }
+    }
+
+    private var grid: some View {
         LazyVGrid(
             columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
             spacing: 14
@@ -229,7 +239,6 @@ struct BookingStatsView: View {
                 stats.perHour != nil ? "profit" : "no hours recorded"
             )
         }
-        .card(padding: 14)
     }
 
     private func stat(_ label: String, _ value: String, _ sub: String) -> some View {

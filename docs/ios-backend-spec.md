@@ -345,11 +345,12 @@ A text template lists other templates as **quick actions**: the buttons on a mes
     "textsPerWeek": 171, "repliesPerWeek": 49      // the weekly targets
   },
   "note": "The estimate: repeat clients cover $950 of a month, …",   // show as is; don't rebuild it from the rates
-  "thisWeek": { "textsToGo": 61, "repliesToGo": 12, "texts": 110, "replies": 37, "followUps": 20, "followUpsDue": 13 }
+  "thisWeek": { "textsToGo": 61, "repliesToGo": 12, "texts": 110, "replies": 37, "followUps": 20, "followUpsDue": 13 },
+  "today": { "texts": 18, "textsTarget": 8 }
 }
 ```
 
-`thisWeek.textsToGo` and `repliesToGo` are the weekly target less what this week has done, 0 once it's met (show "On pace"). The web's fourth stat is new clients (`plan.newClientsThisMonth`, "about N a month needed" from `plan.newClientsPerMonth` rounded up).
+`today.textsTarget` is what was left of the week's texts this morning spread over the days left (Mon–Sat); Home shows it as "Texts N of M". `thisWeek.textsToGo` and `repliesToGo` are the weekly target less what this week has done, 0 once it's met (show "On pace"). The web's fourth stat is new clients (`plan.newClientsThisMonth`, "about N a month needed" from `plan.newClientsPerMonth` rounded up).
 
 #### The Follow up page (reworked 2026-10-11)
 

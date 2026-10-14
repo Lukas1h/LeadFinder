@@ -1,7 +1,6 @@
 import SwiftUI
 
-// The stat cards: on the iPhone they live together on the Home tab; the Mac's
-// Messaging page still shows the goal and outreach cards, as the web does.
+// The Messages page's goal and outreach cards, and the tile Home builds on.
 
 /// One number with a label above and a line of context below.
 struct StatTile: View {

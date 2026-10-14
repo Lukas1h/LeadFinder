@@ -452,6 +452,14 @@ struct MessagesResponse: Codable, Sendable {
             var followUps: Int
             var followUpsDue: Int
         }
+
+        /// Today's share of the week's texts: what was left this morning,
+        /// spread over the days left (Mon–Sat). Optional for cached responses.
+        var today: Today?
+        struct Today: Codable, Sendable {
+            var texts: Int
+            var textsTarget: Int
+        }
     }
 
     struct Stats: Codable, Sendable {

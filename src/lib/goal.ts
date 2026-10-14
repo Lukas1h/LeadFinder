@@ -107,6 +107,11 @@ export interface GoalProgress {
     /** Everyone waiting on the Follow up page: the same list, so the two can't disagree. */
     followUpsDue: number;
   };
+  /** Today's share of the week: what's left of it as of this morning, spread over the days left (Mon–Sat). */
+  today: {
+    texts: number;
+    textsTarget: number;
+  };
 }
 
 export async function computeGoalProgress(): Promise<GoalProgress> {
@@ -115,7 +120,9 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
       select
         date_trunc('month', now() at time zone ${TZ}) at time zone ${TZ} as month_start,
         (date_trunc('month', now() at time zone ${TZ}) + interval '1 month') at time zone ${TZ} as month_end,
-        date_trunc('week', now() at time zone ${TZ}) at time zone ${TZ} as week_start
+        date_trunc('week', now() at time zone ${TZ}) at time zone ${TZ} as week_start,
+        date_trunc('day', now() at time zone ${TZ}) at time zone ${TZ} as day_start,
+        extract(isodow from now() at time zone ${TZ})::int as dow
     ),
     job as (
       select b.id, b.contact_agent_id, b.created_at, coalesce(b.job_date, b.created_at) as at,
@@ -182,6 +189,8 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
         where a.relationship_status = 'interested'
           and greatest(a.last_contacted_at, i.at) > now() - make_interval(days => ${LIVE_DAYS}))::int as interested_live,
       (select count(*) from outreach, bounds where sent_at >= week_start)::int as week_texts,
+      (select count(*) from outreach, bounds where sent_at >= day_start)::int as today_texts,
+      (select dow from bounds) as dow,
       (select count(*) from outreach, bounds where responded_at >= week_start)::int as week_replies,
       -- A text to someone he had already texted before this week began.
       (select count(*) from agent_interactions x, bounds
@@ -259,6 +268,12 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
       replies: n("week_replies"),
       followUps: n("week_follow_ups"),
       followUpsDue: board.today.length + board.later.length,
+    },
+    today: {
+      texts: n("today_texts"),
+      textsTarget: Math.ceil(
+        Math.max(0, textsPerWeek - (n("week_texts") - n("today_texts"))) / (n("dow") <= 6 ? 7 - n("dow") : 1)
+      ),
     },
   };
 }
