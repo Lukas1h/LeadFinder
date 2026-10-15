@@ -17,7 +17,7 @@ if [ -z "$DEVICE" ]; then
   DEVICE="$(xcodebuild -project LeadFinder.xcodeproj -scheme LeadFinder -showdestinations 2>/dev/null \
     | grep 'platform:iOS, arch:' \
     | sed 's/.*id:\([^,]*\),.*/\1/' \
-    | head -1)"
+    | head -1 || true)"
 fi
 if [ -z "$DEVICE" ]; then
   echo "No iPhone connected. Plug it in (or trust this Mac) and retry." >&2
