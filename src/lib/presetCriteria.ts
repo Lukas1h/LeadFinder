@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { agents, type Listing } from "@/db/schema";
 import { leadSectionForListing } from "@/lib/leadSections";
 import { isWarmAgentStatus } from "@/lib/pipeline";
+import { presetSections } from "@/lib/presetSections";
 
 export interface PresetCriteria {
   minScore: number | null;
@@ -48,8 +49,9 @@ export function matchesCriteria(
 ): boolean {
   // Section is the one criterion that isn't a measurement of the property, so
   // a preset can be pointed at the Leads-page section rather than at a score
-  // band. Null on the preset means no constraint, like every other field.
-  if (preset.leadSection != null && preset.leadSection !== listing.leadSection) return false;
+  // band. Null on the preset means no constraint, like every other field. It
+  // can name several, comma-separated ("backup,video"): see presetSections.
+  if (preset.leadSection != null && !presetSections(preset.leadSection).includes(listing.leadSection ?? "")) return false;
   if (preset.comingSoon != null && preset.comingSoon !== listing.isComingSoon) return false;
   if (preset.sitting != null && preset.sitting !== listing.sitting) return false;
   if (preset.minScore != null && (listing.score == null || listing.score < preset.minScore)) return false;

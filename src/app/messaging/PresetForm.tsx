@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { MessagePreset, PresetType, MessageChannel } from "@/db/schema";
 import { createPreset, updatePreset } from "./actions";
+import { presetSections } from "@/lib/presetSections";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +43,14 @@ function toNumberOrNull(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+
+const LEAD_SECTION_CHOICES: [string, string][] = [
+  ["photo", "Photo opportunities"],
+  ["video", "Video opportunities"],
+  ["backup", "Backup opportunities"],
+  ["texted", "Texted before"],
+  ["unlikely", "Unlikely matches"],
+];
 export function PresetForm({
   preset,
   defaultType,
@@ -63,7 +72,7 @@ export function PresetForm({
   const [type, setType] = useState<PresetType>(preset?.type ?? defaultType ?? "initial_outreach");
   const [channel, setChannel] = useState<MessageChannel>(preset?.channel ?? defaultChannel ?? "sms");
   const [minScore, setMinScore] = useState(preset?.minScore?.toString() ?? "");
-  const [leadSection, setLeadSection] = useState(preset?.leadSection ?? "");
+  const [leadSections, setLeadSections] = useState<string[]>(presetSections(preset?.leadSection ?? null));
   const [comingSoon, setComingSoon] = useState(
     preset?.comingSoon == null ? "any" : preset.comingSoon ? "yes" : "no"
   );
@@ -100,7 +109,7 @@ export function PresetForm({
       maxListingAgeDays: toNumberOrNull(maxListingAgeDays),
       minPhotoCount: toNumberOrNull(minPhotoCount),
       maxPhotoCount: toNumberOrNull(maxPhotoCount),
-      leadSection: leadSection || null,
+      leadSection: leadSections.length > 0 ? leadSections.join(",") : null,
       comingSoon: comingSoon === "any" ? null : comingSoon === "yes",
       sitting: sitting === "any" ? null : sitting === "yes",
       secondMessage: channel === "sms" ? secondMessage : null,
@@ -271,22 +280,25 @@ export function PresetForm({
                 </Label>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="lead-section" className="text-xs">
-                      Leads page section
-                    </Label>
-                    <Select value={leadSection} onValueChange={setLeadSection}>
-                      <SelectTrigger id="lead-section">
-                        <SelectValue placeholder="Any section" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="photo">Photo opportunities</SelectItem>
-                        <SelectItem value="video">Video opportunities</SelectItem>
-                        <SelectItem value="backup">Backup opportunities</SelectItem>
-                        <SelectItem value="texted">Texted before</SelectItem>
-                        <SelectItem value="unlikely">Unlikely matches</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="col-span-2 flex flex-col gap-1.5">
+                    <Label className="text-xs">Leads page sections (none ticked: any section)</Label>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                      {LEAD_SECTION_CHOICES.map(([value, label]) => (
+                        <label key={value} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-primary"
+                            checked={leadSections.includes(value)}
+                            onChange={(e) =>
+                              setLeadSections((sections) =>
+                                e.target.checked ? [...sections, value] : sections.filter((s) => s !== value)
+                              )
+                            }
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="coming-soon" className="text-xs">

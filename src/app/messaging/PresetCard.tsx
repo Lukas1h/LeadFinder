@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { presetSections } from "@/lib/presetSections";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +36,8 @@ const SECTION_NAMES: Record<string, string> = {
 
 function formatCriteria(preset: MessagePreset): string | null {
   const parts: string[] = [];
-  if (preset.leadSection != null) parts.push(SECTION_NAMES[preset.leadSection] ?? preset.leadSection);
+  const sections = presetSections(preset.leadSection);
+  if (sections.length > 0) parts.push(sections.map((s) => SECTION_NAMES[s] ?? s).join(" or "));
   if (preset.comingSoon != null) parts.push(preset.comingSoon ? "coming soon only" : "not coming soon");
   if (preset.sitting != null) parts.push(preset.sitting ? "price cut or 30+ days" : "fresh listings");
   if (preset.minScore != null || preset.maxScore != null) {
