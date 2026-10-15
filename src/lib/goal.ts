@@ -23,8 +23,8 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { getFollowUpBoard } from "@/app/follow-up/data";
 
-/** Dollars of booked work a month. Change it here. */
-export const MONTHLY_GOAL = 3000;
+/** Dollars of booked work a month. Change it here. Raised from $3,000 on 2026-10-15, after October passed it mid-month. */
+export const MONTHLY_GOAL = 4000;
 
 /** Lukas's own estimate (2026-10-10): 1 in 50 interested agents. Only used when there are too few people to measure. */
 const ASSUMED_BOOK_RATE = 0.02;
