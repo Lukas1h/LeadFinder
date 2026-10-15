@@ -200,23 +200,29 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
   const sections: Record<LeadSection, LeadGroup[]> = { photo: [], video: [], backup: [], texted: [], unlikely: [] };
   for (const g of groups) if (!g.known) sections[g.section].push(g);
 
-  // Within a section: video puts agents he has never texted first, then the
-  // priciest listing. Backup goes nearest first, then priciest: a backup text
-  // is about being the photographer they think of, and the jobs that come of
-  // it pay about twice as much an hour within 45 minutes of home as they do
-  // two hours out (bookings through Oct 2026), while agents answer at the same
-  // rate wherever they are. Texted goes by who has waited longest since his
-  // last text; photo and unlikely go by the priority score the pipeline uses
-  // (coming soon first, then price-weighted photo opportunity).
+  // Within a section, the three he texts from (photo, video, backup) go by
+  // outreachRank first: listed before coming soon, near before far, a southern
+  // or central Oregon number before a Portland one. From the first cold text
+  // to 331 agents (through Oct 2026): coming-soon agents answered as often but
+  // turned warm half as often (13% vs 29%, the photographer is usually already
+  // booked); agents within 45 minutes answered 43% vs about 30% farther out;
+  // 541/458 agents became interested twice as often as 503/971 (7.6% vs 3.8%).
+  // Photo score, price and brokerage made no difference, so they only break
+  // ties. After that: video puts agents he has never texted first, then the
+  // priciest listing; backup the priciest; photo the pipeline's priority score.
+  // Texted goes by who has waited longest since his last text; unlikely by the
+  // priority score.
   for (const key of LEAD_SECTION_ORDER) {
     sections[key].sort((a, b) =>
       key === "backup"
-        ? driveBand(a.best.city) - driveBand(b.best.city) || (b.best.price ?? 0) - (a.best.price ?? 0)
+        ? outreachRank(a, b) || (b.best.price ?? 0) - (a.best.price ?? 0)
         : key === "video"
-        ? (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) || (b.best.price ?? 0) - (a.best.price ?? 0)
-        : key === "texted"
-          ? (a.textedAt?.getTime() ?? 0) - (b.textedAt?.getTime() ?? 0) || byLeadPriority(a.best, b.best)
-          : byLeadPriority(a.best, b.best)
+        ? (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) || outreachRank(a, b) || (b.best.price ?? 0) - (a.best.price ?? 0)
+        : key === "photo"
+          ? outreachRank(a, b) || byLeadPriority(a.best, b.best)
+          : key === "texted"
+            ? (a.textedAt?.getTime() ?? 0) - (b.textedAt?.getTime() ?? 0) || byLeadPriority(a.best, b.best)
+            : byLeadPriority(a.best, b.best)
     );
   }
   known.sort(
@@ -230,6 +236,23 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
   const unscoredCount = openLeads.filter((l) => isUnscored(l) && l.foundAt.getTime() > recent).length;
 
   return { known, sections, openLeadCount: openLeads.length, queuedCount, agentCount, addressById, unscoredCount };
+}
+
+/** Who to text first: listed before coming soon, then nearer, then a local number (see the sort above). */
+function outreachRank(a: LeadGroup, b: LeadGroup): number {
+  return (
+    Number(a.best.isComingSoon) - Number(b.best.isComingSoon) ||
+    driveBand(a.best.city) - driveBand(b.best.city) ||
+    areaBand(a.agent?.phone ?? a.best.agentPhone) - areaBand(b.agent?.phone ?? b.best.agentPhone)
+  );
+}
+
+/** 541/458 (southern and central Oregon) first, Portland and Vancouver numbers last. */
+function areaBand(phone: string | null | undefined): number {
+  const code = (phone ?? "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "").slice(0, 3);
+  if (code === "541" || code === "458") return 0;
+  if (code === "503" || code === "971" || code === "360") return 2;
+  return 1;
 }
 
 /**
