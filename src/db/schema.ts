@@ -360,15 +360,14 @@ export const bookings = pgTable("bookings", {
   invoiceSentAt: timestamp("invoice_sent_at", { withTimezone: true }),
 
   // Recorded when a booking is marked completed (see CompleteBookingDialog),
-  // so each job's real cost in time and money is on file for later pricing
-  // decisions. All null until then. Hours are decimals; additionalCosts is
-  // whole dollars like line-item amounts, and is subtracted from the
-  // line-item total to get the booking's profit (see bookingProfit).
-  driveHours: real("drive_hours"),
+  // so each job's real time is on file for later pricing decisions. All null
+  // until then; hours are decimals. Drive time and costs aren't here: they
+  // come from the job's trips and expenses (see src/lib/finance), which
+  // replaced a typed-in drive_hours and a lump "additional_costs" on
+  // 2026-10-16.
   editingHours: real("editing_hours"),
   shootingHours: real("shooting_hours"),
   logisticsHours: real("logistics_hours"),
-  additionalCosts: integer("additional_costs"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 
   // Assigned once, the first time "Create invoice" is clicked (see

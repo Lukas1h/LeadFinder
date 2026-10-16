@@ -267,7 +267,7 @@ Every write calls the existing function, which already revalidates the web pages
 | `POST /agents/:id/snooze` | | `dismissFollowUpAgent` |
 | `POST /bookings/:id/shot` | | `markBookingShot`: sets `shotAt`, moving the booking to Editing. `POST /bookings/:id/reopen` clears the latest step (completed, then invoice sent, then shot) |
 | `POST /bookings/:id/invoice-sent` | | `markInvoiceSent` |
-| `POST /bookings/:id/complete` | `{ driveHours, editingHours, shootingHours, logisticsHours, additionalCosts }` (number or null each) | `markBookingCompleted` |
+| `POST /bookings/:id/complete` | `{ editingHours, shootingHours, logisticsHours }` (number or null each). `driveHours` and `additionalCosts` are ignored since 2026-10-16: drive time and costs come from the job's trips and expenses (web Finances page). `bookingJson` still returns both, derived: `driveHours` is the job's share of its trips' drive time, `additionalCosts` its share of their gas plus its expenses (whole dollars), so `total − additionalCosts` is still the profit. The app should drop those two inputs from its completion and edit sheets. | `markBookingCompleted` |
 | `POST /bookings/:id/reopen` | | `reopenBooking` |
 | `POST /reminders` | `ReminderInput` | `createReminder`. Its `{ error }` → 400 |
 | `PUT /reminders/:id` | `ReminderInput` | `updateReminder` |
