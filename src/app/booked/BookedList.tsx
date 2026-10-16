@@ -37,11 +37,13 @@ export interface BookingWithDetails {
   // Set once the invoice has been sent to the client (implies completedAt).
   invoiceSentAt: Date | null;
   // Recorded on completion — see CompleteBookingDialog.
-  driveHours: number | null;
   editingHours: number | null;
   shootingHours: number | null;
   logisticsHours: number | null;
-  additionalCosts: number | null;
+  // This job's share of its trips' drive time, null when no trip is logged.
+  driveHours: number | null;
+  // Its share of the trips' gas and its linked expenses — see src/lib/finance.
+  costs: BookingCosts;
   createdAt: Date;
   contactName: string | null;
   contactPhone: string | null;
@@ -67,6 +69,15 @@ export interface BookingWithDetails {
   paymentLinkUrl: string | null;
   paymentLinkAmount: number | null;
   paidAt: Date | null;
+}
+
+export interface BookingCosts {
+  miles: number;
+  gas: number;
+  expenses: number;
+  mileageDeduction: number;
+  trips: { id: string; date: string; purpose: string; miles: number; driveMinutes: number | null; jobs: number }[];
+  expenseItems: { id: string; date: string; description: string; amount: number; deductiblePercent: number }[];
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

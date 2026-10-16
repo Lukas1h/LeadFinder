@@ -9,6 +9,7 @@ import {
   Wrench,
   ListOrdered,
   HeartHandshake,
+  Wallet,
 } from "lucide-react";
 
 // The desktop sidebar shows every link. Mobile shows MOBILE_TABS instead.
@@ -22,6 +23,7 @@ export const NAV_LINKS = [
   { href: "/queue", label: "Queue", icon: ListOrdered },
   { href: "/booked", label: "Booked", icon: CalendarCheck },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
+  { href: "/finances", label: "Finances", icon: Wallet },
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
@@ -39,7 +41,8 @@ export const MOBILE_TABS: { tab: NavLink; companion: NavLink; also?: NavLink[] }
   // reached from the link at the bottom of Leads (and import notifications),
   // with the same "‹ Leads" back link as a companion page.
   { tab: link("/"), companion: link("/follow-up"), also: [link("/pipeline")] },
-  { tab: link("/booked"), companion: link("/schedule") },
+  // Finances is reached from the link on the Booked page.
+  { tab: link("/booked"), companion: link("/schedule"), also: [link("/finances")] },
   { tab: link("/messaging"), companion: link("/queue") },
   { tab: link("/agents"), companion: link("/settings") },
 ];

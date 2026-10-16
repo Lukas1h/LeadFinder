@@ -18,12 +18,12 @@ export const POST = withErrors(async (req: Request, { params }: { params: Promis
 
   const body = await readJson(req);
 
+  // driveHours and additionalCosts are ignored: drive time and costs come
+  // from the job's trips and expenses now (see src/lib/finance).
   await markBookingCompleted(id, {
-    driveHours: optionalNumber(body.driveHours, "driveHours"),
     editingHours: optionalNumber(body.editingHours, "editingHours"),
     shootingHours: optionalNumber(body.shootingHours, "shootingHours"),
     logisticsHours: optionalNumber(body.logisticsHours, "logisticsHours"),
-    additionalCosts: optionalNumber(body.additionalCosts, "additionalCosts"),
   });
 
   return NextResponse.json({ ok: true });

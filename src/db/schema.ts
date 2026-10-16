@@ -10,6 +10,8 @@ import {
   date,
   boolean,
   jsonb,
+  primaryKey,
+  customType,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
@@ -536,6 +538,12 @@ export const appSettings = pgTable("app_settings", {
   // a hardcoded table of Oregon city coordinates, not real routing.
   homeCity: text("home_city").notNull().default("Winston"),
   homeState: text("home_state").notNull().default("OR"),
+
+  // Finances (see src/lib/finance). The car's average fuel economy, for a
+  // trip's gas cost, and what the other jobs pay a month, which sets the tax
+  // bracket the business's profit lands in.
+  vehicleMpg: real("vehicle_mpg").notNull().default(20),
+  otherWagesMonthly: integer("other_wages_monthly").notNull().default(0),
 });
 
 export type AppSettings = typeof appSettings.$inferSelect;
@@ -893,3 +901,108 @@ export const queuedMessages = pgTable("queued_messages", {
 });
 
 export type QueuedMessage = typeof queuedMessages.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Finances: what the business spends and drives. Revenue stays on bookings
+// (line items); these are the other side of the ledger. The math that joins
+// them lives in src/lib/finance.
+
+// Sent as Postgres hex text ("\\x89504e..."): the neon-http driver posts
+// parameters as JSON, where a raw Buffer wouldn't survive.
+const bytea = customType<{ data: Buffer; driverData: string }>({
+  dataType: () => "bytea",
+  toDriver: (value) => `\\x${value.toString("hex")}`,
+  fromDriver: (value: unknown) =>
+    typeof value === "string"
+      ? Buffer.from(value.startsWith("\\x") ? value.slice(2) : value, "hex")
+      : Buffer.from(value as Uint8Array),
+});
+
+// One drive, not one booking: a day trip to Klamath Falls for two jobs is one
+// trip, and so is a drive to drop flash drives off for an agent, which has no
+// booking at all. Each row is a line of the IRS mileage log: date, where,
+// why, how far.
+export const trips = pgTable("trips", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Wall-clock Pacific date ("2026-10-15"), like reminders.date.
+  date: date("date", { mode: "string" }).notNull(),
+  // The business purpose, as the mileage log reads it.
+  purpose: text("purpose").notNull(),
+  // TRIP_CATEGORIES in src/lib/finance/categories.ts.
+  category: text("category").notNull().default("shoot"),
+  // The stops, one per line, not counting home at either end.
+  stops: text("stops"),
+  miles: real("miles").notNull(),
+  driveMinutes: integer("drive_minutes"),
+  // The miles came from a route estimate rather than the odometer or Lukas.
+  milesEstimated: boolean("miles_estimated").notNull().default(false),
+  agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Trip = typeof trips.$inferSelect;
+export type NewTrip = typeof trips.$inferInsert;
+
+// The jobs a trip was for. A trip's miles, gas and drive time are split
+// across them by revenue (see allocateTrip).
+export const tripBookings = pgTable(
+  "trip_bookings",
+  {
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.tripId, t.bookingId] })]
+);
+
+export const expenses = pgTable("expenses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Wall-clock Pacific date of the charge.
+  date: date("date", { mode: "string" }).notNull(),
+  // Cents: receipts aren't whole dollars the way line items are.
+  amountCents: integer("amount_cents").notNull(),
+  vendor: text("vendor"),
+  description: text("description").notNull(),
+  // EXPENSE_CATEGORIES in src/lib/finance/categories.ts.
+  category: text("category").notNull(),
+  // How much of it is a tax deduction: 100, 50 (a client meal) or 0 (gas and
+  // car washes, which the standard mileage rate already covers; personal
+  // spending; a meal alone on a day trip).
+  deductiblePercent: integer("deductible_percent").notNull().default(100),
+  // Gas only. pricePerGallon prices every trip until the next fill-up.
+  gallons: real("gallons"),
+  pricePerGallon: real("price_per_gallon"),
+  // Paid on a personal card for the business.
+  paidPersonally: boolean("paid_personally").notNull().default(false),
+  // A yearly charge (Upbeat, ZillAPI) is spread over this many months in the
+  // monthly view, starting the month it was paid. Taxes count it when paid.
+  spreadMonths: integer("spread_months").notNull().default(1),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
+  // The paper trail's number, continuing the finances repo's 101, 102, ...
+  receiptNumber: integer("receipt_number").unique(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Expense = typeof expenses.$inferSelect;
+export type NewExpense = typeof expenses.$inferInsert;
+
+// The receipt itself, kept out of the expenses row so listing expenses never
+// drags the bytes along. Photos are shrunk before they get here. In the
+// database rather than a public bucket because receipts show card digits.
+export const receipts = pgTable("receipts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  expenseId: uuid("expense_id")
+    .notNull()
+    .unique()
+    .references(() => expenses.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  data: bytea("data").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

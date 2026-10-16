@@ -70,12 +70,11 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
         ? current.lineItems.map((li) => ({ description: li.description, amount: li.amount }))
         : lineItemList(body.lineItems, "lineItems"),
     dropboxFolderLink: text("dropboxFolderLink", current.dropboxFolderLink),
+    // driveHours and additionalCosts are ignored: they come from trips and expenses now.
     completion: {
-      driveHours: hours("driveHours", current.driveHours),
       editingHours: hours("editingHours", current.editingHours),
       shootingHours: hours("shootingHours", current.shootingHours),
       logisticsHours: hours("logisticsHours", current.logisticsHours),
-      additionalCosts: hours("additionalCosts", current.additionalCosts),
     },
   });
   if (result.error) return badRequest(result.error);

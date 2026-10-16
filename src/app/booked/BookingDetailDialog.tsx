@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Camera, CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, Clock, CalendarPlus, MapPin } from "lucide-react";
+import { Camera, CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, CalendarPlus, MapPin } from "lucide-react";
 import { markBookingShot, markInvoiceSent, reopenBooking } from "./actions";
 import { CompleteBookingDialog } from "./CompleteBookingDialog";
-import { COMPLETION_FIELDS, bookingProfit, profitPerHour } from "./bookingMath";
+import { BookingMoney } from "./BookingMoney";
 import { BookingForm } from "./BookingForm";
 import { GalleryLinkButton, PaymentLinkButton } from "./GallerySection";
 import { GalleryActivity } from "./GalleryActivity";
@@ -65,8 +65,6 @@ export function BookingDetailDialog({
   };
 
   const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
-  const hourlyRate = profitPerHour(booking);
-  const recordedCompletion = COMPLETION_FIELDS.filter(({ key }) => booking[key] != null);
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
   // Apple Maps geocodes the query string, so address + city + state is what it
   // gets — bookings carry no zip or lat/lng. The https form rather than the
@@ -184,35 +182,8 @@ export function BookingDetailDialog({
           </div>
         )}
 
-        {recordedCompletion.length > 0 && (
-          <div className="border-t pt-3">
-            <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1.5">
-              <Clock className="size-3.5" />
-              Time &amp; costs
-            </p>
-            <div className="flex flex-col gap-1">
-              {recordedCompletion.map(({ key, label, unit }) => (
-                <div key={key} className="flex items-center justify-between text-sm gap-3">
-                  <span className="text-foreground/90">{label}</span>
-                  <span className="text-foreground">
-                    {unit === "hours" ? `${booking[key]} h` : formatPrice(booking[key])}
-                  </span>
-                </div>
-              ))}
-              {booking.additionalCosts != null && (
-                <div className="flex items-center justify-between text-sm font-semibold border-t pt-1 mt-1">
-                  <span>Profit</span>
-                  <span>{formatPrice(bookingProfit(booking))}</span>
-                </div>
-              )}
-              {hourlyRate != null && (
-                <div className="flex items-center justify-between text-sm font-semibold">
-                  <span>Est. per hour</span>
-                  <span>{formatPrice(hourlyRate)}/hr</span>
-                </div>
-              )}
-            </div>
-          </div>
+        {(booking.shotAt || booking.invoiceSentAt || booking.completedAt || booking.costs.trips.length > 0 || booking.costs.expenseItems.length > 0) && (
+          <BookingMoney booking={booking} open={open} />
         )}
 
         {booking.lockboxCode && (

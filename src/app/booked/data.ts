@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { bookings, listings, agents, bookingLineItems } from "@/db/schema";
 import { inArray } from "drizzle-orm";
 import { estimateDriveTime } from "@/lib/driveTime";
+import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import type { BookingWithDetails } from "./BookedList";
 
 /**
@@ -21,7 +22,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
   const agentIds = [...new Set(rows.map((b) => b.contactAgentId).filter((id): id is string => id != null))];
   const bookingIds = rows.map((b) => b.id);
 
-  const [linkedListings, contacts, lineItems] = await Promise.all([
+  const [linkedListings, contacts, lineItems, costsFor] = await Promise.all([
     // Full rows, not a curated projection — the "view linked listing"
     // reference card (ListingRow) needs the whole thing: photo, price,
     // status, everything ListingModal shows when it's opened from there.
@@ -44,6 +45,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
           .from(bookingLineItems)
           .where(inArray(bookingLineItems.bookingId, bookingIds))
       : Promise.resolve([]),
+    loadBookingCosts(),
   ]);
 
   const listingById = new Map(linkedListings.map((l) => [l.id, l]));
@@ -59,6 +61,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
     const linkedListing = b.listingId ? listingById.get(b.listingId) : undefined;
     const contact = b.contactAgentId ? contactById.get(b.contactAgentId) : undefined;
     const city = linkedListing?.city ?? b.city;
+    const { costs, driveHours } = costsFor(b.id);
     const state = linkedListing?.state ?? b.state;
     return {
       id: b.id,
@@ -79,11 +82,11 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       completedAt: b.completedAt,
       shotAt: b.shotAt,
       invoiceSentAt: b.invoiceSentAt,
-      driveHours: b.driveHours,
       editingHours: b.editingHours,
       shootingHours: b.shootingHours,
       logisticsHours: b.logisticsHours,
-      additionalCosts: b.additionalCosts,
+      driveHours,
+      costs,
       createdAt: b.createdAt,
       contactName: contact?.name ?? null,
       contactPhone: contact?.phone ?? null,

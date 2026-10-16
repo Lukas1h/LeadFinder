@@ -156,11 +156,14 @@ export function bookingJson(b: BookingWithDetails) {
     // Shot, photos still being edited (the "Editing" section).
     shotAt: b.shotAt,
     invoiceSentAt: b.invoiceSentAt,
+    // Drive time and costs now come from the job's trips and expenses (see
+    // src/lib/finance). Kept under the old names so the app's profit and
+    // per-hour math (total − additionalCosts) stays right without an update.
     driveHours: b.driveHours,
     editingHours: b.editingHours,
     shootingHours: b.shootingHours,
     logisticsHours: b.logisticsHours,
-    additionalCosts: b.additionalCosts,
+    additionalCosts: b.costs.gas + b.costs.expenses > 0 ? Math.round(b.costs.gas + b.costs.expenses) : null,
     createdAt: b.createdAt,
     contactName: b.contactName,
     contactPhone: b.contactPhone,

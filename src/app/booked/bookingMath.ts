@@ -1,11 +1,11 @@
 import type { BookingWithDetails } from "./BookedList";
 
-type ProfitInputs = Pick<BookingWithDetails, "lineItems" | "additionalCosts">;
+type ProfitInputs = Pick<BookingWithDetails, "lineItems" | "costs">;
 
-/** Line-item total minus any additional costs recorded on completion. */
+/** Line-item total minus the job's gas and linked expenses (see src/lib/finance/math.ts). */
 export function bookingProfit(booking: ProfitInputs): number {
   const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
-  return total - (booking.additionalCosts ?? 0);
+  return total - booking.costs.gas - booking.costs.expenses;
 }
 
 /**
@@ -40,12 +40,11 @@ export function sumProfit(bookings: ProfitInputs[]): number {
   return bookings.reduce((sum, b) => sum + bookingProfit(b), 0);
 }
 
+// Drive time isn't here: it comes from the job's trip, with the miles.
 export const COMPLETION_FIELDS = [
-  { key: "driveHours", label: "Drive time", unit: "hours" },
   { key: "shootingHours", label: "Shooting", unit: "hours" },
   { key: "editingHours", label: "Editing", unit: "hours" },
   { key: "logisticsHours", label: "Logistics", unit: "hours" },
-  { key: "additionalCosts", label: "Additional costs", unit: "dollars" },
 ] as const;
 
 export type CompletionKey = (typeof COMPLETION_FIELDS)[number]["key"];
@@ -61,11 +60,9 @@ export function toCompletionDraft(booking?: Pick<BookingWithDetails, CompletionK
 export function fromCompletionDraft(draft: CompletionDraft): Record<CompletionKey, number | null> {
   const parse = (v: string) => (v.trim() && Number.isFinite(Number(v)) ? Number(v) : null);
   return {
-    driveHours: parse(draft.driveHours),
     editingHours: parse(draft.editingHours),
     shootingHours: parse(draft.shootingHours),
     logisticsHours: parse(draft.logisticsHours),
-    additionalCosts: draft.additionalCosts.trim() ? Math.round(Number(draft.additionalCosts)) || 0 : null,
   };
 }
 

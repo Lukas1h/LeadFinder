@@ -243,14 +243,12 @@ export function registerBookingTools(server: McpServer): void {
     {
       title: "Mark a booking completed",
       description:
-        "Sets completedAt to now — the final state, meaning the job is done and paid. Optionally records the job's drive/editing/shooting/logistics hours and additional costs (whole dollars, subtracted from the line-item total as profit).",
+        "Sets completedAt to now — the final state, meaning the job is done and paid. Optionally records the job's editing/shooting/logistics hours. Drive time, miles and costs aren't recorded here: they come from the job's trips and expenses on the Finances page.",
       inputSchema: {
         id: z.string().uuid(),
-        driveHours: z.number().min(0).optional(),
         editingHours: z.number().min(0).optional(),
         shootingHours: z.number().min(0).optional(),
         logisticsHours: z.number().min(0).optional(),
-        additionalCosts: z.number().int().min(0).optional(),
       },
     },
     async ({ id, ...completion }) => {

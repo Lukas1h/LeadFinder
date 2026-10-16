@@ -19,8 +19,9 @@ import {
 import type { BookingWithDetails } from "./BookedList";
 
 /**
- * Asks for the job's time and costs before marking it completed, so every
- * finished booking has that on file. Any field can be left blank.
+ * Asks for the job's hours before marking it completed, so every finished
+ * booking has them on file. Any field can be left blank. The drive and the
+ * job's expenses are logged from the booking's "Time & money" section.
  */
 export function CompleteBookingDialog({
   booking,
@@ -57,7 +58,7 @@ export function CompleteBookingDialog({
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Complete booking</DialogTitle>
-            <DialogDescription>How long did this job take, and what did it cost you? Leave anything you don&rsquo;t know blank.</DialogDescription>
+            <DialogDescription>How long did the work take? Leave anything you don&rsquo;t know blank. The drive and any expenses go under Time &amp; money.</DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <CompletionFields value={draft} onChange={setDraft} />

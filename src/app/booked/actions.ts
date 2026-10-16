@@ -10,6 +10,7 @@ import { normalizePhone, normalizeName } from "@/lib/normalize";
 import { bumpAgentRelationshipOnMilestone, resolveSendOutcome } from "@/app/actions";
 import { attributeBookingToSend } from "@/lib/agentIdentity";
 import { estimateDriveTime } from "@/lib/driveTime";
+import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { createPaymentLink, deactivatePaymentLink, stripeConfigured } from "@/lib/stripe";
 import type { BookingWithDetails } from "./BookedList";
@@ -69,13 +70,14 @@ export interface UpdateBookingInput {
   completion: CompletionInfo;
 }
 
-/** Time and cost info recorded when a booking is completed. Null = not recorded. */
+/**
+ * Hours recorded when a booking is completed. Null = not recorded. Drive time
+ * and the job's costs aren't here: they come from its trips and expenses.
+ */
 export interface CompletionInfo {
-  driveHours: number | null;
   editingHours: number | null;
   shootingHours: number | null;
   logisticsHours: number | null;
-  additionalCosts: number | null;
 }
 
 /**
@@ -228,7 +230,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
   if (!booking) return null;
 
-  const [linkedListing, contact, lineItems] = await Promise.all([
+  const [linkedListing, contact, lineItems, costsFor] = await Promise.all([
     booking.listingId
       ? db.select().from(listings).where(eq(listings.id, booking.listingId)).then((r) => r[0] ?? null)
       : Promise.resolve(null),
@@ -243,9 +245,11 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
       .select({ description: bookingLineItems.description, amount: bookingLineItems.amount })
       .from(bookingLineItems)
       .where(eq(bookingLineItems.bookingId, bookingId)),
+    loadBookingCosts(),
   ]);
 
   const city = linkedListing?.city ?? booking.city;
+  const { costs, driveHours } = costsFor(booking.id);
   const state = linkedListing?.state ?? booking.state;
 
   return {
@@ -264,11 +268,11 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     completedAt: booking.completedAt,
     shotAt: booking.shotAt,
     invoiceSentAt: booking.invoiceSentAt,
-    driveHours: booking.driveHours,
     editingHours: booking.editingHours,
     shootingHours: booking.shootingHours,
     logisticsHours: booking.logisticsHours,
-    additionalCosts: booking.additionalCosts,
+    driveHours,
+    costs,
     createdAt: booking.createdAt,
     contactName: contact?.name ?? null,
     contactPhone: contact?.phone ?? null,
@@ -303,7 +307,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
   const listingIds = [...new Set(rows.map((b) => b.listingId).filter((id): id is string => id != null))];
   const bookingIds = rows.map((b) => b.id);
 
-  const [linkedListings, lineItems, [agent]] = await Promise.all([
+  const [linkedListings, lineItems, [agent], costsFor] = await Promise.all([
     listingIds.length > 0
       ? db.select().from(listings).where(inArray(listings.id, listingIds))
       : Promise.resolve([]),
@@ -319,6 +323,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       .select({ name: agents.name, phone: agents.phone, lastContactedAt: agents.lastContactedAt })
       .from(agents)
       .where(eq(agents.id, agentId)),
+    loadBookingCosts(),
   ]);
 
   const listingById = new Map(linkedListings.map((l) => [l.id, l]));
@@ -349,11 +354,10 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       completedAt: b.completedAt,
       shotAt: b.shotAt,
       invoiceSentAt: b.invoiceSentAt,
-      driveHours: b.driveHours,
       editingHours: b.editingHours,
       shootingHours: b.shootingHours,
       logisticsHours: b.logisticsHours,
-      additionalCosts: b.additionalCosts,
+      ...costsFor(b.id),
       createdAt: b.createdAt,
       contactName: agent?.name ?? null,
       contactPhone: agent?.phone ?? null,
