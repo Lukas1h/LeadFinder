@@ -4,9 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Stat, Sub } from "../Stat";
 import { FinanceSkeleton } from "./loading";
 import { loadLedger } from "@/lib/finance/ledger";
-import { monthOf, monthlySummary, pacificDate, yearTaxView, type MonthSummary } from "@/lib/finance/math";
-import { businessTax } from "@/lib/finance/tax";
-import { expenseCategory } from "@/lib/finance/categories";
+import { pacificDate } from "@/lib/finance/math";
+import { overviewReport } from "@/lib/finance/reports";
 import { formatDollars, monthLabel } from "@/lib/finance/format";
 
 export default function FinancesOverviewPage() {
@@ -20,23 +19,13 @@ export default function FinancesOverviewPage() {
 async function Overview() {
   await connection();
   const ledger = await loadLedger();
-  const today = pacificDate(new Date());
-  const thisMonth = monthOf(today);
-  const year = Number(today.slice(0, 4));
-
-  const months = monthlySummary(ledger, thisMonth);
-  const yearMonths = months.filter((m) => m.month.startsWith(`${year}-`));
-  const current = months.find((m) => m.month === thisMonth);
-  const ytd = sumMonths(yearMonths);
-  const tax = yearTaxView(ledger, year);
-  const taxOwed = businessTax(year, ledger.settings.otherWagesMonthly * 12, tax.taxableProfit).total;
-
-  // Where the year's money went: business gas plus every other category.
-  const categories = new Map<string, number>([["gas", ytd.gas]]);
-  for (const m of yearMonths)
-    for (const [c, v] of Object.entries(m.costsByCategory)) categories.set(c, (categories.get(c) ?? 0) + v);
-  const spend = [...categories.entries()].filter(([, v]) => v > 0.5).sort((a, b) => b[1] - a[1]);
-  const biggest = spend[0]?.[1] ?? 1;
+  const r = overviewReport(ledger, pacificDate(new Date()));
+  const { year, months, spend } = r;
+  const thisMonth = r.month;
+  const current = r.thisMonth;
+  const ytd = r.yearToDate;
+  const taxOwed = r.yearTaxOwed;
+  const biggest = spend[0]?.amount ?? 1;
 
   return (
     <div className="flex flex-col gap-6">
@@ -45,17 +34,17 @@ async function Overview() {
           <p className="text-sm font-medium text-foreground">{monthLabel(thisMonth, false)} so far</p>
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Revenue">
-              {formatDollars(current?.revenue ?? 0)}
-              <Sub>{current?.jobs ?? 0} jobs</Sub>
+              {formatDollars(current.revenue)}
+              <Sub>{current.jobs} jobs</Sub>
             </Stat>
             <Stat label="Costs">
-              {formatDollars(current?.costs ?? 0)}
-              <Sub>{formatDollars(current?.gas ?? 0)} of it gas</Sub>
+              {formatDollars(current.costs)}
+              <Sub>{formatDollars(current.gas)} of it gas</Sub>
             </Stat>
-            <Stat label="Real profit">{formatDollars(current?.profit ?? 0)}</Stat>
+            <Stat label="Real profit">{formatDollars(current.profit)}</Stat>
             <Stat label="Per hour">
-              {current?.perHour != null ? `${formatDollars(current.perHour)}/hr` : "—"}
-              <Sub>{Math.round(current?.hours ?? 0)} h worked</Sub>
+              {current.perHour != null ? `${formatDollars(current.perHour)}/hr` : "—"}
+              <Sub>{Math.round(current.hours)} h worked</Sub>
             </Stat>
           </div>
         </Card>
@@ -91,7 +80,7 @@ async function Overview() {
             </tr>
           </thead>
           <tbody>
-            {[...months].reverse().map((m) => (
+            {months.map((m) => (
               <tr key={m.month} className="border-b last:border-0">
                 <td className="px-4 py-2 whitespace-nowrap">{monthLabel(m.month)}</td>
                 <td className="text-right px-2 py-2">{formatDollars(m.revenue)}</td>
@@ -120,11 +109,9 @@ async function Overview() {
         <Card className="p-4 gap-3">
           <p className="text-sm font-medium text-foreground">Where the money went in {year}</p>
           <div className="flex flex-col gap-2">
-            {spend.map(([category, amount]) => (
+            {spend.map(({ category, label, amount }) => (
               <div key={category} className="flex items-center gap-3 text-sm">
-                <span className="w-40 shrink-0 truncate text-foreground/90">
-                  {category === "gas" ? "Gas (business miles)" : expenseCategory(category).label}
-                </span>
+                <span className="w-40 shrink-0 truncate text-foreground/90">{label}</span>
                 <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                   <div className="h-full rounded-full bg-foreground/70" style={{ width: `${(amount / biggest) * 100}%` }} />
                 </div>
@@ -136,13 +123,4 @@ async function Overview() {
       )}
     </div>
   );
-}
-
-function sumMonths(months: MonthSummary[]) {
-  const revenue = months.reduce((s, m) => s + m.revenue, 0);
-  const costs = months.reduce((s, m) => s + m.costs, 0);
-  const gas = months.reduce((s, m) => s + m.gas, 0);
-  const hours = months.reduce((s, m) => s + m.hours, 0);
-  const profit = revenue - costs;
-  return { revenue, costs, gas, hours, profit, perHour: hours > 0 ? profit / hours : null };
 }

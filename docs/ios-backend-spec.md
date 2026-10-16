@@ -385,6 +385,40 @@ Nobody is on the page within 10 days of the last contact either way (clients exc
 
 ---
 
+#### Finances (added 2026-10-16)
+
+Mirrors the web's Finances pages (`src/app/finances`). Every number comes from `src/lib/finance/reports.ts`, the same functions the web pages render, so the app shows exactly what the web shows. Don't recompute any of it on the phone. Routes are in `src/app/api/app/v1/finances/`. Money is in dollars (floats; round for display). Dates are `"YYYY-MM-DD"` Pacific wall-clock strings, months `"YYYY-MM"`.
+
+How the numbers work (show these short explanations in the UI where the web does):
+- **Real profit** = revenue − gas − business expenses. A trip's gas is its miles ÷ MPG × the price per gallon on the latest gas receipt before it, not the gas receipts themselves (fill-ups also pay for personal driving).
+- A trip's miles, gas and drive time split across its linked jobs by revenue. Expenses linked to a trip split the same way.
+- **The tax view** = revenue − deductible expenses − the mileage deduction (the IRS rate for the trip's date: 72.5¢ through June 2026, 76¢ from July).
+- **Hours** = the booking's shooting + editing + logistics hours plus its share of the drive.
+
+| Method + path | Returns / body | Notes |
+|---|---|---|
+| `GET /finances` | `OverviewReport`: `{ month, year, thisMonth, yearToDate, yearTaxOwed, months, spend, mpg }`. `thisMonth`/`yearToDate` are `{ revenue, jobs, costs, gas, profit, hours, perHour, miles }`. `months` is newest first: `{ month, revenue, jobs, miles, gas, gasBought, costsByCategory, costs, profit, hours, perHour, mileageDeduction, deductibleExpenses }`. `spend` is this year's costs by category, biggest first: `{ category, label, amount }` | The Overview tab, and the source for the Home dashboard's money numbers |
+| `GET /finances/jobs` | `{ jobs, multiJobDays }`. `jobs` (shot jobs, newest first): `{ bookingId, label, city, date, revenue, gas, expenses, profit, profitAfterCarWear, hours, perHour, miles, driveHours, mileageDeduction, tripIds }`. `multiJobDays`: `{ tripId, date, purpose, jobs: [{ bookingId, label }], miles, revenue, gas, expenses, hours, profit, perHour }` | `profitAfterCarWear` charges the IRS rate per mile instead of just gas |
+| `GET /finances/trips` | `MileageReport`: `{ year, mpg, yearMiles, yearTrips, yearDeduction, yearGas, trips }`. Each trip: `{ id, date, purpose, category, stops, miles, driveMinutes, milesEstimated, notes, bookingIds, jobLabels, gallons, pricePerGallon, gas, rate, deduction }`. `stops` is one stop per line, home excluded | The Mileage tab |
+| `POST /finances/trips` | `{ date, purpose, category, miles, stops?, driveMinutes?, milesEstimated?, notes?, bookingIds? }` → `{ ok, id }` | `category` is a value from `tripCategories`. Validation errors are 400 `{ error }` with a readable message |
+| `PATCH /finances/trips/:id` | any of the POST fields → `{ ok, id }` | Fields not sent stay. `bookingIds`, when sent, replaces the links. Sending `miles` without `milesEstimated` clears the estimated flag |
+| `DELETE /finances/trips/:id` | `{ ok }` | |
+| `POST /finances/trips/:id/bookings` | `{ bookingId }` → `{ ok }` | Adds a job to a trip already logged (the second job of a two-job day). The web's booking detail offers "Same drive as …? Add to it" for trips on the job's date |
+| `POST /finances/trips/estimate` | `{ stops: string[] }` → `{ miles, driveMinutes, approximate: string[] }` | Round trip from home through the stops. Takes a few seconds, so show a spinner. `approximate` lists stops routed to their town; mention them. Saves nothing |
+| `GET /finances/expenses` | `{ expenses }`, newest first. Each: `{ id, date, amount, vendor, description, category, deductiblePercent, deductibleAmount, gallons, pricePerGallon, paidPersonally, spreadMonths, bookingId, tripId, receiptNumber, notes, hasReceipt, receiptPath, createdAt }` | `spreadMonths: 12` is a yearly charge ("Yearly" in the UI) |
+| `GET /finances/expenses/:id` | `{ expense }` | |
+| `POST /finances/expenses` | `{ date, amount, description, category, vendor?, deductiblePercent?, gallons?, pricePerGallon?, paidPersonally?, spreadMonths?, bookingId?, tripId?, notes? }` → `{ ok, expense }` | When the category changes, set `deductiblePercent` to that category's `deductible` from `expenseCategories` (the user can override it: 100, 50 or 0). Gallons and price per gallon only matter for `gas` |
+| `PATCH /finances/expenses/:id` | any of the POST fields → `{ ok, expense }` | Fields not sent stay |
+| `DELETE /finances/expenses/:id` | `{ ok }` | Deletes its receipt too |
+| `PUT /finances/expenses/:id/receipt` | Raw file body, `Content-Type: image/jpeg` or `application/pdf`, optional `?name=` → `{ ok, receiptNumber }` | Shrink photos to about 1800px on the long side, JPEG ~0.8, first: Vercel rejects bodies over 4.5 MB. The first receipt gives the expense the next receipt number |
+| `GET /finances/expenses/:id/receipt` | the file | Bearer auth like every route, so load it with the API client, not a plain URL |
+| `POST /finances/receipts/read` | Raw file body (same as above) → `{ date, amount, vendor, description, category, gallons, pricePerGallon }`, any null | Gemini reads the receipt. Use it for the "photo a receipt" flow: shrink, read, prefill the form, let him check it, POST the expense, then PUT the same file as its receipt. Saves nothing on its own |
+| `GET /finances/taxes?year=` | `TaxReport`: `{ year, revenue, deductibleExpenses, mileageDeduction, miles, taxableProfit, otherWagesYearly, tax: { selfEmployment, federal, oregon, total }, effectiveRate, deductions, saved, savedByMileage, marginalRate, settings: { mpg, otherWagesMonthly } }` | Label it an estimate, as the web does. `marginalRate` is the tax on the next dollar of profit |
+| `GET /finances/settings` · `PATCH /finances/settings` | `{ mpg, otherWagesMonthly }` (PATCH takes either or both) | |
+| `GET /finances/link-options` | `{ bookings: [{ id, label, date }], trips: [{ id, date, purpose, miles, bookingIds }], expenseCategories: [{ value, label, deductible, hint }], tripCategories: [{ value, label }] }` | The pickers in the expense and trip forms. Use these lists, don't hard-code categories |
+
+`bookingJson` also carries `costs: { miles, gas, expenses, mileageDeduction, trips: [{ id, date, purpose, miles, driveMinutes, jobs }], expenseItems: [{ id, date, description, amount, deductiblePercent }] }` for the booking's "Time & money" section. The web shows it once a job is shot, or whenever it has a trip or an expense: hours, driving, each trip ("Oct 15 · 335 mi, split with 1 other job"), gas, each expense, then profit, per hour and the mileage deduction, with "Log the trip" (prefilled: the job's date, "Shoot for <contact>, <address>", the address as the stop, linked to the job) and "Add an expense" (prefilled with the job's date and linked to it).
+
 ## Acceptance (run locally, report the output)
 
 Use `npm run dev` on port 3000. Load the token with `export T=$(grep ^MOBILE_API_SECRET= .env.local | cut -d= -f2- | tr -d '"')`.

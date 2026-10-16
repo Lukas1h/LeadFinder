@@ -2,9 +2,9 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { FinanceSkeleton } from "../loading";
 import { loadLedger } from "@/lib/finance/ledger";
-import { pacificDate, tripCost } from "@/lib/finance/math";
-import { mileageRate } from "@/lib/finance/tax";
-import { TripList, type TripRow } from "./TripList";
+import { pacificDate } from "@/lib/finance/math";
+import { mileageReport } from "@/lib/finance/reports";
+import { TripList } from "./TripList";
 
 export default function FinanceMileagePage() {
   return (
@@ -16,23 +16,7 @@ export default function FinanceMileagePage() {
 
 async function Mileage() {
   await connection();
-  const ledger = await loadLedger();
-  const labelById = new Map(ledger.bookings.map((b) => [b.id, b.label]));
-  const year = pacificDate(new Date()).slice(0, 4);
+  const report = mileageReport(await loadLedger(), pacificDate(new Date()));
 
-  const trips: TripRow[] = ledger.trips
-    .map((t) => {
-      const cost = tripCost(t, ledger);
-      return {
-        ...t,
-        gas: cost.gas,
-        pricePerGallon: cost.pricePerGallon,
-        rate: mileageRate(t.date),
-        deduction: cost.mileageDeduction,
-        jobLabels: t.bookingIds.map((id) => labelById.get(id) ?? "Booking"),
-      };
-    })
-    .sort((a, b) => b.date.localeCompare(a.date));
-
-  return <TripList trips={trips} year={year} mpg={ledger.mpg} />;
+  return <TripList report={report} />;
 }

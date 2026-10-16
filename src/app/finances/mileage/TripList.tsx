@@ -8,33 +8,16 @@ import { Stat, Sub } from "../../Stat";
 import { TripDialog, blankTrip, tripToDraft, type TripDraft } from "../TripDialog";
 import { tripCategoryLabel } from "@/lib/finance/categories";
 import { dayLabel, formatDollars, formatMoney, monthLabel } from "@/lib/finance/format";
-
-export interface TripRow {
-  id: string;
-  date: string;
-  purpose: string;
-  category: string;
-  stops: string | null;
-  miles: number;
-  driveMinutes: number | null;
-  milesEstimated: boolean;
-  notes: string | null;
-  bookingIds: string[];
-  gas: number;
-  pricePerGallon: number;
-  rate: number;
-  deduction: number;
-  jobLabels: string[];
-}
+import type { MileageReport, TripReportRow } from "@/lib/finance/reports";
 
 /** The mileage log, by month. Tap a trip to edit it. */
-export function TripList({ trips, year, mpg }: { trips: TripRow[]; year: string; mpg: number }) {
+export function TripList({ report }: { report: MileageReport }) {
+  const { trips, year, mpg } = report;
   const [draft, setDraft] = useState<TripDraft>(() => blankTrip());
   const [open, setOpen] = useState(false);
 
-  const thisYear = trips.filter((t) => t.date.startsWith(`${year}-`));
   const months = useMemo(() => {
-    const byMonth = new Map<string, TripRow[]>();
+    const byMonth = new Map<string, TripReportRow[]>();
     for (const t of trips) byMonth.set(t.date.slice(0, 7), [...(byMonth.get(t.date.slice(0, 7)) ?? []), t]);
     return [...byMonth.entries()];
   }, [trips]);
@@ -56,12 +39,12 @@ export function TripList({ trips, year, mpg }: { trips: TripRow[]; year: string;
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Stat label="Business miles">
-            {Math.round(thisYear.reduce((s, t) => s + t.miles, 0)).toLocaleString()}
-            <Sub>{thisYear.length} trips</Sub>
+            {Math.round(report.yearMiles).toLocaleString()}
+            <Sub>{report.yearTrips} trips</Sub>
           </Stat>
-          <Stat label="Mileage deduction">{formatDollars(thisYear.reduce((s, t) => s + t.deduction, 0))}</Stat>
+          <Stat label="Mileage deduction">{formatDollars(report.yearDeduction)}</Stat>
           <Stat label="Gas it burned">
-            {formatDollars(thisYear.reduce((s, t) => s + t.gas, 0))}
+            {formatDollars(report.yearGas)}
             <Sub>at {mpg} mpg</Sub>
           </Stat>
         </div>

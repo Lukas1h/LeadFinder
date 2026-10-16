@@ -164,6 +164,9 @@ export function bookingJson(b: BookingWithDetails) {
     shootingHours: b.shootingHours,
     logisticsHours: b.logisticsHours,
     additionalCosts: b.costs.gas + b.costs.expenses > 0 ? Math.round(b.costs.gas + b.costs.expenses) : null,
+    // The full breakdown behind those two, for the booking's "Time & money"
+    // section: miles, gas, mileageDeduction, its trips and its expenses.
+    costs: b.costs,
     createdAt: b.createdAt,
     contactName: b.contactName,
     contactPhone: b.contactPhone,

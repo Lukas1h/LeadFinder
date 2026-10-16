@@ -7,8 +7,8 @@ import { Stat, Sub } from "../../Stat";
 import { FinanceSkeleton } from "../loading";
 import { FinanceSettingsForm } from "./FinanceSettingsForm";
 import { loadLedger } from "@/lib/finance/ledger";
-import { pacificDate, yearTaxView } from "@/lib/finance/math";
-import { businessTax, marginalRate, taxSaved } from "@/lib/finance/tax";
+import { pacificDate } from "@/lib/finance/math";
+import { taxReport } from "@/lib/finance/reports";
 import { formatDollars } from "@/lib/finance/format";
 
 export default function FinanceTaxesPage() {
@@ -23,16 +23,12 @@ const pct = (n: number) => `${Math.round(n * 1000) / 10}%`;
 
 async function Taxes() {
   await connection();
-  const ledger = await loadLedger();
   const year = Number(pacificDate(new Date()).slice(0, 4));
-  const wages = ledger.settings.otherWagesMonthly * 12;
-
-  const view = yearTaxView(ledger, year);
-  const tax = businessTax(year, wages, view.taxableProfit);
-  const deductions = view.deductibleExpenses + view.mileageDeduction;
-  const saved = taxSaved(year, wages, view.taxableProfit, deductions);
-  const savedByMileage = taxSaved(year, wages, view.taxableProfit, view.mileageDeduction);
-  const rate = marginalRate(year, wages, view.taxableProfit);
+  const r = taxReport(await loadLedger(), year);
+  const view = r;
+  const { tax, saved, savedByMileage } = r;
+  const rate = r.marginalRate;
+  const wages = r.otherWagesYearly;
 
   return (
     <div className="flex flex-col gap-6">
@@ -57,7 +53,7 @@ async function Taxes() {
           <Stat label="Oregon">{formatDollars(tax.oregon)}</Stat>
           <Stat label="Total to set aside">
             {formatDollars(tax.total)}
-            <Sub>{view.taxableProfit > 0 ? `${pct(tax.total / view.taxableProfit)} of profit` : ""}</Sub>
+            <Sub>{r.effectiveRate != null ? `${pct(r.effectiveRate)} of profit` : ""}</Sub>
           </Stat>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 border-t pt-3">
@@ -106,7 +102,7 @@ async function Taxes() {
         </div>
       </Card>
 
-      <FinanceSettingsForm mpg={ledger.settings.mpg} otherWagesMonthly={ledger.settings.otherWagesMonthly} />
+      <FinanceSettingsForm mpg={r.settings.mpg} otherWagesMonthly={r.settings.otherWagesMonthly} />
     </div>
   );
 }
