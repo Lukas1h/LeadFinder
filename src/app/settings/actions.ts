@@ -105,6 +105,8 @@ export interface EmailAccountInput {
   provider: string;
   label: string;
   email: string;
+  /** Display name for the From header, e.g. "Lukas Hahn". */
+  fromName: string;
   /** An app password. Empty on edit means "keep the stored one". */
   password: string;
   smtpHost: string;
@@ -142,6 +144,10 @@ function accountValues(input: EmailAccountInput) {
   return {
     label: input.label.trim(),
     email,
+    // Blank means "bare address", which is a legitimate choice — some people
+    // deliberately send without a display name — so this is stored as null
+    // rather than rejected.
+    fromName: input.fromName.trim() || null,
     smtpHost: input.smtpHost.trim(),
     smtpPort: input.smtpPort,
     smtpSecure: input.smtpSecure,

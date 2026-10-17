@@ -590,6 +590,11 @@ export const emailAccounts = pgTable("email_accounts", {
   // account (Apple rejects it outright; Gmail rejects unverified aliases), so
   // this is the login and the visible sender.
   email: text("email").notNull(),
+  // The person's name to put in front of the address in the From header —
+  // "Lukas Hahn <lukas@lukashahn.media>". Without it a recipient's mail app
+  // shows the bare address, which reads as no-reply to an agent deciding
+  // whether to engage. Null = bare address.
+  fromName: text("from_name"),
   smtpHost: text("smtp_host").notNull(),
   smtpPort: integer("smtp_port").notNull().default(587),
   // Implicit TLS on the connection (port 465) rather than STARTTLS (587).

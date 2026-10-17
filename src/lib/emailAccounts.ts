@@ -27,6 +27,8 @@ export interface Mailbox {
   key: string;
   label: string;
   email: string;
+  /** Display name for the From header, or null for the bare address. */
+  fromName: string | null;
   smtpHost: string;
   smtpPort: number;
   smtpSecure: boolean;
@@ -43,6 +45,7 @@ function toMailbox(row: typeof emailAccounts.$inferSelect, password: string): Ma
     key: row.id,
     label: row.label,
     email: row.email,
+    fromName: row.fromName,
     smtpHost: row.smtpHost,
     smtpPort: row.smtpPort,
     smtpSecure: row.smtpSecure,
@@ -94,6 +97,10 @@ export async function getSendingMailbox(): Promise<Mailbox> {
       key: "env-icloud",
       label: "iCloud (from environment)",
       email: user,
+      // No name column exists for the env fallback, so derive the obvious one
+      // from the local part of the address rather than showing a bare address
+      // if this fallback is ever the sender again.
+      fromName: user.slice(0, user.indexOf("@")),
       smtpHost: "smtp.mail.me.com",
       smtpPort: 587,
       smtpSecure: false,

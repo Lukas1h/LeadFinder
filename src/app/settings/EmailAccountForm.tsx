@@ -46,6 +46,7 @@ export function EmailAccountForm({
   const [provider, setProvider] = useState<MailProviderId>(account ? "custom" : DEFAULT_PROVIDER.id);
   const [label, setLabel] = useState(account?.label ?? "");
   const [email, setEmail] = useState(account?.email ?? "");
+  const [fromName, setFromName] = useState(account?.fromName ?? "");
   const [password, setPassword] = useState("");
   const [smtpHost, setSmtpHost] = useState(account?.smtpHost ?? DEFAULT_PROVIDER.smtpHost);
   const [smtpPort, setSmtpPort] = useState(String(account?.smtpPort ?? DEFAULT_PROVIDER.smtpPort));
@@ -100,6 +101,7 @@ export function EmailAccountForm({
       provider,
       label: label.trim(),
       email: email.trim(),
+      fromName: fromName.trim(),
       password: password.trim(),
       smtpHost: smtpHost.trim(),
       smtpPort: smtpPortNumber,
@@ -180,6 +182,20 @@ export function EmailAccountForm({
                 placeholder="you@gmail.com"
                 required
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="email-account-from-name">Sender name</Label>
+              <Input
+                id="email-account-from-name"
+                value={fromName}
+                onChange={(e) => setFromName(e.target.value)}
+                placeholder="e.g. Lukas Hahn"
+              />
+              <p className="text-xs text-muted-foreground">
+                Shows as the sender instead of the bare address &mdash; recipients see &ldquo;Lukas
+                Hahn &lt;your address&gt;&rdquo;. Optional.
+              </p>
             </div>
 
             <div className="flex flex-col gap-1.5">

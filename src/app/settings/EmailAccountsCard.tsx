@@ -95,7 +95,9 @@ function EmailAccountRow({ account }: { account: EmailAccount }) {
           <h3 className="font-semibold text-foreground">{account.label}</h3>
           {account.isDefault && <Badge variant="secondary">Active</Badge>}
         </div>
-        <p className="text-xs text-muted-foreground font-mono mt-1">{account.email}</p>
+        <p className="text-xs text-muted-foreground font-mono mt-1">
+          {account.fromName ? `${account.fromName} <${account.email}>` : account.email}
+        </p>
         <p className="text-xs text-muted-foreground mt-1">{testSummary(account)}</p>
       </div>
 
