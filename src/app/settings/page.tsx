@@ -5,11 +5,13 @@ import { searchSources } from "@/db/schema";
 import { desc } from "drizzle-orm";
 import { fetchAccountUsage } from "@/lib/zillapi";
 import { getFollowUpAfterDays } from "@/lib/settings";
+import { listMailboxes } from "@/lib/emailAccounts";
 import { authGateEnabled } from "@/lib/adminSession";
 import { signOut } from "@/app/login/actions";
 import { SourceCard } from "./SourceCard";
 import { SourceForm } from "./SourceForm";
 import { EmailSourceCard } from "./EmailSourceCard";
+import { EmailAccountsCard } from "./EmailAccountsCard";
 import { NotificationsCard } from "./NotificationsCard";
 import { PipelineSettingsCard } from "./PipelineSettingsCard";
 import { ImportShortcutCard } from "./ImportShortcutCard";
@@ -30,12 +32,17 @@ async function SettingsContent() {
   // Deliberately NOT "use cache" — see the comment in src/app/pipeline/page.tsx.
 
   const inboxAddress = process.env.AGENTMAIL_INBOX_ADDRESS ?? null;
+  // Only shown in the accounts card so the fallback is visible when every
+  // account has been deleted — otherwise the env vars would silently take over
+  // and Lukas would have no idea which address outreach was leaving from.
+  const envSenderEmail = process.env.ICLOUD_EMAIL ?? null;
   // Independent of each other, so run them concurrently instead of paying
   // for a DB round trip followed by a separate Zillapi round trip.
-  const [sources, usage, followUpAfterDays] = await Promise.all([
+  const [sources, usage, followUpAfterDays, mailboxes] = await Promise.all([
     db.select().from(searchSources).orderBy(desc(searchSources.createdAt)),
     fetchAccountUsage(),
     getFollowUpAfterDays(),
+    listMailboxes(),
   ]);
 
   const totalCount = sources.length + (inboxAddress ? 1 : 0);
@@ -61,6 +68,8 @@ async function SettingsContent() {
       </header>
 
       <NotificationsCard />
+
+      <EmailAccountsCard accounts={mailboxes} envFallbackEmail={envSenderEmail} />
 
       <PipelineSettingsCard followUpAfterDays={followUpAfterDays} />
 

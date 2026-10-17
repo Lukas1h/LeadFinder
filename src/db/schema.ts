@@ -573,6 +573,49 @@ export const appSettings = pgTable("app_settings", {
 
 export type AppSettings = typeof appSettings.$inferSelect;
 
+// Sending accounts for outbound email. The app sends from exactly one of these
+// at a time (isDefault), but old ones stay configured rather than being
+// deleted: switching is a single click, and a provider that starts getting our
+// cold email flagged isn't a fire drill. Add Gmail, flip the switch, and iCloud
+// is still there for the days a separate domain is the better sender.
+//
+// Until the first row exists, lib/emailAccounts.ts falls back to the old
+// ICLOUD_EMAIL/ICLOUD_APP_PASSWORD env vars, so this table can be empty in an
+// environment that still sends fine.
+export const emailAccounts = pgTable("email_accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // What the settings list shows — "Gmail", "iCloud", not the bare address.
+  label: text("label").notNull(),
+  // The From address. Both providers require From == the authenticated
+  // account (Apple rejects it outright; Gmail rejects unverified aliases), so
+  // this is the login and the visible sender.
+  email: text("email").notNull(),
+  smtpHost: text("smtp_host").notNull(),
+  smtpPort: integer("smtp_port").notNull().default(587),
+  // Implicit TLS on the connection (port 465) rather than STARTTLS (587).
+  smtpSecure: boolean("smtp_secure").notNull().default(false),
+  // AES-256-GCM ciphertext, never plaintext — the app password is a live
+  // credential for a real mailbox. See src/lib/secretBox.ts.
+  passwordEnc: text("password_enc").notNull(),
+  // Optional. SMTP only transmits, it never touches the mailbox, so without an
+  // IMAP append a message sent from here never appears in the provider's own
+  // Sent folder. Null = skip the Sent copy (mail still sends).
+  imapHost: text("imap_host"),
+  imapPort: integer("imap_port"),
+  // Overridable only because a few providers authenticate IMAP as a different
+  // address than SMTP; null means "same as email".
+  imapUser: text("imap_user"),
+  isDefault: boolean("is_default").notNull().default(false),
+  // Last result of the settings page's "Send test" — a wrong app password is
+  // only discoverable by trying it, and the failure text is the whole answer.
+  lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
+  lastTestError: text("last_test_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type EmailAccount = typeof emailAccounts.$inferSelect;
+export type NewEmailAccount = typeof emailAccounts.$inferInsert;
+
 // Which send-moment a preset applies to — mirrors the initial-outreach vs.
 // follow-up split that already exists in the LeadActions/PipelineActions UI.
 export const PRESET_TYPES = ["initial_outreach", "follow_up"] as const;

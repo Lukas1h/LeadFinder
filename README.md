@@ -277,6 +277,38 @@ each source is its own Zillapi call charged the same per-listing-returned
 way as before, so two sources roughly doubles daily spend — same math as
 widening one bbox, just spread across areas instead.
 
+## Sending email accounts
+
+Every outbound email goes through one mailbox, and which mailbox is a setting
+rather than a constant: `/settings` → **Sending email** manages the
+`email_accounts` table, and [`src/lib/emailAccounts.ts`](src/lib/emailAccounts.ts)
+resolves the active row on every send. Switching senders is a one-click update
+and needs no redeploy — it was needed because iCloud's SMTP started getting
+cold outreach flagged, and the fix was being able to send from a different
+domain without a deploy.
+
+- `src/lib/mailer.ts` builds one transporter per account (cached by id) and
+  resolves the sender per send, so nothing downstream — MCP tools, the Compose
+  page, the bulk cold-outreach route — has to know which account is active.
+- App passwords are stored as AES-256-GCM ciphertext
+  ([`src/lib/secretBox.ts`](src/lib/secretBox.ts)), keyed on `MAILBOX_SECRET`.
+  That value must be identical everywhere that touches this database, or an
+  account saved locally is undecryptable in production. Rotating it
+  invalidates every stored password.
+- `ICLOUD_EMAIL` / `ICLOUD_APP_PASSWORD` are still honoured as a fallback when
+  the table has no rows, so an environment that never opens Settings still
+  sends exactly as it did before.
+- **Test** on each row runs nodemailer's `verify()` — it authenticates and
+  sends nothing — and stores the result in `lastTestedAt`/`lastTestError`, so
+  a wrong app password surfaces in Settings instead of on the next real email
+  to an agent. A missing Sent-folder copy (the IMAP append) is not fatal; the
+  mail still sends.
+- Provider presets (Gmail/iCloud/Outlook servers, ports, and the app-password
+  requirement for each) live in [`src/lib/mailProviders.ts`](src/lib/mailProviders.ts),
+  deliberately client-safe and separate from `emailAccounts.ts` so the settings
+  form can import them without pulling the DB and nodemailer into the browser
+  bundle.
+
 ## Two pages
 
 - **`/` — Leads.** Only `status = "new"` listings, one per card (photo
