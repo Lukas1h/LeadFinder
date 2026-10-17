@@ -19,7 +19,7 @@ struct BookingAirspaceNote: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            line(check?.summary ?? notCheckedText)
+            summaryLine(check?.summary ?? notCheckedText)
 
             if let check, check.status == "controlled" {
                 if !figures(check).isEmpty {
@@ -43,8 +43,6 @@ struct BookingAirspaceNote: View {
                     .foregroundStyle(Theme.danger)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            checkAgain
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -52,14 +50,17 @@ struct BookingAirspaceNote: View {
     // MARK: - Pieces
 
     /// The same shape as the job date and drive time above it: an icon and a
-    /// line of text, amber only when there's something to act on.
-    private func line(_ text: String) -> some View {
+    /// line of text, amber only when there's something to act on, with the
+    /// check-again button at the end of the line as the web has it.
+    private func summaryLine(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: isControlled ? "exclamationmark.triangle.fill" : "airplane")
                 .font(.subheadline)
             Text(text)
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            checkAgain
         }
         .foregroundStyle(isControlled ? Theme.warning : Theme.secondaryText)
     }
@@ -81,8 +82,9 @@ struct BookingAirspaceNote: View {
         return parts
     }
 
-    /// The web's "Check again": reruns the check even when the address hasn't
-    /// changed — an airport can start or stop offering LAANC.
+    /// The web's "Check again", as an icon at the end of the line: reruns the
+    /// check even when the address hasn't changed — an airport can start or
+    /// stop offering LAANC.
     private var checkAgain: some View {
         Button {
             Task {
@@ -92,19 +94,19 @@ struct BookingAirspaceNote: View {
                 isChecking = false
             }
         } label: {
-            HStack(spacing: 4) {
+            Group {
                 if isChecking {
                     ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: "arrow.clockwise")
                 }
-                Text(isChecking ? "Checking…" : "Check again")
             }
-            .font(.caption.weight(.semibold))
+            .font(.caption)
             .foregroundStyle(Theme.accent)
         }
         .buttonStyle(.plain)
         .disabled(isChecking)
+        .accessibilityLabel("Check the drone airspace again")
     }
 
     private func link(_ title: String, url: URL) -> some View {
