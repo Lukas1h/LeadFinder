@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { ChevronRight, Plus, CalendarCheck } from "lucide-react";
-import type { Listing } from "@/db/schema";
+import type { AirspaceCheck, Listing } from "@/db/schema";
 import { BookingCard } from "./BookingCard";
 import { BookingForm } from "./BookingForm";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,11 @@ export interface BookingWithDetails {
   paymentLinkUrl: string | null;
   paymentLinkAmount: number | null;
   paidAt: Date | null;
+  // Whether the drone needs ATC authorization at the address — see
+  // src/lib/airspace.ts. Null when there's no street address, the check
+  // hasn't run yet, or it failed (then airspaceCheckedAt is set).
+  airspace: AirspaceCheck | null;
+  airspaceCheckedAt: Date | null;
 }
 
 export interface BookingCosts {

@@ -418,10 +418,36 @@ export const bookings = pgTable("bookings", {
   marketStatusAt: timestamp("market_status_at", { withTimezone: true }),
   marketNoticedAt: timestamp("market_noticed_at", { withTimezone: true }),
   marketCheckedAt: timestamp("market_checked_at", { withTimezone: true }),
+
+  // Whether the drone can fly at the address without ATC authorization:
+  // Class B/C/D or a Class E surface area needs LAANC or DroneZone first
+  // (see src/lib/airspace.ts). Checked after a booking is saved and whenever
+  // its address changes. Checked-at set with no result = the check failed.
+  airspace: jsonb("airspace").$type<AirspaceCheck>(),
+  airspaceCheckedAt: timestamp("airspace_checked_at", { withTimezone: true }),
 });
 
 export type Booking = typeof bookings.$inferSelect;
 export type NewBooking = typeof bookings.$inferInsert;
+
+/** A booking's drone airspace check — see checkAirspace in src/lib/airspace.ts. */
+export interface AirspaceCheck {
+  status: "uncontrolled" | "controlled";
+  /** The surface airspace the spot is in, highest class first: "Klamath Falls Class D", class "D". Empty when uncontrolled. */
+  airspaces: { name: string; class: string }[];
+  /** The facility map's ceiling in feet AGL, the most LAANC can approve here. 0 = only through DroneZone. Null outside the grid. */
+  ceilingFt: number | null;
+  /** Whether the airport takes LAANC requests. Null outside the grid. */
+  laanc: boolean | null;
+  airport: { name: string; id: string } | null;
+  lat: number;
+  lng: number;
+  /** The street wasn't on the map, so this is the town's center, not the house. */
+  approximate: boolean;
+  /** The address that was checked, so a later save can tell whether it changed. */
+  place: string;
+  summary: string;
+}
 
 // Every time a client's gallery link is opened or something is downloaded
 // from it — shown in the booking's detail dialog. Location comes from

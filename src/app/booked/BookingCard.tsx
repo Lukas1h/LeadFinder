@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, KeyRound, StickyNote, Phone, Car } from "lucide-react";
+import { CalendarDays, KeyRound, StickyNote, Phone, Car, TriangleAlert } from "lucide-react";
 import { BookingDetailDialog } from "./BookingDetailDialog";
+import { airspaceBadgeLabel } from "./AirspaceSection";
 import { bookingProfit } from "./bookingMath";
 import { formatPrice, formatDate, formatDateTime, formatPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
@@ -21,6 +22,8 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
   // Only while it's still to shoot: once the job is done the day is no longer in question.
   const tentative = booking.dateTentative && !booking.completedAt && !booking.invoiceSentAt && !booking.shotAt;
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
+  // Needs ATC authorization to fly the drone there. Only while it's still to shoot.
+  const airspace = !booking.shotAt && !booking.completedAt && !booking.invoiceSentAt ? airspaceBadgeLabel(booking) : null;
 
   return (
     <>
@@ -51,6 +54,14 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
               <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
                 <Car className="size-3.5" />
                 {booking.driveTime}
+              </div>
+            )}
+            {airspace && (
+              <div className="mt-1">
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                  <TriangleAlert className="size-3" />
+                  {airspace}
+                </span>
               </div>
             )}
           </div>

@@ -15,7 +15,8 @@ export interface RouteEstimate {
   approximate: string[];
 }
 
-async function geocode(place: string): Promise<[number, number] | null> {
+/** [lon, lat] of a place, or null when OpenStreetMap doesn't know it. Also used by src/lib/airspace.ts. */
+export async function geocode(place: string): Promise<[number, number] | null> {
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("q", place);
   url.searchParams.set("format", "json");

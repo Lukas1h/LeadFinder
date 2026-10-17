@@ -100,6 +100,8 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       paymentLinkUrl: b.paymentLinkUrl,
       paymentLinkAmount: b.paymentLinkAmount,
       paidAt: b.paidAt,
+      airspace: b.airspace,
+      airspaceCheckedAt: b.airspaceCheckedAt,
     };
   });
 }

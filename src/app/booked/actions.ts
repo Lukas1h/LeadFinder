@@ -6,10 +6,12 @@ import { bookings, bookingLineItems, listings, agents, galleryViews, type Galler
 import { reopenStep } from "./bookingMath";
 import { eq, inArray, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
 import { bumpAgentRelationshipOnMilestone, resolveSendOutcome } from "@/app/actions";
 import { attributeBookingToSend } from "@/lib/agentIdentity";
 import { estimateDriveTime } from "@/lib/driveTime";
+import { refreshBookingAirspace } from "@/lib/airspace";
 import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { createPaymentLink, deactivatePaymentLink, stripeConfigured } from "@/lib/stripe";
@@ -138,6 +140,10 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
 
   if (!booking) return { error: "Couldn't create the booking — try again." };
 
+  // Is the drone allowed there without ATC authorization? A few seconds of
+  // map lookups, so after the response: saving stays instant.
+  after(() => refreshBookingAirspace(booking.id));
+
   // Credit the outreach that won the job, so a preset variant gets the revenue
   // it actually produced — see attributeBookingToSend.
   await attributeBookingToSend(booking.id, contactAgentId, input.jobDate ?? new Date());
@@ -203,6 +209,9 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
       ...input.completion,
     })
     .where(eq(bookings.id, bookingId));
+
+  // Re-checks the airspace only if the address changed (see refreshBookingAirspace).
+  after(() => refreshBookingAirspace(bookingId));
 
   await db.delete(bookingLineItems).where(eq(bookingLineItems.bookingId, bookingId));
   const validLineItems: NewBookingLineItem[] = input.lineItems
@@ -286,6 +295,8 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     paymentLinkUrl: booking.paymentLinkUrl,
     paymentLinkAmount: booking.paymentLinkAmount,
     paidAt: booking.paidAt,
+    airspace: booking.airspace,
+    airspaceCheckedAt: booking.airspaceCheckedAt,
   };
 }
 
@@ -371,6 +382,8 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       paymentLinkUrl: b.paymentLinkUrl,
       paymentLinkAmount: b.paymentLinkAmount,
       paidAt: b.paidAt,
+      airspace: b.airspace,
+      airspaceCheckedAt: b.airspaceCheckedAt,
     };
   });
 }
@@ -437,6 +450,16 @@ export async function getOrCreatePaymentLink(bookingId: string): Promise<Payment
   if (row?.oldLinkId) await deactivatePaymentLink(row.oldLinkId).catch(() => {});
   revalidatePath("/booked");
   return { url: link.url };
+}
+
+export type AirspaceRecheckResult = { summary: string } | { error: string };
+
+/** "Check again" in the booking's detail view: runs the airspace check now, even if the address hasn't changed. */
+export async function recheckBookingAirspace(bookingId: string): Promise<AirspaceRecheckResult> {
+  const check = await refreshBookingAirspace(bookingId, { force: true });
+  revalidatePath("/booked");
+  if (!check) return { error: "Couldn't check the airspace. Is there a street address? Try again in a minute." };
+  return { summary: check.summary };
 }
 
 /**

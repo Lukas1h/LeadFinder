@@ -181,6 +181,11 @@ export function bookingJson(b: BookingWithDetails) {
     // directions sheet. Empty parts are dropped so a half-filled booking
     // doesn't turn into ", , OR".
     mapsQuery: [b.address, b.city, b.state].filter(Boolean).join(", ") || null,
+    // The drone airspace check (src/lib/airspace.ts): "controlled" means ATC
+    // authorization (LAANC or DroneZone) before flying. Null = no street
+    // address, not checked yet, or the check failed (airspaceCheckedAt set).
+    airspace: b.airspace,
+    airspaceCheckedAt: b.airspaceCheckedAt,
   };
 }
 

@@ -10,6 +10,7 @@ import { BookingMoney } from "./BookingMoney";
 import { BookingForm } from "./BookingForm";
 import { GalleryLinkButton, PaymentLinkButton } from "./GallerySection";
 import { GalleryActivity } from "./GalleryActivity";
+import { AirspaceSection } from "./AirspaceSection";
 import { ListingRow } from "@/app/ListingRow";
 import { AgentRow } from "@/app/AgentRow";
 import { formatPrice, formatDateTime } from "@/lib/format";
@@ -163,6 +164,8 @@ export function BookingDetailDialog({
             </Button>
           )}
         </div>
+
+        <AirspaceSection booking={booking} />
 
         {booking.lineItems.length > 0 && (
           <div className="border-t pt-3">

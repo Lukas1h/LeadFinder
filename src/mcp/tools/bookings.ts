@@ -6,6 +6,7 @@ import { bookings, bookingLineItems, listings, agents, type NewBookingLineItem }
 import { estimateDriveTime } from "@/lib/driveTime";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
 import { attributeBookingToSend } from "@/lib/agentIdentity";
+import { refreshBookingAirspace } from "@/lib/airspace";
 import { text, errorText } from "./shared";
 import { reopenStep } from "@/app/booked/bookingMath";
 
@@ -104,7 +105,9 @@ export function registerBookingTools(server: McpServer): void {
     "get_booking",
     {
       title: "Get booking detail",
-      description: "Full detail for one booking — line items with total, linked listing (if any), and contact agent (if any).",
+      description:
+        "Full detail for one booking — line items with total, linked listing (if any), and contact agent (if any). " +
+        "`airspace` is the drone airspace at the address: when its status is \"controlled\" (Class B/C/D or a Class E surface area), warn Lukas with its `summary` — he needs LAANC or DroneZone authorization before flying there. Null = no street address or the check failed.",
       inputSchema: { id: z.string().uuid() },
     },
     async ({ id }) => {
@@ -120,7 +123,8 @@ export function registerBookingTools(server: McpServer): void {
       title: "Create a booking",
       description:
         "Books a job — either tied to an existing listing (pass listingId, which also flips that listing's status to 'booked') or a standalone booking with no listing (pass address/city/state instead). The contact is looked up or created by phone. " +
-        "Note: unlike the app's own booking form, this does not bump the agent's relationship status or resolve message-send outcomes — those are cosmetic and can be set separately via update_agent if needed.",
+        "Note: unlike the app's own booking form, this does not bump the agent's relationship status or resolve message-send outcomes — those are cosmetic and can be set separately via update_agent if needed. " +
+        "The result includes `airspace`, a drone airspace check of the address: if its status is \"controlled\", tell Lukas its `summary` (he needs LAANC or DroneZone authorization before flying there).",
       inputSchema: {
         listingId: z.string().uuid().optional(),
         address: z.string().optional(),
@@ -174,6 +178,9 @@ export function registerBookingTools(server: McpServer): void {
           .where(eq(listings.id, listingId));
       }
 
+      // Awaited, unlike the app's form, so the reply can carry the warning.
+      await refreshBookingAirspace(booking.id);
+
       const joined = await joinedBooking(booking.id);
       return text(joined);
     }
@@ -184,7 +191,8 @@ export function registerBookingTools(server: McpServer): void {
     {
       title: "Update a booking",
       description:
-        "Edits an existing booking's contact, job date, lockbox code, internal notes, invoice note, or line items. Passing lineItems replaces the full set (not a merge/diff) — omit it to leave line items untouched.",
+        "Edits an existing booking's contact, job date, lockbox code, internal notes, invoice note, or line items. Passing lineItems replaces the full set (not a merge/diff) — omit it to leave line items untouched. " +
+        "Changing the address re-checks the drone airspace (`airspace` in the result): warn Lukas if it's \"controlled\".",
       inputSchema: {
         id: z.string().uuid(),
         contactName: z.string().optional(),
@@ -232,6 +240,9 @@ export function registerBookingTools(server: McpServer): void {
           .map((li) => ({ bookingId: id, description: li.description.trim(), amount: li.amount }));
         if (validLineItems.length > 0) await db.insert(bookingLineItems).values(validLineItems);
       }
+
+      // A no-op unless the address changed.
+      if (address !== undefined || city !== undefined || state !== undefined) await refreshBookingAirspace(id);
 
       const joined = await joinedBooking(id);
       return text(joined);
