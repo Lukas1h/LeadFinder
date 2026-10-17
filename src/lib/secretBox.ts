@@ -26,10 +26,14 @@ const ALGORITHM = "aes-256-gcm";
  * which surfaces as "could not decrypt" rather than a silent bad password.
  */
 function key(): Buffer {
-  const value = process.env.MAILBOX_SECRET ?? process.env.UNSUBSCRIBE_SECRET;
-  if (!value) throw new Error("MAILBOX_SECRET / UNSUBSCRIBE_SECRET is not set");
-  // Fixed 32 bytes for AES-256 regardless of the secret's own length.
-  return createHash("sha256").update(value).digest();
+  const raw = process.env.MAILBOX_SECRET ?? process.env.UNSUBSCRIBE_SECRET;
+  if (!raw) throw new Error("MAILBOX_SECRET / UNSUBSCRIBE_SECRET is not set");
+  // Trimmed because a secret copied through a shell heredoc or a
+  // `vercel env add` fed by stdin picks up a trailing newline, and a stray
+  // "\n" changes the hash while looking identical in every listing. That
+  // silently made every stored password undecryptable in production while the
+  // local copy worked, so the whitespace can't be allowed to matter.
+  return createHash("sha256").update(raw.trim()).digest();
 }
 
 /** Opaque, URL-safe ciphertext. */
@@ -41,15 +45,22 @@ export function encryptSecret(plaintext: string): string {
 }
 
 /**
- * Throws if the value isn't one of ours — a wrong key (rotated MAILBOX_SECRET)
- * and a corrupted row are indistinguishable here, and both mean the same thing
- * to the caller: re-enter the password.
+ * Throws if the value isn't one of ours. AES-GCM's "Unsupported state or
+ * unable to authenticate data" is the symptom of a wrong key as well as a
+ * corrupted row, and both mean the same thing to whoever reads it: the stored
+ * password can't be trusted, so re-enter it. The wording says which.
  */
 export function decryptSecret(ciphertext: string): string {
-  const raw = Buffer.from(ciphertext, "base64url");
-  // iv (12) + auth tag (16) + at least one byte of ciphertext
-  if (raw.length < 29) throw new Error("stored password is malformed");
-  const decipher = createDecipheriv(ALGORITHM, key(), raw.subarray(0, 12));
-  decipher.setAuthTag(raw.subarray(12, 28));
-  return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8");
+  try {
+    const raw = Buffer.from(ciphertext, "base64url");
+    // iv (12) + auth tag (16) + at least one byte of ciphertext
+    if (raw.length < 29) throw new Error("malformed");
+    const decipher = createDecipheriv(ALGORITHM, key(), raw.subarray(0, 12));
+    decipher.setAuthTag(raw.subarray(12, 28));
+    return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8");
+  } catch {
+    throw new Error(
+      "Could not decrypt the stored password. MAILBOX_SECRET here does not match the one the account was saved with — re-enter the app password to fix it."
+    );
+  }
 }

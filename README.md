@@ -293,8 +293,14 @@ domain without a deploy.
 - App passwords are stored as AES-256-GCM ciphertext
   ([`src/lib/secretBox.ts`](src/lib/secretBox.ts)), keyed on `MAILBOX_SECRET`.
   That value must be identical everywhere that touches this database, or an
-  account saved locally is undecryptable in production. Rotating it
-  invalidates every stored password.
+  account saved locally is undecryptable in production — the symptom is
+  `Could not decrypt the stored password` on Test, not an auth failure, since
+  decryption happens before SMTP is ever contacted. Whitespace is trimmed off
+  the secret on the way in, because a value piped through `vercel env add`'s
+  stdin keeps its trailing newline and that changes the hash while looking
+  identical in every listing. Set it with `vercel env add MAILBOX_SECRET
+  production --value …`, not by piping to stdin. Rotating it invalidates every
+  stored password.
 - `ICLOUD_EMAIL` / `ICLOUD_APP_PASSWORD` are still honoured as a fallback when
   the table has no rows, so an environment that never opens Settings still
   sends exactly as it did before.
