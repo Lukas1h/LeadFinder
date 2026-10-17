@@ -71,9 +71,6 @@ struct BookingDetailView: View {
                 header
                 statusActions
                 if hasContact { contact }
-                if showsAirspace {
-                    BookingAirspaceSection(booking: booking) { await recheckAirspace() }
-                }
                 if hasLineItems { lineItems }
                 if showsMoney {
                     BookingMoneySection(booking: booking) { await refresh() }
@@ -203,6 +200,11 @@ struct BookingDetailView: View {
                     .foregroundStyle(Theme.secondaryText)
             }
 
+            if showsAirspace {
+                BookingAirspaceNote(booking: booking) { await recheckAirspace() }
+                    .padding(.top, 2)
+            }
+
             if let code = booking.lockboxCode?.nilIfBlank {
                 lockboxBanner(code)
             }
@@ -257,8 +259,8 @@ struct BookingDetailView: View {
         booking.contactName?.nilIfBlank != nil || booking.contactPhone?.nilIfBlank != nil
     }
 
-    /// The drone airspace note, where the web puts it: under the contact, above
-    /// the line items. Only with a street address — without one the server never
+    /// The drone airspace note, where the web has it: in the header, under the
+    /// drive time. Only with a street address — without one the server never
     /// checked, so there is nothing to say.
     private var showsAirspace: Bool {
         booking.address?.nilIfBlank != nil
