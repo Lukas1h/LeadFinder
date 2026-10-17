@@ -161,8 +161,9 @@ export async function bookingPlace(bookingId: string): Promise<string | null> {
     .where(eq(bookings.id, bookingId));
   if (!row) return null;
   const address = (row.listingAddress ?? row.address)?.trim();
-  // A city alone would only check the town center: not worth a warning either way.
-  if (!address) return null;
+  // A city alone, or a placeholder like "Address TBD", would only check the
+  // town center: a false all-clear is worse than no answer.
+  if (!address || /\b(tbd|tba|unknown|n\/a)\b/i.test(address)) return null;
   const city = row.listingCity ?? row.city;
   const state = row.listingState ?? row.state ?? "OR";
   return [address, city, state].filter(Boolean).join(", ");
