@@ -17,7 +17,7 @@
 # See .claude/skills/delegate-opencode/SKILL.md for when and how to delegate.
 set -euo pipefail
 
-MODEL="opencode/big-pickle"
+MODEL="opencode/space-bunny-free"
 DIR="$PWD"
 PURE=""
 TIMEOUT=1200

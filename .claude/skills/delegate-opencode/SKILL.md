@@ -21,16 +21,16 @@ pushes and deploys.
 
 ## How to launch
 
-**Model:** default `opencode/big-pickle`. Benchmarked 2026-09-27 (3 runs each: a
+**Model:** always `opencode/space-bunny-free`. Lukas, 2026-10-16: "don't use big pickle anymore… it has to be spacebunny" (Big Pickle's output on a Swift task was poor). If Space Bunny is gone from `opencode models`, ask him before picking another. Benchmarked 2026-09-27 (3 runs each: a
 spec'd multi-file edit with a planted bug + rules to follow, and a 12-item batch job):
 every free model scored 100% on well-specified work, so pick on speed, reliability and
 how long it stays free, not "smarts" — you do the reasoning, the worker executes.
 
 | Model | Avg time | Notes |
 |---|---|---|
-| `opencode/big-pickle` | ~37s | **Default.** Consistent; free since Oct 2025 (believed GLM-4.6), so least likely to vanish. 200K context. May log prompts. |
+| `opencode/big-pickle` | ~37s | **Don't use** (Lukas, 2026-10-16). Was the default; free since Oct 2025 (believed GLM-4.6), so least likely to vanish. 200K context. May log prompts. |
 | `opencode/ling-3.0-flash-fin-free` | ~29s | Fastest and consistent. Use when speed matters. 262K context. |
-| `opencode/space-bunny-free` | ~42s | Strong, 1M context, multimodal (screenshots), zero data retention. **Free-week promo from 2026-09-23** — expect it to disappear. |
+| `opencode/space-bunny-free` | ~42s | **Default.** Strong, 1M context, multimodal (screenshots), zero data retention. **Free-week promo from 2026-09-23** — expect it to disappear. |
 | `opencode/mimo-v2.6-flash-free` | ~50s | Fine but variable. |
 | `opencode/longcat-2.5-preview-free` / `nemotron-3-ultra-free` | ~65s | Slower; 1M context for huge inputs. |
 | `opencode/nemotron-3.5-lightning-free` | 44s–6 min | Stalls for minutes on some runs. Avoid. |
@@ -47,7 +47,7 @@ the table rather than waiting.
 
 **A. Paseo available** (tools named `mcp__paseo__*` exist — Lukas's machine / Paseo app):
 `mcp__paseo__create_agent` with
-`provider: "opencode/opencode/big-pickle"`,
+`provider: "opencode/opencode/space-bunny-free"`,
 `settings: { modeId: "build", thinkingOptionId: "medium", features: { auto_accept: true } }`.
 You get a notification when it finishes — don't poll.
 
