@@ -31,6 +31,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>LeadFinder uses the camera to photograph receipts for your expenses.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

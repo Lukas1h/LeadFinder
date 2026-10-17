@@ -51,6 +51,11 @@ final class Resource<Value: Decodable & Sendable> {
             error = nil
         } catch let apiError as APIError {
             error = apiError.errorDescription
+        } catch is CancellationError {
+            // The screen that asked went away (a tab switch, a push); not a failure.
+            hasLoaded = false
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            hasLoaded = false
         } catch {
             self.error = error.localizedDescription
         }
@@ -69,6 +74,14 @@ final class AppState {
     let agents = Resource<AgentsResponse>(path: "api/app/v1/agents", key: .agents)
     let messages = Resource<MessagesResponse>(path: "api/app/v1/messages", key: .messages)
 
+    // Finances: the Overview also feeds Home's money numbers.
+    let finances = Resource<FinanceOverview>(path: "api/app/v1/finances", key: .finances)
+    let financeJobs = Resource<FinanceJobsReport>(path: "api/app/v1/finances/jobs", key: .financeJobs)
+    let financeTrips = Resource<MileageReport>(path: "api/app/v1/finances/trips", key: .financeTrips)
+    let financeExpenses = Resource<ExpensesResponse>(path: "api/app/v1/finances/expenses", key: .financeExpenses)
+    let financeTaxes = Resource<TaxReport>(path: "api/app/v1/finances/taxes", key: .financeTaxes)
+    let financeLinkOptions = Resource<FinanceLinkOptions>(path: "api/app/v1/finances/link-options", key: .financeLinkOptions)
+
     init() {}
 
     func warmCache() async {
@@ -85,6 +98,21 @@ final class AppState {
         #if os(iOS)
         await CallerIDSync.syncIfChanged()
         #endif
+    }
+
+    /// After a trip or an expense is saved: every report it moves (a trip
+    /// changes gas, profit, per hour, deductions and the tax estimate) and the
+    /// bookings, whose `costs` carry it too.
+    func reloadFinances() async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.finances.load(force: true) }
+            group.addTask { await self.financeJobs.load(force: true) }
+            group.addTask { await self.financeTrips.load(force: true) }
+            group.addTask { await self.financeExpenses.load(force: true) }
+            group.addTask { await self.financeTaxes.load(force: true) }
+            group.addTask { await self.financeLinkOptions.load(force: true) }
+            group.addTask { await self.bookings.load(force: true) }
+        }
     }
 
     /// Rebuilds the reminder and booking alerts from what's loaded now. Called

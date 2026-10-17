@@ -72,14 +72,14 @@ struct BookingDetailView: View {
                 statusActions
                 if hasContact { contact }
                 if hasLineItems { lineItems }
+                if showsMoney {
+                    BookingMoneySection(booking: booking) { await refresh() }
+                }
                 if let notes = booking.notes?.nilIfBlank {
                     textCard(title: "Notes", text: notes)
                 }
                 if let note = booking.invoiceNote?.nilIfBlank {
                     textCard(title: "Invoice note", text: note)
-                }
-                if !timeRows.isEmpty {
-                    rowsCard(title: "Time & costs", rows: timeRows)
                 }
                 if !statusRows.isEmpty {
                     rowsCard(title: "Status", rows: statusRows)
@@ -87,6 +87,9 @@ struct BookingDetailView: View {
             }
             .padding(16)
         }
+        #if DEBUG
+        .defaultScrollAnchor(DebugLaunchArguments.scrollsToBottom ? .bottom : nil)
+        #endif
         .background(Theme.background)
         .sheet(item: $openContact) { AgentDirectoryDetail(agent: $0) }
     }
@@ -380,26 +383,12 @@ struct BookingDetailView: View {
             .kerning(0.6)
     }
 
-    // MARK: - Recorded hours and status flags
+    // MARK: - Time & money and status flags
 
-    private var timeRows: [DetailRow] {
-        var rows: [DetailRow] = []
-        if let hours = booking.driveHours {
-            rows.append(DetailRow(label: "Drive time", value: Self.hours(hours)))
-        }
-        if let hours = booking.editingHours {
-            rows.append(DetailRow(label: "Editing", value: Self.hours(hours)))
-        }
-        if let hours = booking.shootingHours {
-            rows.append(DetailRow(label: "Shooting", value: Self.hours(hours)))
-        }
-        if let hours = booking.logisticsHours {
-            rows.append(DetailRow(label: "Logistics", value: Self.hours(hours)))
-        }
-        if let costs = booking.additionalCosts {
-            rows.append(DetailRow(label: "Additional costs", value: BookingFormat.price(costs)))
-        }
-        return rows
+    /// As the web: once the job is shot, or whenever it has a trip or an expense.
+    private var showsMoney: Bool {
+        booking.shotAt != nil || booking.invoiceSentAt != nil || booking.completedAt != nil
+            || !(booking.costs?.trips.isEmpty ?? true) || !(booking.costs?.expenseItems.isEmpty ?? true)
     }
 
     private var statusRows: [DetailRow] {
@@ -426,10 +415,6 @@ struct BookingDetailView: View {
         guard let raw = iso?.nilIfBlank else { return nil }
         guard let date = DateFormatting.parse(raw) else { return raw }
         return DateFormatting.dayTime.string(from: date)
-    }
-
-    private static func hours(_ value: Double) -> String {
-        "\(value.formatted(.number.precision(.fractionLength(0...1)))) h"
     }
 
     // MARK: - Links

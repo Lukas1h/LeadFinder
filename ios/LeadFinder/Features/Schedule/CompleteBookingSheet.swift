@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Finishing a job: the web's completion dialog. Every figure is optional —
+/// Finishing a job: the web's completion dialog, hours only (drive time and
+/// costs come from the job's trips and expenses since 2026-10-16). Every figure is optional —
 /// blank means "not recorded", which keeps the per-hour stats honest about a
 /// missing number rather than counting it as zero.
 struct CompleteBookingSheet: View {
@@ -9,11 +10,9 @@ struct CompleteBookingSheet: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    @State private var driveHours = ""
     @State private var shootingHours = ""
     @State private var editingHours = ""
     @State private var logisticsHours = ""
-    @State private var additionalCosts = ""
     @State private var isSaving = false
     @State private var error: String?
 
@@ -21,15 +20,13 @@ struct CompleteBookingSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    field("Drive hours", $driveHours)
                     field("Shooting hours", $shootingHours)
                     field("Editing hours", $editingHours)
                     field("Logistics hours", $logisticsHours)
-                    field("Additional costs ($)", $additionalCosts, whole: true)
                 } header: {
-                    Text("Time & costs")
+                    Text("Hours")
                 } footer: {
-                    Text("All optional. Leave one blank if you didn't track it.")
+                    Text("All optional. Leave one blank if you didn't track it. Driving and costs come from the trip and expenses logged for the job.")
                 }
                 .listRowBackground(Theme.card)
 
@@ -59,12 +56,12 @@ struct CompleteBookingSheet: View {
         .presentationBackground(Theme.background)
     }
 
-    private func field(_ title: String, _ value: Binding<String>, whole: Bool = false) -> some View {
+    private func field(_ title: String, _ value: Binding<String>) -> some View {
         HStack {
             Text(title)
             Spacer()
             TextField("—", text: value)
-                .keyboard(whole ? .number : .decimal)
+                .keyboard(.decimal)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 90)
         }
@@ -77,11 +74,9 @@ struct CompleteBookingSheet: View {
         do {
             try await APIClient.shared.completeBooking(
                 id: booking.id,
-                driveHours: Double(driveHours),
                 editingHours: Double(editingHours),
                 shootingHours: Double(shootingHours),
-                logisticsHours: Double(logisticsHours),
-                additionalCosts: Int(additionalCosts)
+                logisticsHours: Double(logisticsHours)
             )
             onDone()
             dismiss()

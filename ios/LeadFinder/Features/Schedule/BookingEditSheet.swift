@@ -24,11 +24,9 @@ struct BookingEditSheet: View {
     @State private var notes: String
     @State private var invoiceNote: String
     @State private var items: [ItemRow]
-    @State private var driveHours: String
     @State private var editingHours: String
     @State private var shootingHours: String
     @State private var logisticsHours: String
-    @State private var additionalCosts: String
     @State private var isSaving = false
     @State private var confirmDelete = false
     @State private var error: String?
@@ -56,11 +54,9 @@ struct BookingEditSheet: View {
         _items = State(initialValue: (booking?.lineItems ?? []).map {
             ItemRow(description: $0.description, amount: String($0.amount))
         })
-        _driveHours = State(initialValue: Self.text(booking?.driveHours))
         _editingHours = State(initialValue: Self.text(booking?.editingHours))
         _shootingHours = State(initialValue: Self.text(booking?.shootingHours))
         _logisticsHours = State(initialValue: Self.text(booking?.logisticsHours))
-        _additionalCosts = State(initialValue: booking?.additionalCosts.map(String.init) ?? "")
     }
 
     private var hasListing: Bool { booking?.listingId != nil }
@@ -138,12 +134,16 @@ struct BookingEditSheet: View {
                 .listRowBackground(Theme.card)
 
                 if isCompleted {
-                    Section("Time & costs") {
-                        decimalField("Drive hours", $driveHours)
-                        decimalField("Editing hours", $editingHours)
+                    // Drive time and costs come from the job's trips and
+                    // expenses now (Time & money on the booking), not here.
+                    Section {
                         decimalField("Shooting hours", $shootingHours)
+                        decimalField("Editing hours", $editingHours)
                         decimalField("Logistics hours", $logisticsHours)
-                        decimalField("Additional costs ($)", $additionalCosts)
+                    } header: {
+                        Text("Hours")
+                    } footer: {
+                        Text("Driving and costs come from the trip and expenses logged for this job.")
                     }
                     .listRowBackground(Theme.card)
                 }
@@ -228,11 +228,9 @@ struct BookingEditSheet: View {
             lineItems: items
                 .filter { $0.description.nilIfBlank != nil }
                 .map { .init(description: $0.description, amount: Int($0.amount) ?? 0) },
-            driveHours: isCompleted ? Double(driveHours) : nil,
             editingHours: isCompleted ? Double(editingHours) : nil,
             shootingHours: isCompleted ? Double(shootingHours) : nil,
-            logisticsHours: isCompleted ? Double(logisticsHours) : nil,
-            additionalCosts: isCompleted ? Int(additionalCosts) : nil
+            logisticsHours: isCompleted ? Double(logisticsHours) : nil
         )
         do {
             if let booking {

@@ -81,6 +81,9 @@ enum AppNotifications {
         case .authorized, .provisional, .ephemeral:
             return true
         case .notDetermined:
+            #if DEBUG
+            if DebugLaunchArguments.skipsAlertPrompt { return false }
+            #endif
             return (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
         default:
             return false

@@ -123,5 +123,35 @@ enum DebugLaunchArguments {
     static var opensBookings: Bool {
         ProcessInfo.processInfo.arguments.contains("-bookings")
     }
+
+    private static func value(after flag: String) -> String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: flag), index + 1 < arguments.count else { return nil }
+        return arguments[index + 1]
+    }
+
+    /// `-home-section money` scrolls Home to a section (goal, money, funnel,
+    /// bookings, todo), for screenshotting the parts below the fold.
+    static var homeSection: String? { value(after: "-home-section") }
+
+    /// `-finances jobs` opens Finances from Home on that tab.
+    static var financesTab: FinanceTab? { value(after: "-finances").flatMap(FinanceTab.init(rawValue:)) }
+
+    /// `-finance-form expense|trip` opens that form over Finances.
+    static var financeForm: String? { value(after: "-finance-form") }
+
+    /// `-booking <id>` opens that booking's detail sheet from Home.
+    static var bookingId: String? { value(after: "-booking") }
+
+    /// `-scroll-bottom` opens the booking sheet scrolled to its end.
+    static var scrollsToBottom: Bool {
+        ProcessInfo.processInfo.arguments.contains("-scroll-bottom")
+    }
+
+    /// `-no-alert-prompt` skips asking for notification permission, which
+    /// would otherwise cover a fresh simulator's first screenshot.
+    static var skipsAlertPrompt: Bool {
+        ProcessInfo.processInfo.arguments.contains("-no-alert-prompt")
+    }
 }
 #endif

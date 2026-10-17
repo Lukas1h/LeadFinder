@@ -9,6 +9,12 @@ enum CacheKey: String, CaseIterable {
     case agents
     case callerID = "caller-id"
     case messages
+    case finances
+    case financeJobs = "finance-jobs"
+    case financeTrips = "finance-trips"
+    case financeExpenses = "finance-expenses"
+    case financeTaxes = "finance-taxes"
+    case financeLinkOptions = "finance-link-options"
 }
 
 /// Offline-first store: every screen renders the last cached JSON immediately,

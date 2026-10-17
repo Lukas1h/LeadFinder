@@ -53,7 +53,7 @@ final class Navigator {
 /// The web's sidebar, in the web's order (src/app/nav-links.ts), limited to
 /// the pages the phone API serves.
 enum Page: String, CaseIterable, Identifiable {
-    case leads, followUp, agents, messaging, booked, schedule
+    case leads, followUp, agents, messaging, booked, schedule, finances
 
     var id: String { rawValue }
 
@@ -65,6 +65,7 @@ enum Page: String, CaseIterable, Identifiable {
         case .messaging: "Messaging"
         case .booked: "Booked"
         case .schedule: "Schedule"
+        case .finances: "Finances"
         }
     }
 
@@ -77,6 +78,7 @@ enum Page: String, CaseIterable, Identifiable {
         case .messaging: "paperplane"
         case .booked: "calendar.badge.checkmark"
         case .schedule: "calendar"
+        case .finances: "dollarsign.circle"
         }
     }
 
@@ -88,6 +90,7 @@ enum Page: String, CaseIterable, Identifiable {
         case .messaging: "4"
         case .booked: "5"
         case .schedule: "6"
+        case .finances: "7"
         }
     }
 }
@@ -130,6 +133,7 @@ struct MacCommands: Commands {
         case .schedule:
             await appState.schedule.load(force: true)
             await appState.bookings.load(force: true)
+        case .finances: await appState.reloadFinances()
         }
     }
 }

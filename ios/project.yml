@@ -48,6 +48,8 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         ITSAppUsesNonExemptEncryption: false
+        # Photographing receipts for an expense (Finances).
+        NSCameraUsageDescription: LeadFinder uses the camera to photograph receipts for your expenses.
         # Xcode expands $(VAR) in Info.plist from the build settings, which come
         # from Config/Base.xcconfig and the git-ignored Secrets.xcconfig. Left
         # unexpanded when the secret is missing, which AppConfig detects.

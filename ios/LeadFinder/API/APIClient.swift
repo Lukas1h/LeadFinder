@@ -12,7 +12,7 @@ actor APIClient {
 
     private let cache: CacheStore
     private let session: URLSession
-    private let decoder = JSONDecoder()
+    let decoder = JSONDecoder()
 
     init(cache: CacheStore = CacheStore()) {
         self.cache = cache
@@ -74,7 +74,7 @@ actor APIClient {
         }
     }
 
-    private func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+    func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
         do {
             return try await session.data(for: request)
         } catch let error as URLError where error.code == .notConnectedToInternet {
@@ -351,7 +351,7 @@ actor APIClient {
     }
 
     /// Runs a request and returns the body of a 2xx answer.
-    private func checked(_ request: URLRequest) async throws -> Data {
+    func checked(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await send(request)
         guard let http = response as? HTTPURLResponse else { throw APIError.http(-1, "No response") }
         if http.statusCode == 401 { throw APIError.unauthorized }
@@ -407,15 +407,15 @@ actor APIClient {
         var notes: String
         var invoiceNote: String
         var lineItems: [Item]
-        var driveHours: Double?
+        // No driveHours or additionalCosts: the server ignores them since
+        // 2026-10-16 (they come from the job's trips and expenses).
         var editingHours: Double?
         var shootingHours: Double?
         var logisticsHours: Double?
-        var additionalCosts: Int?
 
         private enum CodingKeys: String, CodingKey {
             case address, city, state, contactName, contactPhone, jobDate, lockboxCode, notes, invoiceNote
-            case lineItems, driveHours, editingHours, shootingHours, logisticsHours, additionalCosts
+            case lineItems, editingHours, shootingHours, logisticsHours
         }
 
         func encode(to encoder: Encoder) throws {
@@ -434,11 +434,9 @@ actor APIClient {
             try c.encode(notes, forKey: .notes)
             try c.encode(invoiceNote, forKey: .invoiceNote)
             try c.encode(lineItems, forKey: .lineItems)
-            try c.encodeIfPresent(driveHours, forKey: .driveHours)
             try c.encodeIfPresent(editingHours, forKey: .editingHours)
             try c.encodeIfPresent(shootingHours, forKey: .shootingHours)
             try c.encodeIfPresent(logisticsHours, forKey: .logisticsHours)
-            try c.encodeIfPresent(additionalCosts, forKey: .additionalCosts)
         }
     }
 
@@ -460,32 +458,27 @@ actor APIClient {
         _ = try await send("DELETE", "api/app/v1/bookings/\(id)", body: Empty?.none, as: OK.self)
     }
 
-    /// Finishes a job. Nil figures are "not recorded".
+    /// Finishes a job. Nil figures are "not recorded". Drive time and costs
+    /// aren't sent: they come from the job's trips and expenses.
     func completeBooking(
         id: String,
-        driveHours: Double?,
         editingHours: Double?,
         shootingHours: Double?,
-        logisticsHours: Double?,
-        additionalCosts: Int?
+        logisticsHours: Double?
     ) async throws {
         struct Body: Encodable, Sendable {
-            let driveHours: Double?
             let editingHours: Double?
             let shootingHours: Double?
             let logisticsHours: Double?
-            let additionalCosts: Int?
         }
         struct OK: Decodable, Sendable { let ok: Bool }
         _ = try await send(
             "POST",
             "api/app/v1/bookings/\(id)/complete",
             body: Body(
-                driveHours: driveHours,
                 editingHours: editingHours,
                 shootingHours: shootingHours,
-                logisticsHours: logisticsHours,
-                additionalCosts: additionalCosts
+                logisticsHours: logisticsHours
             ),
             as: OK.self
         )
@@ -567,14 +560,14 @@ actor APIClient {
     /// A plain GET with no cache. For one-off reads behind a screen the user
     /// opened deliberately — caching these would mean a disk entry per listing
     /// or per message the app has ever looked at.
-    private func read<T: Decodable & Sendable>(_ path: String) async throws -> T {
+    func read<T: Decodable & Sendable>(_ path: String) async throws -> T {
         try await read(path, query: [])
     }
 
     /// `URL.appendingPathComponent` percent-encodes a "?", so a query string has
     /// to be attached as a real query — otherwise "?type=initial_outreach" ends
     /// up as part of the path and the route 404s.
-    private func read<T: Decodable & Sendable>(_ path: String, query: [URLQueryItem]) async throws -> T {
+    func read<T: Decodable & Sendable>(_ path: String, query: [URLQueryItem]) async throws -> T {
         let request = try await authorizedRequest(path, query: query)
         let (data, response) = try await send(request)
 
@@ -590,7 +583,7 @@ actor APIClient {
         }
     }
 
-    private func authorizedRequest(_ path: String, query: [URLQueryItem] = []) async throws -> URLRequest {
+    func authorizedRequest(_ path: String, query: [URLQueryItem] = []) async throws -> URLRequest {
         guard let base = AppConfig.baseURL else { throw APIError.notConfigured }
         guard let secret = AppConfig.apiSecret else { throw APIError.notConfigured }
 

@@ -310,11 +310,18 @@ struct Booking: Codable, Sendable, Identifiable, Hashable {
     /// Shot, photos still being edited (the "Editing" section).
     var shotAt: String?
     var invoiceSentAt: String?
+    /// Derived on the server since 2026-10-16: the job's share of its trips'
+    /// drive time. Not an input any more.
     var driveHours: Double?
     var editingHours: Double?
     var shootingHours: Double?
     var logisticsHours: Double?
+    /// Derived on the server: its share of the trips' gas plus its expenses,
+    /// whole dollars, so `total − additionalCosts` is the profit.
     var additionalCosts: Int?
+    /// The trips and expenses behind those two, for "Time & money". Missing
+    /// from a cache written before 2026-10-16.
+    var costs: BookingCosts?
     var createdAt: String
     var contactName: String?
     var contactPhone: String?
@@ -427,6 +434,17 @@ struct MessagesResponse: Codable, Sendable {
             var newClientsThisMonth: Int
             var textsPerWeek: Int
             var repliesPerWeek: Int
+            /// This month's work from people who had booked before.
+            var `repeat`: Double?
+            /// What new clients have to bring in a month.
+            var newRevenue: Double?
+            var firstJob: Double?
+        }
+        /// What `rates.book` rests on: booked of interested.
+        var bookSample: BookSample?
+        struct BookSample: Codable, Sendable {
+            var booked: Int
+            var of: Int
         }
         /// The estimate in a sentence, written by the server so it can't drift
         /// from the math. Optional for a response cached from before it existed.
