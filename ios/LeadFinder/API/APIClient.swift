@@ -512,6 +512,27 @@ actor APIClient {
         return response.booking
     }
 
+    /// "Check again" on a booking's drone airspace: re-runs the FAA check now,
+    /// even when the address hasn't changed (see AirspaceCheck).
+    ///
+    /// The server answers `{ summary }` or `{ error }` — a failed lookup comes
+    /// back as a 200 with `error`, so both land in the result rather than one
+    /// of them throwing.
+    struct AirspaceRecheck: Decodable, Sendable {
+        var summary: String?
+        var error: String?
+    }
+
+    func recheckBookingAirspace(bookingId: String) async throws -> AirspaceRecheck {
+        struct Empty: Encodable, Sendable {}
+        return try await send(
+            "POST",
+            "api/app/v1/bookings/\(bookingId)/airspace",
+            body: Empty(),
+            as: AirspaceRecheck.self
+        )
+    }
+
     // MARK: - Reminders
 
     struct ReminderInput: Encodable, Sendable {

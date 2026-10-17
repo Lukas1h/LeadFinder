@@ -5,16 +5,25 @@ struct BadgeChip: View {
     let text: String
     var tint: Color = Theme.secondaryText
     var filled: Bool = false
+    /// SF Symbol before the wording, for badges that warn about something — the
+    /// booking card's "Class D airspace" tag.
+    var icon: String?
 
     var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(filled ? tint.opacity(0.22) : tint.opacity(0.13), in: Capsule())
-            .overlay(Capsule().strokeBorder(tint.opacity(0.28), lineWidth: 0.5))
-            .foregroundStyle(tint)
+        HStack(spacing: 3) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .bold))
+            }
+            Text(text)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(filled ? tint.opacity(0.22) : tint.opacity(0.13), in: Capsule())
+        .overlay(Capsule().strokeBorder(tint.opacity(0.28), lineWidth: 0.5))
+        .foregroundStyle(tint)
     }
 }
 

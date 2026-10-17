@@ -71,6 +71,9 @@ struct BookingDetailView: View {
                 header
                 statusActions
                 if hasContact { contact }
+                if showsAirspace {
+                    BookingAirspaceSection(booking: booking) { await recheckAirspace() }
+                }
                 if hasLineItems { lineItems }
                 if showsMoney {
                     BookingMoneySection(booking: booking) { await refresh() }
@@ -252,6 +255,29 @@ struct BookingDetailView: View {
 
     private var hasContact: Bool {
         booking.contactName?.nilIfBlank != nil || booking.contactPhone?.nilIfBlank != nil
+    }
+
+    /// The drone airspace note, where the web puts it: under the contact, above
+    /// the line items. Only with a street address — without one the server never
+    /// checked, so there is nothing to say.
+    private var showsAirspace: Bool {
+        booking.address?.nilIfBlank != nil
+    }
+
+    /// "Check again": the server reruns the FAA lookup and this screen reloads,
+    /// so the note itself carries the new answer. Returns the message to show
+    /// under it, or nil when the check worked.
+    private func recheckAirspace() async -> String? {
+        isWorking = true
+        actionError = nil
+        defer { isWorking = false }
+        do {
+            let result = try await APIClient.shared.recheckBookingAirspace(bookingId: booking.id)
+            await refresh()
+            return result.error
+        } catch {
+            return (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
     }
 
     private var contact: some View {

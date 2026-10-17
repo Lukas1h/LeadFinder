@@ -166,6 +166,12 @@ struct BookingCard: View {
                             .font(.caption)
                             .foregroundStyle(Theme.tertiaryText)
                     }
+                    // Needs ATC authorization before the drone flies there. Only
+                    // while it's still to shoot, as on the web: once the job is
+                    // done the airspace is no longer in question.
+                    if let airspace = airspaceBadge {
+                        BadgeChip(text: airspace, tint: Theme.warning, filled: true, icon: "exclamationmark.triangle.fill")
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -182,6 +188,14 @@ struct BookingCard: View {
         }
         parts.append(BookingFormat.price(booking.total))
         return parts.joined(separator: " · ")
+    }
+
+    /// "Class D airspace" when the address needs ATC authorization, nil
+    /// otherwise. Shot, invoiced or completed jobs drop it: the web's card only
+    /// warns while the shoot is still ahead.
+    private var airspaceBadge: String? {
+        guard booking.shotAt == nil, booking.completedAt == nil, booking.invoiceSentAt == nil else { return nil }
+        return booking.airspace?.badgeLabel
     }
 }
 

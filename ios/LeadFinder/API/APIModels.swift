@@ -333,9 +333,70 @@ struct Booking: Codable, Sendable, Identifiable, Hashable {
     var dropboxFolderLink: String?
     var galleryUrl: String?
     var mapsQuery: String?
+    /// Whether the drone needs ATC authorization at the address, checked by the
+    /// server a few seconds after a booking is saved or its address changes
+    /// (`src/lib/airspace.ts`). Nil with no street address, before the first
+    /// check, or when the check failed — then `airspaceCheckedAt` is set.
+    /// Optional so a response cached before this existed still decodes.
+    var airspace: AirspaceCheck?
+    var airspaceCheckedAt: String?
 
     var addressLine: String {
         [address, city, state].compactMap { $0?.nilIfBlank }.joined(separator: ", ")
+    }
+}
+
+/// A shoot's drone airspace, as checked on the server against the FAA's class
+/// airspace and UAS facility map layers (`AirspaceCheck` in src/db/schema.ts,
+/// written by `checkAirspace` in src/lib/airspace.ts).
+///
+/// Part 107.41 needs ATC authorization — LAANC, or a DroneZone request where the
+/// airport doesn't offer LAANC — to fly in Class B, C, D or a Class E surface
+/// area. A Klamath Falls job sat in Class D next to the airport and nobody
+/// noticed until he was on site.
+struct AirspaceCheck: Codable, Sendable, Hashable {
+    /// The surface airspace the spot is in, highest class first.
+    struct Layer: Codable, Sendable, Hashable {
+        var name: String
+        /// "B", "C", "D", or "E2"/"E3"/"E4" for a Class E surface area.
+        /// `class` is a Swift keyword, hence the mapping.
+        var className: String
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case className = "class"
+        }
+    }
+
+    struct Airport: Codable, Sendable, Hashable {
+        var name: String
+        var id: String
+    }
+
+    /// "uncontrolled" (Class G: fly to 400 ft) or "controlled".
+    var status: String
+    var airspaces: [Layer]
+    /// The facility map's ceiling in feet AGL — the most LAANC can approve here.
+    /// 0 means only through DroneZone. Nil outside the facility map's grid.
+    var ceilingFt: Double?
+    /// Whether the airport takes LAANC requests. Nil outside the grid.
+    var laanc: Bool?
+    var airport: Airport?
+    var lat: Double
+    var lng: Double
+    /// The street wasn't on the map, so this is the town's centre, not the house.
+    var approximate: Bool
+    /// The address that was checked, so a later save can tell whether it changed.
+    var place: String
+    /// The one-line answer, worded by the server so the web and the app agree.
+    var summary: String
+
+    /// "Class D airspace" for the booking card, nil when the drone can fly there
+    /// freely — the badge the web's `airspaceBadgeLabel` puts on a card.
+    var badgeLabel: String? {
+        guard status == "controlled" else { return nil }
+        guard let cls = airspaces.first?.className else { return "Controlled airspace" }
+        return "Class \(cls) airspace"
     }
 }
 
