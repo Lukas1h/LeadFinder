@@ -11,6 +11,7 @@ export function LeadActions({
   listingId,
   agentName,
   agentPhone,
+  altPhone,
   agentEmail,
   address,
   city,
@@ -19,6 +20,7 @@ export function LeadActions({
   listingId: string;
   agentName: string | null;
   agentPhone: string | null;
+  altPhone?: string | null;
   agentEmail?: string | null;
   address?: string | null;
   city?: string | null;
@@ -48,6 +50,7 @@ export function LeadActions({
         listingId={listingId}
         type="initial_outreach"
         agentPhone={agentPhone}
+        altPhone={altPhone}
         agentEmail={agentEmail ?? null}
         agentName={agentName}
         address={address ?? null}

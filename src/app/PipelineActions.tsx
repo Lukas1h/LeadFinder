@@ -14,6 +14,7 @@ export function PipelineActions({
   status,
   agentName,
   agentPhone,
+  altPhone,
   agentEmail,
   address,
   city,
@@ -22,6 +23,7 @@ export function PipelineActions({
   status: LeadStatus;
   agentName: string | null;
   agentPhone: string | null;
+  altPhone?: string | null;
   agentEmail?: string | null;
   address?: string | null;
   city?: string | null;
@@ -53,6 +55,7 @@ export function PipelineActions({
           listingId={listingId}
           type="initial_outreach"
           agentPhone={agentPhone}
+          altPhone={altPhone}
           agentEmail={agentEmail ?? null}
           agentName={agentName}
           address={address ?? null}
@@ -80,6 +83,7 @@ export function PipelineActions({
           listingId={listingId}
           type="follow_up"
           agentPhone={agentPhone}
+          altPhone={altPhone}
           agentEmail={agentEmail ?? null}
           agentName={agentName}
           address={address ?? null}

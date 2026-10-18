@@ -112,6 +112,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
             listingId={lead.id}
             agentName={lead.agentName}
             agentPhone={lead.agentPhone}
+            altPhone={agent?.phone}
             agentEmail={agent?.email}
             address={lead.address}
             city={lead.city}

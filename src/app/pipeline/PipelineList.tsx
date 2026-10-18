@@ -208,6 +208,7 @@ export function PipelineList({
               status={lead.status}
               agentName={lead.agentName}
               agentPhone={lead.agentPhone}
+              altPhone={attachedAgent?.phone}
               agentEmail={attachedAgent?.email}
               address={lead.address}
               city={lead.city}

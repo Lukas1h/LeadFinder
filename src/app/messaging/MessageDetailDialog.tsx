@@ -72,6 +72,14 @@ export function MessageDetailDialog({
   const shown = detail && detail.id === sendId ? detail : null;
   const agent = shown?.agent ?? null;
   const name = firstName(agent?.name ?? null) ?? "them";
+  // The listing's own agentPhone snapshot and the agent's saved number can
+  // genuinely disagree (a team line vs. a personal cell, or a number that
+  // changed) — offered as an alternative rather than guessing which is right.
+  const listingPhone = shown?.listing?.agentPhone ?? null;
+  const [phone, setPhone] = useState<string | null>(null);
+  useEffect(() => {
+    setPhone(agent?.phone ?? null);
+  }, [agent?.phone]);
 
   const finish = (message: string) => {
     toast.success(message);
@@ -105,7 +113,7 @@ export function MessageDetailDialog({
     }
     // A text: recorded as it's handed to Messages, like every text from the
     // web, and confirmed by the usual "did it go?" prompt.
-    if (!agent?.phone) return;
+    if (!phone) return;
     setBusy(action.presetId);
     const result = await recordQuickActionText(shown.id, action.presetId, action.variantId, false);
     setBusy(null);
@@ -113,7 +121,7 @@ export function MessageDetailDialog({
       toast.error(result.error);
       return;
     }
-    window.location.href = smsUrl(agent.phone, action.text);
+    window.location.href = smsUrl(phone, action.text);
     finish(`${action.name} opened in Messages`);
   };
 
@@ -180,7 +188,7 @@ export function MessageDetailDialog({
                     variant={i === 0 ? "default" : "outline"}
                     className="w-full"
                     onClick={() => runAction(action)}
-                    disabled={busy != null || phoneOnly || (action.channel === "sms" && !agent?.phone)}
+                    disabled={busy != null || phoneOnly || (action.channel === "sms" && !phone)}
                     title={phoneOnly ? "Has attachments: send it from the iPhone app" : undefined}
                   >
                     {action.channel === "email" ? <Mail /> : phoneOnly ? <Paperclip /> : <MessageCircle />}
@@ -189,7 +197,23 @@ export function MessageDetailDialog({
                   </Button>
                 );
               })}
-              <div className={`grid gap-2 ${agent?.phone ? "grid-cols-3" : "grid-cols-2"}`}>
+              {listingPhone && listingPhone !== agent?.phone && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>
+                    Texting <span className="text-foreground">{phone ?? "no number"}</span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => setPhone(phone === listingPhone ? (agent?.phone ?? null) : listingPhone)}
+                  >
+                    Use {phone === listingPhone ? agent?.phone : listingPhone} instead
+                  </Button>
+                </div>
+              )}
+              <div className={`grid gap-2 ${phone ? "grid-cols-3" : "grid-cols-2"}`}>
                 <Button variant="outline" size="sm" className="px-2" onClick={() => mark("keep_in_touch")} disabled={busy != null}>
                   <Clock />
                   Keep in touch
@@ -198,9 +222,9 @@ export function MessageDetailDialog({
                   <ThumbsDown />
                   Declined
                 </Button>
-                {agent?.phone && (
+                {phone && (
                   <Button variant="outline" size="sm" asChild>
-                    <a href={smsUrl(agent.phone, "")}>
+                    <a href={smsUrl(phone, "")}>
                       <MessageCircle />
                       Text back
                     </a>

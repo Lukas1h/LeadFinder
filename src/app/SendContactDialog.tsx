@@ -40,6 +40,7 @@ export function SendContactDialog({
   listingId,
   type,
   agentPhone,
+  altPhone,
   agentEmail,
   agentName,
   address,
@@ -49,6 +50,14 @@ export function SendContactDialog({
   listingId: string;
   type: PresetType;
   agentPhone: string | null;
+  /**
+   * A second number on file for this agent, when it's not the same as
+   * agentPhone — the listing's own agentPhone snapshot and the agent's saved
+   * record can genuinely disagree (a team line vs. a personal cell, or a
+   * number that changed), and there's no way to tell which one is right from
+   * here, so both are offered rather than guessing.
+   */
+  altPhone?: string | null;
   agentEmail: string | null;
   agentName: string | null;
   address: string | null;
@@ -66,6 +75,7 @@ export function SendContactDialog({
   const selectedSmsRef = useRef<string | null>(null);
   const selectedEmailRef = useRef<string | null>(null);
   const [editedText, setEditedText] = useState("");
+  const [phone, setPhone] = useState("");
   const [isDraftingAi, setIsDraftingAi] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
   const [isSendingSms, setIsSendingSms] = useState(false);
@@ -114,6 +124,7 @@ export function SendContactDialog({
     setSmsPresets([]);
     setSmsSelectedPresetId(null);
     setEditedText("");
+    setPhone(agentPhone ?? "");
     setIsDraftingAi(false);
     setAiInstruction("");
     setEmailLoaded(false);
@@ -150,7 +161,7 @@ export function SendContactDialog({
   // dialog.
   const hasSmsAiDraft = Boolean(selectedSms?.text);
   const hasEmailAiDraft = Boolean(selectedEmail?.subject || selectedEmail?.text);
-  const callHref = telUrl(agentPhone);
+  const callHref = telUrl(phone);
 
   /**
    * The one place a draft gets spent, whether it's the first one or a redo.
@@ -199,7 +210,7 @@ export function SendContactDialog({
     if (!selectedSms) return;
     // Copied in the same tap, so the second text is one paste in Messages.
     copyInTap(selectedSms.secondMessage);
-    window.location.href = smsUrl(agentPhone ?? "", editedText);
+    window.location.href = smsUrl(phone, editedText);
     setIsSendingSms(true);
     sendMessage(listingId, type, selectedSms.presetId, selectedSms.variantId, editedText).then(() => {
       setIsSendingSms(false);
@@ -321,6 +332,22 @@ export function SendContactDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                )}
+                {altPhone && altPhone !== agentPhone && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      Texting <span className="text-foreground">{phone || "no number"}</span>
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setPhone(phone === altPhone ? (agentPhone ?? "") : altPhone)}
+                    >
+                      Use {phone === altPhone ? agentPhone : altPhone} instead
+                    </Button>
+                  </div>
                 )}
                 {selectedSms &&
                   (isDraftingAi ? (
