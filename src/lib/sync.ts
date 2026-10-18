@@ -6,7 +6,7 @@ import { scorePhotos } from "@/lib/photoScore";
 import { notifyNewListings, notifyWarmListings } from "@/lib/push";
 import { FEW_PHOTOS_THRESHOLD, WARM_AGENT_STATUSES } from "@/lib/pipeline";
 import { linkListingToAgent } from "@/lib/agentIdentity";
-import { refreshLeadSections } from "@/lib/leadSections";
+import { LEAD_MIN_PRICE, hasInHouseMedia, isBuilderListing, refreshLeadSections } from "@/lib/leadSections";
 import { dropDuplicateListings } from "@/lib/listingDedupe";
 import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -62,9 +62,10 @@ type AgentLookup = AgentInfo & { agentEmail: string | null };
  * Oregon Datashare listings (Medford, Grants Pass, Bend: it only has the
  * brokerage), while Compass is free and does — see src/lib/compass.ts. So
  * Compass fills whatever Zillapi leaves blank, and `zillapi` says where the
- * paid lookup goes: "first" for search results, "never" when the caller
- * already fetched the full listing, "last" for retries, where Compass is tried
- * before spending another credit on a listing that came back empty once.
+ * paid lookup goes: "never" when the caller already fetched the full listing,
+ * "last" otherwise, so Compass is always tried before spending a credit.
+ * ("first" was the default for search results until 2026-10-17, when Zillapi
+ * top-ups had reached about $10 a month.)
  */
 async function lookUpAgent(
   row: { zpid: string; address: string | null; city: string | null; price: number | null },
@@ -144,11 +145,23 @@ export async function runSync(): Promise<SyncResult> {
 async function retryMissingAgentInfo(): Promise<number> {
   const cutoff = new Date(Date.now() - AGENT_RETRY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const candidates = await db
-    .select({ id: listings.id, zpid: listings.zpid, address: listings.address, city: listings.city, price: listings.price })
+    .select({
+      id: listings.id,
+      zpid: listings.zpid,
+      address: listings.address,
+      city: listings.city,
+      price: listings.price,
+      brokerName: listings.brokerName,
+    })
     .from(listings)
     .where(and(isNull(listings.agentPhone), gte(listings.foundAt, cutoff)));
 
-  const eligible = candidates.slice(0, AGENT_RETRY_LIMIT);
+  // Unlikely whoever the agent turns out to be (under the price floor, a
+  // builder, Redfin): not worth a credit. The email-alert path saves these
+  // without an agent on purpose.
+  const eligible = candidates
+    .filter((r) => !(r.price != null && r.price < LEAD_MIN_PRICE) && !isBuilderListing(r.brokerName) && !hasInHouseMedia(r.brokerName))
+    .slice(0, AGENT_RETRY_LIMIT);
   if (eligible.length === 0) return 0;
 
   let updated = 0;
@@ -253,6 +266,8 @@ export async function insertAndEnrichListings(
     notificationUrl?: string;
     /** The rows came from a full listing fetch, so Zillapi has nothing more to say about the agent. */
     agentAlreadyFetched?: boolean;
+    /** Agent emails found alongside the rows (Compass has them), by zpid, for the agent record. */
+    agentEmails?: Map<string, string>;
   }
 ): Promise<number> {
   candidates = await dropDuplicateListings(candidates);
@@ -289,7 +304,7 @@ export async function insertAndEnrichListings(
         // a score nobody needs.
         const enoughPhotosToScore = (row.photos?.length ?? 0) >= FEW_PHOTOS_THRESHOLD;
         const [agent, photoScore] = await Promise.all([
-          row.agentPhone ? null : lookUpAgent(row, options?.agentAlreadyFetched ? "never" : "first"),
+          row.agentPhone ? null : lookUpAgent(row, options?.agentAlreadyFetched ? "never" : "last"),
           enoughPhotosToScore ? scorePhotos(row.photos) : Promise.resolve({ score: null, reasoning: null }),
         ]);
 
@@ -313,7 +328,7 @@ export async function insertAndEnrichListings(
           row.id,
           agent?.agentPhone ?? row.agentPhone,
           agent?.agentName ?? row.agentName,
-          agent?.agentEmail
+          agent?.agentEmail ?? options?.agentEmails?.get(row.zpid)
         );
         if (agentId) agentIdByListing.set(row.id, agentId);
       })

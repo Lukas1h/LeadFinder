@@ -2,7 +2,10 @@ import { Webhook } from "svix";
 import { db } from "@/db";
 import { listings } from "@/db/schema";
 import { inArray } from "drizzle-orm";
-import { fetchFullListing } from "@/lib/zillapi";
+import { fetchFullListing, zillowLinkFromZpid } from "@/lib/zillapi";
+import { fetchCompassListing } from "@/lib/compass";
+import { parseAlertCards, type AlertCard } from "@/lib/alertCards";
+import { LEAD_MIN_PRICE, hasInHouseMedia, isBuilderListing } from "@/lib/leadSections";
 import { insertAndEnrichListings, retryMissingPhotoScores } from "@/lib/sync";
 import { fetchAgentMailMessage } from "@/lib/agentmail";
 import { applyPriceCutsToExisting, parseEmailPriceCuts } from "@/lib/priceCuts";
@@ -195,7 +198,22 @@ async function handle(req: Request): Promise<Response> {
   const priceCutByZpid = new Map(priceCuts.map((c) => [c.zpid, c]));
   const priceCutsApplied = await applyPriceCutsToExisting(priceCuts.filter((c) => existingZpids.has(c.zpid)));
 
-  const fetched = await Promise.all(newZpids.map((zpid) => fetchFullListing(zpid)));
+  // Free sources first: the email's own card for each listing, then Compass.
+  // Zillapi is only paid for what neither can answer (see lookUpAlertListing).
+  const cards = parseAlertCards(text);
+  const agentEmails = new Map<string, string>();
+  const paths: Record<AlertLookup["source"], number> = { compass: 0, email: 0, zillapi: 0, skipped: 0 };
+  const fetched: (NewListing | null)[] = [];
+  for (let i = 0; i < newZpids.length; i += 2) {
+    const batch = await Promise.all(
+      newZpids.slice(i, i + 2).map((zpid) => lookUpAlertListing(zpid, cards.get(zpid), trustedSet.has(zpid)))
+    );
+    for (const found of batch) {
+      paths[found.source]++;
+      if (found.agentEmail && found.listing) agentEmails.set(found.listing.zpid, found.agentEmail);
+      fetched.push(found.listing);
+    }
+  }
   const recommendationCutoff = new Date(Date.now() - RECOMMENDATION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
   const staleRecommendations: string[] = [];
   const candidates = fetched
@@ -218,7 +236,7 @@ async function handle(req: Request): Promise<Response> {
     });
 
   // fetchFullListing already asked Zillapi about the agent.
-  const inserted = await insertAndEnrichListings(candidates, { agentAlreadyFetched: true });
+  const inserted = await insertAndEnrichListings(candidates, { agentAlreadyFetched: true, agentEmails });
 
   // Listings arrive here all day and the sync cron runs once, so this is where
   // a backlog of unscored listings (scoring was down, then came back) gets
@@ -233,8 +251,78 @@ async function handle(req: Request): Promise<Response> {
     zpids,
     alreadyExisted: existingZpids.size,
     skippedStaleRecommendations: staleRecommendations.length,
-    fetchFailed: newZpids.length - candidates.length - staleRecommendations.length,
+    // Where each new listing's details came from: only "zillapi" costs a credit.
+    lookups: paths,
+    fetchFailed: newZpids.length - candidates.length - staleRecommendations.length - paths.skipped,
     inserted,
     priceCutsApplied,
   });
+}
+
+interface AlertLookup {
+  listing: NewListing | null;
+  agentEmail?: string | null;
+  source: "compass" | "email" | "zillapi" | "skipped";
+}
+
+/** Under the price floor, a builder, or a brokerage with its own photographers: the unlikely rules, on the email's card alone. */
+function unlikelyFromCard(card: AlertCard): boolean {
+  return (card.price != null && card.price < LEAD_MIN_PRICE) || isBuilderListing(card.brokerName) || hasInHouseMedia(card.brokerName);
+}
+
+/**
+ * One new listing's details, as cheaply as they can be had. Zillapi was
+ * costing about 3,000 credits a month over its plan (2026-10-17), one for
+ * every listing an alert mentioned, while Compass has the same listing for
+ * free about three times in four, agent email included.
+ *
+ * 1. Compass, found by the street and city on the email's card.
+ * 2. If Compass can't help: a listing the email already shows is unlikely
+ *    (under the price floor, a builder, Redfin) is saved from the card alone,
+ *    since it isn't getting texted anyway, and a recommendation-carousel
+ *    listing is dropped rather than paid for.
+ * 3. Otherwise, Zillapi.
+ */
+async function lookUpAlertListing(zpid: string, card: AlertCard | undefined, trusted: boolean): Promise<AlertLookup> {
+  if (card?.address && card.city) {
+    const compass = await fetchCompassListing({ address: card.address, city: card.city, price: card.price }).catch(
+      (error) => {
+        console.error("agentmail webhook: compass lookup failed", zpid, error);
+        return null;
+      }
+    );
+    if (compass) {
+      return {
+        source: "compass",
+        agentEmail: compass.agentEmail,
+        listing: {
+          ...compass.listing,
+          zpid,
+          listingUrl: zillowLinkFromZpid(zpid),
+          // The email's spelling ("Exp Realty, Llc" vs Compass's capitals) when it has one.
+          brokerName: card.brokerName ?? compass.listing.brokerName,
+          price: card.price ?? compass.listing.price,
+        },
+      };
+    }
+    if (!trusted) return { source: "skipped", listing: null };
+    if (unlikelyFromCard(card)) {
+      return {
+        source: "email",
+        listing: {
+          zpid,
+          address: card.address,
+          city: card.city,
+          state: card.state,
+          price: card.price,
+          bedrooms: card.bedrooms,
+          bathrooms: card.bathrooms,
+          livingArea: card.livingArea,
+          brokerName: card.brokerName,
+          listingUrl: zillowLinkFromZpid(zpid),
+        },
+      };
+    }
+  }
+  return { source: "zillapi", listing: await fetchFullListing(zpid) };
 }

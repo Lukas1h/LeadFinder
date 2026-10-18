@@ -1,3 +1,4 @@
+import type { NewListing } from "@/db/schema";
 import { normalizeEmail, normalizeName, normalizePhone } from "./normalize";
 
 /**
@@ -185,4 +186,142 @@ export async function fetchCompassAgent(listing: {
     };
   }
   return null;
+}
+
+/**
+ * Everything a new lead needs, from the listing's Compass page, so an alert
+ * listing doesn't cost a Zillapi credit (Zillapi ran about 3,000 credits a
+ * month over its plan, nearly all on alert listings, 2026-10-17). The page's
+ * window.__INITIAL_DATA__ carries the full listing: every photo (the same
+ * count Zillow shows, checked on 2026-10-17), the listing agent's cell and
+ * email, the brokerage, price, list date, price history, and size.
+ *
+ * Null unless it's clearly the same, still-for-sale listing with an agent to
+ * text: an active or coming-soon status, a price within 10% of the one we
+ * expect (the email's), and a named agent with a phone. Anything less goes to
+ * the paid lookup instead.
+ */
+export interface CompassListing {
+  listing: Omit<NewListing, "zpid">;
+  agentEmail: string | null;
+}
+
+interface CompassInitialListing {
+  localizedStatus?: string;
+  location?: { city?: string; state?: string; zipCode?: string };
+  size?: { bedrooms?: number; totalBathrooms?: number; bathrooms?: number; squareFeet?: number };
+  price?: { lastKnown?: number; listed?: number };
+  date?: { listed?: number };
+  history?: { timestamp?: number; localizedStatus?: string; price?: number }[];
+  media?: { category?: number; originalUrl?: string }[];
+  fullContacts?: { company?: string; email?: string; contactName?: string; phone?: string; mobile?: string; contactType?: string }[];
+  detailedInfo?: { propertyType?: { masterType?: { GLOBAL?: string[] } } };
+}
+
+// Compass's property types -> the Zillow homeType values the rest of the app uses.
+const HOME_TYPES: [RegExp, string][] = [
+  [/single family/i, "SINGLE_FAMILY"],
+  [/condo|co-?op/i, "CONDO"],
+  [/town/i, "TOWNHOUSE"],
+  [/multi/i, "MULTI_FAMILY"],
+  [/manufactured|mobile/i, "MANUFACTURED"],
+  [/land|lot/i, "LOT"],
+];
+
+/** "CAPITOL REAL ESTATE" -> "Capitol Real Estate"; mixed case is left alone. */
+function tidyName(name: string): string {
+  return /[a-z]/.test(name) ? name.trim() : name.trim().toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Price cuts since the latest listing (or relisting), from the page's history,
+ * newest first, the same shape summarizePriceHistory gives for Zillow's.
+ */
+function compassPriceCuts(history: CompassInitialListing["history"]) {
+  const events = (history ?? []).filter((e) => e.timestamp).sort((a, b) => b.timestamp! - a.timestamp!);
+  const listedIdx = events.findIndex((e) => /listed|coming soon/i.test(e.localizedStatus ?? ""));
+  if (listedIdx === -1) return {};
+  const sinceListed = events.slice(0, listedIdx + 1);
+  const cuts = sinceListed.filter((e, i) => {
+    const before = sinceListed[i + 1];
+    return /price change/i.test(e.localizedStatus ?? "") && e.price != null && before?.price != null && e.price < before.price;
+  });
+  const latest = cuts[0];
+  const beforeLatest = latest ? sinceListed[sinceListed.indexOf(latest) + 1] : null;
+  return {
+    originalPrice: events[listedIdx].price ?? null,
+    priceCutCount: cuts.length,
+    priceCutAt: latest ? new Date(latest.timestamp!) : null,
+    priceCutAmount: latest && beforeLatest?.price ? Math.round(beforeLatest.price - latest.price!) : null,
+  };
+}
+
+export async function fetchCompassListing(listing: {
+  address: string;
+  city: string;
+  price: number | null;
+}): Promise<CompassListing | null> {
+  const path = await findListingPath(listing.address, listing.city);
+  if (!path) return null;
+  const page = await fetchWithTimeout(`https://www.compass.com${path}`, { redirect: "follow" });
+  if (!page) return null;
+  const html = await page.text();
+
+  const marker = "window.__INITIAL_DATA__ = ";
+  const start = html.indexOf(marker);
+  if (start < 0) return null;
+  let blob = html.slice(start + marker.length, html.indexOf("</script>", start)).trim();
+  if (blob.endsWith(";")) blob = blob.slice(0, -1);
+  let data: CompassInitialListing | undefined;
+  try {
+    data = (JSON.parse(blob) as { props?: { listingRelation?: { listing?: CompassInitialListing } } }).props?.listingRelation
+      ?.listing;
+  } catch {
+    return null;
+  }
+  if (!data) return null;
+
+  const status = data.localizedStatus ?? "";
+  if (!/^active|coming soon/i.test(status) || /under contract|pending/i.test(status)) return null;
+
+  const price = data.price?.lastKnown ?? data.price?.listed ?? null;
+  if (listing.price && price && Math.abs(price - listing.price) / listing.price > 0.1) return null;
+
+  const contact = data.fullContacts?.find((c) => /listing agent/i.test(c.contactType ?? "")) ?? data.fullContacts?.[0];
+  // The cell first: it's the number Zillow shows, and the one that takes a text.
+  const phone = contact?.mobile || contact?.phone;
+  if (!contact?.contactName || !phone) return null;
+
+  // Photos at 1024px: plenty to score and show, a third of the original's size.
+  const photos = (data.media ?? [])
+    .filter((m) => (m.category ?? 0) === 0 && m.originalUrl)
+    .map((m) => m.originalUrl!.replace(/\/origin\.jpg$/, "/1024x768.jpg"));
+  const type = data.detailedInfo?.propertyType?.masterType?.GLOBAL?.[0] ?? "";
+  const listedFrom = (data.history ?? [])
+    .filter((e) => e.timestamp && /listed|coming soon/i.test(e.localizedStatus ?? ""))
+    .map((e) => e.timestamp!)
+    .sort((a, b) => b - a)[0] ?? data.date?.listed;
+
+  return {
+    agentEmail: contact.email ? normalizeEmail(contact.email) : null,
+    listing: {
+      address: listing.address,
+      city: data.location?.city ?? listing.city,
+      state: data.location?.state ?? "OR",
+      zipcode: data.location?.zipCode ?? null,
+      price,
+      bedrooms: data.size?.bedrooms != null ? String(data.size.bedrooms) : null,
+      bathrooms: (data.size?.totalBathrooms ?? data.size?.bathrooms) != null ? String(data.size?.totalBathrooms ?? data.size?.bathrooms) : null,
+      livingArea: data.size?.squareFeet ?? null,
+      homeType: HOME_TYPES.find(([re]) => re.test(type))?.[1] ?? null,
+      listedAt: listedFrom ? new Date(listedFrom) : null,
+      photos,
+      photoCount: photos.length,
+      isComingSoon: /coming soon/i.test(status),
+      brokerName: contact.company ? tidyName(contact.company) : null,
+      agentName: normalizeName(contact.contactName),
+      agentPhone: normalizePhone(phone),
+      ...compassPriceCuts(data.history),
+    },
+  };
 }

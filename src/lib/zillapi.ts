@@ -42,7 +42,7 @@ interface ZillapiListResponse {
   [key: string]: unknown;
 }
 
-function zillowLinkFromZpid(zpid: string): string {
+export function zillowLinkFromZpid(zpid: string): string {
   return `https://www.zillow.com/homedetails/${zpid}_zpid/`;
 }
 
