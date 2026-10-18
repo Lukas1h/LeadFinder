@@ -278,10 +278,12 @@ function unlikelyFromCard(card: AlertCard): boolean {
  *
  * 1. Compass, found by the street and city on the email's card.
  * 2. If Compass can't help: a listing the email already shows is unlikely
- *    (under the price floor, a builder, Redfin) is saved from the card alone,
- *    since it isn't getting texted anyway, and a recommendation-carousel
- *    listing is dropped rather than paid for.
- * 3. Otherwise, Zillapi.
+ *    (under the price floor, a builder, Redfin) isn't getting texted anyway,
+ *    so it's saved from the card alone, or dropped if it was only a
+ *    recommendation.
+ * 3. Otherwise, Zillapi. Recommendation-carousel listings included: over 400
+ *    alerts (to 2026-10-17) Lukas texted 28% of the ones saved against 16% of
+ *    his own searches' results, and one became a booking.
  */
 async function lookUpAlertListing(zpid: string, card: AlertCard | undefined, trusted: boolean): Promise<AlertLookup> {
   if (card?.address && card.city) {
@@ -305,8 +307,9 @@ async function lookUpAlertListing(zpid: string, card: AlertCard | undefined, tru
         },
       };
     }
-    if (!trusted) return { source: "skipped", listing: null };
     if (unlikelyFromCard(card)) {
+      // A carousel listing that's unlikely anyway isn't worth a row at all.
+      if (!trusted) return { source: "skipped", listing: null };
       return {
         source: "email",
         listing: {
