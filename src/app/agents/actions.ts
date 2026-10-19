@@ -138,6 +138,49 @@ export async function importAgent(input: {
   return { error: null };
 }
 
+const lastName = (name: string | null) => name?.trim().split(/\s+/).at(-1)?.toLowerCase() ?? null;
+
+/**
+ * Clears the way for giving agent `id` an email another record already has.
+ * The usual case is the same person twice: an email-only row from the cold
+ * email lists ("Gwen Christensen") and the phone row from a listing
+ * ("Gwendolyn E Christensen"). When the other row has no phone and the same
+ * last name, its history moves onto `id` and it's deleted. Anything else is
+ * left alone and named in the error, since two different people can share
+ * an office address. Returns the error, or null when the email is free.
+ */
+async function absorbEmailDuplicate(id: string, name: string, email: string): Promise<string | null> {
+  const [other] = await db
+    .select()
+    .from(agents)
+    .where(and(eq(agents.email, email), ne(agents.id, id)));
+  if (!other) return null;
+  const [self] = await db.select({ name: agents.name }).from(agents).where(eq(agents.id, id));
+  const sameLastName = lastName(other.name) != null && lastName(other.name) === lastName(name.trim() || self?.name || null);
+  if (other.phone || !sameLastName) return `${other.name ?? "Another agent"} already has this email`;
+
+  for (const [table, column] of [
+    ["message_sends", "agent_id"],
+    ["agent_interactions", "agent_id"],
+    ["listings", "agent_id"],
+    ["bookings", "contact_agent_id"],
+    ["reminders", "agent_id"],
+    ["queued_messages", "agent_id"],
+    ["trips", "agent_id"],
+  ] as const) {
+    await db.execute(sql`update ${sql.identifier(table)} set ${sql.identifier(column)} = ${id} where ${sql.identifier(column)} = ${other.id}`);
+  }
+  await db
+    .update(agents)
+    .set({
+      lastContactedAt: sql`greatest(${agents.lastContactedAt}, ${other.lastContactedAt})`,
+      notes: other.notes ? sql`trim(coalesce(${agents.notes} || E'\n', '') || ${other.notes})` : undefined,
+    })
+    .where(eq(agents.id, id));
+  await db.delete(agents).where(eq(agents.id, other.id));
+  return null;
+}
+
 /** Edits an existing agent's name/phone/email/relationship — from the "Edit" control in AgentDetailDialog. */
 export async function updateAgentContactInfo(
   id: string,
@@ -155,11 +198,8 @@ export async function updateAgentContactInfo(
     if (existing) return { error: "Another agent already has this phone number" };
   }
   if (email) {
-    const [existing] = await db
-      .select({ id: agents.id })
-      .from(agents)
-      .where(and(eq(agents.email, email), ne(agents.id, id)));
-    if (existing) return { error: "Another agent already has this email" };
+    const conflict = await absorbEmailDuplicate(id, input.name, email);
+    if (conflict) return { error: conflict };
   }
 
   await db
@@ -184,11 +224,9 @@ export async function saveAgentEmail(id: string, emailInput: string): Promise<{ 
   const email = normalizeEmail(emailInput.trim());
   if (!EMAIL_RE.test(email)) return { error: "That isn't a valid email address" };
 
-  const [existing] = await db
-    .select({ name: agents.name })
-    .from(agents)
-    .where(and(eq(agents.email, email), ne(agents.id, id)));
-  if (existing) return { error: `${existing.name ?? "Another agent"} already has this email` };
+  const [current] = await db.select({ name: agents.name }).from(agents).where(eq(agents.id, id));
+  const conflict = await absorbEmailDuplicate(id, current?.name ?? "", email);
+  if (conflict) return { error: conflict };
 
   const [agent] = await db.update(agents).set({ email }).where(eq(agents.id, id)).returning();
   revalidatePath("/agents");
