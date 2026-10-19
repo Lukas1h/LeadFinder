@@ -3,6 +3,12 @@ export function firstName(fullName: string | null): string | null {
   return fullName.trim().split(/\s+/)[0] || null;
 }
 
+/** The name a message greeted, when that's a different person from the linked agent (a shared team number). */
+export function sharedNumberName(agentName: string | null, recipientName: string | null): string | null {
+  if (!agentName || !recipientName) return null;
+  return firstName(agentName)?.toLowerCase() === firstName(recipientName)?.toLowerCase() ? null : recipientName;
+}
+
 // Abbreviation -> the full word a person would say, lowercase on purpose:
 // "South Bank road" reads like a text, "South Bank Road" like a form.
 const STREET_SUFFIXES: Record<string, string> = {

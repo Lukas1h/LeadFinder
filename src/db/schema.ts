@@ -825,6 +825,12 @@ export const messageSends = pgTable("message_sends", {
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   respondedAt: timestamp("responded_at", { withTimezone: true }),
   result: messageResultEnum("result").notNull().default("pending"),
+  // What actually went out, edits included, and the name it greeted. The
+  // linked agent can be someone else on the same number (a team line), so
+  // re-rendering the template with agents.name could show the wrong person.
+  // Null on rows from before 2026-10-19, which fall back to re-rendering.
+  body: text("body"),
+  recipientName: text("recipient_name"),
 });
 
 export type MessageSend = typeof messageSends.$inferSelect;

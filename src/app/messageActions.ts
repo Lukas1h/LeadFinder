@@ -497,6 +497,8 @@ export async function sendMessage(
       type,
       channel: "sms",
       sentAt: now,
+      body: finalText,
+      recipientName: lead?.agentName ?? null,
     })
     .returning({ id: messageSends.id });
 

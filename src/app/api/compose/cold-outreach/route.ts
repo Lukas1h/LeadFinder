@@ -123,6 +123,8 @@ export async function POST(request: NextRequest) {
     type: "initial_outreach",
     channel: "email",
     sentAt: now,
+    body: text,
+    recipientName: name,
   });
 
   return NextResponse.json({ status: "sent", agentId });

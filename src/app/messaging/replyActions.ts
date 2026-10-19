@@ -39,8 +39,10 @@ export interface SendDetail {
   respondedAt: Date | null;
   result: MessageResult;
   presetName: string;
-  /** The template as it reads for this agent and listing (edits made at send time aren't stored). */
+  /** What went out. Sends from before 2026-10-19 didn't store it, so those show the template re-rendered. */
   text: string;
+  /** The name the message greeted, which can differ from agent.name when two people share a number. */
+  recipientName: string | null;
   agent: Agent | null;
   listing: Listing | null;
   /** The template's quick actions, in order (see messagePresets.quickActionPresetIds). */
@@ -156,7 +158,7 @@ export async function getSendDetail(sendId: string): Promise<SendDetail | null> 
   if (!row) return null;
 
   const who = {
-    agentName: row.agent?.name ?? row.listing?.agentName ?? null,
+    agentName: greetingName(row.send, row.agent?.name, row.listing?.agentName),
     address: row.listing?.address ?? null,
     city: row.listing?.city ?? null,
   };
@@ -170,7 +172,8 @@ export async function getSendDetail(sendId: string): Promise<SendDetail | null> 
     respondedAt: row.send.respondedAt,
     result: row.send.result,
     presetName: row.presetName,
-    text: renderMessageBody(row.body, who.agentName, who.address, who.city),
+    text: row.send.body ?? renderMessageBody(row.body, who.agentName, who.address, who.city),
+    recipientName: who.agentName,
     agent: row.agent,
     listing: row.listing,
     quickActions,
@@ -258,12 +261,35 @@ function revalidateAll() {
 
 async function loadSend(sendId: string) {
   const [row] = await db
-    .select({ send: messageSends, agent: agents, quickActionPresetIds: messagePresets.quickActionPresetIds })
+    .select({
+      send: messageSends,
+      agent: agents,
+      quickActionPresetIds: messagePresets.quickActionPresetIds,
+      listingAgentName: listings.agentName,
+      address: listings.address,
+      city: listings.city,
+    })
     .from(messageSends)
     .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))
     .leftJoin(agents, eq(messageSends.agentId, agents.id))
+    .leftJoin(listings, eq(messageSends.listingId, listings.id))
     .where(eq(messageSends.id, sendId));
   return row ?? null;
+}
+
+/**
+ * Who a follow-up to this send should greet: whoever the first message did.
+ * Two people can share one number (a teammate's cell on a listing), so the
+ * linked agent record isn't always the person the conversation is with.
+ * Older sends didn't store it; a listing's texts and emails were written to
+ * the listing's agent name, so that's the better guess for those.
+ */
+function greetingName(
+  send: { recipientName: string | null },
+  agentName: string | null | undefined,
+  listingAgentName: string | null | undefined
+): string | null {
+  return send.recipientName ?? listingAgentName ?? agentName ?? null;
 }
 
 /** "Keep in touch" or "Declined": logs the reply, no message goes out. */
@@ -333,16 +359,15 @@ export async function sendQuickActionEmail(
   const variant = (await nextVariants([preset.id])).get(preset.id);
   if (!variant) return { error: `"${preset.name}" has no enabled variant` };
 
-  const [listing] = row.send.listingId
-    ? await db.select({ address: listings.address, city: listings.city }).from(listings).where(eq(listings.id, row.send.listingId))
-    : [];
+  const name = greetingName(row.send, agent.name, row.listingAgentName);
+  const body = renderMessageBody(variant.body, name, row.address, row.city);
 
   try {
     await sendEmail({
       to: email,
-      toName: agent.name,
-      subject: renderSubject(variant.subject ?? "", agent.name),
-      text: renderMessageBody(variant.body, agent.name, listing?.address ?? null, listing?.city ?? null),
+      toName: name,
+      subject: renderSubject(variant.subject ?? "", name),
+      text: body,
       ...(await emailFilesFor(variant.id, preset.attachments)),
     });
   } catch (err) {
@@ -363,6 +388,8 @@ export async function sendQuickActionEmail(
     type: preset.type,
     channel: "email",
     sentAt: now,
+    body,
+    recipientName: name,
   });
   await recordReply(row.send, agent, "samples", `Replied: wants samples. Sent "${preset.name}" to ${email}.`);
 
@@ -395,11 +422,13 @@ export async function recordQuickActionText(
   if (!preset) return { error: "That template is gone" };
   if (preset.channel !== "sms") return { error: `"${preset.name}" is an email, not a text` };
   const [variant] = await db
-    .select({ id: messagePresetVariants.id })
+    .select({ id: messagePresetVariants.id, body: messagePresetVariants.body })
     .from(messagePresetVariants)
     .where(and(eq(messagePresetVariants.id, variantId), eq(messagePresetVariants.presetId, presetId)));
   if (!variant) return { error: "That variant doesn't belong to the template" };
 
+  // The same text the quick action handed to Messages (see loadQuickActions).
+  const name = greetingName(row.send, agent.name, row.listingAgentName);
   const now = new Date();
   await db.update(agents).set({ lastContactedAt: now }).where(eq(agents.id, agent.id));
   const [sent] = await db
@@ -412,6 +441,8 @@ export async function recordQuickActionText(
       type: preset.type,
       channel: "sms",
       sentAt: now,
+      body: renderMessageBody(variant.body, name, row.address, row.city),
+      recipientName: name,
     })
     .returning({ id: messageSends.id });
   const interactionId = await startPendingInteraction({

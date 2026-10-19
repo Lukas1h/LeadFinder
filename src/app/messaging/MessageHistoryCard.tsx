@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Mail, MessageCircle, History } from "lucide-react";
 import type { RecentSend } from "@/lib/messageStats";
 import { formatPhone } from "@/lib/format";
+import { sharedNumberName } from "@/lib/sms";
 import { MessageDetailDialog } from "./MessageDetailDialog";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -69,6 +70,9 @@ export function MessageHistoryCard({ sends }: { sends: RecentSend[] }) {
               <div className="min-w-0 flex-1">
                 <p className="text-[15px] font-medium text-foreground truncate">
                   {s.agentName ?? formatPhone(s.agentPhone) ?? s.agentEmail ?? "Unknown recipient"}
+                  {sharedNumberName(s.agentName, s.recipientName) && (
+                    <span className="font-normal text-muted-foreground"> · sent to {s.recipientName}</span>
+                  )}
                 </p>
                 {s.listingAddress && <p className="text-sm text-foreground/80 truncate">{s.listingAddress}</p>}
                 <p className="text-xs text-muted-foreground truncate">

@@ -93,6 +93,8 @@ async function sendBulkTemplateEmail(
     type: variant.type,
     channel: "email",
     sentAt: now,
+    body,
+    recipientName: name,
   });
 
   return { name, email, status: "sent", agentId };
@@ -250,7 +252,7 @@ export function registerMessagingTools(server: McpServer): void {
 
       const [send] = await db
         .insert(messageSends)
-        .values({ listingId: null, agentId, presetId, variantId, type: variant.type, channel: "email", sentAt: now })
+        .values({ listingId: null, agentId, presetId, variantId, type: variant.type, channel: "email", sentAt: now, body, recipientName: name })
         .returning({ id: messageSends.id });
 
       return text({ sent: true, agentId, messageSendId: send.id, subject, body });

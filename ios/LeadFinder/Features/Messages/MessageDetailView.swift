@@ -240,11 +240,19 @@ struct MessageDetailView: View {
                 .kerning(0.6)
 
             // Tap through to their own screen to call, text or email.
-            TappableAgentRow(agent: agent, subtitle: agent.email)
+            TappableAgentRow(agent: agent, subtitle: sharedNumberNote(agent) ?? agent.email)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()
         .padding(.horizontal, 16)
+    }
+
+    /// "Sent to Barbara on this number" when the message greeted someone else
+    /// than the linked agent, i.e. two people share the number.
+    private func sharedNumberNote(_ agent: Agent) -> String? {
+        guard let recipient = detail?.recipientName, let agentName = agent.name else { return nil }
+        let first = { (name: String) in name.split(separator: " ").first.map { $0.lowercased() } }
+        return first(recipient) == first(agentName) ? nil : "Sent to \(recipient) on this number"
     }
 
     private func listingCard(_ listing: Listing) -> some View {

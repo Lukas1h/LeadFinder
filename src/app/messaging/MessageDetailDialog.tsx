@@ -13,7 +13,7 @@ import {
 } from "./replyActions";
 import { AgentRow } from "@/app/AgentRow";
 import { ListingRow } from "@/app/ListingRow";
-import { smsUrl, firstName } from "@/lib/sms";
+import { smsUrl, firstName, sharedNumberName } from "@/lib/sms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -241,7 +241,16 @@ export function MessageDetailDialog({
 
               <div className="flex flex-col -mx-2">
                 {agent && (
-                  <AgentRow name={agent.name} phone={agent.phone} agentId={agent.id} subtitle={agent.email} />
+                  <AgentRow
+                    name={agent.name}
+                    phone={agent.phone}
+                    agentId={agent.id}
+                    subtitle={
+                      sharedNumberName(agent.name, shown.recipientName)
+                        ? `Sent to ${shown.recipientName} on this number`
+                        : agent.email
+                    }
+                  />
                 )}
                 {shown.listing && <ListingRow listing={shown.listing} />}
               </div>

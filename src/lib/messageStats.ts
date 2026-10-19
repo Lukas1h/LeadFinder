@@ -257,6 +257,8 @@ export interface RecentSend {
   agentPhone: string | null;
   agentEmail: string | null;
   listingAddress: string | null;
+  /** The name the message greeted. Differs from agentName when two people share a number. */
+  recipientName: string | null;
 }
 
 /**
@@ -281,6 +283,8 @@ export async function getRecentMessageSends(limit = 100): Promise<RecentSend[]> 
       agentPhone: agents.phone,
       agentEmail: agents.email,
       listingAddress: listings.address,
+      // Who the message greeted; older sends didn't store it, and a listing's were written to its agent name.
+      recipientName: sql<string | null>`coalesce(${messageSends.recipientName}, ${listings.agentName})`,
     })
     .from(messageSends)
     .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))

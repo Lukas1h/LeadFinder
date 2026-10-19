@@ -5,11 +5,10 @@ import { isUuid, notFound } from "../../helpers";
 
 /**
  * One message in full, for the phone's message detail screen: who it went to,
- * which listing it was about, and the text as it reads for them.
- *
- * The text is re-rendered from the stored variant rather than the exact bytes
- * that went out — the web notes that edits made at send time aren't persisted,
- * so this is the template, not a receipt.
+ * which listing it was about, and what was sent. `text` is exactly what went
+ * out; sends from before 2026-10-19 didn't store it, so those get the
+ * template re-rendered. `recipientName` is who it greeted, which can differ
+ * from `agent.name` when two people share a number (a teammate's cell).
  */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = requireAppAuth(req);
@@ -34,6 +33,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       presetName: detail.presetName,
     },
     text: detail.text,
+    recipientName: detail.recipientName,
     // A send can have no agent or no listing attached (a cold email goes out
     // with neither), so both are nullable rather than a 404.
     agent: detail.agent ? agentJson(detail.agent) : null,

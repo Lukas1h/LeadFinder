@@ -286,6 +286,13 @@ A text template lists other templates as **quick actions**: the buttons on a mes
 `GET /messages/:id` now also returns:
 
 ```jsonc
+"text": "Hey Barbara, …",          // exactly what was sent (sends before 2026-10-19: the template re-rendered)
+"recipientName": "Barbara A Brown", // who it greeted; when its first name isn't agent.name's, show "Sent to <name> on this number" under the agent (two people share the number)
+```
+
+and the list's `sends[]` carry `recipientName` too. Quick actions greet `recipientName`, so a follow-up keeps talking to the same person.
+
+```jsonc
 "quickActions": [            // in the order to show them; may be empty
   {
     "presetId": "…", "name": "Send contact",

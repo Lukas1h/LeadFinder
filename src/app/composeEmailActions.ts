@@ -467,6 +467,8 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
     type: input.type,
     channel: "email",
     sentAt: now,
+    body,
+    recipientName: input.agentName,
   });
 
   revalidatePath("/");
@@ -623,6 +625,8 @@ export async function sendComposeEmail(input: SendComposeEmailInput): Promise<{ 
     type: input.type,
     channel: "email",
     sentAt: now,
+    body,
+    recipientName: name,
   });
 
   revalidatePath("/messaging");

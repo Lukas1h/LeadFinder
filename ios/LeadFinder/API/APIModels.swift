@@ -593,10 +593,12 @@ struct MessagesResponse: Codable, Sendable {
 // MARK: - GET /messages/:id
 
 struct MessageDetailResponse: Codable, Sendable {
-    /// The template as it reads for this agent and listing. Edits made at send
-    /// time aren't stored, so this is re-rendered from the variant rather than
-    /// the exact bytes that went out.
+    /// What was sent. Sends from before 2026-10-19 didn't store it, so for
+    /// those it's the template re-rendered.
     var text: String
+    /// Who the message greeted. Can be someone other than `agent` when two
+    /// people share a number (a teammate's cell). Missing from an older server.
+    var recipientName: String?
     var agent: Agent?
     var listing: Listing?
     /// The first email quick action, kept by the server for older builds.
