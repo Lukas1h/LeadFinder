@@ -57,6 +57,14 @@ interface AgentMailMessageReceived {
 // one of these actually fires.
 const EXCLUDED_ALERT_RE = /sale pending|pending sale|\bsold\b|off.?market|tour reminder|open house reminder/i;
 
+// Rental saved searches (2026-10-19, testing whether Zillow emails rental
+// alerts at all, for property-manager outreach) share this inbox. Their
+// alerts must not become agent leads or spend Zillapi credits, so they stop
+// here; the message itself stays in AgentMail. Rental prices read "$1,850/mo",
+// which none of 40 recent for-sale alerts contained.
+const RENTAL_SUBJECT_RE = /\brental|for rent\b/i;
+const RENTAL_PRICE_RE = /\$\s?[\d,.]+K?\s*\/\s*mo\b/i;
+
 // Zillow's "New Listing: <addr>. Your search" digest (and the "instant
 // home recs" price-cut alert, e.g. "A $5K price cut in Sutherlin") puts
 // the one real result first, then a recommendation carousel — headed
@@ -177,6 +185,11 @@ async function handle(req: Request): Promise<Response> {
       body = html + " " + text;
       ({ trusted, recommended } = splitLeadZpids(body));
     }
+  }
+
+  if (RENTAL_SUBJECT_RE.test(subject) || RENTAL_PRICE_RE.test(body)) {
+    console.log("agentmail webhook: rental alert, not a lead:", subject);
+    return new Response("Ignored: rental alert", { status: 200 });
   }
 
   const zpids = [...trusted, ...recommended];
