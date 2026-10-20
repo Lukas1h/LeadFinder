@@ -5,7 +5,7 @@ import { inArray } from "drizzle-orm";
 import { fetchFullListing, zillowLinkFromZpid } from "@/lib/zillapi";
 import { fetchCompassListing } from "@/lib/compass";
 import { parseAlertCards, type AlertCard } from "@/lib/alertCards";
-import { LEAD_MIN_PRICE, hasInHouseMedia, isBuilderListing } from "@/lib/leadSections";
+import { isUnderPriceFloor, hasInHouseMedia, isBuilderListing } from "@/lib/leadSections";
 import { insertAndEnrichListings, retryMissingPhotoScores } from "@/lib/sync";
 import { fetchAgentMailMessage } from "@/lib/agentmail";
 import { applyPriceCutsToExisting, parseEmailPriceCuts } from "@/lib/priceCuts";
@@ -280,7 +280,10 @@ interface AlertLookup {
 
 /** Under the price floor, a builder, or a brokerage with its own photographers: the unlikely rules, on the email's card alone. */
 function unlikelyFromCard(card: AlertCard): boolean {
-  return (card.price != null && card.price < LEAD_MIN_PRICE) || isBuilderListing(card.brokerName) || hasInHouseMedia(card.brokerName);
+  // The card has no property type, but a lot is the one listing with neither
+  // bedrooms nor square footage, so it gets land's lower floor.
+  const homeType = !card.bedrooms && card.livingArea == null ? "LOT" : null;
+  return isUnderPriceFloor(card.price, homeType) || isBuilderListing(card.brokerName) || hasInHouseMedia(card.brokerName);
 }
 
 /**

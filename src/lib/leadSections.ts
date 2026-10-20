@@ -22,6 +22,13 @@ export const LEAD_FRESH_DAYS = 14;
 
 /** Under this, a shoot isn't worth the drive. */
 export const LEAD_MIN_PRICE = 250_000;
+/** Land is a drone-only shoot, and acreage worth flying sits well under the house floor. */
+export const LAND_MIN_PRICE = 100_000;
+
+/** Below the floor for its kind: land ("LOT", Zillow's homeType) has its own, lower one. */
+export function isUnderPriceFloor(price: number | null | undefined, homeType: string | null | undefined): boolean {
+  return price != null && price < (homeType === "LOT" ? LAND_MIN_PRICE : LEAD_MIN_PRICE);
+}
 /** Over this, a listing wants video rather than a backup-photographer text. */
 export const LEAD_VIDEO_PRICE = 750_000;
 /**
@@ -54,6 +61,7 @@ export const LEAD_SECTION_BRIEFS: Record<LeadSection, string> = {
 /** The listing facts a section decision depends on. */
 export interface LeadSectionInput {
   price: number | null;
+  homeType?: string | null;
   score: number | null;
   agentId?: string | null;
   agentName?: string | null;
@@ -130,7 +138,7 @@ export function isRecentlyTexted(lastTextedAt: Date | null | undefined): boolean
 
 /** Under the floor, unreachable, a builder, a brokerage that handles its own media, or the agent already turned us down. */
 export function isLeadUnlikely(listing: LeadSectionInput): boolean {
-  if (listing.price != null && listing.price < LEAD_MIN_PRICE) return true;
+  if (isUnderPriceFloor(listing.price, listing.homeType)) return true;
   if (hasNoAgent(listing)) return true;
   if (isBuilderListing(listing.brokerName)) return true;
   if (hasInHouseMedia(listing.brokerName)) return true;
@@ -205,6 +213,7 @@ export async function refreshLeadSections(ids: string[]): Promise<Map<string, Le
       id: listings.id,
       leadSection: listings.leadSection,
       price: listings.price,
+      homeType: listings.homeType,
       score: listings.score,
       agentId: listings.agentId,
       agentName: listings.agentName,

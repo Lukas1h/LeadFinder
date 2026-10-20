@@ -6,7 +6,7 @@ import { scorePhotos } from "@/lib/photoScore";
 import { notifyNewListings, notifyWarmListings } from "@/lib/push";
 import { FEW_PHOTOS_THRESHOLD, WARM_AGENT_STATUSES } from "@/lib/pipeline";
 import { linkListingToAgent } from "@/lib/agentIdentity";
-import { LEAD_MIN_PRICE, hasInHouseMedia, isBuilderListing, refreshLeadSections } from "@/lib/leadSections";
+import { isUnderPriceFloor, hasInHouseMedia, isBuilderListing, refreshLeadSections } from "@/lib/leadSections";
 import { dropDuplicateListings } from "@/lib/listingDedupe";
 import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -151,6 +151,7 @@ async function retryMissingAgentInfo(): Promise<number> {
       address: listings.address,
       city: listings.city,
       price: listings.price,
+      homeType: listings.homeType,
       brokerName: listings.brokerName,
     })
     .from(listings)
@@ -160,7 +161,7 @@ async function retryMissingAgentInfo(): Promise<number> {
   // builder, Redfin): not worth a credit. The email-alert path saves these
   // without an agent on purpose.
   const eligible = candidates
-    .filter((r) => !(r.price != null && r.price < LEAD_MIN_PRICE) && !isBuilderListing(r.brokerName) && !hasInHouseMedia(r.brokerName))
+    .filter((r) => !isUnderPriceFloor(r.price, r.homeType) && !isBuilderListing(r.brokerName) && !hasInHouseMedia(r.brokerName))
     .slice(0, AGENT_RETRY_LIMIT);
   if (eligible.length === 0) return 0;
 
