@@ -25,6 +25,15 @@ struct LeadsView: View {
             }
             .background(Theme.background)
             .navigationTitle("Leads")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink {
+                        PhotoEditorView()
+                    } label: {
+                        Label("Photo editor", systemImage: "wand.and.stars")
+                    }
+                }
+            }
             .sheet(item: $openLead) { group in
                 LeadDetailView(group: group)
                     .presentationDetents([.large])

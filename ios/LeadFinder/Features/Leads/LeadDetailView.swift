@@ -14,6 +14,7 @@ struct LeadDetailView: View {
     /// if the fetch fails.
     @State private var detail: ListingDetailResponse?
     @State private var openListing: Listing?
+    @State private var editingPhotos = false
 
     /// The best listing, with every photo once `/listings/:id` has answered.
     private var listing: Listing { detail?.listing ?? group.best }
@@ -35,6 +36,16 @@ struct LeadDetailView: View {
         }
         .background(Theme.background)
         .sheet(item: $openListing) { LeadListingSheet(listing: $0, agent: group.agent) }
+        .sheet(isPresented: $editingPhotos) {
+            NavigationStack {
+                PhotoEditorView(listingId: listing.id)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { editingPhotos = false }
+                        }
+                    }
+            }
+        }
         .navigationTitle(group.best.address?.nilIfBlank ?? "Lead")
         .titleDisplay(.inline)
         .task {
@@ -92,6 +103,16 @@ struct LeadDetailView: View {
             if let urlString = group.best.listingUrl, let url = URL(string: urlString) {
                 Link(destination: url) {
                     Label("Open the listing", systemImage: "arrow.up.right.square")
+                        .font(.footnote.weight(.medium))
+                }
+                .padding(.top, 2)
+            }
+
+            if !(listing.photos ?? []).isEmpty {
+                Button {
+                    editingPhotos = true
+                } label: {
+                    Label("Edit photos", systemImage: "wand.and.stars")
                         .font(.footnote.weight(.medium))
                 }
                 .padding(.top, 2)
