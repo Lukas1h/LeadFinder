@@ -79,6 +79,23 @@ export interface CallGeminiInput {
  * (JSON.parse for a structured response, or use the text as-is).
  */
 export async function callGemini(input: CallGeminiInput): Promise<string | null> {
+  const data = (await postGemini(input)) as { candidates?: { content?: { parts?: { text?: string }[] } }[] } | null;
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+}
+
+/** The first image a Gemini image model sends back, as base64 with its MIME type, or null. */
+export async function callGeminiImage(
+  input: CallGeminiInput
+): Promise<{ mimeType: string; data: string } | null> {
+  const data = (await postGemini(input)) as {
+    candidates?: { content?: { parts?: { inlineData?: { mimeType?: string; data?: string } }[] } }[];
+  } | null;
+  const part = data?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+  return part?.inlineData?.data ? { mimeType: part.inlineData.mimeType ?? "image/png", data: part.inlineData.data } : null;
+}
+
+/** The generateContent request and its retries, shared by text and image calls; the parsed response, or null. */
+async function postGemini(input: CallGeminiInput): Promise<unknown> {
   let base = endpointForKey.get(input.apiKey) ?? GEMINI_BASE_URL;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -100,7 +117,12 @@ export async function callGemini(input: CallGeminiInput): Promise<string | null>
       const body = await res.text();
 
       // The key belongs to the other endpoint. Doesn't count as an attempt.
-      if (res.status === 403 && body.includes("API_KEY_SERVICE_BLOCKED") && !endpointForKey.has(input.apiKey)) {
+      // AI Studio checks the request before the key, so a field only Vertex
+      // knows (the image editor's JPEG output) comes back as a 400 first.
+      const wrongDoor =
+        (res.status === 403 && body.includes("API_KEY_SERVICE_BLOCKED")) ||
+        (res.status === 400 && base === GEMINI_BASE_URL && body.includes("Unknown name"));
+      if (wrongDoor && !endpointForKey.has(input.apiKey)) {
         base = base === GEMINI_BASE_URL ? VERTEX_BASE_URL : GEMINI_BASE_URL;
         endpointForKey.set(input.apiKey, base);
         attempt--;
@@ -124,10 +146,7 @@ export async function callGemini(input: CallGeminiInput): Promise<string | null>
     }
 
     endpointForKey.set(input.apiKey, base);
-    const data = (await res.json()) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-    };
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    return res.json();
   }
 
   return null;

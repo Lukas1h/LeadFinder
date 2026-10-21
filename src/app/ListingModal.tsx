@@ -3,7 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ExternalLink, X, UserPlus, Car } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, X, UserPlus, Car, Wand2 } from "lucide-react";
 import { LEAD_STATUSES, type Listing, type LeadStatus } from "@/db/schema";
 import { getListingPhotos, updateListingNotes, updateListingStatus, updateListingFollowUp, findListingSourceUrl } from "./actions";
 import { PhotoCarousel } from "./PhotoCarousel";
@@ -200,6 +201,14 @@ export function ListingModal({
           )}
 
           <div className="flex flex-col gap-2 mt-2">
+            {photos.length > 0 && (
+              <Button variant="outline" asChild className="w-full">
+                <Link href={`/photo-editor?listing=${lead.id}`}>
+                  <Wand2 />
+                  Edit photos
+                </Link>
+              </Button>
+            )}
             <Button variant="outline" asChild className="w-full">
               <a href={lead.listingUrl ?? "#"} target="_blank" rel="noopener noreferrer">
                 Zillow
