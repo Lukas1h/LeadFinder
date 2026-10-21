@@ -34,15 +34,16 @@ export const PHOTO_PRESETS: PhotoPreset[] = [
     id: "sunset-exterior",
     label: "Sunset exterior",
     description:
-      "Orange-pink sunset sky with wispy clouds, bright façade, harsh midday shadows softened, no invented lights",
+      "Orange-pink sunset sky, soft even light with no harsh midday shadows, every light stays off, no surface repainted",
     prompt:
-      "Professional real estate exterior HDR twilight edit:\n" +
-      "1. SKY: Replace dull exterior sky with a vibrant, glowing orange-pink sunset along the horizon blending seamlessly into soft wispy blue evening clouds.\n" +
-      "2. ULTRA-BRIGHT EXPOSURE: Boost the house exterior exposure an extra +3 to +5 stops brighter so the façade, trim, porch, and driveway are ultra-bright, crisp, and luminous with zero dark shadows.\n" +
-      "3. SOFT EVEN TWILIGHT LIGHT: Remove all harsh midday sun shadows. Erase the hard-edged shadow patches the sun casts on the lawn, driveway, siding, and under trees, and relight the whole scene with soft, even, shadowless twilight ambient light, like the sun has just set. The result must read as a natural evening photo, not a midday photo with a sunset sky pasted on.\n" +
-      "4. DO NOT TURN ON ANY LIGHTS: Do NOT add, invent, or turn on any light source. No warm yellow glow in any window, no interior lights behind glass, no porch lights, garage lights, landscape spotlights, or path lights that are off in the original. Every window shows exactly what it shows in the original photo — interior, blinds, or at most a faint reflection of the new sky like glass at dusk — and stays that way.\n" +
-      "5. STRAIGHTEN GEOMETRY: Straighten all vertical house walls, columns, and rooflines so the architecture stands perfectly upright and level.\n" +
-      "6. DO NOT TOUCH BLINDS & LANDSCAPING: Do not open or alter any window blinds or curtains. Keep all existing landscaping without inventing new objects, and make any existing lawn grass, plants, and trees extra vibrant lush green.",
+      "Professional real estate exterior edit: replace the sky with a sunset and soften the harsh daylight. This is NOT a dusk photo shoot — no lights come on anywhere.\n" +
+      "1. SKY: Replace the sky with a vibrant, glowing orange-pink sunset along the horizon blending into soft wispy blue evening clouds. The sky is the only thing that may be replaced.\n" +
+      "2. SOFT EVEN LIGHT: Remove all harsh midday sun shadows. Erase the hard-edged shadow patches on the lawn, driveway, siding, and under trees, and relight the whole scene with soft, even, shadowless ambient light, like the minute after the sun has set: the house and yard stay fully visible and bright, lit only by the sky.\n" +
+      "3. NO LIGHTS ANYWHERE: Not one light turns on. No warm or yellow glow in any window — every window stays dim and shows exactly what it showed in the original photo (interior, blinds, or at most a faint reflection of the new sky). Porch lights, garage lights, landscape spotlights, path lights, and lamp posts that are off in the original stay off: no new glow, halo, or lit fixture anywhere in the photo.\n" +
+      "4. NEVER REPAINT ANY SURFACE: Every surface keeps its exact original color and material. A black front door stays black. A black or dark garage door stays dark. Grey siding stays grey, brick stays brick, stone stays stone. Brighten the lighting only — never whiten, lighten, or recolor any painted or finished surface. This exterior rule overrides the interior high-key brightness standard.\n" +
+      "5. STRAIGHTEN GEOMETRY: Straighten all vertical walls, columns, and rooflines so the architecture stands perfectly upright and level.\n" +
+      "6. LANDSCAPING: Keep all existing landscaping without inventing new objects, and make existing lawn, plants, and trees lush green. Do not open or alter window blinds or curtains.\n" +
+      "7. FINAL CHECK: Before returning the image, verify that no window glows, no fixture is lit, and no surface changed color — if any did, fix it before returning.",
   },
   {
     id: "max-anti-glare",
