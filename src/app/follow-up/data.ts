@@ -604,3 +604,8 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
   );
   return { today: items.slice(0, slots), later: items.slice(slots), doneToday, dailyTarget: DAILY_TARGET, upcoming };
 }
+
+/** The listings the board shows, so the feeds under it can leave them out. */
+export function shownListingIds(board: Pick<FollowUpBoard, "today" | "later">): Set<string> {
+  return new Set([...board.today, ...board.later].flatMap((e) => (e.listing ? [e.listing.id] : [])));
+}

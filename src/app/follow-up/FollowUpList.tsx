@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Copy, HeartHandshake, Sparkles } from "lucide-react";
+import { Copy, HeartHandshake, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { dismissFollowUpAgent } from "@/app/agents/actions";
 import { AgentCard } from "@/app/agents/AgentCard";
@@ -11,12 +11,12 @@ import { RelationshipBadge } from "@/app/badges";
 import { formatDate } from "@/lib/format";
 import { ListingRow } from "@/app/ListingRow";
 import type { FollowUpItem, FollowUpUpcoming } from "./data";
-import type { DroneOfferGroup } from "./droneOffers";
-import type { PhotoFixOfferFeed } from "./photoFixOffers";
+import type { FeedItem, FollowUpFeed } from "./feeds";
 
-/** What a card needs: a follow-up, or a feed offer (a drone offer has no reason or listing, a photo offer both). */
+/** What a card needs: a follow-up, or a feed item (which has no reason). */
 type CardItem = Pick<FollowUpItem, "agent" | "lastReplyAt" | "label" | "suggestion"> &
-  Partial<Pick<FollowUpItem, "reason" | "listing" | "address" | "city">> & { editorUrl?: string };
+  Partial<Pick<FollowUpItem, "reason" | "listing" | "address" | "city">> &
+  Partial<Pick<FeedItem, "editorHref">>;
 
 export function FollowUpList({
   today,
@@ -24,8 +24,7 @@ export function FollowUpList({
   doneToday,
   dailyTarget,
   upcoming,
-  droneOffers,
-  photoFixOffers,
+  feeds,
   counts,
   dates,
 }: {
@@ -34,8 +33,7 @@ export function FollowUpList({
   doneToday: number;
   dailyTarget: number;
   upcoming: FollowUpUpcoming[];
-  droneOffers: DroneOfferGroup[];
-  photoFixOffers: PhotoFixOfferFeed;
+  feeds: FollowUpFeed[];
   counts: Record<string, number>;
   dates: Record<string, { listedAt: Date | null; foundAt: Date }[]>;
 }) {
@@ -100,78 +98,57 @@ export function FollowUpList({
       ) : (
         e.address && <p className="text-sm text-foreground px-2">{[e.address, e.city].filter(Boolean).join(", ")}</p>
       )}
-      {e.editorUrl && (
-        <Link
-          href={e.editorUrl}
-          className="mx-2 mb-2 flex items-center justify-center gap-1.5 rounded-md border border-violet-600/30 bg-violet-500/10 px-3 py-2 text-sm font-medium text-violet-700 hover:bg-violet-500/20 dark:text-violet-300"
-        >
-          <Sparkles className="size-3.5" />
-          Open in photo editor
-        </Link>
+      {e.editorHref && (
+        <div className="px-2 pb-2">
+          <Link
+            href={e.editorHref}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+          >
+            <Wand2 className="size-4" />
+            Open in photo editor
+          </Link>
+        </div>
       )}
     </AgentCard>
   );
 
-  // The free drone shots trial (see droneOffers.ts): who to offer them to, by where he'll be this week.
-  const offers = droneOffers
-    .map((g) => ({ ...g, items: g.items.filter((e) => !snoozed.has(e.agent.id)) }))
-    .filter((g) => g.items.length > 0 || g.heldBack > 0);
-  const drone = offers.length > 0 && (
-    <section className="rounded-xl border border-emerald-600/30 bg-emerald-500/5 p-4">
-      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Free drone shots this week</h2>
-      <p className="text-sm text-muted-foreground mt-1">
-        Agents you know near where you&rsquo;re already driving, who haven&rsquo;t had the offer yet. One free shoot
-        each. To email it instead, pick the &ldquo;Follow-up: free drone shots&rdquo; template.
-      </p>
-      {offers.map((g) => (
-        <div key={g.title} className="mt-4">
-          <h3 className="text-sm font-medium text-foreground">{g.title}</h3>
-          {g.items.length > 0 && <div className="flex flex-col gap-4 mt-2">{g.items.map(card)}</div>}
-          {g.heldBack > 0 && (
-            <p className="text-sm text-muted-foreground mt-2">
-              {g.items.length > 0 ? `${g.heldBack} more` : g.heldBack} you know here heard from you in the last 10 days.
-            </p>
-          )}
-        </div>
-      ))}
-    </section>
-  );
-
-  // The AI photo touch-up feed (see photoFixOffers.ts): sitting, weak-photo
-  // listings of agents he knows, with the editor one tap away. The remote
-  // counterpart to the drone offers above — no drive, nobody has to be there.
-  const photoItems = photoFixOffers.items.filter((e) => !snoozed.has(e.agent.id));
-  const photoFeed = (photoItems.length > 0 || photoFixOffers.heldBack > 0) && (
-    <section className="rounded-xl border border-violet-600/30 bg-violet-500/5 p-4">
-      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">AI photo touch-ups</h2>
-      <p className="text-sm text-muted-foreground mt-1">
-        Agents you know whose listing has been sitting with weak photos. Offer to run its photos through the AI
-        editor and send the results — free, and nobody has to be at the house.
-      </p>
-      {photoItems.length > 0 && <div className="flex flex-col gap-4 mt-3">{photoItems.map(card)}</div>}
-      {photoFixOffers.heldBack > 0 && (
-        <p className="text-sm text-muted-foreground mt-2">
-          {photoItems.length > 0 ? `${photoFixOffers.heldBack} more` : photoFixOffers.heldBack} with a sitting
-          listing heard from you in the last 10 days.
-        </p>
-      )}
-    </section>
-  );
-
-  // The feeds: standing reasons to get in touch, each built around a different
-  // offer. Below the main list — it's the day's work, they're the extras.
-  const feeds = (drone || photoFeed) && (
-    <section className="flex flex-col gap-6">
+  // The feeds (feeds/index.ts): offers that make an easy excuse to get back in touch, under the main list.
+  const shownFeeds = feeds
+    .map((f) => ({
+      ...f,
+      groups: f.groups
+        .map((g) => ({ ...g, items: g.items.filter((e) => !snoozed.has(e.agent.id)) }))
+        .filter((g) => g.items.length > 0 || g.heldBack > 0),
+    }))
+    .filter((f) => f.groups.length > 0);
+  const feedSections = shownFeeds.length > 0 && (
+    <div className="flex flex-col gap-6 border-t pt-8">
       <div>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Feeds</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">Feeds</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Standing reasons to get in touch, grouped by the offer — free drone shots where you&rsquo;re already
-          driving, AI photo touch-ups from anywhere.
+          Extra reasons to get in touch, each built around one offer. Work them when the list above is done.
         </p>
       </div>
-      {drone}
-      {photoFeed}
-    </section>
+      {shownFeeds.map((f) => (
+        <details key={f.key} open className="group rounded-xl border p-4">
+          <summary className="cursor-pointer select-none text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            {f.title} ({f.groups.reduce((n, g) => n + g.items.length, 0)})
+          </summary>
+          <p className="text-sm text-muted-foreground mt-1">{f.blurb}</p>
+          {f.groups.map((g) => (
+            <div key={g.title} className="mt-4">
+              <h3 className="text-sm font-medium text-foreground">{g.title}</h3>
+              {g.items.length > 0 && <div className="flex flex-col gap-4 mt-2">{g.items.map(card)}</div>}
+              {g.heldBack > 0 && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  {g.items.length > 0 ? `${g.heldBack} more` : g.heldBack} heard from you too recently to ask.
+                </p>
+              )}
+            </div>
+          ))}
+        </details>
+      ))}
+    </div>
   );
 
   // Everyone who isn't due yet, with the date they will be, so nobody is ever just missing from the page.
@@ -215,8 +192,8 @@ export function FollowUpList({
           <HeartHandshake className="size-8" />
           <p>Everyone you know has heard from you recently.</p>
         </div>
-        {feeds}
         {comingUp}
+        {feedSections}
       </div>
     );
   }
@@ -248,8 +225,8 @@ export function FollowUpList({
           <div className="flex flex-col gap-4">{next.map(card)}</div>
         </section>
       )}
-      {feeds}
       {comingUp}
+      {feedSections}
     </div>
   );
 }

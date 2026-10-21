@@ -4,12 +4,10 @@ import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { firstName } from "@/lib/sms";
 
 /**
- * "Free drone shots this week": the section at the top of the Follow up page
- * while Lukas tries offering complimentary aerials to agents he already knows,
- * wherever he's driving anyway (started 2026-10-11, after the first such email
- * got a yes in two hours). He may drop it; everything for it is in this file,
- * plus the section in FollowUpList and the `droneOffers` field of the phone's
- * GET /follow-up.
+ * "Free drone shots": one of the Follow up page's feeds (feeds/index.ts),
+ * offering complimentary aerials to agents he already knows, wherever he's
+ * driving anyway (started 2026-10-11, after the first such email got a yes in
+ * two hours).
  *
  * Who shows: warm and interested agents with a listing in an area he'll be in
  * (home, or a booking in the next week and the towns on the way to it), who
