@@ -132,7 +132,7 @@ export interface FollowUpBoard {
 }
 
 /** "1811 NE Alameda Ave" → "1811 alameda". Bookings often aren't linked to a listing, so match by address. */
-function addressKey(address: string | null): string | null {
+export function addressKey(address: string | null): string | null {
   if (!address) return null;
   const words = address.toLowerCase().replace(/[.,#]/g, " ").split(/\s+/).filter(Boolean);
   const number = words.find((w) => /^\d+$/.test(w));

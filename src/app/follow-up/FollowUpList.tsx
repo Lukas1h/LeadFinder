@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Copy, HeartHandshake } from "lucide-react";
+import Link from "next/link";
+import { Copy, HeartHandshake, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { dismissFollowUpAgent } from "@/app/agents/actions";
 import { AgentCard } from "@/app/agents/AgentCard";
@@ -11,10 +12,11 @@ import { formatDate } from "@/lib/format";
 import { ListingRow } from "@/app/ListingRow";
 import type { FollowUpItem, FollowUpUpcoming } from "./data";
 import type { DroneOfferGroup } from "./droneOffers";
+import type { PhotoFixOfferFeed } from "./photoFixOffers";
 
-/** What a card needs: a follow-up, or a drone offer (which has no reason or listing). */
+/** What a card needs: a follow-up, or a feed offer (a drone offer has no reason or listing, a photo offer both). */
 type CardItem = Pick<FollowUpItem, "agent" | "lastReplyAt" | "label" | "suggestion"> &
-  Partial<Pick<FollowUpItem, "reason" | "listing" | "address" | "city">>;
+  Partial<Pick<FollowUpItem, "reason" | "listing" | "address" | "city">> & { editorUrl?: string };
 
 export function FollowUpList({
   today,
@@ -23,6 +25,7 @@ export function FollowUpList({
   dailyTarget,
   upcoming,
   droneOffers,
+  photoFixOffers,
   counts,
   dates,
 }: {
@@ -32,6 +35,7 @@ export function FollowUpList({
   dailyTarget: number;
   upcoming: FollowUpUpcoming[];
   droneOffers: DroneOfferGroup[];
+  photoFixOffers: PhotoFixOfferFeed;
   counts: Record<string, number>;
   dates: Record<string, { listedAt: Date | null; foundAt: Date }[]>;
 }) {
@@ -96,6 +100,15 @@ export function FollowUpList({
       ) : (
         e.address && <p className="text-sm text-foreground px-2">{[e.address, e.city].filter(Boolean).join(", ")}</p>
       )}
+      {e.editorUrl && (
+        <Link
+          href={e.editorUrl}
+          className="mx-2 mb-2 flex items-center justify-center gap-1.5 rounded-md border border-violet-600/30 bg-violet-500/10 px-3 py-2 text-sm font-medium text-violet-700 hover:bg-violet-500/20 dark:text-violet-300"
+        >
+          <Sparkles className="size-3.5" />
+          Open in photo editor
+        </Link>
+      )}
     </AgentCard>
   );
 
@@ -121,6 +134,43 @@ export function FollowUpList({
           )}
         </div>
       ))}
+    </section>
+  );
+
+  // The AI photo touch-up feed (see photoFixOffers.ts): sitting, weak-photo
+  // listings of agents he knows, with the editor one tap away. The remote
+  // counterpart to the drone offers above — no drive, nobody has to be there.
+  const photoItems = photoFixOffers.items.filter((e) => !snoozed.has(e.agent.id));
+  const photoFeed = (photoItems.length > 0 || photoFixOffers.heldBack > 0) && (
+    <section className="rounded-xl border border-violet-600/30 bg-violet-500/5 p-4">
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">AI photo touch-ups</h2>
+      <p className="text-sm text-muted-foreground mt-1">
+        Agents you know whose listing has been sitting with weak photos. Offer to run its photos through the AI
+        editor and send the results — free, and nobody has to be at the house.
+      </p>
+      {photoItems.length > 0 && <div className="flex flex-col gap-4 mt-3">{photoItems.map(card)}</div>}
+      {photoFixOffers.heldBack > 0 && (
+        <p className="text-sm text-muted-foreground mt-2">
+          {photoItems.length > 0 ? `${photoFixOffers.heldBack} more` : photoFixOffers.heldBack} with a sitting
+          listing heard from you in the last 10 days.
+        </p>
+      )}
+    </section>
+  );
+
+  // The feeds: standing reasons to get in touch, each built around a different
+  // offer. Below the main list — it's the day's work, they're the extras.
+  const feeds = (drone || photoFeed) && (
+    <section className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Feeds</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Standing reasons to get in touch, grouped by the offer — free drone shots where you&rsquo;re already
+          driving, AI photo touch-ups from anywhere.
+        </p>
+      </div>
+      {drone}
+      {photoFeed}
     </section>
   );
 
@@ -161,11 +211,11 @@ export function FollowUpList({
   if (now.length === 0 && next.length === 0) {
     return (
       <div className="flex flex-col gap-8">
-        {drone}
         <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
           <HeartHandshake className="size-8" />
           <p>Everyone you know has heard from you recently.</p>
         </div>
+        {feeds}
         {comingUp}
       </div>
     );
@@ -173,7 +223,6 @@ export function FollowUpList({
 
   return (
     <div className="flex flex-col gap-8">
-      {drone}
       <section>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Today ({Math.min(doneToday, dailyTarget)} of {dailyTarget} done)
@@ -199,6 +248,7 @@ export function FollowUpList({
           <div className="flex flex-col gap-4">{next.map(card)}</div>
         </section>
       )}
+      {feeds}
       {comingUp}
     </div>
   );

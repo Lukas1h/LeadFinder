@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAppAuth } from "@/lib/appApiAuth";
 import { getFollowUpBoard, type FollowUpItem } from "@/app/follow-up/data";
 import { getDroneOffers } from "@/app/follow-up/droneOffers";
+import { getPhotoFixOffers, withoutBoardListings } from "@/app/follow-up/photoFixOffers";
 import { FOLLOW_UP_GROUPS } from "@/app/follow-up/groups";
 import { listingCountsByAgent, listingDatesByAgent } from "@/app/agents/actions";
 import { resolveAvgDaysBetweenListings } from "@/app/agents/stats";
@@ -19,12 +20,15 @@ export async function GET(req: Request) {
   const denied = requireAppAuth(req);
   if (denied) return denied;
 
-  const [{ today, later, doneToday, dailyTarget, upcoming }, droneOffers, counts, dates] = await Promise.all([
+  const [board, droneOffers, photoFixFeed, counts, dates] = await Promise.all([
     getFollowUpBoard(),
     getDroneOffers(),
+    getPhotoFixOffers(),
     listingCountsByAgent(),
     listingDatesByAgent(),
   ]);
+  const { today, later, doneToday, dailyTarget, upcoming } = board;
+  const photoFixOffers = withoutBoardListings(photoFixFeed, board);
 
   // `headline` is the reason, in the words to use ("Pending since Oct 5"). A
   // home he shot that was booked by address alone has no listing, so its
@@ -53,7 +57,7 @@ export async function GET(req: Request) {
     dailyTarget,
     // Everyone not due yet and when they will be; dueAt is null once only a listing or sale brings them back.
     upcoming: upcoming.map((u) => ({ agent: agentJson(u.agent), dueAt: u.dueAt, note: u.note })),
-    // The free drone shots trial (droneOffers.ts): the page's top section, items shaped like today's.
+    // The free drone shots trial (droneOffers.ts): one of the page's feeds, items shaped like today's.
     droneOffers: droneOffers.map((g) => ({
       title: g.title,
       heldBack: g.heldBack,
@@ -68,6 +72,22 @@ export async function GET(req: Request) {
         avgDaysBetweenListings: resolveAvgDaysBetweenListings(e.agent, dates[e.agent.id] ?? []),
       })),
     })),
+    // The AI photo touch-up feed (photoFixOffers.ts): sitting, weak-photo
+    // listings of agents he knows, each with the editor deep link.
+    photoFixOffers: {
+      heldBack: photoFixOffers.heldBack,
+      items: photoFixOffers.items.map((e) => ({
+        agent: agentJson(e.agent),
+        lastReplyAt: e.lastReplyAt,
+        listing: listingJson(e.listing, "first"),
+        headline: e.label,
+        reason: "photo_fix",
+        suggestion: e.suggestion,
+        editorUrl: e.editorUrl,
+        listingCount: counts[e.agent.id] ?? 0,
+        avgDaysBetweenListings: resolveAvgDaysBetweenListings(e.agent, dates[e.agent.id] ?? []),
+      })),
+    },
 
     news: by("news").map(item),
     justListed: by("weak_photos", "just_listed", "price_cut").map(item),
