@@ -1,6 +1,6 @@
-import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, bookings, listings, messageSends, type AgentRelationshipStatus } from "@/db/schema";
+import { agents, bookings, listings, messagePresets, messageSends, type AgentRelationshipStatus } from "@/db/schema";
 import { normalizeEmail, normalizeName, normalizePhone } from "./normalize";
 
 /**
@@ -205,12 +205,26 @@ export async function setAgentRelationshipStatus(
  * an agent and carries no listing, so nothing could be credited and the
  * messaging page's per-variant revenue was structurally zero.
  *
- * Picks the agent's most recent send before the job was booked. That's a
- * judgment, not a fact — a repeat client might book with no outreach involved —
- * so it only looks back a bounded window, and a booking with no send behind it
- * in that window is left unattributed rather than credited to something stale.
+ * Picks the agent's most recent send before the job was booked, with two
+ * exceptions (2026-10-21, after Roxanne Wergeland's booking was credited to
+ * her samples email rather than the "Coming Soon" text that won her):
+ *
+ * - Quick actions (samples, pricing sheet, contact card: the templates offered
+ *   as replies, messagePresets.quickActionPresetIds) answer a request; they
+ *   don't win anyone. The usual run is opener -> "send samples" -> booking,
+ *   so crediting the latest send credited the samples email every time. They
+ *   only get the credit when nothing else was sent.
+ * - Only sends after the agent's previous booking count. A repeat job is the
+ *   client coming back, not the old cold email working twice. Bookings made
+ *   within a day of each other (two properties from one conversation) are
+ *   the same win and share the credit.
+ *
+ * Still a judgment, so it looks back a bounded window, and a booking with no
+ * send behind it is left unattributed rather than credited to something stale.
+ * Safe to rerun: a send that loses its last booking goes back to pending.
  */
 const ATTRIBUTION_WINDOW_DAYS = 120;
+const SAME_WIN_MS = 24 * 60 * 60 * 1000;
 
 export async function attributeBookingToSend(
   bookingId: string,
@@ -218,25 +232,54 @@ export async function attributeBookingToSend(
   bookedAt: Date
 ): Promise<string | null> {
   if (!agentId) return null;
+  // Booked now for a job days away: the sends that count are the ones before today.
+  const at = new Date(Math.min(bookedAt.getTime(), Date.now()));
 
-  const cutoff = new Date(bookedAt.getTime() - ATTRIBUTION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-  const [latest] = await db
-    .select({ id: messageSends.id, respondedAt: messageSends.respondedAt })
-    .from(messageSends)
+  const [previous] = await db
+    .select({ createdAt: bookings.createdAt })
+    .from(bookings)
     .where(
       and(
-        eq(messageSends.agentId, agentId),
-        lte(messageSends.sentAt, bookedAt),
-        gte(messageSends.sentAt, cutoff)
+        eq(bookings.contactAgentId, agentId),
+        lt(bookings.createdAt, new Date(at.getTime() - SAME_WIN_MS)),
+        ne(bookings.id, bookingId)
       )
     )
-    .orderBy(desc(messageSends.sentAt))
+    .orderBy(desc(bookings.createdAt))
     .limit(1);
+  const windowStart = new Date(at.getTime() - ATTRIBUTION_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const after = previous && previous.createdAt > windowStart ? previous.createdAt : windowStart;
 
-  if (!latest) return null;
-  const sendRow = latest;
+  const quickActions = new Set(
+    (await db.select({ ids: messagePresets.quickActionPresetIds }).from(messagePresets)).flatMap((p) => p.ids)
+  );
+  const sends = await db
+    .select({ id: messageSends.id, presetId: messageSends.presetId, respondedAt: messageSends.respondedAt })
+    .from(messageSends)
+    .where(and(eq(messageSends.agentId, agentId), lte(messageSends.sentAt, at), gt(messageSends.sentAt, after)))
+    .orderBy(desc(messageSends.sentAt));
+  const winner = sends.find((s) => !quickActions.has(s.presetId)) ?? sends[0] ?? null;
 
-  await db.update(bookings).set({ messageSendId: latest.id }).where(eq(bookings.id, bookingId));
+  const [current] = await db.select({ sendId: bookings.messageSendId }).from(bookings).where(eq(bookings.id, bookingId));
+  const previousSendId = current?.sendId ?? null;
+  await db.update(bookings).set({ messageSendId: winner?.id ?? null }).where(eq(bookings.id, bookingId));
+
+  // The send this booking used to credit, if nothing else credits it now, is just a send again.
+  if (previousSendId && previousSendId !== winner?.id) {
+    const [still] = await db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(eq(bookings.messageSendId, previousSendId))
+      .limit(1);
+    if (!still) {
+      await db
+        .update(messageSends)
+        .set({ result: "pending" })
+        .where(and(eq(messageSends.id, previousSendId), eq(messageSends.result, "booked")));
+    }
+  }
+  if (!winner) return null;
+
   // Booking is the strongest outcome a send can have, so it overwrites whatever
   // the result was before. It also implies a response — nobody books without
   // answering first — so a send credited with a job but still reading "no
@@ -244,7 +287,7 @@ export async function attributeBookingToSend(
   // the booking date stands in for it.
   await db
     .update(messageSends)
-    .set({ result: "booked", ...(sendRow.respondedAt ? {} : { respondedAt: bookedAt }) })
-    .where(eq(messageSends.id, latest.id));
-  return latest.id;
+    .set({ result: "booked", ...(winner.respondedAt ? {} : { respondedAt: at }) })
+    .where(eq(messageSends.id, winner.id));
+  return winner.id;
 }
