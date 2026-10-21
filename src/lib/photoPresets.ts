@@ -34,13 +34,15 @@ export const PHOTO_PRESETS: PhotoPreset[] = [
     id: "sunset-exterior",
     label: "Sunset exterior",
     description:
-      "Glowing orange-pink sunset with wispy blue clouds, bright overexposed-style façade lift, straightened verticals",
+      "Orange-pink sunset sky with wispy clouds, bright façade, harsh midday shadows softened, no invented lights",
     prompt:
       "Professional real estate exterior HDR twilight edit:\n" +
       "1. SKY: Replace dull exterior sky with a vibrant, glowing orange-pink sunset along the horizon blending seamlessly into soft wispy blue evening clouds.\n" +
       "2. ULTRA-BRIGHT EXPOSURE: Boost the house exterior exposure an extra +3 to +5 stops brighter so the façade, trim, porch, and driveway are ultra-bright, crisp, and luminous with zero dark shadows.\n" +
-      "3. STRAIGHTEN GEOMETRY: Straighten all vertical house walls, columns, and rooflines so the architecture stands perfectly upright and level.\n" +
-      "4. DO NOT TOUCH BLINDS & LANDSCAPING: Do not open or alter any window blinds or curtains. Keep all existing landscaping without inventing new objects, and make any existing lawn grass, plants, and trees extra vibrant lush green.",
+      "3. SOFT EVEN TWILIGHT LIGHT: Remove all harsh midday sun shadows. Erase the hard-edged shadow patches the sun casts on the lawn, driveway, siding, and under trees, and relight the whole scene with soft, even, shadowless twilight ambient light, like the sun has just set. The result must read as a natural evening photo, not a midday photo with a sunset sky pasted on.\n" +
+      "4. DO NOT TURN ON ANY LIGHTS: Do NOT add, invent, or turn on any light source. No warm yellow glow in any window, no interior lights behind glass, no porch lights, garage lights, landscape spotlights, or path lights that are off in the original. Every window shows exactly what it shows in the original photo — interior, blinds, or at most a faint reflection of the new sky like glass at dusk — and stays that way.\n" +
+      "5. STRAIGHTEN GEOMETRY: Straighten all vertical house walls, columns, and rooflines so the architecture stands perfectly upright and level.\n" +
+      "6. DO NOT TOUCH BLINDS & LANDSCAPING: Do not open or alter any window blinds or curtains. Keep all existing landscaping without inventing new objects, and make any existing lawn grass, plants, and trees extra vibrant lush green.",
   },
   {
     id: "max-anti-glare",
