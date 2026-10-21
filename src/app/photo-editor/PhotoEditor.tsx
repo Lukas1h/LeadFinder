@@ -3,21 +3,28 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, Download, ImagePlus, Loader2, RotateCcw, Search, Sparkles, X } from "lucide-react";
+import { Check, Crop, Download, ImagePlus, Loader2, PenLine, RotateCcw, Ruler, Search, Sparkles, X } from "lucide-react";
 import { PHOTO_PRESETS } from "@/lib/photoPresets";
+import { NO_GEOMETRY, isIdentity, type Geometry } from "@/lib/photoGeometry";
 import { makeZip } from "@/lib/zip";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AnnotateDialog } from "./AnnotateDialog";
 import { BeforeAfter } from "./BeforeAfter";
+import { CropDialog } from "./CropDialog";
+import { TransformDialog } from "./TransformDialog";
+import { loadSource, prepare, type Prepared, type SourceImage, type Stroke } from "./prepare";
 import { getEditorListing, searchEditorListings, type EditorListing, type EditorSearchResult } from "./actions";
 
 /** At once: each edit takes 10-25 s, and more in parallel only meets Gemini's rate limit sooner. */
 const CONCURRENCY = 3;
 /** Uploads are shrunk to this before sending: a phone's 4000px original would pass Vercel's 4.5 MB request limit. */
 const UPLOAD_MAX_PX = 2048;
-const CUSTOM = "custom";
+/** The preset menu's "no preset" choice: the notes are the whole prompt. */
+const NOTES_ONLY = "notes";
+const DEFAULT_PRESET = "bright-interior";
 
 interface Photo {
   key: string;
@@ -34,24 +41,51 @@ interface Edit {
   label: string;
 }
 
+/** A photo in the tray, with everything set for it alone. */
+interface Item {
+  photo: Photo;
+  presetId: string;
+  notes: string;
+  geometry: Geometry;
+  strokes: Stroke[];
+  /** The straightened/cropped photo and its marked copy, rendered when either is set; null sends the original. */
+  prepared: Prepared | null;
+  edit?: Edit;
+}
+
+type Tool = { key: string; kind: "annotate" | "transform" | "crop"; source: SourceImage };
+
+const newItem = (photo: Photo): Item => ({
+  photo,
+  presetId: DEFAULT_PRESET,
+  notes: "",
+  geometry: NO_GEOMETRY,
+  strokes: [],
+  prepared: null,
+});
+
+const presetLabel = (id: string) => (id === NOTES_ONLY ? "Notes only" : (PHOTO_PRESETS.find((p) => p.id === id)?.label ?? id));
+const b64 = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(",") + 1);
+
 export function PhotoEditor({ initialListing }: { initialListing: EditorListing | null }) {
   const router = useRouter();
   const [listing, setListing] = useState<EditorListing | null>(initialListing);
   const [photos, setPhotos] = useState<Photo[]>(() => (initialListing ? listingPhotos(initialListing) : []));
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [presetId, setPresetId] = useState(PHOTO_PRESETS[0].id);
-  const [customPrompt, setCustomPrompt] = useState("");
-  const [edits, setEdits] = useState<Record<string, Edit>>({});
-  const queue = useRef<{ photo: Photo; presetId: string; prompt: string; label: string }[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [tool, setTool] = useState<Tool | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+  const queue = useRef<{ key: string; body: Record<string, unknown>; label: string }[]>([]);
   const running = useRef(0);
+
+  const update = (key: string, patch: Partial<Item>) =>
+    setItems((prev) => prev.map((it) => (it.photo.key === key ? { ...it, ...patch } : it)));
 
   const loadListing = async (id: string) => {
     const found = await getEditorListing(id);
     if (!found) return toast.error("Couldn't load that listing");
     setListing(found);
     setPhotos(listingPhotos(found));
-    setSelected(new Set());
-    setEdits({});
+    setItems([]);
     router.replace(`/photo-editor?listing=${id}`, { scroll: false });
   };
 
@@ -65,7 +99,7 @@ export function PhotoEditor({ initialListing }: { initialListing: EditorListing 
         added.push({
           key: `upload-${crypto.randomUUID()}`,
           preview: dataUrl,
-          source: { data: dataUrl.split(",")[1], mimeType: "image/jpeg" },
+          source: { data: b64(dataUrl), mimeType: "image/jpeg" },
           name: file.name.replace(/\.[^.]+$/, ""),
         });
       } catch {
@@ -73,16 +107,35 @@ export function PhotoEditor({ initialListing }: { initialListing: EditorListing 
       }
     }
     setPhotos((prev) => [...prev, ...added]);
-    setSelected((prev) => new Set([...prev, ...added.map((p) => p.key)]));
+    setItems((prev) => [...prev, ...added.map(newItem)]);
   };
 
-  const toggle = (key: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  const inTray = new Set(items.map((it) => it.photo.key));
+  const toggle = (photo: Photo) =>
+    setItems((prev) =>
+      prev.some((it) => it.photo.key === photo.key) ? prev.filter((it) => it.photo.key !== photo.key) : [...prev, newItem(photo)]
+    );
+
+  const openTool = async (item: Item, kind: Tool["kind"]) => {
+    setOpening(`${item.photo.key}:${kind}`);
+    try {
+      setTool({ key: item.photo.key, kind, source: await loadSource(item.photo.key, item.photo.source) });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't load that photo");
+    } finally {
+      setOpening(null);
+    }
+  };
+
+  /** New straightening or marks: re-render what will be sent, or go back to the original when there's nothing left. */
+  const applyTool = (item: Item, source: SourceImage, geometry: Geometry, strokes: Stroke[]) => {
+    const prepared = isIdentity(geometry) && strokes.length === 0 ? null : prepare(source, geometry, strokes);
+    if (prepared === null && !(isIdentity(geometry) && strokes.length === 0)) {
+      return toast.error("Those lines can't all be squared up");
+    }
+    update(item.photo.key, { geometry, strokes, prepared });
+    setTool(null);
+  };
 
   const pump = () => {
     while (running.current < CONCURRENCY && queue.current.length > 0) {
@@ -91,16 +144,16 @@ export function PhotoEditor({ initialListing }: { initialListing: EditorListing 
       fetch("/api/photo-editor/edit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...job.photo.source, presetId: job.presetId, prompt: job.prompt || undefined }),
+        body: JSON.stringify(job.body),
       })
         .then(async (res) => {
           const body = (await res.json().catch(() => ({}))) as { image?: string; error?: string };
           if (!res.ok || !body.image) throw new Error(body.error ?? `Edit failed (${res.status})`);
-          setEdits((prev) => ({ ...prev, [job.photo.key]: { status: "done", image: body.image, label: job.label } }));
+          update(job.key, { edit: { status: "done", image: body.image, label: job.label } });
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : "Edit failed";
-          setEdits((prev) => ({ ...prev, [job.photo.key]: { status: "error", error: message, label: job.label } }));
+          update(job.key, { edit: { status: "error", error: message, label: job.label } });
         })
         .finally(() => {
           running.current--;
@@ -109,39 +162,64 @@ export function PhotoEditor({ initialListing }: { initialListing: EditorListing 
     }
   };
 
-  const run = (targets: Photo[]) => {
-    const prompt = presetId === CUSTOM ? customPrompt.trim() : "";
-    if (presetId === CUSTOM && !prompt) return toast.error("Write a prompt first");
-    const label = presetId === CUSTOM ? "Custom" : PHOTO_PRESETS.find((p) => p.id === presetId)!.label;
-    setEdits((prev) => {
-      const next = { ...prev };
-      for (const photo of targets) next[photo.key] = { status: "working", label };
-      return next;
-    });
-    queue.current.push(...targets.map((photo) => ({ photo, presetId, prompt, label })));
+  /** Each photo goes with its own preset, notes, marks and straightening, as they are right now. */
+  const run = (targets: Item[]) => {
+    const jobs: typeof queue.current = [];
+    for (const it of targets) {
+      const notes = it.notes.trim();
+      const notesOnly = it.presetId === NOTES_ONLY;
+      if (notesOnly && !notes && it.strokes.length === 0) {
+        toast.error(`${it.photo.name}: write a note or pick a preset`);
+        continue;
+      }
+      const source = it.prepared ? { data: b64(it.prepared.clean), mimeType: "image/jpeg" } : it.photo.source;
+      jobs.push({
+        key: it.photo.key,
+        label: presetLabel(it.presetId) + (notes ? " + notes" : "") + (it.strokes.length ? " + removal" : ""),
+        body: {
+          ...source,
+          ...(notesOnly
+            ? { prompt: notes || "Keep the photo exactly as it is apart from the removal below." }
+            : { presetId: it.presetId, notes: notes || undefined }),
+          marked: it.prepared?.marked ? b64(it.prepared.marked) : undefined,
+          geometryFixed: !isIdentity(it.geometry) || undefined,
+        },
+      });
+    }
+    if (jobs.length === 0) return;
+    const working = new Set(jobs.map((j) => j.key));
+    setItems((prev) =>
+      prev.map((it) =>
+        working.has(it.photo.key)
+          ? { ...it, edit: { status: "working", label: jobs.find((j) => j.key === it.photo.key)!.label } }
+          : it
+      )
+    );
+    queue.current.push(...jobs);
     pump();
   };
 
-  const selectedPhotos = photos.filter((p) => selected.has(p.key));
-  const editedPhotos = photos.filter((p) => edits[p.key]);
-  const done = editedPhotos.filter((p) => edits[p.key].status === "done");
-  const working = editedPhotos.filter((p) => edits[p.key].status === "working").length;
+  const done = items.filter((it) => it.edit?.status === "done");
+  const working = items.filter((it) => it.edit?.status === "working").length;
   const baseName = slug(listing ? [listing.address, listing.city].filter(Boolean).join(" ") : "photos");
   /** The edit comes back as whatever the model sent (PNG by default) — name the download after it, not the source. */
-  const fileName = (p: Photo) => {
-    const ext = edits[p.key]?.image?.startsWith("data:image/png") ? "png" : "jpg";
-    return `${baseName}-${String(photos.indexOf(p) + 1).padStart(2, "0")}.${ext}`;
+  const fileName = (it: Item) => {
+    const ext = it.edit?.image?.startsWith("data:image/png") ? "png" : "jpg";
+    return `${baseName}-${String(items.indexOf(it) + 1).padStart(2, "0")}.${ext}`;
   };
 
   const downloadAll = async () => {
     const files = await Promise.all(
-      done.map(async (p) => ({
-        name: fileName(p),
-        bytes: new Uint8Array(await (await fetch(edits[p.key].image!)).arrayBuffer()),
+      done.map(async (it) => ({
+        name: fileName(it),
+        bytes: new Uint8Array(await (await fetch(it.edit!.image!)).arrayBuffer()),
       }))
     );
     saveBlob(makeZip(files), `${baseName}-edited.zip`);
   };
+
+  const toolItem = tool && items.find((it) => it.photo.key === tool.key);
+  const closeTool = (open: boolean) => !open && setTool(null);
 
   return (
     <div className="flex flex-col gap-6">
@@ -180,26 +258,33 @@ export function PhotoEditor({ initialListing }: { initialListing: EditorListing 
         <section className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-medium">
-              Photos <span className="text-muted-foreground">· {selected.size} of {photos.length} selected</span>
+              Photos <span className="text-muted-foreground">· tap to add to the edit, {items.length} of {photos.length} added</span>
             </h2>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setSelected(new Set(photos.map((p) => p.key)))}>
-                Select all
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setItems((prev) => [...prev, ...photos.filter((p) => !inTray.has(p.key)).map(newItem)])}
+              >
+                Add all
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+              <Button variant="ghost" size="sm" disabled={working > 0} onClick={() => setItems([])}>
                 Clear
               </Button>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6 lg:grid-cols-8">
             {photos.map((photo) => {
-              const on = selected.has(photo.key);
+              const on = inTray.has(photo.key);
               return (
                 <button
                   key={photo.key}
                   type="button"
-                  onClick={() => toggle(photo.key)}
-                  className={`relative aspect-[4/3] overflow-hidden rounded-md border-2 ${on ? "border-primary" : "border-transparent opacity-70 hover:opacity-100"}`}
+                  onClick={() => toggle(photo)}
+                  className={cn(
+                    "relative aspect-[4/3] overflow-hidden rounded-md border-2",
+                    on ? "border-primary" : "border-transparent opacity-70 hover:opacity-100"
+                  )}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={photo.preview} alt={photo.name} className="h-full w-full object-cover" loading="lazy" />
@@ -212,122 +297,197 @@ export function PhotoEditor({ initialListing }: { initialListing: EditorListing 
               );
             })}
           </div>
-
-          <div className="flex flex-col gap-2 rounded-lg border p-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Select value={presetId} onValueChange={setPresetId}>
-                <SelectTrigger className="sm:w-56">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PHOTO_PRESETS.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value={CUSTOM}>Custom prompt</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button disabled={selectedPhotos.length === 0} onClick={() => run(selectedPhotos)}>
-                <Sparkles />
-                Edit {selectedPhotos.length} photo{selectedPhotos.length === 1 ? "" : "s"}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {presetId === CUSTOM
-                ? "Describe the edit. Every edit also gets the standard retouching rules: ultra-bright, straightened, de-glared, blinds untouched, nothing invented."
-                : PHOTO_PRESETS.find((p) => p.id === presetId)?.description}
-            </p>
-            {presetId === CUSTOM && (
-              <Textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder="e.g. Brighten the room, replace the grey sky with blue, straighten the verticals"
-                rows={3}
-              />
-            )}
-          </div>
         </section>
       )}
 
-      {editedPhotos.length > 0 && (
+      {items.length > 0 && (
         <section className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-medium">
-              Edits{" "}
+              To edit{" "}
               <span className="text-muted-foreground">
-                · {done.length} done{working > 0 && `, ${working} working`}
+                · {items.length} photo{items.length === 1 ? "" : "s"}
+                {done.length > 0 && `, ${done.length} done`}
+                {working > 0 && `, ${working} working`}
               </span>
             </h2>
-            <Button size="sm" disabled={done.length === 0} onClick={downloadAll}>
-              <Download />
-              Download all ({done.length})
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => run(items.filter((it) => it.edit?.status !== "working"))}>
+                <Sparkles />
+                Edit all
+              </Button>
+              <Button size="sm" variant="outline" disabled={done.length === 0} onClick={downloadAll}>
+                <Download />
+                Download all ({done.length})
+              </Button>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Check each one before using it: the model redraws the photo and can still change details.
+            Each photo has its own preset and notes. <PenLine className="inline size-3" /> marks things to remove,{" "}
+            <Ruler className="inline size-3" /> straightens with guide lines, <Crop className="inline size-3" /> crops and
+            rotates. Check every edit before using it: the model redraws the photo and can still change details.
           </p>
           <div className="grid gap-4 md:grid-cols-2">
-            {editedPhotos.map((photo) => {
-              const edit = edits[photo.key];
-              return (
-                <div key={photo.key} className="flex flex-col gap-2 rounded-lg border p-2">
-                  {edit.status === "done" && edit.image ? (
-                    <BeforeAfter before={photo.preview} after={edit.image} alt={photo.name} />
-                  ) : (
-                    <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-muted">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={photo.preview} alt={photo.name} className="h-full w-full object-contain opacity-40" />
-                      <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm">
-                        {edit.status === "working" ? (
-                          <span className="flex items-center gap-2">
-                            <Loader2 className="size-4 animate-spin" /> Editing…
-                          </span>
-                        ) : (
-                          <span className="text-destructive">{edit.error}</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">{edit.label}</span>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" disabled={edit.status === "working"} onClick={() => run([photo])}>
-                        <RotateCcw />
-                        Redo
-                      </Button>
-                      {edit.image && (
-                        <Button variant="ghost" size="sm" asChild>
-                          <a href={edit.image} download={fileName(photo)}>
-                            <Download />
-                          </a>
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={edit.status === "working"}
-                        onClick={() =>
-                          setEdits((prev) => {
-                            const next = { ...prev };
-                            delete next[photo.key];
-                            return next;
-                          })
-                        }
-                      >
-                        <X />
-                        <span className="sr-only">Remove</span>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {items.map((it) => (
+              <ItemCard
+                key={it.photo.key}
+                item={it}
+                opening={opening}
+                fileName={fileName(it)}
+                onChange={(patch) => update(it.photo.key, patch)}
+                onTool={(kind) => openTool(it, kind)}
+                onRun={() => run([it])}
+                onRemove={() => setItems((prev) => prev.filter((x) => x.photo.key !== it.photo.key))}
+              />
+            ))}
           </div>
         </section>
       )}
+
+      {tool && toolItem && tool.kind === "transform" && (
+        <TransformDialog
+          open
+          onOpenChange={closeTool}
+          source={tool.source}
+          guides={toolItem.geometry.guides}
+          // New guides change the frame, so the old crop no longer means anything.
+          onApply={(guides) => applyTool(toolItem, tool.source, { ...toolItem.geometry, guides, crop: null }, toolItem.strokes)}
+        />
+      )}
+      {tool && toolItem && tool.kind === "crop" && (
+        <CropDialog
+          open
+          onOpenChange={closeTool}
+          source={tool.source}
+          geometry={toolItem.geometry}
+          onApply={(change) => applyTool(toolItem, tool.source, { ...toolItem.geometry, ...change }, toolItem.strokes)}
+        />
+      )}
+      {tool && toolItem && tool.kind === "annotate" && (
+        <AnnotateDialog
+          open
+          onOpenChange={closeTool}
+          source={tool.source}
+          geometry={toolItem.geometry}
+          strokes={toolItem.strokes}
+          onApply={(strokes) => applyTool(toolItem, tool.source, toolItem.geometry, strokes)}
+        />
+      )}
     </div>
   );
+}
+
+/** One photo in the tray: the picture (or its before/after), then one compact row of its settings and tools. */
+function ItemCard({
+  item,
+  opening,
+  fileName,
+  onChange,
+  onTool,
+  onRun,
+  onRemove,
+}: {
+  item: Item;
+  opening: string | null;
+  fileName: string;
+  onChange: (patch: Partial<Item>) => void;
+  onTool: (kind: Tool["kind"]) => void;
+  onRun: () => void;
+  onRemove: () => void;
+}) {
+  const { photo, edit, prepared, geometry, strokes } = item;
+  const busy = edit?.status === "working";
+  const before = prepared?.clean ?? photo.preview;
+  const shown = prepared?.marked ?? before;
+  const straightened = geometry.guides.length > 0;
+  const cropped = geometry.rotation !== 0 || geometry.crop !== null;
+
+  const tool = (kind: Tool["kind"], label: string, icon: React.ReactNode, active: boolean) => (
+    <Button
+      variant={active ? "secondary" : "ghost"}
+      size="icon"
+      title={label}
+      disabled={busy || opening != null}
+      onClick={() => onTool(kind)}
+      className={cn(active && "text-red-600 dark:text-red-400")}
+    >
+      {opening === `${photo.key}:${kind}` ? <Loader2 className="animate-spin" /> : icon}
+      <span className="sr-only">{label}</span>
+    </Button>
+  );
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-2">
+      {edit?.status === "done" && edit.image ? (
+        <BeforeAfter before={before} after={edit.image} alt={photo.name} />
+      ) : (
+        <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-black">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={shown} alt={photo.name} className={cn("h-full w-full object-contain", busy && "opacity-40")} />
+          {busy && (
+            <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-white">
+              <Loader2 className="size-4 animate-spin" /> Editing…
+            </div>
+          )}
+          {(straightened || cropped || strokes.length > 0) && (
+            <div className="absolute top-2 left-2 flex gap-1">
+              {straightened && <Tag>Straightened</Tag>}
+              {cropped && <Tag>{geometry.rotation ? `Rotated ${geometry.rotation.toFixed(1)}°` : "Cropped"}</Tag>}
+              {strokes.length > 0 && <Tag>Removing {strokes.length} mark{strokes.length === 1 ? "" : "s"}</Tag>}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex items-center gap-1">
+        <Select value={item.presetId} onValueChange={(presetId) => onChange({ presetId })}>
+          <SelectTrigger size="sm" className="w-[8.5rem] shrink-0 text-xs" title="Preset">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PHOTO_PRESETS.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.label}
+              </SelectItem>
+            ))}
+            <SelectItem value={NOTES_ONLY}>Notes only</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input
+          value={item.notes}
+          onChange={(e) => onChange({ notes: e.target.value })}
+          onKeyDown={(e) => e.key === "Enter" && !busy && onRun()}
+          placeholder={item.presetId === NOTES_ONLY ? "What to do to this photo" : "Notes for this photo"}
+          maxLength={500}
+          className="h-7 min-w-0 flex-1 text-xs"
+        />
+        {tool("annotate", "Mark things to remove", <PenLine />, strokes.length > 0)}
+        {tool("transform", "Straighten with guides", <Ruler />, straightened)}
+        {tool("crop", "Crop and rotate", <Crop />, cropped)}
+        <Button variant="ghost" size="icon" title={edit ? "Redo" : "Edit"} disabled={busy} onClick={onRun}>
+          {busy ? <Loader2 className="animate-spin" /> : edit ? <RotateCcw /> : <Sparkles />}
+          <span className="sr-only">{edit ? "Redo" : "Edit"}</span>
+        </Button>
+        {edit?.image && (
+          <Button variant="ghost" size="icon" title="Download" asChild>
+            <a href={edit.image} download={fileName}>
+              <Download />
+              <span className="sr-only">Download</span>
+            </a>
+          </Button>
+        )}
+        <Button variant="ghost" size="icon" title="Remove from the edit" disabled={busy} onClick={onRemove}>
+          <X />
+          <span className="sr-only">Remove</span>
+        </Button>
+      </div>
+      {edit?.status === "error" && <p className="px-1 text-xs text-destructive">{edit.error}</p>}
+      {edit?.status === "done" && <p className="px-1 text-xs text-muted-foreground">{edit.label}</p>}
+    </div>
+  );
+}
+
+function Tag({ children }: { children: React.ReactNode }) {
+  return <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{children}</span>;
 }
 
 function ListingSearch({ onPick }: { onPick: (id: string) => void }) {

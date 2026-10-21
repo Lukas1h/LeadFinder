@@ -82,7 +82,12 @@ async function optimizeForGemini(bytes: Buffer): Promise<GeminiImagePart> {
  * base64 — inside Vercel's response limit): asking for a bigger size or a
  * different format changes how it renders.
  */
-export async function editPhoto(source: PhotoSource, prompt: string): Promise<{ mimeType: string; data: string }> {
+export async function editPhoto(
+  source: PhotoSource,
+  prompt: string,
+  /** The same photo with what to remove marked in red; sent second, after the photo itself. */
+  marked?: { data: string; mimeType: string }
+): Promise<{ mimeType: string; data: string }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
 
@@ -93,11 +98,12 @@ export async function editPhoto(source: PhotoSource, prompt: string): Promise<{ 
   if (!bytes) throw new Error("Couldn't download that photo");
 
   const image = await optimizeForGemini(bytes);
+  const markedImage = marked ? await optimizeForGemini(Buffer.from(marked.data, "base64")) : null;
 
   const request = {
     model: MODEL,
     apiKey,
-    parts: [image, { text: instructionFor(prompt) }],
+    parts: [image, ...(markedImage ? [markedImage] : []), { text: instructionFor(prompt) }],
     generationConfig: {
       responseModalities: ["IMAGE", "TEXT"],
     },
