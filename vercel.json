@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/market-status",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/homes-refresh",
+      "schedule": "0 10 * * *"
     }
   ]
 }

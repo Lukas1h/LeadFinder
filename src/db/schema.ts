@@ -306,6 +306,13 @@ export const agents = pgTable("agents", {
   homesListingsPerYear: integer("homes_listings_per_year"),
   homesAvgSalePrice: integer("homes_avg_sale_price"),
   homesCapturedAt: timestamp("homes_captured_at", { withTimezone: true }),
+  // The daily refresh (lib/homesRefresh.ts) stamps every attempt, found or
+  // not, so an agent homes.com doesn't list is retried monthly rather than
+  // paid for every day. The note says how the last attempt went: "captured",
+  // "not found", "ambiguous", or the error. A blocked or failed fetch leaves
+  // both alone so it's retried the next day.
+  homesCheckedAt: timestamp("homes_checked_at", { withTimezone: true }),
+  homesCheckNote: text("homes_check_note"),
 
   // The agent's office, typed in by hand. Listings carry their own broker
   // name and that's used when this is empty, but a client met off-Zillow has

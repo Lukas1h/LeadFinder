@@ -361,6 +361,53 @@ listing than the one you contacted them about; matching is phone-based,
 not name-based, since the same person's name can vary slightly across
 listings.
 
+## Refreshing homes.com agent stats
+
+The `agents` table carries a few figures homes.com knows about each agent:
+deals closed in the last year, average sale price, license number,
+brokerage. They feed the volume/price/location badge that ranks the Follow up
+feeds (`src/lib/agentBadge.ts`), and they go stale, so they're refreshed
+monthly.
+
+**Where it runs.** On Vercel: `/api/cron/homes-refresh`, daily at 10:00 UTC
+(`vercel.json`). Each run takes up to 40 agents who are due (clients,
+interested and warm; never checked, or last checked over 30 days ago), oldest
+first. Every attempt is stamped (`homes_checked_at`, with a note in
+`homes_check_note`), found or not, so someone homes.com doesn't list costs one
+search a month. A blocked or failed fetch isn't stamped, so it's retried the
+next day. Code: `src/lib/homesRefresh.ts`.
+
+**Finding the profile** (`src/lib/homesApi.ts`). The agent's `homes_url` if
+we have it, otherwise homes.com's directory search, a JSON API that plain
+`fetch` can call (send the body as `application/json`, or it 415s). Its
+responses are obfuscated with a key in the `c-content` header; the decoder is
+the site's own scheme, ported. The directory is national and full of
+namesakes, so only Oregon results count, matched on name (allowing initials
+and either half of a double surname), then city and office, then the phone
+on the page.
+
+**Fetching the page** (`src/lib/homesFetch.ts`). Akamai Bot Manager 403s
+profile pages for anything but a real browser on a residential address:
+plain fetch, Chrome/Firefox TLS impersonation, replayed browser cookies and
+headless Chrome all failed (2026-10-21), and Vercel's AWS addresses are worse.
+So pages come through a web unblocker, whichever key is set:
+
+- `ZYTE_API_KEY`: Zyte API, pay as you go.
+- `BRIGHTDATA_API_TOKEN` + `BRIGHTDATA_UNLOCKER_ZONE`: Bright Data Web Unlocker.
+
+With neither set the cron does nothing. Volume is a few hundred pages a month.
+
+**Parsing** (`src/lib/homesProfile.ts`). The page carries three overlapping
+transaction windows (1, 2 and 5 years) at once, so each is read on its own:
+volume from the 1-year tab, average price from the 5-year one (the page's own
+headline figure). Tests: `npx tsx scripts/homes-profile.test.ts` and
+`node --env-file=.env.local --import tsx scripts/homes-capture-match.test.ts`.
+
+**By hand.** `POST /api/agent-profile-capture` takes a profile page's HTML,
+gated by `HOMES_CAPTURE_SECRET`; the Tampermonkey userscript in
+`scripts/userscripts/` posts any profile Lukas opens, for an agent the cron
+couldn't tell apart from a namesake or one he wants updated now.
+
 ## Deploying
 
 - Push this repo to GitHub and import it into Vercel.

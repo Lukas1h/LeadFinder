@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<!--
+  A trimmed copy of a real homes.com agent profile page (Geoff O'Neill, John L.
+  Scott Medford, Medford OR), captured 2026-10-21. Only the parts the parser
+  reads are kept: the JSON-LD, the agent's own JSON blob, the transaction
+  history tab panels and the FAQ answer.
+
+  The numbers are the real ones, and they are the reason the parser has to
+  read the tabs one at a time — 1 Year is 1+2=3 deals, 2 Year is 7+3=10 and
+  5 Year is 24+15=39, so a page-wide search for "Total Deals" finds all three
+  overlapping windows at once.
+-->
+<html>
+  <head>
+    <title>Geoff O'neill | Real Estate Agent in Medford, OR | John L. Scott Medford</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "ProfilePage",
+            "url": "https://www.homes.com/real-estate-agents/geoff-oneill/53q574n/",
+            "headline": "Geoff O'neill | Real Estate Agent in Medford, OR | John L. Scott Medford",
+            "mainEntity": {
+              "@type": "Person",
+              "@id": "https://www.homes.com/real-estate-agents/geoff-oneill/53q574n/#person",
+              "name": "Geoff O'neill"
+            }
+          },
+          {
+            "@type": "RealEstateListing",
+            "url": "https://www.homes.com/property/8595-deer-creek-rd-selma-or/37tdk30x7sdgy/",
+            "name": "8595 Deer Creek Rd, Selma, OR 97538",
+            "availability": "https://schema.org/InStock"
+          },
+          {
+            "@type": "RealEstateListing",
+            "url": "https://www.homes.com/property/3272-nellie-ettinger-ln-medford-or/37tdk2e2c1f4/",
+            "name": "3272 Nellie Ettinger Ln, Medford, OR 97504",
+            "availability": "https://schema.org/InStock"
+          },
+          {
+            "@type": "RealEstateListing",
+            "url": "https://www.homes.com/property/1111-hwy-62-medford-or/37tdk31x9v2q/",
+            "name": "1111 Hwy 62, Medford, OR 97501",
+            "availability": "https://schema.org/InStock"
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <script type="application/json" id="__NEXT_DATA__">
+      {
+        "props": {
+          "pageProps": {
+            "agent": {
+              "@type": "Person",
+              "@id": "https://www.homes.com/real-estate-agents/geoff-oneill/53q574n/#person",
+              "name": "Geoff O'neill",
+              "url": "https://www.homes.com/real-estate-agents/geoff-oneill/53q574n/",
+              "telephone": "(541) 319-8935",
+              "worksFor": { "@type": "Organization", "name": "John L. Scott Medford" },
+              "jobTitle": "Real Estate Agent",
+              "contactPoint": [{ "@type": "ContactPoint", "telephone": "+1-541-319-8935" }],
+              "hasCredential": [
+                {
+                  "@type": "EducationalOccupationalCredential",
+                  "credentialCategory": "license",
+                  "identifier": "200208122"
+                }
+              ]
+            }
+          }
+        }
+      }
+    </script>
+
+    <article class="adp-transaction-history-container">
+      <h2 class="section-title" id="transaction-history-title">Transaction History</h2>
+      <ul role="tablist" class="tabs-container" id="transaction-history-tabs">
+        <li class="tab active" role="tab" aria-controls="1-year-panel" id="1-year-tab" aria-selected="true">1 Year</li>
+        <li class="tab" role="tab" aria-controls="2-year-panel" id="2-year-tab" aria-selected="false">2 Year</li>
+        <li class="tab" role="tab" aria-controls="5-year-panel" id="5-year-tab" aria-selected="false">5 Year</li>
+      </ul>
+      <div id="transaction-history-panels">
+        <div role="tabpanel" aria-labelledby="1-year-tab" class="panel show" id="1-year-panel">
+          <div class="transaction-history-tables-container">
+            <section class="adp-detail-table">
+              <table class="detail-table-container">
+                <caption class="caption">Seller Deals</caption>
+                <tbody>
+                  <tr><th>Total Deals</th><td>1</td></tr>
+                  <tr><th>Total Value</th><td>$195,000</td></tr>
+                  <tr><th>Average Sale Price</th><td>$195,000</td></tr>
+                </tbody>
+              </table>
+            </section>
+            <section class="adp-detail-table">
+              <table class="detail-table-container">
+                <caption class="caption">Buyer Deals</caption>
+                <tbody>
+                  <tr><th>Total Deals</th><td>2</td></tr>
+                  <tr><th>Total Value</th><td>$659,000</td></tr>
+                  <tr><th>Average Sale Price</th><td>$329,500</td></tr>
+                </tbody>
+              </table>
+            </section>
+          </div>
+        </div>
+        <div role="tabpanel" aria-labelledby="2-year-tab" class="panel hide" id="2-year-panel">
+          <div class="transaction-history-tables-container">
+            <section class="adp-detail-table">
+              <table class="detail-table-container">
+                <caption class="caption">Seller Deals</caption>
+                <tbody>
+                  <tr><th>Total Deals</th><td>7</td></tr>
+                  <tr><th>Total Value</th><td>$2,957,134</td></tr>
+                  <tr><th>Average Sale Price</th><td>$422,448</td></tr>
+                </tbody>
+              </table>
+            </section>
+            <section class="adp-detail-table">
+              <table class="detail-table-container">
+                <caption class="caption">Buyer Deals</caption>
+                <tbody>
+                  <tr><th>Total Deals</th><td>3</td></tr>
+                  <tr><th>Total Value</th><td>$1,063,995</td></tr>
+                  <tr><th>Average Sale Price</th><td>$354,665</td></tr>
+                </tbody>
+              </table>
+            </section>
+          </div>
+        </div>
+        <div role="tabpanel" aria-labelledby="5-year-tab" class="panel hide" id="5-year-panel">
+          <div class="transaction-history-tables-container">
+            <section class="adp-detail-table">
+              <table class="detail-table-container">
+                <caption class="caption">Seller Deals</caption>
+                <tbody>
+                  <tr><th>Total Deals</th><td>24</td></tr>
+                  <tr><th>Total Value</th><td>$8,420,319</td></tr>
+                  <tr><th>Average Sale Price</th><td>$350,847</td></tr>
+                </tbody>
+              </table>
+            </section>
+            <section class="adp-detail-table">
+              <table class="detail-table-container">
+                <caption class="caption">Buyer Deals</caption>
+                <tbody>
+                  <tr><th>Total Deals</th><td>15</td></tr>
+                  <tr><th>Total Value</th><td>$6,095,985</td></tr>
+                  <tr><th>Average Sale Price</th><td>$406,399</td></tr>
+                </tbody>
+              </table>
+            </section>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <div class="faq-answer-container hidden">
+      <div class="faq-answer">
+        Geoff O'neill has closed 39 sales totaling $14.5M in transaction volume, with an average sale price of
+        $372.2K. Individual sales have ranged from as low as $195K to as high as $775K, reflecting experience
+        across a wide range of price points.
+      </div>
+    </div>
+  </body>
+</html>
