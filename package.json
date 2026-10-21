@@ -27,6 +27,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "shadcn": "^4.20.1",
+    "sharp": "^0.35.4",
     "sonner": "^2.0.8",
     "svix": "^2.3.0",
     "tailwind-merge": "^3.6.0",

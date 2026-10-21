@@ -1,26 +1,43 @@
 // The photo editor (src/app/photo-editor): a listing's photos, or uploaded
-// ones, re-edited by Gemini's image model with one of Lukas's presets. The
-// presets and the wrapping instruction come from his EstateHDR test app
-// (2026-10-20), with one addition: in the first test the model filled a
-// house's dark windows with a furnished living room and a kitchen that
-// weren't there, so every edit is now told not to invent anything (see also
-// src/lib/photoPresets.ts).
+// ones, re-edited by Gemini's image model with one of Lukas's presets.
+// Everything that reaches the model matches his EstateHDR test app
+// (2026-10-20): the preset prompts (photoPresets.ts) and the wrapping
+// instruction below are verbatim, the input is shrunk to the same 896px
+// JPEG, and the request carries no extra generation knobs. Earlier ports
+// that deviated paid for it: paraphrased prompts came back dull, 2K
+// rendering plus full-resolution inputs let the model invent views (the
+// hallucinations the corrections-only rewrite tried to fix with words),
+// and the Vertex-only imageConfig field 400s on AI Studio keys, which
+// sent every edit to the wrong endpoint to die (2026-10-21).
 
-import { callGeminiImage, fetchImagePart } from "@/lib/gemini";
+import sharp from "sharp";
+import { callGeminiImage, type GeminiImagePart } from "@/lib/gemini";
 
 export { PHOTO_PRESETS, presetById } from "@/lib/photoPresets";
 
 const MODEL = "gemini-3.1-flash-image";
 
-const FAITHFULNESS =
-  "NON-NEGOTIABLE: This is a real property's listing photo. The result must be the SAME photo, corrected, not a new picture of a similar room.\n" +
-  "- Every object in the result must be in the original, in the same place, with the same shape. Do NOT add, remove, move, or restyle furniture, decor, plants, fixtures, outlets, vents, or finishes.\n" +
-  "- Do NOT invent anything not visible in the original: no views, trees, sky, rooms, or lights through windows or doorways; no new reflections.\n" +
-  "- A window that is pure white (blown out) in the original stays pure white. Blinds, shades, and curtains stay exactly as they are. Glass cabinet doors, mirrors, and screens keep showing what they show in the original.\n" +
-  "- Small objects (counter items, decor, magnets, labels) keep their exact shape, color, and position; don't redraw or tidy them.\n" +
-  "- Do NOT change the color of walls, ceilings, cabinets, floors, counters, or furniture. Brighter, yes; a different paint color, no.\n" +
-  "- Do NOT add text, logos, labels, or watermarks. Keep the same framing and composition.\n" +
-  "Return the edited photograph.";
+// The test app feeds the model at most 896px at 80% JPEG — the size its
+// prompts were tuned against, and several times faster per edit than
+// full-resolution photos.
+const INPUT_MAX_PX = 896;
+const INPUT_JPEG_QUALITY = 80;
+
+/** The wrapping instruction, verbatim from the test app's geminiService.ts. */
+function instructionFor(prompt: string): string {
+  return `Master Architectural & Real Estate Photo Retoucher:
+Task:
+${prompt}
+
+NON-NEGOTIABLE RETOUCHING STANDARDS:
+1. EXTREME HIGH-KEY BRIGHTNESS (+5 STOPS): Make the interior exposure an extra +5 stops brighter. Like borderline blown out. Overexposed! I want the whites and bright surfaces to be so bright and white they are nearly clipping! Flood the room with luminous, airy magazine-grade light.
+2. DO NOT OPEN BLINDS OR SHADES: Strictly NEVER open, raise, remove, or alter window blinds, slats, shades, shutters, or curtains. If blinds are closed or tilted shut, they MUST stay closed exactly as they are in the original image.
+3. IF WINDOWS ARE WHITE AND BLOWN OUT, LEAVE THEM THAT WAY INSTEAD OF HALLUCINATING DATA: If a window pane is pure white or blown out / overexposed in the original image, LEAVE IT PURE WHITE AND BLOWN OUT! Do NOT hallucinate, invent, or generate fake trees, skies, yards, or buildings inside blown-out windows. Only make existing sky blue and existing foliage vibrant green if those details are ALREADY visibly present in the original photo.
+4. AUTOMATIC ARCHITECTURAL STRAIGHTENING: Correct lens distortion and perspective convergence like a professional tilt-shift lens. Make all vertical walls, doorframes, window frames, and cabinet edges 100% plumb/vertical, and level horizontal lines.
+5. AGGRESSIVE FLOOR DE-GLARE (POLARIZER): Completely suppress harsh white window reflections and shiny glare bouncing off the hardwood or tile floor. Restore rich natural wood grain underneath.
+6. NO VIRTUAL STAGING: Do NOT add or remove furniture or change the room's design.
+Return the straightened, ultra-bright architectural HDR photograph.`;
+}
 
 /**
  * The biggest copy of a listing photo its host will hand out. The app stores
@@ -38,35 +55,60 @@ export function largestPhotoUrl(url: string): string {
 
 export type PhotoSource = { url: string } | { data: string; mimeType: string };
 
+async function fetchPhotoBytes(url: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return Buffer.from(await res.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+/** Any source photo → the ≤896px, 80%-quality JPEG the test app always sends. */
+async function optimizeForGemini(bytes: Buffer): Promise<GeminiImagePart> {
+  const jpeg = await sharp(bytes)
+    // Bake in EXIF orientation, like the test app's browser-canvas resize.
+    .rotate()
+    .resize(INPUT_MAX_PX, INPUT_MAX_PX, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: INPUT_JPEG_QUALITY })
+    .toBuffer();
+  return { inlineData: { mimeType: "image/jpeg", data: jpeg.toString("base64") } };
+}
+
 /**
- * One photo edited with a preset (or a prompt of his own), returned as a 1K
- * JPEG. 1K (1195 px) rather than 2K: a third cheaper (about $0.07 a photo
- * against $0.10) and twice as fast, and the listing photos going in are
- * small JPEGs anyway (2026-10-20). JPEG rather than the model's default PNG,
- * which is several times bigger for nothing.
+ * One photo edited with a preset (or a prompt of his own). Like the test
+ * app, the model is left at its default output (about 1K PNG, ~2 MB as
+ * base64 — inside Vercel's response limit): asking for a bigger size or a
+ * different format changes how it renders.
  */
 export async function editPhoto(source: PhotoSource, prompt: string): Promise<{ mimeType: string; data: string }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
 
-  const image =
+  const bytes =
     "url" in source
-      ? (await fetchImagePart(largestPhotoUrl(source.url))) ?? (await fetchImagePart(source.url))
-      : { inlineData: { mimeType: source.mimeType, data: source.data } };
-  if (!image) throw new Error("Couldn't download that photo");
+      ? (await fetchPhotoBytes(largestPhotoUrl(source.url))) ?? (await fetchPhotoBytes(source.url))
+      : Buffer.from(source.data, "base64");
+  if (!bytes) throw new Error("Couldn't download that photo");
 
-  const result = await callGeminiImage({
+  const image = await optimizeForGemini(bytes);
+
+  const request = {
     model: MODEL,
     apiKey,
-    parts: [image, { text: `Master architectural and real estate photo retoucher.\n\nTask:\n${prompt}\n\n${FAITHFULNESS}` }],
+    parts: [image, { text: instructionFor(prompt) }],
     generationConfig: {
       responseModalities: ["IMAGE", "TEXT"],
-      // Low, so it edits rather than reimagines.
-      temperature: 0.2,
-      imageConfig: { imageSize: "1K", imageOutputOptions: { mimeType: "image/jpeg", compressionQuality: 90 } },
     },
     logLabel: "editPhoto",
-  });
+  };
+  // The image filter occasionally blocks a good edit (a 200 whose candidate
+  // has finishReason IMAGE_RECITATION and no image — watched it happen on the
+  // first test after the prompt restore). A second roll of the same request
+  // usually clears it, so retry once before giving up.
+  let result = await callGeminiImage(request);
+  if (!result) result = await callGeminiImage(request);
   if (!result) throw new Error("The model didn't return an image. Try again.");
   return result;
 }

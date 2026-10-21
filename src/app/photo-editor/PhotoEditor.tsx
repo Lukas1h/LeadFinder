@@ -127,7 +127,11 @@ export function PhotoEditor({ initialListing }: { initialListing: EditorListing 
   const done = editedPhotos.filter((p) => edits[p.key].status === "done");
   const working = editedPhotos.filter((p) => edits[p.key].status === "working").length;
   const baseName = slug(listing ? [listing.address, listing.city].filter(Boolean).join(" ") : "photos");
-  const fileName = (p: Photo) => `${baseName}-${String(photos.indexOf(p) + 1).padStart(2, "0")}.jpg`;
+  /** The edit comes back as whatever the model sent (PNG by default) — name the download after it, not the source. */
+  const fileName = (p: Photo) => {
+    const ext = edits[p.key]?.image?.startsWith("data:image/png") ? "png" : "jpg";
+    return `${baseName}-${String(photos.indexOf(p) + 1).padStart(2, "0")}.${ext}`;
+  };
 
   const downloadAll = async () => {
     const files = await Promise.all(
@@ -231,7 +235,7 @@ export function PhotoEditor({ initialListing }: { initialListing: EditorListing 
             </div>
             <p className="text-xs text-muted-foreground">
               {presetId === CUSTOM
-                ? "Describe the edit. Every edit is also told not to add, remove, or invent anything."
+                ? "Describe the edit. Every edit also gets the standard retouching rules: ultra-bright, straightened, de-glared, blinds untouched, nothing invented."
                 : PHOTO_PRESETS.find((p) => p.id === presetId)?.description}
             </p>
             {presetId === CUSTOM && (

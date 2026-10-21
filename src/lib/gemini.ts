@@ -117,8 +117,8 @@ async function postGemini(input: CallGeminiInput): Promise<unknown> {
       const body = await res.text();
 
       // The key belongs to the other endpoint. Doesn't count as an attempt.
-      // AI Studio checks the request before the key, so a field only Vertex
-      // knows (the image editor's JPEG output) comes back as a 400 first.
+      // AI Studio checks the request before the key, so anything only Vertex
+      // knows (a model or field it hasn't heard of) comes back as a 400 first.
       const wrongDoor =
         (res.status === 403 && body.includes("API_KEY_SERVICE_BLOCKED")) ||
         (res.status === 400 && base === GEMINI_BASE_URL && body.includes("Unknown name"));
