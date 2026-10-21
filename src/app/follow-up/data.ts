@@ -14,6 +14,7 @@ import { estimateDriveMinutes } from "@/lib/driveTime";
 import { LEAD_GOOD_PHOTO_SCORE } from "@/lib/leadSections";
 import { marketNews, marketNewsLabel, type MarketNews } from "@/lib/marketStatus";
 import { suggestFollowUpText } from "./suggest";
+import { scoreAgent } from "@/lib/agentBadge";
 
 const DAY = 24 * 60 * 60 * 1000;
 const TZ = "America/Los_Angeles";
@@ -615,6 +616,10 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
     (a, b) =>
       FOLLOW_UP_REASONS.indexOf(a.reason) - FOLLOW_UP_REASONS.indexOf(b.reason) ||
       Number(b.shot) - Number(a.shot) ||
+      // Local beats a high-volume agent further off beats high price alone
+      // beats low volume far away (scoreAgent, Lukas's own ranking
+      // 2026-10-21) — ahead of the coarser drive-time band this used alone.
+      scoreAgent(a.agent).rank - scoreAgent(b.agent).rank ||
       a.band - b.band ||
       b.activity - a.activity ||
       rank(a.agent) - rank(b.agent) ||

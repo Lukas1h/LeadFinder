@@ -9,6 +9,7 @@ import { AgentDetailDialog } from "./AgentDetailDialog";
 import { ComposeEmailDialog } from "@/app/messaging/ComposeEmailDialog";
 import { startPendingInteraction } from "./interactionActions";
 import { RelationshipBadge } from "@/app/badges";
+import { scoreAgent } from "@/lib/agentBadge";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { FOLLOW_UP_SNOOZE_DAYS, snoozeLabel } from "@/app/follow-up/snooze";
@@ -49,6 +50,7 @@ export function AgentCard({
   // badge is what this row actually needs to say — who this person is.
   const callHref = telUrl(agent.phone);
   const avgDaysBetweenListings = resolveAvgDaysBetweenListings(agent, listingDates);
+  const score = scoreAgent(agent);
 
   // Call and Text hand off to the dialer or Messages, so the app can't observe
   // whether they picked up or whether anything was sent. Park the attempt as
@@ -73,6 +75,20 @@ export function AgentCard({
             }
           />
           <RelationshipBadge status={agent.relationshipStatus} agentName={agent.name} className="shrink-0" />
+          {score.tier !== "unknown" && (
+            <span
+              className="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+              title={[
+                score.volumePerYear != null ? `~${score.volumePerYear}/yr` : null,
+                score.avgPrice != null ? `~$${Math.round(score.avgPrice / 1000)}K avg` : null,
+                score.driveMinutes != null ? `~${score.driveMinutes} min away` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            >
+              {score.label}
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-baseline gap-x-2">
           {agent.phone && <p className="text-xs text-muted-foreground font-mono mt-0.5">{agent.phone}</p>}

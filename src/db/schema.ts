@@ -293,6 +293,20 @@ export const agents = pgTable("agents", {
   // the computed one; leave it null to keep using observed data.
   avgDaysBetweenListings: integer("avg_days_between_listings"),
 
+  // Filled by the homes.com profile capture (lib/homesProfile.ts, POST
+  // /api/agent-profile-capture): Lukas's Tampermonkey userscript posts the
+  // page whenever he visits an agent's homes.com profile (Akamai blocks
+  // server-side fetches of the page, so this rides along with his own
+  // browsing instead). When present, homesListingsPerYear/homesAvgSalePrice
+  // feed avgListingsPerYear/avgListingPrice the same way a hand-entered
+  // value would (see resolveAgentVolume in lib/agentBadge.ts) rather than
+  // overwrite them, so a deliberate manual entry still wins.
+  homesUrl: text("homes_url"),
+  homesLicenseId: text("homes_license_id"),
+  homesListingsPerYear: integer("homes_listings_per_year"),
+  homesAvgSalePrice: integer("homes_avg_sale_price"),
+  homesCapturedAt: timestamp("homes_captured_at", { withTimezone: true }),
+
   // The agent's office, typed in by hand. Listings carry their own broker
   // name and that's used when this is empty, but a client met off-Zillow has
   // no listing on file, and their office is what makes "I shot for someone at
