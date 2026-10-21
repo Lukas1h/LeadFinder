@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAppAuth } from "@/lib/appApiAuth";
-import { getFollowUpBoard, shownListingIds, type FollowUpItem } from "@/app/follow-up/data";
-import { getFollowUpFeeds, withoutListings, type FeedItem } from "@/app/follow-up/feeds";
+import { getFollowUpBoard, type FollowUpItem } from "@/app/follow-up/data";
+import { buildFeeds, getOfferFeeds, type FeedItem } from "@/app/follow-up/feeds";
 import { FOLLOW_UP_GROUPS } from "@/app/follow-up/groups";
 import { listingCountsByAgent, listingDatesByAgent } from "@/app/agents/actions";
 import { resolveAvgDaysBetweenListings } from "@/app/agents/stats";
@@ -19,14 +19,14 @@ export async function GET(req: Request) {
   const denied = requireAppAuth(req);
   if (denied) return denied;
 
-  const [board, allFeeds, counts, dates] = await Promise.all([
+  const [board, offers, counts, dates] = await Promise.all([
     getFollowUpBoard(),
-    getFollowUpFeeds(),
+    getOfferFeeds(),
     listingCountsByAgent(),
     listingDatesByAgent(),
   ]);
   const { today, later, doneToday, dailyTarget, upcoming } = board;
-  const feeds = withoutListings(allFeeds, shownListingIds(board));
+  const feeds = buildFeeds(board, offers);
 
   // `headline` is the reason, in the words to use ("Pending since Oct 5"). A
   // home he shot that was booked by address alone has no listing, so its
@@ -67,7 +67,9 @@ export async function GET(req: Request) {
     dailyTarget,
     // Everyone not due yet and when they will be; dueAt is null once only a listing or sale brings them back.
     upcoming: upcoming.map((u) => ({ agent: agentJson(u.agent), dueAt: u.dueAt, note: u.note })),
-    // The sections under the list (follow-up/feeds): each an offer, its people grouped, items shaped like today's.
+    // The page as the web has it since 2026-10-21: one tab per feed (follow-up/feeds), items shaped like
+    // today's, and the day/week counter. `today`/`later` above are the same people for builds before that.
+    stats: board.stats,
     feeds: feeds.map((f) => ({
       key: f.key,
       title: f.title,

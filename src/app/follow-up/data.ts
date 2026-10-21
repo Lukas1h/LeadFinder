@@ -127,8 +127,15 @@ export interface FollowUpBoard {
   /** Follow-ups already done today: people he got back in touch with after a gap. A snooze isn't one; the next person moves up. */
   doneToday: number;
   dailyTarget: number;
+  /** The page's counter: follow-ups done today and since Monday, and how many of those have answered since. */
+  stats: FollowUpStats;
   /** Everyone else he knows, soonest first, the ones with no date last. */
   upcoming: FollowUpUpcoming[];
+}
+
+export interface FollowUpStats {
+  today: { done: number; replied: number; target: number };
+  week: { done: number; replied: number; target: number };
 }
 
 /** "1811 NE Alameda Ave" → "1811 alameda". Bookings often aren't linked to a listing, so match by address. */
@@ -156,6 +163,13 @@ function startOfToday(now: number): number {
   }).formatToParts(new Date(now));
   const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0) % 24;
   return now - ((part("hour") * 60 + part("minute")) * 60 + part("second")) * 1000;
+}
+
+/** Midnight on Monday, Pacific. */
+function startOfWeek(now: number): number {
+  const day = new Date(now).toLocaleDateString("en-US", { weekday: "short", timeZone: TZ });
+  const sinceMonday = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(day);
+  return startOfToday(now - sinceMonday * DAY);
 }
 
 /** Nearest first, in the Leads page's bands: local, a short drive, a long one, a trip, unknown. */
@@ -199,7 +213,17 @@ function driveBand(city: string | null): number {
  * longest silence first, which put the people least likely to answer on top.
  */
 export async function getFollowUpBoard(): Promise<FollowUpBoard> {
-  const empty: FollowUpBoard = { today: [], later: [], doneToday: 0, dailyTarget: DAILY_TARGET, upcoming: [] };
+  const empty: FollowUpBoard = {
+    today: [],
+    later: [],
+    doneToday: 0,
+    dailyTarget: DAILY_TARGET,
+    upcoming: [],
+    stats: {
+      today: { done: 0, replied: 0, target: DAILY_TARGET },
+      week: { done: 0, replied: 0, target: DAILY_TARGET * 7 },
+    },
+  };
   const candidates = await db
     .select()
     .from(agents)
@@ -390,7 +414,8 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
   const due: Ranked[] = [];
   const upcoming: FollowUpUpcoming[] = [];
   const today = startOfToday(now);
-  let doneToday = 0;
+  const weekStart = startOfWeek(now);
+  const stats = structuredClone(empty.stats);
 
   for (const agent of candidates) {
     const h = history.get(agent.id)!;
@@ -401,11 +426,19 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
     const snoozed = now < snoozedUntil;
     const activity = listed.get(agent.id)?.recent ?? 0;
 
-    // Done today: back in touch after a gap. Someone he first texted this
-    // morning and is still talking to isn't a follow-up.
-    const firstOutToday = h.out.find((t) => t >= today);
-    const before = Math.max(h.lastIn < today ? h.lastIn : 0, ...h.out.filter((t) => t < today), 0);
-    if (firstOutToday != null && before > 0 && firstOutToday - before >= 5 * DAY) doneToday++;
+    // Done today (and this week): back in touch after a gap. Someone he
+    // first texted this morning and is still talking to isn't a follow-up.
+    const followedUp = (since: number) => {
+      const first = h.out.find((t) => t >= since);
+      const before = Math.max(h.lastIn < since ? h.lastIn : 0, ...h.out.filter((t) => t < since), 0);
+      return first != null && before > 0 && first - before >= 5 * DAY ? first : null;
+    };
+    for (const [key, since] of [["today", today], ["week", weekStart]] as const) {
+      const at = followedUp(since);
+      if (at == null) continue;
+      stats[key].done++;
+      if (h.lastIn > at) stats[key].replied++;
+    }
 
     /** The floor: no reason brings someone up before this. */
     const heldUntil = !isClient(agent) && lastTouch ? lastTouch + MIN_GAP_DAYS * DAY : 0;
@@ -598,14 +631,17 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
     city,
     suggestion,
   }));
+  const doneToday = stats.today.done;
   const slots = Math.max(0, DAILY_TARGET - doneToday);
   upcoming.sort(
     (a, b) => (a.dueAt?.getTime() ?? Infinity) - (b.dueAt?.getTime() ?? Infinity) || rank(a.agent) - rank(b.agent)
   );
-  return { today: items.slice(0, slots), later: items.slice(slots), doneToday, dailyTarget: DAILY_TARGET, upcoming };
-}
-
-/** The listings the board shows, so the feeds under it can leave them out. */
-export function shownListingIds(board: Pick<FollowUpBoard, "today" | "later">): Set<string> {
-  return new Set([...board.today, ...board.later].flatMap((e) => (e.listing ? [e.listing.id] : [])));
+  return {
+    today: items.slice(0, slots),
+    later: items.slice(slots),
+    doneToday,
+    dailyTarget: DAILY_TARGET,
+    upcoming,
+    stats,
+  };
 }

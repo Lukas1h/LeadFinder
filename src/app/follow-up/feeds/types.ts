@@ -1,13 +1,21 @@
 import type { Agent, Listing } from "@/db/schema";
 
 /**
- * Feeds: the sections under the Follow up list, each built around one offer
- * that makes an easy excuse to get back in touch with someone he knows (free
- * drone shots where he'll be driving, a free photo touch-up on a listing
- * that's sitting). The main list is "who's due"; a feed is "who this offer
- * fits". New feeds go in this folder and in getFollowUpFeeds (index.ts).
+ * Feeds: the Follow up page is nothing but these, one tab each. Some are a
+ * reason the board found (getFollowUpBoard: a new listing, a sale, a price
+ * cut, samples with no answer, a plain check-in); the rest are built around
+ * one offer that makes an easy excuse to get back in touch (free drone shots
+ * where he'll be driving, a free touch-up on a listing that's sitting). New
+ * feeds go in this folder and in buildFeeds (index.ts).
  */
-export type FollowUpFeedKey = "drone" | "photo_touchup";
+export type FollowUpFeedKey =
+  | "new_listings"
+  | "samples"
+  | "congrats"
+  | "price_cuts"
+  | "photo_touchup"
+  | "drone"
+  | "check_ins";
 
 export interface FeedItem {
   agent: Agent;
@@ -20,6 +28,9 @@ export interface FeedItem {
   listing: Listing | null;
   /** Where to do the work once they say yes: the photo editor with this listing loaded. */
   editorHref: string | null;
+  /** For a home he shot that was booked by address alone, which has no listing row. */
+  address?: string | null;
+  city?: string | null;
 }
 
 export interface FeedGroup {
@@ -34,5 +45,7 @@ export interface FollowUpFeed {
   title: string;
   /** Who's in it and why, a sentence or two. */
   blurb: string;
+  /** A plain "it's been a while" rather than a reason; its cards' lines are muted. */
+  muted?: boolean;
   groups: FeedGroup[];
 }

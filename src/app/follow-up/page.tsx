@@ -1,13 +1,13 @@
 import { Suspense } from "react";
 import { listingCountsByAgent, listingDatesByAgent } from "@/app/agents/actions";
 import { AgentsSkeleton } from "@/app/agents/loading";
-import { getFollowUpBoard, shownListingIds } from "./data";
-import { getFollowUpFeeds, withoutListings } from "./feeds";
+import { getFollowUpBoard } from "./data";
+import { buildFeeds, getOfferFeeds } from "./feeds";
 import { FollowUpList } from "./FollowUpList";
 
 /**
- * Everyone Lukas knows who is due to hear from him, strongest reason first,
- * five a day (see getFollowUpBoard). Its own page so it can take Pipeline's
+ * Everyone Lukas knows who is due to hear from him, as feeds: one tab per
+ * reason or offer (see feeds/index.ts and getFollowUpBoard). Its own page so it can take Pipeline's
  * place next to Leads on mobile — the work is keeping relationships warm now,
  * not moving properties through stages.
  */
@@ -22,25 +22,24 @@ export default function FollowUpPage() {
 }
 
 async function FollowUpContent() {
-  const [board, allFeeds, counts, dates] = await Promise.all([
+  const [board, offers, counts, dates] = await Promise.all([
     getFollowUpBoard(),
-    getFollowUpFeeds(),
+    getOfferFeeds(),
     listingCountsByAgent(),
     listingDatesByAgent(),
   ]);
-  const feeds = withoutListings(allFeeds, shownListingIds(board));
+  const feeds = buildFeeds(board, offers);
 
   return (
     <>
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Follow up</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Agents you know who have a reason to hear from you, best reason first: a new listing, samples that got no
-          answer, a sale, a price cut, then anyone who&rsquo;s gone quiet. Nobody shows up within 10 days of your last
-          text, and each follow-up that goes unanswered doubles the wait.
+          Agents you know with a reason to hear from you, one feed per reason. Nobody shows up within 10 days of your
+          last text, and each follow-up that goes unanswered doubles the wait.
         </p>
       </header>
-      <FollowUpList {...board} feeds={feeds} counts={counts} dates={dates} />
+      <FollowUpList feeds={feeds} upcoming={board.upcoming} stats={board.stats} counts={counts} dates={dates} />
     </>
   );
 }
