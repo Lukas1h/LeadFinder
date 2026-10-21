@@ -18,6 +18,7 @@ const FAITHFULNESS =
   "- Do NOT invent anything not visible in the original: no views, trees, sky, rooms, or lights through windows or doorways; no new reflections.\n" +
   "- A window that is pure white (blown out) in the original stays pure white. Blinds, shades, and curtains stay exactly as they are. Glass cabinet doors, mirrors, and screens keep showing what they show in the original.\n" +
   "- Small objects (counter items, decor, magnets, labels) keep their exact shape, color, and position; don't redraw or tidy them.\n" +
+  "- Do NOT change the color of walls, ceilings, cabinets, floors, counters, or furniture. Brighter, yes; a different paint color, no.\n" +
   "- Do NOT add text, logos, labels, or watermarks. Keep the same framing and composition.\n" +
   "Return the edited photograph.";
 

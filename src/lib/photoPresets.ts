@@ -21,7 +21,7 @@ export const PHOTO_PRESETS: PhotoPreset[] = [
     prompt:
       "Professional real estate interior photo edit, done the way a retoucher would in Lightroom. Corrections only:\n" +
       "1. EXPOSURE: Brighten the room a lot: bright, clean, airy walls and ceilings, lifted shadows and dark corners, while keeping detail in the whites.\n" +
-      "2. COLOR: Neutral, slightly warm whites. Remove yellow, blue, or green color casts.\n" +
+      "2. COLOR: Keep every surface its real color: walls, ceilings, cabinets, floors, and counters stay the same paint and finish as in the original (beige stays beige, grey stays grey). Only correct an obvious lighting cast, like orange bulbs or blue shade, so the room looks as it would in daylight.\n" +
       "3. PERSPECTIVE: Make vertical lines (walls, door frames, cabinets, window edges) plumb and the horizon level.\n" +
       "4. GLARE: Reduce harsh reflections and glare streaks on floors and counters.\n" +
       "5. WINDOWS: Balance them so they aren't dark, showing only what is already visible through them in the original. " +
