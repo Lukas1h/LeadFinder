@@ -55,3 +55,16 @@ export function areaPhrase(city: string | null | undefined): string | null {
   const key = name.toLowerCase();
   return AREA_PHRASES.find(([, cities]) => cities.includes(key))?.[0] ?? `in the ${name} area`;
 }
+
+/**
+ * The towns {{recentWork}} (lib/recentWork.ts) treats as "near" this city —
+ * the same grouping {{area}} describes, lowercased for matching. A city with
+ * no group of its own (most small towns) is just itself, so an exact-city
+ * match still works.
+ */
+export function citiesNear(city: string | null | undefined): string[] {
+  const name = city?.trim().toLowerCase();
+  if (!name) return [];
+  const group = AREA_PHRASES.find(([, cities]) => cities.includes(name));
+  return group ? group[1] : [name];
+}

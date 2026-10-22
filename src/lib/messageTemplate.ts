@@ -12,6 +12,9 @@ export const AI_DRAFT_VARIANT_SENTINEL = "draft";
 /** Where an email variant's inline photos go (messagePresetVariants.inlinePhotos). Taken out of anything sent without them. */
 export const PHOTOS_MARKER = "{{photos}}";
 
+/** A job he just finished near the agent's town (lib/recentWork.ts), or a nudge to the site with nothing nearby. */
+export const RECENT_WORK_MARKER = "{{recentWork}}";
+
 /**
  * Renders a preset variant body, substituting {{firstName}}, {{street}},
  * {{city}} and {{area}} — the per-city "where I work" phrase the AI drafts

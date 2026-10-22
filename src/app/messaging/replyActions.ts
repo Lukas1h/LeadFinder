@@ -26,7 +26,8 @@ import { attachmentMetaSql, withContentTypes, type AttachmentMeta } from "@/lib/
 import { resolvePendingInteraction, startPendingInteraction } from "@/app/agents/interactionActions";
 import { revalidatePath } from "next/cache";
 import { sendEmail } from "@/lib/mailer";
-import { PHOTOS_MARKER, renderMessageBody, renderSubject } from "@/lib/messageTemplate";
+import { PHOTOS_MARKER, RECENT_WORK_MARKER, renderMessageBody, renderSubject } from "@/lib/messageTemplate";
+import { recentWorkLine } from "@/lib/recentWork";
 import { emailFilesFor, splitEmailFiles } from "@/lib/emailPhotos";
 import { normalizeEmail, EMAIL_RE } from "@/lib/normalize";
 import { setAgentRelationshipStatus } from "@/lib/agentIdentity";
@@ -116,27 +117,33 @@ async function loadQuickActions(
     nextVariants(presetIds),
   ]);
   const byId = new Map(presets.map((p) => [p.id, p]));
-  return presetIds.flatMap((id) => {
-    const preset = byId.get(id);
-    const variant = variants.get(id);
-    if (!preset || !variant) return [];
-    const files = splitEmailFiles(withContentTypes(preset.attachments), variant.inlinePhotos);
-    return [
-      {
-        presetId: preset.id,
-        name: preset.name,
-        channel: preset.channel,
-        variantId: variant.id,
-        // A preview: the email itself shows the photos where the marker is.
-        text: renderMessageBody(variant.body, who.agentName, who.address, who.city).replaceAll(
-          PHOTOS_MARKER,
-          files.inlinePhotos.length > 0 ? `[${files.inlinePhotos.length} photos shown here]` : ""
-        ),
-        subject: variant.subject ? renderSubject(variant.subject, who.agentName) : null,
-        attachments: files.attachments,
-      },
-    ];
-  });
+  // {{recentWork}} needs a DB lookup, shared by every quick action since it
+  // only depends on the agent's city, not the preset.
+  const recentWork = await recentWorkLine(who.city);
+  return (
+    await Promise.all(
+      presetIds.map(async (id) => {
+        const preset = byId.get(id);
+        const variant = variants.get(id);
+        if (!preset || !variant) return [];
+        const files = splitEmailFiles(withContentTypes(preset.attachments), variant.inlinePhotos);
+        return [
+          {
+            presetId: preset.id,
+            name: preset.name,
+            channel: preset.channel,
+            variantId: variant.id,
+            // A preview: the email itself shows the photos where the marker is.
+            text: renderMessageBody(variant.body, who.agentName, who.address, who.city)
+              .replaceAll(PHOTOS_MARKER, files.inlinePhotos.length > 0 ? `[${files.inlinePhotos.length} photos shown here]` : "")
+              .replaceAll(RECENT_WORK_MARKER, recentWork),
+            subject: variant.subject ? renderSubject(variant.subject, who.agentName) : null,
+            attachments: files.attachments,
+          },
+        ];
+      })
+    )
+  ).flat();
 }
 
 export async function getSendDetail(sendId: string): Promise<SendDetail | null> {
@@ -360,7 +367,10 @@ export async function sendQuickActionEmail(
   if (!variant) return { error: `"${preset.name}" has no enabled variant` };
 
   const name = greetingName(row.send, agent.name, row.listingAgentName);
-  const body = renderMessageBody(variant.body, name, row.address, row.city);
+  const body = renderMessageBody(variant.body, name, row.address, row.city).replaceAll(
+    RECENT_WORK_MARKER,
+    await recentWorkLine(row.city)
+  );
 
   try {
     await sendEmail({
