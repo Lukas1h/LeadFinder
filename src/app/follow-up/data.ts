@@ -512,7 +512,10 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
       continue;
     }
 
-    if (fresh && freshOpen) {
+    // A good-photo listing is only a reason for people already working with
+    // him or interested: for a warm agent it means they have a photographer,
+    // and "nice listing!" goes nowhere (cut 2026-10-21).
+    if (fresh && freshOpen && agent.relationshipStatus !== "warm") {
       const when = shortDate(fresh.listedAt ?? fresh.foundAt);
       push({
         reason: "just_listed",
@@ -553,6 +556,14 @@ export async function getFollowUpBoard(): Promise<FollowUpBoard> {
         city: cut.city,
         at: cut.priceCutAt!.getTime(),
       });
+      continue;
+    }
+
+    // Warm agents don't come back on a timer any more (2026-10-21): "just
+    // checking in" was the biggest, weakest tab. They come up for a reason
+    // above, or in an offer feed (a twilight gift, a touch-up, drone shots).
+    if (agent.relationshipStatus === "warm") {
+      upcoming.push({ agent, dueAt: null, note: "Waits for a listing, a sale, or an offer feed" });
       continue;
     }
 

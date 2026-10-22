@@ -218,6 +218,8 @@ export async function startPendingInteraction(input: {
   channel: "call" | "text";
   messageSendId?: string | null;
   listingStatusBefore?: LeadStatus | null;
+  /** The Follow up feed it was started from, for that feed's reply rate. */
+  followUpFeed?: string | null;
 }): Promise<string | null> {
   const [row] = await db
     .insert(agentInteractions)
@@ -229,6 +231,7 @@ export async function startPendingInteraction(input: {
       pendingSince: new Date(),
       messageSendId: input.messageSendId ?? null,
       listingStatusBefore: input.listingStatusBefore ?? null,
+      followUpFeed: input.followUpFeed?.slice(0, 40) ?? null,
       source: "app",
     })
     .returning({ id: agentInteractions.id });

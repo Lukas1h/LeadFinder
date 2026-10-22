@@ -186,6 +186,9 @@ export const listings = pgTable("listings", {
   // status took effect (the contract or closing date), not when it was
   // noticed, and going under contract or closing is what puts the agent on
   // the Follow up page as someone to congratulate.
+  // When the nightly check saw it go from under contract / pending back to
+  // for sale: the deal fell through (lib/marketStatus.ts). The relaunch moment.
+  backOnMarketAt: timestamp("back_on_market_at", { withTimezone: true }),
   marketStatus: text("market_status"),
   marketStatusAt: timestamp("market_status_at", { withTimezone: true }),
   // When the check first saw the listing under contract or sold. Follow up
@@ -313,6 +316,12 @@ export const agents = pgTable("agents", {
   // both alone so it's retried the next day.
   homesCheckedAt: timestamp("homes_checked_at", { withTimezone: true }),
   homesCheckNote: text("homes_check_note"),
+
+  // Where they mostly list: the most common city among their tracked
+  // listings, refreshed daily for agents he knows (refreshAgentHomeCities in
+  // lib/agentBadge.ts). The location third of the volume/price/location
+  // priority, since an agent row has no address of its own.
+  homeCity: text("home_city"),
 
   // The agent's office, typed in by hand. Listings carry their own broker
   // name and that's used when this is empty, but a client met off-Zillow has
@@ -911,6 +920,10 @@ export const agentInteractions = pgTable("agent_interactions", {
   // Null means unknown or not applicable — an email doesn't have an outcome the
   // way a call does.
   outcome: interactionOutcomeEnum("outcome"),
+  // Which Follow up feed the text or call was started from ("relaunch",
+  // "twilight_gift", …; FollowUpFeedKey), so each feed's reply rate can be
+  // measured and the ones that don't work cut. Null when it wasn't one.
+  followUpFeed: text("follow_up_feed"),
   note: text("note"),
 
   // When it actually happened, which is not necessarily when it was recorded:

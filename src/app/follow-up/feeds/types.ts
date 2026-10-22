@@ -10,10 +10,10 @@ import type { Agent, Listing } from "@/db/schema";
  */
 export type FollowUpFeedKey =
   | "new_listings"
+  | "relaunch"
   | "samples"
   | "congrats"
-  | "price_cuts"
-  | "photo_touchup"
+  | "twilight_gift"
   | "drone"
   | "check_ins";
 
@@ -47,5 +47,7 @@ export interface FollowUpFeed {
   blurb: string;
   /** A plain "it's been a while" rather than a reason; its cards' lines are muted. */
   muted?: boolean;
+  /** How texts from this feed have done lately (feeds/stats.ts), once there are any. */
+  stats?: { reached: number; replied: number; days: number };
   groups: FeedGroup[];
 }

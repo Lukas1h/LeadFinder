@@ -47,7 +47,8 @@ export function resolveAgentPrice(agent: { avgListingPrice: number | null; homes
 }
 
 export function scoreAgent(agent: {
-  city?: string | null;
+  /** Where they mostly list (agents.homeCity). Missing means location unknown, not far. */
+  homeCity?: string | null;
   avgListingsPerYear: number | null;
   avgListingPrice: number | null;
   homesListingsPerYear: number | null;
@@ -55,10 +56,10 @@ export function scoreAgent(agent: {
 }): AgentScore {
   const volumePerYear = resolveAgentVolume(agent);
   const avgPrice = resolveAgentPrice(agent);
-  const driveMinutes = agent.city ? estimateDriveMinutes(agent.city) : null;
+  const driveMinutes = agent.homeCity ? estimateDriveMinutes(agent.homeCity) : null;
 
   const local = driveMinutes != null && driveMinutes <= LOCAL_MINUTES;
-  const far = driveMinutes == null || driveMinutes > FAR_MINUTES;
+  const far = driveMinutes != null && driveMinutes > FAR_MINUTES;
   const highVolume = volumePerYear != null && volumePerYear >= HIGH_VOLUME_PER_YEAR;
   const highPrice = avgPrice != null && avgPrice >= HIGH_PRICE;
 
@@ -75,7 +76,7 @@ export function scoreAgent(agent: {
     label = "High price, low volume";
   } else if (volumePerYear != null || avgPrice != null) {
     tier = "low_volume_far";
-    label = "Low volume, far";
+    label = far ? "Low volume, far" : "Low volume";
   } else {
     tier = "unknown";
     label = "No volume data yet";
@@ -83,3 +84,4 @@ export function scoreAgent(agent: {
 
   return { tier, rank: TIER_RANK[tier], label, volumePerYear, avgPrice, driveMinutes };
 }
+

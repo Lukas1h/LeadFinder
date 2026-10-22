@@ -55,9 +55,9 @@ interface Item {
 
 type Tool = { key: string; kind: "annotate" | "transform" | "crop"; source: SourceImage };
 
-const newItem = (photo: Photo): Item => ({
+const newItem = (photo: Photo, presetId: string = DEFAULT_PRESET): Item => ({
   photo,
-  presetId: DEFAULT_PRESET,
+  presetId,
   notes: "",
   geometry: NO_GEOMETRY,
   strokes: [],
@@ -67,7 +67,17 @@ const newItem = (photo: Photo): Item => ({
 const presetLabel = (id: string) => (id === NOTES_ONLY ? "Notes only" : (PHOTO_PRESETS.find((p) => p.id === id)?.label ?? id));
 const b64 = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(",") + 1);
 
-export function PhotoEditor({ initialListing }: { initialListing: EditorListing | null }) {
+export function PhotoEditor({
+  initialListing,
+  initialPreset,
+}: {
+  initialListing: EditorListing | null;
+  /** The preset photos added to the tray start on (?preset=, e.g. sunset-exterior from a twilight gift card). */
+  initialPreset?: string | null;
+}) {
+  const startPreset =
+    initialPreset && PHOTO_PRESETS.some((p) => p.id === initialPreset) ? initialPreset : DEFAULT_PRESET;
+  const addItem = (photo: Photo) => newItem(photo, startPreset);
   const router = useRouter();
   const [listing, setListing] = useState<EditorListing | null>(initialListing);
   const [photos, setPhotos] = useState<Photo[]>(() => (initialListing ? listingPhotos(initialListing) : []));
@@ -107,13 +117,13 @@ export function PhotoEditor({ initialListing }: { initialListing: EditorListing 
       }
     }
     setPhotos((prev) => [...prev, ...added]);
-    setItems((prev) => [...prev, ...added.map(newItem)]);
+    setItems((prev) => [...prev, ...added.map(addItem)]);
   };
 
   const inTray = new Set(items.map((it) => it.photo.key));
   const toggle = (photo: Photo) =>
     setItems((prev) =>
-      prev.some((it) => it.photo.key === photo.key) ? prev.filter((it) => it.photo.key !== photo.key) : [...prev, newItem(photo)]
+      prev.some((it) => it.photo.key === photo.key) ? prev.filter((it) => it.photo.key !== photo.key) : [...prev, addItem(photo)]
     );
 
   const openTool = async (item: Item, kind: Tool["kind"]) => {
@@ -264,7 +274,7 @@ export function PhotoEditor({ initialListing }: { initialListing: EditorListing 
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setItems((prev) => [...prev, ...photos.filter((p) => !inTray.has(p.key)).map(newItem)])}
+                onClick={() => setItems((prev) => [...prev, ...photos.filter((p) => !inTray.has(p.key)).map(addItem)])}
               >
                 Add all
               </Button>

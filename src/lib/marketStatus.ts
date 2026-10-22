@@ -169,7 +169,16 @@ export async function refreshMarketStatuses(limit = 200): Promise<MarketCheckRes
       }),
     ...listingRows.map((l) => async () => {
       const update = await check({ ...l, since: l.listedAt ?? l.foundAt }, result);
-      await db.update(listings).set(update).where(eq(listings.id, l.id));
+      // Under contract or pending, and now for sale again: the deal fell
+      // through, the agent's relaunch moment (Follow up's Relaunch feed).
+      const fellThrough =
+        update.marketStatus !== undefined &&
+        (marketNews(l.marketStatus) === "pending" || marketNews(l.marketStatus) === "under_contract") &&
+        marketNews(update.marketStatus) === null;
+      await db
+        .update(listings)
+        .set({ ...update, ...(fellThrough ? { backOnMarketAt: new Date() } : {}) })
+        .where(eq(listings.id, l.id));
     }),
   ];
 

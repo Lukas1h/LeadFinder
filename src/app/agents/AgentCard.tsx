@@ -24,6 +24,7 @@ export function AgentCard({
   lastReplyAt,
   lead,
   textBody,
+  followUpFeed,
   children,
 }: {
   agent: Agent;
@@ -40,6 +41,8 @@ export function AgentCard({
   lead?: ReactNode;
   /** What the Text button opens Messages with. Empty when not given. */
   textBody?: string;
+  /** The Follow up feed this card is in, recorded with a call or text so each feed's reply rate can be measured. */
+  followUpFeed?: string;
   /** Full-width extra row under the card, e.g. the listing they just put up. */
   children?: ReactNode;
 }) {
@@ -58,7 +61,7 @@ export function AgentCard({
   // Contact dialog's buttons do. Email needs none of this — it opens Compose
   // in place, and the send only gets written once it's actually sent.
   const logHandoff = (channel: "call" | "text") => {
-    startPendingInteraction({ agentId: agent.id, channel }).catch(() => {});
+    startPendingInteraction({ agentId: agent.id, channel, followUpFeed }).catch(() => {});
   };
 
   return (

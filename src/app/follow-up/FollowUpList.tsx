@@ -54,7 +54,7 @@ export function FollowUpList({
     );
   };
 
-  const card = (e: FeedItem, muted = false) => (
+  const card = (e: FeedItem, feedKey: string, muted = false) => (
     <AgentCard
       key={e.agent.id}
       agent={e.agent}
@@ -63,6 +63,7 @@ export function FollowUpList({
       followUpDismiss={dismiss}
       lastReplyAt={e.lastReplyAt}
       textBody={e.suggestion}
+      followUpFeed={feedKey}
       lead={
         // The reason leads: it's what the text will be about. A plain check-in is the absence of one, so it's muted.
         <p
@@ -203,10 +204,16 @@ export function FollowUpList({
       ) : feed && feed.count + feed.groups.reduce((n, g) => n + g.heldBack, 0) > 0 ? (
         <section>
           <p className="text-sm text-muted-foreground">{feed.blurb}</p>
+          {feed.stats && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Last {feed.stats.days} days: {feed.stats.replied} of {feed.stats.reached} reached from here replied
+              {feed.stats.reached > 0 && ` (${Math.round((feed.stats.replied / feed.stats.reached) * 100)}%)`}
+            </p>
+          )}
           {feed.groups.map((g) => (
             <div key={g.title} className="mt-5">
               {feed.groups.length > 1 && <h3 className="text-sm font-medium text-foreground">{g.title}</h3>}
-              {g.items.length > 0 && <div className="flex flex-col gap-4 mt-2">{g.items.map((e) => card(e, feed.muted))}</div>}
+              {g.items.length > 0 && <div className="flex flex-col gap-4 mt-2">{g.items.map((e) => card(e, feed.key, feed.muted))}</div>}
               {g.heldBack > 0 && (
                 <p className="text-sm text-muted-foreground mt-2">
                   {g.items.length > 0 ? `${g.heldBack} more` : g.heldBack} heard from you too recently to ask.
