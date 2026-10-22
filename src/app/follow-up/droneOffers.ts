@@ -1,7 +1,8 @@
 import { db } from "@/db";
-import { agents, agentInteractions, bookings, listings, messagePresets, messageSends, type Agent } from "@/db/schema";
-import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
-import { firstName } from "@/lib/sms";
+import { agents, agentInteractions, bookings, listings, messagePresets, messageSends, type Agent, type Listing } from "@/db/schema";
+import { and, eq, gte, inArray, isNull, lt, ne, sql } from "drizzle-orm";
+import { firstName, naturalStreetName } from "@/lib/sms";
+import { shotAddresses, shotByHim, stillActive } from "./feeds/shared";
 
 /**
  * "Free drone shots": one of the Follow up page's feeds (feeds/index.ts),
@@ -13,6 +14,13 @@ import { firstName } from "@/lib/sms";
  * (home, or a booking in the next week and the towns on the way to it), who
  * haven't heard from him in MIN_GAP_DAYS, haven't been offered this before,
  * have never booked, and aren't snoozed.
+ *
+ * When one of theirs in that area is for sale with no aerial among its photos
+ * (listings.photosHaveDrone, from the photo scorer since 2026-10-22), the
+ * offer names that listing and they go first in the group: "want me to grab
+ * drone shots of 123 Main while I'm there?" is a much easier yes than "any
+ * properties?". Listings scored before that date have no answer and only
+ * get the general offer.
  */
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -66,6 +74,8 @@ const areaOf = (city: string | null | undefined) => AREAS.find((a) => a.cities.i
 
 export interface DroneOfferItem {
   agent: Agent;
+  /** Their for-sale listing in this area with no aerials, when there is one: the offer is about it. */
+  listing: Listing | null;
   lastReplyAt: Date | null;
   /** "Grants Pass · last contact Sep 16" */
   label: string;
@@ -96,7 +106,7 @@ export async function getDroneOffers(): Promise<DroneOfferGroup[]> {
   const now = Date.now();
   const todayKey = dayKey(new Date(now));
 
-  const [trips, cities, sends, interactions, booked] = await Promise.all([
+  const [trips, cities, sends, interactions, booked, noDrone, shot] = await Promise.all([
     // Jobs still to shoot in the coming week: where he'll be.
     db
       .select({ jobDate: bookings.jobDate, city: sql<string | null>`coalesce(${bookings.city}, ${listings.city})` })
@@ -124,7 +134,19 @@ export async function getDroneOffers(): Promise<DroneOfferGroup[]> {
       .from(agentInteractions)
       .where(inArray(agentInteractions.agentId, ids)),
     db.select({ agentId: bookings.contactAgentId }).from(bookings).where(inArray(bookings.contactAgentId, ids)),
+    db
+      .select()
+      .from(listings)
+      .where(and(inArray(listings.agentId, ids), eq(listings.photosHaveDrone, false), ne(listings.status, "booked"))),
+    shotAddresses(),
   ]);
+  // Each agent's for-sale listings with no aerials, newest first.
+  const needsDrone = new Map<string, Listing[]>();
+  for (const l of noDrone) {
+    if (!l.agentId || l.isComingSoon || !stillActive(l) || shotByHim(l, shot)) continue;
+    needsDrone.set(l.agentId, [...(needsDrone.get(l.agentId) ?? []), l]);
+  }
+  for (const list of needsDrone.values()) list.sort((a, b) => (b.listedAt ?? b.foundAt).getTime() - (a.listedAt ?? a.foundAt).getTime());
 
   const lastTouch = new Map<string, number>();
   const lastIn = new Map<string, number>();
@@ -211,11 +233,24 @@ export async function getDroneOffers(): Promise<DroneOfferGroup[]> {
     const name = firstName(agent.name);
     const hey = name ? `Hey ${name}!` : "Hey there!";
     const when = stops[at].when;
+    const target = (needsDrone.get(agent.id) ?? []).find((l) => stops[at].cities.has(norm(l.city))) ?? null;
+    const street = target ? naturalStreetName(target.address) : null;
     groups[at].items.push({
       agent,
+      listing: target,
       lastReplyAt: lastIn.has(agent.id) ? new Date(lastIn.get(agent.id)!) : null,
-      label: `${town} · ${touched ? `last contact ${shortDate(new Date(touched))}` : "no contact logged"}`,
-      suggestion: when
+      label: [
+        target ? `${street ?? "Their listing"} has no aerials` : null,
+        town,
+        touched ? `last contact ${shortDate(new Date(touched))}` : "no contact logged",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      suggestion: target
+        ? when
+          ? `${hey} I'm going to be in ${town} ${when} and noticed ${street ? `${street}` : "your listing"} doesn't have any drone shots yet. Want me to grab some while I'm over there? Complimentary, I'd love to help you out!`
+          : `${hey} Noticed ${street ? `${street}` : "your listing"} doesn't have any drone shots yet. I'm doing some complimentary drone shots around ${town} this week, want me to grab some for you?`
+        : when
         ? `${hey} I'm going to be in ${town} ${when}, thought I'd check in and say hi. While I'm over there, do you have any properties that need some complimentary drone shots done? I'd love to help you out if so!`
         : `${hey} Thought I'd check in and say hi. I'm doing some complimentary drone shots around ${town} this week, do you have any properties that could use some? I'd love to help you out if so!`,
     });
@@ -223,6 +258,10 @@ export async function getDroneOffers(): Promise<DroneOfferGroup[]> {
 
   const rank = (a: Agent) => (a.relationshipStatus === "interested" ? 0 : 1);
   const newest = (a: Agent) => townsOf.get(a.id)?.[0]?.at ?? 0;
-  for (const g of groups) g.items.sort((x, y) => rank(x.agent) - rank(y.agent) || newest(y.agent) - newest(x.agent));
+  // A named listing is the easier yes, so those go first.
+  for (const g of groups)
+    g.items.sort(
+      (x, y) => Number(!!y.listing) - Number(!!x.listing) || rank(x.agent) - rank(y.agent) || newest(y.agent) - newest(x.agent)
+    );
   return groups.filter((g) => g.items.length > 0 || g.heldBack > 0);
 }

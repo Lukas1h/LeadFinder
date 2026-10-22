@@ -34,11 +34,22 @@ Signs of professional photos: Bright images, parallel verticals that are level, 
 Drone images are a dead give away that they have pro photos, that should imediately make it at least a 7.
 So are goregous twilight images, or perfect HDR interiors.
 
-Respond with ONLY a JSON object: {"score": <integer 1-10>, "reasoning": "<one short sentence>"}`;
+Also answer two yes/no questions about the same photos. These are separate facts, NOT part of the score: an empty or unstaged home is not a photography flaw, so never lower the score because rooms are vacant, and never mention staging in the reasoning.
+- "vacant": true if the home is empty — the interior rooms shown have no furniture (an unfurnished, unstaged home). False if the rooms are furnished or staged, or if no interior is shown.
+- "hasDrone": true if any photo is an aerial/drone shot taken from well above the roofline. A photo from the street or a ladder is not one.
+
+Respond with ONLY a JSON object: {"score": <integer 1-10>, "reasoning": "<one short sentence>", "vacant": <true|false>, "hasDrone": <true|false>}`;
 
 interface PhotoScoreResult {
   score: number | null;
   reasoning: string | null;
+  /**
+   * From the same call, at no extra cost (added 2026-10-22). Null when the
+   * model didn't answer. Judged on the sampled photos only (MAX_PHOTOS_TO_SCORE),
+   * so hasDrone=false means "none in the sample", not "none in the gallery".
+   */
+  vacant?: boolean | null;
+  hasDrone?: boolean | null;
   scoredPhotos: string[] | null;
 }
 
@@ -102,9 +113,16 @@ export async function scorePhotos(photos: string[] | null): Promise<PhotoScoreRe
   if (!content) return { score: null, reasoning: null, scoredPhotos: null };
 
   try {
-    const parsed = JSON.parse(content) as { score?: number; reasoning?: string };
+    const parsed = JSON.parse(content) as { score?: number; reasoning?: string; vacant?: unknown; hasDrone?: unknown };
     const score = typeof parsed.score === "number" ? Math.max(1, Math.min(10, Math.round(parsed.score))) : null;
-    return { score, reasoning: parsed.reasoning ?? null, scoredPhotos };
+    const yesNo = (v: unknown) => (typeof v === "boolean" ? v : null);
+    return {
+      score,
+      reasoning: parsed.reasoning ?? null,
+      vacant: yesNo(parsed.vacant),
+      hasDrone: yesNo(parsed.hasDrone),
+      scoredPhotos,
+    };
   } catch {
     return { score: null, reasoning: null, scoredPhotos: null };
   }

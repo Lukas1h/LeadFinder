@@ -225,7 +225,12 @@ export async function retryMissingPhotoScores(limit = SCORE_RETRY_LIMIT): Promis
         if (result.score == null) return;
         await db
           .update(listings)
-          .set({ score: result.score, scoreReasoning: result.reasoning })
+          .set({
+            score: result.score,
+            scoreReasoning: result.reasoning,
+            ...(result.vacant != null ? { photosVacant: result.vacant } : {}),
+            ...(result.hasDrone != null ? { photosHaveDrone: result.hasDrone } : {}),
+          })
           .where(eq(listings.id, row.id));
         rescored++;
       })
@@ -315,6 +320,8 @@ export async function insertAndEnrichListings(
         if (agent?.brokerName) update.brokerName = agent.brokerName;
         if (photoScore.score != null) update.score = photoScore.score;
         if (photoScore.reasoning) update.scoreReasoning = photoScore.reasoning;
+        if ("vacant" in photoScore && photoScore.vacant != null) update.photosVacant = photoScore.vacant;
+        if ("hasDrone" in photoScore && photoScore.hasDrone != null) update.photosHaveDrone = photoScore.hasDrone;
 
         if (Object.keys(update).length > 0) {
           await db.update(listings).set(update).where(eq(listings.id, row.id));

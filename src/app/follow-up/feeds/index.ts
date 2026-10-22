@@ -48,7 +48,11 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
     drone: drone.map((g) => ({
       title: g.title,
       heldBack: g.heldBack,
-      items: byPriority(g.items.map((e) => ({ ...e, listing: null, editorHref: null }))),
+      // Named-listing offers first (droneOffers.ts), then Lukas's priority within each half.
+      items: [
+        ...byPriority(g.items.filter((e) => e.listing).map((e) => ({ ...e, editorHref: null }))),
+        ...byPriority(g.items.filter((e) => !e.listing).map((e) => ({ ...e, editorHref: null }))),
+      ],
     })),
     stats,
   };

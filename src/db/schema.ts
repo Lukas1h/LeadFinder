@@ -159,6 +159,12 @@ export const listings = pgTable("listings", {
 
   score: integer("score"),
   scoreReasoning: text("score_reasoning"),
+  // Asked in the same photo-scoring call (lib/photoScore.ts), so free: is the
+  // home empty (the Virtual staging feed), and is there an aerial in the
+  // sampled photos (the Drone shots feed). Null for listings scored before
+  // 2026-10-22, which aren't re-scored for this.
+  photosVacant: boolean("photos_vacant"),
+  photosHaveDrone: boolean("photos_have_drone"),
 
   // Free-text, edited from the listing detail modal.
   notes: text("notes"),

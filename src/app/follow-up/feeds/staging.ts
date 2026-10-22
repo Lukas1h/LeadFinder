@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { agents, listings, type Agent, type Listing } from "@/db/schema";
-import { and, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
 import { firstName, naturalStreetName } from "@/lib/sms";
 import { byPriority, loadContactHistory, shortDate, shotAddresses, shotByHim, stillActive, volumeLine } from "./shared";
 import type { FeedGroup } from "./types";
@@ -11,12 +11,10 @@ import type { FeedGroup } from "./types";
  * their own photographer usually didn't offer. Staged here externally, not
  * in the photo editor — the offer is the free demo, not the tool.
  *
- * There's no MLS description text in the schema to check for "vacant" — the
- * only free signal is the photo scorer's own reasoning (score_reasoning),
- * which occasionally calls out empty/unstaged rooms as part of critiquing
- * the photos. That's a real signal, not a guess, but a thin one: 2 of ~2,500
- * tracked listings mention it as of 2026-10-22. This feed will be quiet
- * until there's a direct source (e.g. a listing-description field) to check.
+ * Vacant comes from the photo scorer, asked in the same call that scores the
+ * photos (listings.photosVacant, since 2026-10-22). Listings scored before
+ * then have no answer, so for those the scorer's own reasoning text is the
+ * fallback: it occasionally calls out empty rooms (2 of ~2,500 did).
  *
  * Who shows: warm and interested agents, not declined or snoozed, untouched
  * for MIN_GAP_DAYS, never offered this before, with an active listing he
@@ -47,7 +45,7 @@ export async function getStagingGroup(): Promise<FeedGroup> {
         and(
           inArray(listings.agentId, known.map((a) => a.id)),
           ne(listings.status, "booked"),
-          isNotNull(listings.scoreReasoning)
+          or(eq(listings.photosVacant, true), isNotNull(listings.scoreReasoning))
         )
       ),
     loadContactHistory(known),
@@ -58,7 +56,8 @@ export async function getStagingGroup(): Promise<FeedGroup> {
   const byId = new Map(known.map((a) => [a.id, a]));
   const newest = new Map<string, Listing>();
   for (const l of rows) {
-    if (!l.agentId || !VACANT_RE.test(l.scoreReasoning ?? "") || !stillActive(l) || shotByHim(l, shot)) continue;
+    const vacant = l.photosVacant ?? VACANT_RE.test(l.scoreReasoning ?? "");
+    if (!l.agentId || !vacant || l.isComingSoon || !stillActive(l) || shotByHim(l, shot)) continue;
     const prev = newest.get(l.agentId);
     if (!prev || (l.listedAt ?? l.foundAt) > (prev.listedAt ?? prev.foundAt)) newest.set(l.agentId, l);
   }
