@@ -510,6 +510,55 @@ export const galleryViews = pgTable("gallery_views", {
 
 export type GalleryView = typeof galleryViews.$inferSelect;
 
+export interface PortfolioPhotoRef {
+  bookingId: string;
+  /** The Dropbox filename within that booking's gallery folder. */
+  name: string;
+}
+
+export interface PortfolioHouse {
+  bookingId: string;
+  /** Snapshotted at creation — the booking's own address can change or the row can be deleted later. */
+  address: string | null;
+  city: string | null;
+  /** Filenames within that booking's gallery, in carousel order. */
+  photos: string[];
+}
+
+export interface PortfolioContent {
+  /** "Eugene", "Roseburg" — the hero's "Real Estate Photography & Video in {area}, Oregon" line. */
+  area: string | null;
+  /** The condensed "best of" grid, hand-picked across any of his galleries. */
+  photos: PortfolioPhotoRef[];
+  video: { youtubeId: string; title: string } | null;
+  houses: PortfolioHouse[];
+}
+
+// A personalized portfolio page (/portfolio/[slug], served bare on
+// gallery.lukashahn.art — see proxy.ts) sent in place of the samples email's
+// attachment, mainly for cold outreach: his own best photos, a video, and a
+// few named houses with their galleries, built in the same voice and design
+// as lukashahn.art/real-estate. agentId is for Lukas's own tracking (which
+// push notification to send, and whose name to show him) — it never appears
+// on the page itself, which carries no sign it was made for any one person.
+export const portfolioLinks = pgTable("portfolio_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Short and unrelated to any token format elsewhere (bookings.galleryToken
+  // is 32 chars) so the two can be told apart by length alone where that
+  // matters (proxy.ts tries this table only when a bare path is too short
+  // to be a gallery token).
+  slug: text("slug").notNull().unique(),
+  agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  content: jsonb("content").$type<PortfolioContent>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  viewCount: integer("view_count").notNull().default(0),
+  firstViewedAt: timestamp("first_viewed_at", { withTimezone: true }),
+  lastViewedAt: timestamp("last_viewed_at", { withTimezone: true }),
+});
+
+export type PortfolioLink = typeof portfolioLinks.$inferSelect;
+export type NewPortfolioLink = typeof portfolioLinks.$inferInsert;
+
 // Price/services as line items rather than a flat number, so this can
 // eventually generate real invoices — a line item like "Twilight shoot —
 // $100" answers both "what did I charge" and "what did I do" at once. A

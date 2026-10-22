@@ -11,6 +11,7 @@ import {
   HeartHandshake,
   Wallet,
   Wand2,
+  Link2,
 } from "lucide-react";
 
 // The desktop sidebar shows every link. Mobile shows MOBILE_TABS instead.
@@ -27,6 +28,7 @@ export const NAV_LINKS = [
   { href: "/finances", label: "Finances", icon: Wallet },
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { href: "/photo-editor", label: "Photo editor", icon: Wand2 },
+  { href: "/portfolio-links", label: "Portfolio links", icon: Link2 },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

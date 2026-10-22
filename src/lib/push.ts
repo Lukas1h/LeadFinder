@@ -115,6 +115,16 @@ export async function notifyPaymentReceived(amountDollars: number, where: string
   await broadcast({ title: `Paid online: $${amountDollars.toLocaleString("en-US")}`, body: where, url: "/booked" });
 }
 
+/** Someone opened a personalized portfolio link (lib/portfolioLink.ts) — the page itself never reveals who it's for; this is only Lukas's own notice. */
+export async function notifyPortfolioView(agentName: string | null, viewCount: number): Promise<void> {
+  const nth = viewCount === 1 ? "" : viewCount === 2 ? " (2nd visit)" : ` (${viewCount}th visit)`;
+  await broadcast({
+    title: agentName ? `${agentName} is looking at their portfolio page` : "Someone's looking at a portfolio page",
+    body: `View${viewCount === 1 ? "" : "s"}: ${viewCount}${nth}`,
+    url: "/portfolio-links",
+  });
+}
+
 async function broadcast(payload: PushPayload): Promise<void> {
   if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
 

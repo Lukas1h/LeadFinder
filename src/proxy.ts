@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { bookings } from "@/db/schema";
+import { bookings, portfolioLinks } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { authGateEnabled, isValidSession, safeNextPath, SESSION_COOKIE } from "@/lib/adminSession";
 
@@ -8,8 +8,12 @@ import { authGateEnabled, isValidSession, safeNextPath, SESSION_COOKIE } from "@
 // completely separate from the admin app's own domains so a client who
 // strips a gallery link down to its root never lands on Lukas's internal
 // tool. A bare /<token> path (no /gallery/ prefix) is rewritten internally
-// to the real /gallery/[token] page; the bare root, and any unrecognized
-// token, redirect to the real business site instead.
+// to the real /gallery/[token] page, or — for a short slug, PORTFOLIO_SLUG_LENGTH
+// chars — to /portfolio/[slug] instead (see lib/portfolioLink.ts: the two
+// token formats are different lengths on purpose, so this can tell them
+// apart without a second DB round trip on every request). The bare root,
+// and any unrecognized token of either length, redirect to the real
+// business site instead.
 //
 // The token check happens here rather than relying on the page's own
 // notFound() -> redirect(): Next.js's own docs are explicit that redirect()
@@ -22,6 +26,8 @@ import { authGateEnabled, isValidSession, safeNextPath, SESSION_COOKIE } from "@
 // gallery.lukashahn.art requests — the admin app's own domains return
 // immediately above and never pay this extra round trip.
 const GALLERY_HOST = "gallery.lukashahn.art";
+/** Must match SLUG_LENGTH in lib/portfolioLink.ts. */
+const PORTFOLIO_SLUG_LENGTH = 6;
 const MAIN_SITE_URL = "https://lukashahn.art/real-estate";
 
 // Marks a request as "serving the gallery experience" so layout.tsx (a
@@ -73,7 +79,7 @@ const PUBLIC_PATHS = new Set([
   "/api/compose/cold-outreach",
 ]);
 
-const PUBLIC_PREFIXES = ["/gallery/", "/api/gallery/", "/api/webhooks/", "/api/cron/", "/api/app/", "/.well-known/"];
+const PUBLIC_PREFIXES = ["/gallery/", "/portfolio/", "/api/gallery/", "/api/portfolio/", "/api/webhooks/", "/api/cron/", "/api/app/", "/.well-known/"];
 
 const HANDOFF_FILE_RE = /^\/api\/(agents|bookings)\/[^/]+\/(vcard|calendar)$/;
 
@@ -132,10 +138,11 @@ export async function proxy(req: NextRequest) {
     const denied = adminGate(req);
     if (denied) return denied;
 
-    // Direct /gallery/[token] access on any other domain (the admin app's
-    // own aliases, or someone who bookmarked an old link) still needs to be
-    // chrome-less — same header, same single source of truth in layout.tsx.
-    if (pathname.startsWith("/gallery/")) {
+    // Direct /gallery/[token] (or /portfolio/[slug]) access on any other
+    // domain (the admin app's own aliases, or someone who bookmarked an old
+    // link) still needs to be chrome-less — same header, same single source
+    // of truth in layout.tsx.
+    if (pathname.startsWith("/gallery/") || pathname.startsWith("/portfolio/")) {
       return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
     }
     return NextResponse.next();
@@ -147,11 +154,23 @@ export async function proxy(req: NextRequest) {
   if (pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
-  if (pathname.startsWith("/gallery/")) {
+  if (pathname.startsWith("/gallery/") || pathname.startsWith("/portfolio/")) {
     return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
   }
 
   const token = pathname.slice(1);
+  if (token.length === PORTFOLIO_SLUG_LENGTH) {
+    try {
+      const [match] = await db.select({ id: portfolioLinks.id }).from(portfolioLinks).where(eq(portfolioLinks.slug, token));
+      if (!match) return NextResponse.redirect(MAIN_SITE_URL);
+    } catch (err) {
+      console.error("proxy: portfolio slug lookup failed", err);
+    }
+    return NextResponse.rewrite(new URL(`/portfolio${pathname}`, req.url), {
+      request: { headers: markGalleryView(req.headers) },
+    });
+  }
+
   try {
     const [match] = await db.select({ id: bookings.id }).from(bookings).where(eq(bookings.galleryToken, token));
     if (!match) return NextResponse.redirect(MAIN_SITE_URL);
