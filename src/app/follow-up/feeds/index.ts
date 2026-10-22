@@ -1,9 +1,12 @@
+import { connection } from "next/server";
 import type { FollowUpBoard, FollowUpItem, FollowUpReason } from "../data";
 import { getDroneOffers } from "../droneOffers";
 import { getBackOnMarketGroup } from "./backOnMarket";
+import { getGraphicsGroups } from "./graphics";
 import { getPhotoTouchUpGroups } from "./photoTouchUps";
 import { byPriority } from "./shared";
 import { FEED_STATS_DAYS, getFeedStats, type FeedStats } from "./stats";
+import { getStagingGroup } from "./staging";
 import { getTwilightGiftGroup } from "./twilightGifts";
 import type { FeedGroup, FeedItem, FollowUpFeed } from "./types";
 
@@ -14,14 +17,22 @@ export interface OfferFeeds {
   touchUps: FeedGroup[];
   backOnMarket: FeedGroup;
   twilight: FeedGroup;
+  staging: FeedGroup;
+  graphics: FeedGroup[];
   drone: FeedGroup[];
   stats: Map<string, FeedStats>;
 }
 
 export async function getOfferFeeds(): Promise<OfferFeeds> {
-  const [touchUps, backOnMarket, drone, stats] = await Promise.all([
+  // Before anything below reads Date.now(): request-time rendering has to be
+  // established before any of these parallel branches touch the clock, or
+  // whichever gets there first (not necessarily this one) fails the build.
+  await connection();
+  const [touchUps, backOnMarket, staging, graphics, drone, stats] = await Promise.all([
     getPhotoTouchUpGroups(),
     getBackOnMarketGroup(),
+    getStagingGroup(),
+    getGraphicsGroups(),
     getDroneOffers(),
     getFeedStats(),
   ]);
@@ -32,6 +43,8 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
     touchUps,
     backOnMarket,
     twilight,
+    staging,
+    graphics,
     drone: drone.map((g) => ({
       title: g.title,
       heldBack: g.heldBack,
@@ -111,6 +124,20 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
       blurb:
         "Warm and interested agents whose newest listing already has good photos. Make a twilight version of the front photo (it opens in the editor on the sunset preset), then offer it. A yes is what turns warm into interested.",
       groups: [notShown(offers.twilight)],
+    },
+    {
+      key: "staging",
+      title: "Virtual staging",
+      blurb:
+        "Warm and interested agents with a vacant listing. Offer to virtually stage one photo (done outside the app) as a free demo of how the space could look furnished.",
+      groups: [notShown(offers.staging)],
+    },
+    {
+      key: "graphics",
+      title: "Graphics",
+      blurb:
+        "Homes you shot that just went live or just changed status: a \u201cjust listed\u201d or \u201cjust sold\u201d moment worth a graphic. You make it yourself; the caption is a starting point.",
+      groups: offers.graphics,
     },
     {
       key: "drone",

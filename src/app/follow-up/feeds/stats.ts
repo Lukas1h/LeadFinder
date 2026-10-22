@@ -1,7 +1,6 @@
 import { db } from "@/db";
 import { agentInteractions, messageSends } from "@/db/schema";
 import { and, gt, inArray, isNotNull } from "drizzle-orm";
-import { connection } from "next/server";
 
 const DAY = 24 * 60 * 60 * 1000;
 /** The window each feed is judged on. */
@@ -22,8 +21,7 @@ export interface FeedStats {
  * inbound call/text/email, or a send marked responded, within a week of it.
  */
 export async function getFeedStats(): Promise<Map<string, FeedStats>> {
-  // Request-time: the window is measured from now, which can't be read while prerendering.
-  await connection();
+  // Request-time rendering is already established by getOfferFeeds before this runs.
   const since = new Date(Date.now() - FEED_STATS_DAYS * DAY);
   const starts = await db
     .select({ agentId: agentInteractions.agentId, feed: agentInteractions.followUpFeed, at: agentInteractions.occurredAt })

@@ -14,6 +14,8 @@ export type FollowUpFeedKey =
   | "samples"
   | "congrats"
   | "twilight_gift"
+  | "staging"
+  | "graphics"
   | "drone"
   | "check_ins";
 
