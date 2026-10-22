@@ -194,9 +194,49 @@ struct FollowUpResponse: Codable, Sendable {
         var listingCount: Int?
         /// Their usual gap between listings, in days, when it can be worked out.
         var avgDaysBetweenListings: Int?
+        /// Feed items only: the web's photo editor with this listing loaded,
+        /// e.g. "/photo-editor?listing=<id>&preset=sunset-exterior".
+        var editorHref: String?
 
         var id: String { agent.id }
     }
+
+    /// One tab of the page since 2026-10-21 (`src/app/follow-up/feeds`).
+    struct Feed: Codable, Sendable, Identifiable {
+        var key: String
+        var title: String
+        var blurb: String?
+        var groups: [FeedGroup]
+
+        var id: String { key }
+        var itemCount: Int { groups.reduce(0) { $0 + $1.items.count } }
+    }
+
+    struct FeedGroup: Codable, Sendable, Identifiable {
+        var title: String
+        var items: [JustListed]
+        /// People this fits who heard from him too recently to ask.
+        var heldBack: Int?
+
+        var id: String { title }
+    }
+
+    /// The day/week counter: texts done against target, and the replies.
+    struct Stats: Codable, Sendable {
+        struct Count: Codable, Sendable {
+            var done: Int
+            var replied: Int
+            var target: Int
+        }
+
+        var today: Count
+        var week: Count
+    }
+
+    /// One tab per feed, in the web's order. Optional so a response cached
+    /// before 2026-10-21 still decodes (and shows the old layout).
+    var feeds: [Feed]?
+    var stats: Stats?
 
     /// The page since 2026-10-11: today's few, then everyone else who is due,
     /// strongest reason first. Optional so a response cached from before the

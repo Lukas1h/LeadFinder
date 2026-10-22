@@ -148,6 +148,9 @@ enum DebugLaunchArguments {
         ProcessInfo.processInfo.arguments.contains("-scroll-bottom")
     }
 
+    /// `-follow-up [feed key]` opens Follow up from Home, on that tab.
+    static var followUpTab: String? { value(after: "-follow-up") }
+
     /// `-no-alert-prompt` skips asking for notification permission, which
     /// would otherwise cover a fresh simulator's first screenshot.
     static var skipsAlertPrompt: Bool {

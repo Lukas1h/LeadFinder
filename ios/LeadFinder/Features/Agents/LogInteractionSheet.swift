@@ -58,7 +58,11 @@ struct LogInteractionSheet: View {
         }
     }
 
-    init(agentId: String, agentName: String, afterCall: Bool = false, onLogged: @escaping () -> Void) {
+    /// The Follow up tab a call was made from, sent with it.
+    var followUpFeed: String?
+
+    init(agentId: String, agentName: String, afterCall: Bool = false, followUpFeed: String? = nil, onLogged: @escaping () -> Void) {
+        self.followUpFeed = followUpFeed
         self.agentId = agentId
         self.agentName = agentName
         self.afterCall = afterCall
@@ -200,7 +204,8 @@ struct LogInteractionSheet: View {
                 direction: direction.rawValue,
                 outcome: channel == .call ? outcome?.rawValue : nil,
                 note: note.nilIfBlank,
-                occurredAt: occurredAt
+                occurredAt: occurredAt,
+                followUpFeed: followUpFeed
             )
             onLogged()
             dismiss()

@@ -22,6 +22,27 @@ struct FollowUpView: View {
     @State private var callTappedAt: Date?
     @State private var callStarted = false
     @State private var logAgent: Agent?
+    /// The feed key a call was started from, sent with the call's log.
+    @State private var callFeed: String?
+    /// The selected tab: a feed's key, or `comingUp`.
+    @State private var tab: String?
+    @State private var editor: EditorLink?
+
+    private static let comingUp = "coming_up"
+
+    /// A "photo editor" deep link from a feed card.
+    private struct EditorLink: Identifiable {
+        let listingId: String?
+        let presetId: String?
+        var id: String { "\(listingId ?? "")|\(presetId ?? "")" }
+
+        /// "/photo-editor?listing=<id>&preset=<id>", the web's path.
+        init(href: String) {
+            let items = URLComponents(string: "https://x\(href)")?.queryItems ?? []
+            listingId = items.first { $0.name == "listing" }?.value
+            presetId = items.first { $0.name == "preset" }?.value
+        }
+    }
 
     var body: some View {
         Group {
@@ -42,8 +63,18 @@ struct FollowUpView: View {
             AgentDirectoryDetail(agent: AgentsResponse.Row(agent: agent))
         }
         .sheet(item: $openListing) { LeadListingSheet(listing: $0) }
+        .sheet(item: $editor) { link in
+            NavigationStack {
+                PhotoEditorView(listingId: link.listingId, initialPresetId: link.presetId)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { editor = nil }
+                        }
+                    }
+            }
+        }
         .sheet(item: $logAgent) { agent in
-            LogInteractionSheet(agentId: agent.id, agentName: agent.displayName, afterCall: true) {
+            LogInteractionSheet(agentId: agent.id, agentName: agent.displayName, afterCall: true, followUpFeed: callFeed) {
                 Task { await appState.followUp.load(force: true) }
             }
         }
@@ -66,6 +97,11 @@ struct FollowUpView: View {
         }
         .refreshable { await appState.followUp.load(force: true) }
         .task { await appState.followUp.load() }
+        #if DEBUG
+        .task {
+            if let key = DebugLaunchArguments.followUpTab, key != "-" { tab = key }
+        }
+        #endif
         .searchField(
             text: $query,
             prompt: "Search name, notes, phone"
@@ -76,7 +112,9 @@ struct FollowUpView: View {
 
     @ViewBuilder
     private func content(_ response: FollowUpResponse) -> some View {
-        if let today = response.today, let later = response.later {
+        if let feeds = response.feeds {
+            feedContent(response, feeds: feeds)
+        } else if let today = response.today, let later = response.later {
             rankedContent(
                 today: today.filter { matches($0.agent) },
                 later: later.filter { matches($0.agent) },
@@ -91,6 +129,179 @@ struct FollowUpView: View {
             )
         } else {
             sectionedContent(response)
+        }
+    }
+
+    // MARK: - Feeds (the page since 2026-10-21)
+
+    /// One tab per feed with the day/week counter above, as the web's page.
+    /// A feed with nobody in it doesn't get a tab; "Coming up" is last.
+    @ViewBuilder
+    private func feedContent(_ response: FollowUpResponse, feeds: [FollowUpResponse.Feed]) -> some View {
+        let shown: [FollowUpResponse.Feed] = feeds.compactMap { feed in
+            var feed = feed
+            feed.groups = feed.groups.compactMap { group in
+                var group = group
+                group.items = group.items.filter { matches($0.agent) }
+                return group.items.isEmpty && (trimmedQuery.isEmpty ? (group.heldBack ?? 0) == 0 : true) ? nil : group
+            }
+            return feed.itemCount > 0 ? feed : nil
+        }
+        let upcoming = (response.upcoming ?? []).filter { matches($0.agent) }
+        let tabs: [(key: String, title: String, count: Int)] =
+            shown.map { ($0.key, $0.title, $0.itemCount) }
+            + (upcoming.isEmpty ? [] : [(Self.comingUp, "Coming up", upcoming.count)])
+        let active = tabs.first { $0.key == tab }?.key ?? tabs.first?.key
+
+        VStack(alignment: .leading, spacing: 0) {
+            ErrorBanner(
+                message: appState.followUp.error,
+                onRetry: { Task { await appState.followUp.load(force: true) } }
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    if let stats = response.stats {
+                        HStack(spacing: 12) {
+                            counter("Today", stats.today)
+                            counter("This week", stats.week)
+                        }
+                    }
+
+                    if let contactError {
+                        Text(contactError)
+                            .font(.caption)
+                            .foregroundStyle(Theme.danger)
+                    }
+
+                    if tabs.isEmpty {
+                        emptyState
+                    } else {
+                        tabBar(tabs, active: active)
+                        if active == Self.comingUp {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Not due yet. Interested agents come back 2 weeks after your last contact, warm agents after 3, clients after 4, or sooner if they list or sell something.")
+                                    .font(.footnote)
+                                    .foregroundStyle(Theme.secondaryText)
+                                ForEach(upcoming) { upcomingRow($0) }
+                            }
+                        } else if let feed = shown.first(where: { $0.key == active }) {
+                            feedBody(feed)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollDismissesKeyboard(.immediately)
+        }
+    }
+
+    /// Follow-ups done (back in touch after a gap) against the pace, and how
+    /// many of those have answered since: the web's Stat.
+    private func counter(_ label: String, _ count: FollowUpResponse.Stats.Count) -> some View {
+        let met = count.done >= count.target
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(label.uppercased())
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.secondaryText)
+                .kerning(0.5)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(count.done)")
+                    .font(.title2.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(met ? Theme.emerald : Theme.primaryText)
+                Text("/ \(count.target)")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.cardRaised)
+                    Capsule()
+                        .fill(met ? Theme.emerald : Theme.primaryText.opacity(0.8))
+                        .frame(width: max(6, proxy.size.width * min(1, Double(count.done) / Double(max(1, count.target)))))
+                }
+            }
+            .frame(height: 6)
+            Text("\(count.replied) \(count.replied == 1 ? "reply" : "replies")")
+                .font(.caption)
+                .foregroundStyle(Theme.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card(padding: 14)
+    }
+
+    private func tabBar(_ tabs: [(key: String, title: String, count: Int)], active: String?) -> some View {
+        ScrollViewReader { proxy in
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(tabs, id: \.key) { item in
+                    let selected = item.key == active
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) { tab = item.key }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(item.title)
+                            Text("\(item.count)")
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1)
+                                .background(selected ? Theme.background.opacity(0.25) : Theme.cardRaised, in: Capsule())
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(selected ? Theme.accent : Theme.card, in: Capsule())
+                        .foregroundStyle(selected ? Theme.background : Theme.primaryText)
+                        .overlay(Capsule().strokeBorder(Theme.border, lineWidth: selected ? 0 : 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .id(item.key)
+                }
+            }
+        }
+        .scrollClipDisabled()
+        // Keeps the chosen tab on screen, however it was chosen.
+        .onChange(of: active) { _, key in
+            if let key { withAnimation { proxy.scrollTo(key, anchor: .center) } }
+        }
+        .task(id: active) {
+            if let active { proxy.scrollTo(active, anchor: .center) }
+        }
+        }
+    }
+
+    /// A feed's blurb, then its groups of cards. Every card carries the
+    /// feed's key so Text and Call count toward that feed's reply rate.
+    private func feedBody(_ feed: FollowUpResponse.Feed) -> some View {
+        // The one feed that is "it's been a while" rather than a reason.
+        let muted = feed.key == "check_ins"
+        return VStack(alignment: .leading, spacing: 12) {
+            if let blurb = feed.blurb?.nilIfBlank {
+                Text(blurb)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            ForEach(feed.groups) { group in
+                VStack(alignment: .leading, spacing: 12) {
+                    if feed.groups.count > 1 {
+                        Text(group.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.primaryText)
+                            .padding(.top, 4)
+                    }
+                    ForEach(group.items) { followUpCard($0, feedKey: feed.key, muted: muted) }
+                    if let held = group.heldBack, held > 0 {
+                        Text("\(group.items.isEmpty ? "\(held)" : "\(held) more") heard from you too recently to ask.")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.secondaryText)
+                    }
+                }
+            }
         }
     }
 
@@ -233,7 +444,7 @@ struct FollowUpView: View {
     /// status, phone and email, the listing count and dates, notes, then
     /// snooze / call / text / email, and under them the text to start from
     /// and the listing the reason is about.
-    private func followUpCard(_ item: FollowUpResponse.JustListed) -> some View {
+    private func followUpCard(_ item: FollowUpResponse.JustListed, feedKey: String? = nil, muted: Bool = false) -> some View {
         let agent = item.agent
         let digits = agent.phone?.filter(\.isNumber).nilIfBlank
         let email = agent.email?.nilIfBlank
@@ -243,9 +454,10 @@ struct FollowUpView: View {
                 // The reason leads: it's what the text will be about. A plain
                 // "quiet" is the absence of one, so it's muted.
                 if let headline = item.headline?.nilIfBlank {
+                    let quiet = muted || item.reason == "quiet"
                     Text(headline)
-                        .font(.subheadline.weight(item.reason == "quiet" ? .regular : .medium))
-                        .foregroundStyle(item.reason == "quiet" ? Theme.secondaryText : Theme.emerald)
+                        .font(.subheadline.weight(quiet ? .regular : .medium))
+                        .foregroundStyle(quiet ? Theme.secondaryText : Theme.emerald)
                 }
                 HStack(spacing: 8) {
                     Button { openAgent = agent } label: {
@@ -312,12 +524,13 @@ struct FollowUpView: View {
                     iconButton("phone", label: "Call \(agent.displayName)") {
                         if let url = URL(string: "tel://\(digits)") {
                             callAgent = agent
+                            callFeed = feedKey
                             callTappedAt = Date()
                             Platform.open(url)
                         }
                     }
                     iconButton("message", label: "Text \(agent.displayName)") {
-                        text(agent, digits: digits, body: item.suggestion ?? "")
+                        text(agent, digits: digits, body: item.suggestion ?? "", feedKey: feedKey)
                     }
                 }
                 if let email, let url = URL(string: "mailto:\(email)") {
@@ -326,11 +539,20 @@ struct FollowUpView: View {
             }
 
             if let suggestion = item.suggestion?.nilIfBlank {
-                suggestedText(suggestion, agent: agent, digits: digits)
+                suggestedText(suggestion, agent: agent, digits: digits, feedKey: feedKey)
             }
             if let listing = item.listing {
                 Button { openListing = listing } label: { ListingRow(listing: listing, showsChevron: true) }
                     .buttonStyle(.plain)
+            }
+            if let href = item.editorHref?.nilIfBlank {
+                Button { editor = EditorLink(href: href) } label: {
+                    Label("Open in photo editor", systemImage: "wand.and.stars")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.emerald)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -349,9 +571,9 @@ struct FollowUpView: View {
     /// A text to start from, written by the server for this reason. Tapping it
     /// opens Messages with it, as the card's Text button does; nothing goes
     /// out until he sends it.
-    private func suggestedText(_ suggestion: String, agent: Agent, digits: String?) -> some View {
+    private func suggestedText(_ suggestion: String, agent: Agent, digits: String?, feedKey: String? = nil) -> some View {
         Button {
-            if let digits { text(agent, digits: digits, body: suggestion) }
+            if let digits { text(agent, digits: digits, body: suggestion, feedKey: feedKey) }
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Suggested text")
@@ -407,7 +629,7 @@ struct FollowUpView: View {
 
     /// Opens Messages to this agent with the suggested text written, for him
     /// to edit and send. Only a text that went out is recorded.
-    private func text(_ agent: Agent, digits: String, body: String) {
+    private func text(_ agent: Agent, digits: String, body: String, feedKey: String? = nil) {
         contactError = nil
         MessageComposer.present(recipients: [digits], body: body) { outcome in
             switch outcome {
@@ -418,7 +640,7 @@ struct FollowUpView: View {
             case .sent:
                 Task {
                     do {
-                        try await APIClient.shared.confirmAgentTextSent(agentId: agent.id)
+                        try await APIClient.shared.confirmAgentTextSent(agentId: agent.id, followUpFeed: feedKey)
                         await appState.followUp.load(force: true)
                     } catch {
                         contactError = "The text went out, but recording it failed: "

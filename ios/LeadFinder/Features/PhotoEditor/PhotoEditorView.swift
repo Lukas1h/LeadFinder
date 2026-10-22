@@ -10,6 +10,8 @@ import UniformTypeIdentifiers
 struct PhotoEditorView: View {
     /// When opened from a listing, its photos load straight away.
     var listingId: String?
+    /// A preset to start on (Follow up's "twilight gift" opens on its own).
+    var initialPresetId: String?
 
     @State private var listing: ListingHeader?
     @State private var photos: [EditorPhoto] = []
@@ -292,7 +294,9 @@ struct PhotoEditorView: View {
     private func loadPresets() async {
         do {
             presets = try await APIClient.shared.photoPresets()
-            if presetId.isEmpty { presetId = presets.first?.id ?? Self.customId }
+            if presetId.isEmpty {
+                presetId = presets.first { $0.id == initialPresetId }?.id ?? presets.first?.id ?? Self.customId
+            }
         } catch {
             self.error = error.localizedDescription
         }

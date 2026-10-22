@@ -150,10 +150,13 @@ actor APIClient {
 
     /// Records a text sent to an agent directly, with no listing behind it.
     /// Called only when the Messages sheet reports `.sent`.
-    func confirmAgentTextSent(agentId: String) async throws {
-        struct Body: Encodable, Sendable {}
+    ///
+    /// `followUpFeed` is the Follow up tab it was started from, for that
+    /// feed's reply rate (the web's `startPendingInteraction`).
+    func confirmAgentTextSent(agentId: String, followUpFeed: String? = nil) async throws {
+        struct Body: Encodable, Sendable { let followUpFeed: String? }
         struct OK: Decodable, Sendable { let ok: Bool }
-        _ = try await send("POST", "api/app/v1/agents/\(agentId)/texts", body: Body(), as: OK.self)
+        _ = try await send("POST", "api/app/v1/agents/\(agentId)/texts", body: Body(followUpFeed: followUpFeed), as: OK.self)
     }
 
     /// "Not now" on a Follow up card: takes the agent off Follow up for 7, 14
@@ -173,7 +176,8 @@ actor APIClient {
         direction: String,
         outcome: String?,
         note: String?,
-        occurredAt: Date
+        occurredAt: Date,
+        followUpFeed: String? = nil
     ) async throws {
         struct Body: Encodable, Sendable {
             let channel: String
@@ -181,6 +185,7 @@ actor APIClient {
             let outcome: String?
             let note: String?
             let occurredAt: String
+            let followUpFeed: String?
         }
         struct OK: Decodable, Sendable { let ok: Bool }
         _ = try await send(
@@ -191,7 +196,8 @@ actor APIClient {
                 direction: direction,
                 outcome: outcome,
                 note: note,
-                occurredAt: occurredAt.formatted(.iso8601)
+                occurredAt: occurredAt.formatted(.iso8601),
+                followUpFeed: followUpFeed
             ),
             as: OK.self
         )

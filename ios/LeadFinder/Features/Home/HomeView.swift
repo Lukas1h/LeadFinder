@@ -56,6 +56,7 @@ struct HomeView: View {
             #if DEBUG
             .task {
                 if let tab = DebugLaunchArguments.financesTab { path.append(FinancesRoute(tab: tab)) }
+                if DebugLaunchArguments.followUpTab != nil { path.append(FollowUpRoute()) }
                 if let id = DebugLaunchArguments.bookingId {
                     openBooking = try? await APIClient.shared.bookingDetail(id)
                 }
