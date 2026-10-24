@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import { after } from "next/server";
+import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
 import { db } from "@/db";
 import { agents, portfolioLinks } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { notifyPortfolioView } from "@/lib/push";
+import { parseUserAgent } from "@/lib/galleryViews";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { ListingCard, MutableVideo } from "./client";
 import { PageTracker } from "./tracker";
@@ -28,10 +30,29 @@ const outfit = Outfit({
   variable: "--font-portfolio-sans",
 });
 
-export const metadata: Metadata = {
-  title: "Hahn Media | Real Estate Photo & Video",
-  description: "Real estate photography, drone and video in Oregon.",
-};
+const SITE = "https://gallery.lukashahn.art";
+
+/**
+ * The link preview (iMessage, Facebook…): the page's hero — the before/after's
+ * after photo when it has one, else the lead portfolio photo. Absolute URLs:
+ * crawlers don't resolve relative og:image paths.
+ */
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const [link] = await db.select({ content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
+  const c = link?.content;
+  const area = c?.area?.trim() || "Eugene";
+  const title = `Real estate photo & video in ${area} | Hahn Media`;
+  const description = "Cinematic media that sells listings quicker.";
+  const hero = (c?.beforeAfter && c.afterSrc?.trim()) || (AGENT_PAGE_PHOTOS.find((p) => p.key === c?.leadPhoto) ?? AGENT_PAGE_PHOTOS[0]).src;
+  const images = [hero.startsWith("http") ? hero : `${SITE}${hero}`];
+  return {
+    title,
+    description,
+    openGraph: { title, description, siteName: "Hahn Media", images },
+    twitter: { card: "summary_large_image", title, description, images },
+  };
+}
 
 const PHONE = "+15414303372";
 const VCARD = [
@@ -73,7 +94,8 @@ export default async function PortfolioPage({
 }) {
   const { slug } = await params;
   // ?preview=1 is Lukas checking a link himself (the builder's and list's Open buttons): no view, no push, no tracking.
-  const preview = (await searchParams).preview === "1";
+  // A link-preview fetcher (iMessage drawing the card when the link is texted) isn't the agent opening it either.
+  const preview = (await searchParams).preview === "1" || parseUserAgent((await headers()).get("user-agent")).isPreview;
   const [link] = await db.select().from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
   if (!link) notFound();
   const c = link.content;
