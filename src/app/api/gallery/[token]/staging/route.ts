@@ -21,10 +21,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   if (names.length === 0) return NextResponse.json({ error: "Pick at least one photo" }, { status: 400 });
 
   const [booking] = await db
-    .select({ id: bookings.id, address: bookings.address, listingId: bookings.listingId, dropboxFolderLink: bookings.dropboxFolderLink })
+    .select({ id: bookings.id, address: bookings.address, listingId: bookings.listingId, dropboxFolderLink: bookings.dropboxFolderLink, stagingRequestsEnabled: bookings.stagingRequestsEnabled })
     .from(bookings)
     .where(eq(bookings.galleryToken, token));
-  if (!booking?.dropboxFolderLink) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!booking?.dropboxFolderLink || !booking.stagingRequestsEnabled) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Only names this gallery actually has.
   const { photos } = await listGalleryMedia(booking.dropboxFolderLink);

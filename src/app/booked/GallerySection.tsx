@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, CreditCard, ImagePlus, Images } from "lucide-react";
-import { getOrAssignGalleryToken, getOrCreatePaymentLink } from "./actions";
+import { Check, CreditCard, ImagePlus, Images, Sofa } from "lucide-react";
+import { getOrAssignGalleryToken, getOrCreatePaymentLink, setStagingRequestsEnabled } from "./actions";
 import { Button } from "@/components/ui/button";
 import type { BookingWithDetails } from "./BookedList";
 
@@ -53,6 +53,34 @@ export function GalleryLinkButton({ booking, onAddGallery }: { booking: BookingW
     <Button variant="outline" size="sm" onClick={handleClick} disabled={isPending}>
       {copied ? <Check className="text-green-600" /> : <Images />}
       {isPending ? "Generating…" : copied ? "Copied!" : "Copy gallery link"}
+    </Button>
+  );
+}
+
+/**
+ * Whether the client gallery offers "Request virtual staging" — off by
+ * default, turned on per booking for clients it's offered to.
+ */
+export function StagingToggleButton({ booking }: { booking: BookingWithDetails }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [enabled, setEnabled] = useState(booking.stagingRequestsEnabled);
+  if (!booking.dropboxFolderLink) return null;
+
+  const handleClick = () => {
+    const next = !enabled;
+    setEnabled(next);
+    startTransition(async () => {
+      await setStagingRequestsEnabled(booking.id, next);
+      toast.success(next ? "Gallery now offers virtual staging" : "Virtual staging hidden from gallery");
+      router.refresh();
+    });
+  };
+
+  return (
+    <Button variant={enabled ? "secondary" : "outline"} size="sm" onClick={handleClick} disabled={isPending}>
+      {enabled ? <Check className="text-green-600" /> : <Sofa />}
+      {enabled ? "Staging on gallery" : "Offer staging"}
     </Button>
   );
 }

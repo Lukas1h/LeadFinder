@@ -292,6 +292,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     invoicedAt: booking.invoicedAt,
     dropboxFolderLink: booking.dropboxFolderLink,
     galleryToken: booking.galleryToken,
+    stagingRequestsEnabled: booking.stagingRequestsEnabled,
     paymentLinkUrl: booking.paymentLinkUrl,
     paymentLinkAmount: booking.paymentLinkAmount,
     paidAt: booking.paidAt,
@@ -379,6 +380,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       invoicedAt: b.invoicedAt,
       dropboxFolderLink: b.dropboxFolderLink,
       galleryToken: b.galleryToken,
+      stagingRequestsEnabled: b.stagingRequestsEnabled,
       paymentLinkUrl: b.paymentLinkUrl,
       paymentLinkAmount: b.paymentLinkAmount,
       paidAt: b.paidAt,
@@ -395,6 +397,12 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
  * re-opening "Get client gallery link" always returns the same URL instead
  * of silently breaking one already sent to a client.
  */
+/** Turns the client gallery's "Request virtual staging" button on or off. */
+export async function setStagingRequestsEnabled(bookingId: string, enabled: boolean): Promise<void> {
+  await db.update(bookings).set({ stagingRequestsEnabled: enabled }).where(eq(bookings.id, bookingId));
+  revalidatePath("/booked");
+}
+
 export async function getOrAssignGalleryToken(bookingId: string): Promise<string> {
   const [existing] = await db.select({ galleryToken: bookings.galleryToken }).from(bookings).where(eq(bookings.id, bookingId));
   if (existing?.galleryToken) return existing.galleryToken;

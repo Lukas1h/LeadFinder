@@ -21,9 +21,6 @@ import { GalleryPhotoGrid } from "./GalleryPhotoGrid";
 // there's no "instant" navigation to preserve.
 export const instant = false;
 
-// Galleries that show "Request virtual staging" — only ones Lukas offers it on.
-const STAGING_TOKENS = new Set(["PHmftCzi6ncPOQCUJk0QB_1I8TfPInFs"]);
-
 // Same brand type pairing as the invoice route (src/app/api/bookings/[id]/invoice/route.ts)
 // — Noto Serif for the "Hahn Media" wordmark, Outfit for everything else —
 // loaded here instead, since this is a real page (not a raw HTML string
@@ -55,6 +52,7 @@ async function getGalleryBooking(token: string) {
       paymentLinkUrl: bookings.paymentLinkUrl,
       paymentLinkAmount: bookings.paymentLinkAmount,
       paidAt: bookings.paidAt,
+      stagingRequestsEnabled: bookings.stagingRequestsEnabled,
     })
     .from(bookings)
     .where(eq(bookings.galleryToken, token));
@@ -87,6 +85,7 @@ async function getGalleryBooking(token: string) {
     id: booking.id,
     paymentLinkUrl,
     paidAt: booking.paidAt,
+    stagingRequestsEnabled: booking.stagingRequestsEnabled,
     dropboxFolderLink: booking.dropboxFolderLink,
     invoiceNumber: booking.invoiceNumber,
     contactName: contact?.name ?? null,
@@ -280,7 +279,7 @@ export default async function GalleryPage({
           <p>No photos yet — check back soon.</p>
         </div>
       ) : photos.length > 0 ? (
-        <GalleryPhotoGrid token={token} names={photos.map((p) => p.name)} staging={STAGING_TOKENS.has(token)} />
+        <GalleryPhotoGrid token={token} names={photos.map((p) => p.name)} staging={booking.stagingRequestsEnabled} />
       ) : null}
 
       <footer className="w-full mt-12 pt-6 border-t border-[#181A1C]/10 text-center text-xs text-[#181A1C]/50">

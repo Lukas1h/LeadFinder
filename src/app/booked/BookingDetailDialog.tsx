@@ -8,7 +8,7 @@ import { markBookingShot, markInvoiceSent, reopenBooking } from "./actions";
 import { CompleteBookingDialog } from "./CompleteBookingDialog";
 import { BookingMoney } from "./BookingMoney";
 import { BookingForm } from "./BookingForm";
-import { GalleryLinkButton, PaymentLinkButton } from "./GallerySection";
+import { GalleryLinkButton, PaymentLinkButton, StagingToggleButton } from "./GallerySection";
 import { GalleryActivity } from "./GalleryActivity";
 import { AirspaceSection } from "./AirspaceSection";
 import { ListingRow } from "@/app/ListingRow";
@@ -151,6 +151,7 @@ export function BookingDetailDialog({
           )}
           <GalleryLinkButton booking={booking} onAddGallery={() => setEditOpen(true)} />
           <PaymentLinkButton booking={booking} />
+          <StagingToggleButton booking={booking} />
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             <Pencil />
             Edit

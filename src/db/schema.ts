@@ -431,6 +431,9 @@ export const bookings = pgTable("bookings", {
   // client-facing /gallery/[token] URL can't also be used to look up the
   // rest of the booking (line items, lockbox code, notes).
   galleryToken: text("gallery_token").unique(),
+  // Shows "Request virtual staging" on the client gallery — off unless
+  // Lukas turns it on for this booking (BookingDetailDialog).
+  stagingRequestsEnabled: boolean("staging_requests_enabled").notNull().default(false),
 
   // A Stripe Payment Link for the booking's total, made on demand from the
   // booking's detail view (see src/lib/stripe.ts) and shown on the client
