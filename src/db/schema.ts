@@ -600,6 +600,53 @@ export const portfolioImages = pgTable("portfolio_images", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// One visit to an agent page: a page load, keyed by an id the browser makes
+// up, so its running totals (time, scroll, sections) can be re-sent and
+// overwritten as the visit goes on. Location from Vercel's IP headers,
+// city-level, same as galleryViews.
+export const portfolioSessions = pgTable("portfolio_sessions", {
+  id: uuid("id").primaryKey(),
+  linkId: uuid("link_id")
+    .notNull()
+    .references(() => portfolioLinks.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  // Seconds the tab was actually visible, not wall time since opening.
+  activeSeconds: integer("active_seconds").notNull().default(0),
+  maxScrollPct: integer("max_scroll_pct").notNull().default(0),
+  // Seconds each section (hero, video, pricing, …) spent in the middle of the screen.
+  sectionSeconds: jsonb("section_seconds").$type<Record<string, number>>().notNull().default({}),
+  // "390x844" — tells a phone from a laptop when the user agent doesn't.
+  screen: text("screen"),
+  ip: text("ip"),
+  city: text("city"),
+  region: text("region"),
+  country: text("country"),
+  userAgent: text("user_agent"),
+  referer: text("referer"),
+});
+
+export type PortfolioSession = typeof portfolioSessions.$inferSelect;
+
+// Every tap on an agent page: Save contact, Book a shoot, Sound on, a listing
+// carousel arrow… event is the PORTFOLIO_EVENTS key, detail says which one
+// (where on the page, which listing).
+export const PORTFOLIO_EVENTS = ["save_contact", "book_shoot", "sound_on", "sound_off", "listing_prev", "listing_next", "reviews"] as const;
+export type PortfolioEvent = (typeof PORTFOLIO_EVENTS)[number];
+
+export const portfolioEvents = pgTable("portfolio_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sessionId: uuid("session_id")
+    .notNull()
+    .references(() => portfolioSessions.id, { onDelete: "cascade" }),
+  linkId: uuid("link_id")
+    .notNull()
+    .references(() => portfolioLinks.id, { onDelete: "cascade" }),
+  event: text("event").$type<PortfolioEvent>().notNull(),
+  detail: text("detail"),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type PortfolioLink = typeof portfolioLinks.$inferSelect;
 export type NewPortfolioLink = typeof portfolioLinks.$inferInsert;
 

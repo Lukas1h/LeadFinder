@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, Crop, Download, ImagePlus, Loader2, PenLine, RotateCcw, Ruler, Search, Sparkles, X } from "lucide-react";
+import { Check, Crop, Download, ImagePlus, LayoutTemplate, Loader2, PenLine, RotateCcw, Ruler, Search, Sparkles, X } from "lucide-react";
 import { PHOTO_PRESETS } from "@/lib/photoPresets";
 import { NO_GEOMETRY, isIdentity, type Geometry } from "@/lib/photoGeometry";
 import { makeZip } from "@/lib/zip";
@@ -17,6 +17,7 @@ import { CropDialog } from "./CropDialog";
 import { TransformDialog } from "./TransformDialog";
 import { loadSource, prepare, type Prepared, type SourceImage, type Stroke } from "./prepare";
 import { getEditorListing, searchEditorListings, type EditorListing, type EditorSearchResult } from "./actions";
+import { saveEditForAgentPage } from "@/app/portfolio-links/actions";
 
 /** At once: each edit takes 10-25 s, and more in parallel only meets Gemini's rate limit sooner. */
 const CONCURRENCY = 3;
@@ -70,8 +71,11 @@ const b64 = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(",") + 1);
 export function PhotoEditor({
   initialListing,
   initialPreset,
+  portfolioAgentId,
 }: {
   initialListing: EditorListing | null;
+  /** Arrived from the agent page builder (?agent=): "Use on agent page" goes back to them even if the listing has no agent link. */
+  portfolioAgentId?: string | null;
   /** The preset photos added to the tray start on (?preset=, e.g. sunset-exterior from a twilight gift card). */
   initialPreset?: string | null;
 }) {
@@ -84,6 +88,7 @@ export function PhotoEditor({
   const [items, setItems] = useState<Item[]>([]);
   const [tool, setTool] = useState<Tool | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  const [sendingToPage, setSendingToPage] = useState<string | null>(null);
   const queue = useRef<{ key: string; body: Record<string, unknown>; label: string }[]>([]);
   const running = useRef(0);
 
@@ -96,7 +101,7 @@ export function PhotoEditor({
     setListing(found);
     setPhotos(listingPhotos(found));
     setItems([]);
-    router.replace(`/photo-editor?listing=${id}`, { scroll: false });
+    router.replace(`/photo-editor?listing=${id}${portfolioAgentId ? `&agent=${portfolioAgentId}` : ""}`, { scroll: false });
   };
 
   const addUploads = async (files: FileList | null) => {
@@ -207,6 +212,25 @@ export function PhotoEditor({
     );
     queue.current.push(...jobs);
     pump();
+  };
+
+  /** A finished edit and the photo it was made from, as an agent page's before/after (src/app/portfolio-links). */
+  const sendToAgentPage = async (it: Item) => {
+    if (!it.edit?.image) return;
+    setSendingToPage(it.photo.key);
+    try {
+      const before = it.prepared?.clean ?? ("url" in it.photo.source ? it.photo.source.url : it.photo.preview);
+      const { href } = await saveEditForAgentPage({
+        before,
+        after: it.edit.image,
+        listingId: it.photo.key.startsWith("upload-") ? null : (listing?.id ?? null),
+        agentId: portfolioAgentId ?? null,
+      });
+      router.push(href);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't save that for the agent page");
+      setSendingToPage(null);
+    }
   };
 
   const done = items.filter((it) => it.edit?.status === "done");
@@ -347,6 +371,8 @@ export function PhotoEditor({
                 onChange={(patch) => update(it.photo.key, patch)}
                 onTool={(kind) => openTool(it, kind)}
                 onRun={() => run([it])}
+                onSendToAgentPage={() => sendToAgentPage(it)}
+                sendingToPage={sendingToPage === it.photo.key}
                 onRemove={() => setItems((prev) => prev.filter((x) => x.photo.key !== it.photo.key))}
               />
             ))}
@@ -395,6 +421,8 @@ function ItemCard({
   onChange,
   onTool,
   onRun,
+  onSendToAgentPage,
+  sendingToPage,
   onRemove,
 }: {
   item: Item;
@@ -403,6 +431,8 @@ function ItemCard({
   onChange: (patch: Partial<Item>) => void;
   onTool: (kind: Tool["kind"]) => void;
   onRun: () => void;
+  onSendToAgentPage: () => void;
+  sendingToPage: boolean;
   onRemove: () => void;
 }) {
   const { photo, edit, prepared, geometry, strokes } = item;
@@ -491,7 +521,15 @@ function ItemCard({
         </Button>
       </div>
       {edit?.status === "error" && <p className="px-1 text-xs text-destructive">{edit.error}</p>}
-      {edit?.status === "done" && <p className="px-1 text-xs text-muted-foreground">{edit.label}</p>}
+      {edit?.status === "done" && (
+        <div className="flex items-center justify-between gap-2 px-1">
+          <p className="text-xs text-muted-foreground">{edit.label}</p>
+          <Button variant="outline" size="sm" className="h-7 text-xs" disabled={sendingToPage} onClick={onSendToAgentPage}>
+            {sendingToPage ? <Loader2 className="animate-spin" /> : <LayoutTemplate />}
+            Use on agent page
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -39,6 +39,8 @@ export function MutableVideo({ id, title }: { id: string; title: string }) {
       <button
         type="button"
         onClick={toggle}
+        data-track={muted ? "sound_on" : "sound_off"}
+        data-track-detail={title}
         aria-label={muted ? "Unmute video" : "Mute video"}
         className="absolute right-4 bottom-4 flex h-11 cursor-pointer items-center gap-2 rounded-[22px] border border-[#F9F4F1]/70 bg-black/35 px-4 text-xs font-medium uppercase tracking-[0.16em] text-[#F9F4F1] backdrop-blur-[4px] hover:border-[#F9F4F1] hover:bg-black/55"
       >
@@ -86,12 +88,26 @@ export function ListingCard({ listing: l }: { listing: PortfolioListing }) {
             <span className="absolute top-3 right-3 bg-[#181A1C]/70 px-[9px] py-[5px] text-xs font-medium text-white">
               {idx + 1} / {n}
             </span>
-            <button type="button" onClick={() => step(-1)} aria-label="Previous photo" className={`${arrowButton} left-2.5`}>
+            <button
+              type="button"
+              onClick={() => step(-1)}
+              data-track="listing_prev"
+              data-track-detail={l.address}
+              aria-label="Previous photo"
+              className={`${arrowButton} left-2.5`}
+            >
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#181A1C" strokeWidth="1.8">
                 <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            <button type="button" onClick={() => step(1)} aria-label="Next photo" className={`${arrowButton} right-2.5`}>
+            <button
+              type="button"
+              onClick={() => step(1)}
+              data-track="listing_next"
+              data-track-detail={l.address}
+              aria-label="Next photo"
+              className={`${arrowButton} right-2.5`}
+            >
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#181A1C" strokeWidth="1.8">
                 <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>

@@ -6,8 +6,9 @@ import { db } from "@/db";
 import { agents, portfolioLinks } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { notifyPortfolioView } from "@/lib/push";
-import { AGENT_PAGE_BA_DEFAULT, AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
+import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { ListingCard, MutableVideo } from "./client";
+import { PageTracker } from "./tracker";
 
 // Same reasoning as the gallery route: a fresh navigation from outside the
 // app, not an in-app tab switch, so there's no "instant" shell to preserve.
@@ -63,26 +64,35 @@ const serif = "font-[family-name:var(--font-portfolio-serif)]";
  * Public, no login — the slug is the only access control, same spirit as
  * the client gallery's token.
  */
-export default async function PortfolioPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function PortfolioPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
+}) {
   const { slug } = await params;
+  // ?preview=1 is Lukas checking a link himself (the builder's and list's Open buttons): no view, no push, no tracking.
+  const preview = (await searchParams).preview === "1";
   const [link] = await db.select().from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
   if (!link) notFound();
   const c = link.content;
 
-  after(async () => {
-    await db
-      .update(portfolioLinks)
-      .set({
-        viewCount: sql`${portfolioLinks.viewCount} + 1`,
-        firstViewedAt: sql`coalesce(${portfolioLinks.firstViewedAt}, now())`,
-        lastViewedAt: new Date(),
-      })
-      .where(eq(portfolioLinks.id, link.id));
-    const agentName = link.agentId
-      ? ((await db.select({ name: agents.name }).from(agents).where(eq(agents.id, link.agentId)))[0]?.name ?? null)
-      : null;
-    await notifyPortfolioView(agentName, link.viewCount + 1).catch((err) => console.error("portfolio view push failed", err));
-  });
+  if (!preview)
+    after(async () => {
+      await db
+        .update(portfolioLinks)
+        .set({
+          viewCount: sql`${portfolioLinks.viewCount} + 1`,
+          firstViewedAt: sql`coalesce(${portfolioLinks.firstViewedAt}, now())`,
+          lastViewedAt: new Date(),
+        })
+        .where(eq(portfolioLinks.id, link.id));
+      const agentName = link.agentId
+        ? ((await db.select({ name: agents.name }).from(agents).where(eq(agents.id, link.agentId)))[0]?.name ?? null)
+        : null;
+      await notifyPortfolioView(link.id, agentName, link.viewCount + 1).catch((err) => console.error("portfolio view push failed", err));
+    });
 
   const area = c.area?.trim() || "Eugene";
   const firstName = c.agentFirstName?.trim() || "";
@@ -91,23 +101,23 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
   const showOffer = c.showOffer ?? true;
   const showTour = c.showTourOfHomes ?? true;
 
-  const photos = AGENT_PAGE_PHOTOS.slice();
+  // The closing full-width photo stays put; the lead photo jumps to the front of the rest.
+  const closing = AGENT_PAGE_PHOTOS[AGENT_PAGE_PHOTOS.length - 1];
+  const photos = AGENT_PAGE_PHOTOS.slice(0, -1);
   const lead = photos.findIndex((p) => p.key === c.leadPhoto);
   if (lead > 0) photos.unshift(photos.splice(lead, 1)[0]);
+  photos.push(closing);
 
-  const ba = c.beforeAfter
-    ? (() => {
-        const after = c.afterSrc?.trim() || AGENT_PAGE_BA_DEFAULT.after;
-        const before = c.beforeSrc?.trim() || (c.afterSrc?.trim() ? null : AGENT_PAGE_BA_DEFAULT.before);
-        return { after, before: before ?? after, dulled: !before };
-      })()
-    : null;
+  // Only with an after photo; no before = the after shown dulled as its own "before".
+  const afterSrc = c.beforeAfter ? c.afterSrc?.trim() : null;
+  const beforeSrc = c.beforeSrc?.trim() || null;
+  const ba = afterSrc ? { after: afterSrc, before: beforeSrc ?? afterSrc, dulled: !beforeSrc } : null;
   // A big hero (before/after, else the video), a row of photos under it, then
   // with a before/after the video as a second hero and more photos. Each grid
   // only ever shows full rows — see PhotoGrid.
   const gridTop = ba ? photos.slice(0, 4) : [];
   const gridBottom = ba ? photos.slice(4, 10) : photos.slice(0, 6);
-  const featureLast = ba ? null : photos[9];
+  const featureLast = ba ? null : photos[photos.length - 1];
   const listings = (c.listings ?? []).map((l) => ({
     ...l,
     photos: l.photos.map((name) => `/api/portfolio/${slug}/listing-photo?bookingId=${l.bookingId}&name=${encodeURIComponent(name)}`),
@@ -131,6 +141,8 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
           <a
             href={VCARD_HREF}
             download={VCARD_NAME}
+            data-track="save_contact"
+            data-track-detail="header"
             className="inline-flex min-h-11 items-center whitespace-nowrap border border-[#181A1C] px-[22px] text-xs font-medium uppercase tracking-[0.3em] text-[#181A1C] hover:bg-[#181A1C] hover:text-white"
           >
             Save contact
@@ -140,7 +152,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
 
       <main id="top">
         {/* Hero */}
-        <section className="px-4 pt-[clamp(32px,5vw,56px)] pb-[clamp(28px,4vw,40px)] text-center">
+        <section data-section="hero" className="px-4 pt-[clamp(32px,5vw,56px)] pb-[clamp(28px,4vw,40px)] text-center">
           <div className="mx-auto flex max-w-[760px] flex-col items-center">
             {showTour && (
               <p className="mb-3.5 text-[13px] font-medium uppercase tracking-[0.2em] text-[#995000]">
@@ -154,6 +166,8 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
             {showOffer && (
               <a
                 href={bookHref}
+                data-track="book_shoot"
+                data-track-detail="$50 off (top)"
                 className="mt-5 inline-flex items-baseline gap-2.5 bg-[#F9F4F1] px-5 py-2.5 text-[#181A1C] hover:bg-[#F3EAE3]"
               >
                 <span className={`${serif} text-base font-bold text-[#D67F1F]`}>$50 off</span>
@@ -168,7 +182,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
           <div className="mx-auto max-w-[1040px]">
             {ba && (
               <>
-                <div className="relative aspect-[3/2] w-full overflow-hidden bg-[#F9F4F1]">
+                <div data-section="before_after" className="relative aspect-[3/2] w-full overflow-hidden bg-[#F9F4F1]">
                   {/* eslint-disable-next-line @next/next/no-img-element -- before/after overlay */}
                   <img src={ba.after} alt="After editing" className="absolute inset-0 h-full w-full object-cover" />
                   {/* eslint-disable-next-line @next/next/no-img-element -- before/after overlay */}
@@ -203,7 +217,9 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
                 <div className="h-2 sm:h-3" />
               </>
             )}
-            <MutableVideo id={video.id} title={video.title} />
+            <div data-section="video">
+              <MutableVideo id={video.id} title={video.title} />
+            </div>
             <PhotoGrid photos={gridBottom} desktopRows={2} className="mt-2 sm:mt-3" />
             {featureLast && (
               // eslint-disable-next-line @next/next/no-img-element -- static sample photo
@@ -211,6 +227,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
                 src={featureLast.src}
                 alt={featureLast.alt}
                 loading="lazy"
+                data-section="photos"
                 className="mt-2 aspect-[3/2] w-full bg-[#F9F4F1] object-cover sm:mt-3"
               />
             )}
@@ -218,7 +235,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
         </section>
 
         {/* Why Hahn Media */}
-        <section className="px-4 pt-[clamp(56px,8vw,88px)]">
+        <section data-section="why" className="px-4 pt-[clamp(56px,8vw,88px)]">
           <div className="mx-auto grid max-w-[1040px] grid-cols-1 bg-[#F9F4F1] md:grid-cols-3 text-center">
             {[
               {
@@ -246,7 +263,10 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
                 ),
               },
             ].map((f, i) => (
-              <div key={f.title} className={`px-[clamp(24px,3vw,36px)] py-[30px] ${i > 0 ? "border-t border-[#181A1C]/10 md:border-t-0 md:border-l" : ""}`}>
+              <div
+                key={f.title}
+                className={`px-[clamp(24px,3vw,36px)] py-[30px] ${i > 0 ? "border-t border-[#181A1C]/10 md:border-t-0 md:border-l" : ""}`}
+              >
                 <h3 className={`${serif} text-[21px] font-bold`}>{f.title}</h3>
                 <p className="mt-2 text-base leading-[1.55] text-pretty text-[#181A1C]/78">{f.body}</p>
               </div>
@@ -256,7 +276,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
 
         {/* Recent listings */}
         {listings.length > 0 && (
-          <section className="px-4 pt-[clamp(64px,9vw,104px)]">
+          <section data-section="listings" className="px-4 pt-[clamp(64px,9vw,104px)]">
             <div className="mx-auto max-w-[1040px]">
               <h2 className={`${serif} mb-[clamp(32px,5vw,48px)] text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>
                 Recent listings near {area}
@@ -271,7 +291,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
         )}
 
         {/* Testimonial */}
-        <section className="mt-[clamp(64px,9vw,104px)] bg-[#F9F4F1] px-4 py-[clamp(56px,8vw,88px)]">
+        <section data-section="testimonial" className="mt-[clamp(64px,9vw,104px)] bg-[#F9F4F1] px-4 py-[clamp(56px,8vw,88px)]">
           <figure className="mx-auto max-w-[720px] text-center">
             <div className={`${serif} text-[64px] font-bold leading-[0.6] text-[#D67F1F]`}>“</div>
             <blockquote className={`${serif} mt-4 text-[clamp(19px,2.3vw,23px)] leading-[1.6] font-normal text-pretty`}>
@@ -293,6 +313,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
                 href="https://maps.app.goo.gl/WMhhHxSnYozHLfBP8"
                 target="_blank"
                 rel="noopener"
+                data-track="reviews"
                 className="mt-2.5 border-b border-[#995000]/35 pb-0.5 text-sm text-[#995000] hover:text-[#D67F1F]"
               >
                 Read more reviews on Google
@@ -302,7 +323,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
         </section>
 
         {/* Pricing */}
-        <section id="pricing" className="px-4 pt-[clamp(64px,9vw,104px)]">
+        <section id="pricing" data-section="pricing" className="px-4 pt-[clamp(64px,9vw,104px)]">
           <div className="mx-auto max-w-[672px]">
             <h2 className={`${serif} text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>Pricing</h2>
             <div className="mt-[clamp(28px,4vw,40px)] border-t border-[#181A1C]/15">
@@ -329,7 +350,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
         </section>
 
         {/* Book */}
-        <section id="book" className="px-4 pt-[clamp(72px,10vw,120px)] pb-[clamp(80px,11vw,128px)]">
+        <section id="book" data-section="book" className="px-4 pt-[clamp(72px,10vw,120px)] pb-[clamp(80px,11vw,128px)]">
           <div className="mx-auto max-w-[880px]">
             <h2
               className={`${serif} mb-[clamp(32px,5vw,48px)] text-center text-[clamp(30px,4.4vw,44px)] font-bold leading-[1.15] tracking-[-0.02em] text-balance text-[#D67F1F]`}
@@ -345,6 +366,8 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
                 <a
                   href={VCARD_HREF}
                   download={VCARD_NAME}
+                  data-track="save_contact"
+                  data-track-detail="bottom"
                   className="mt-auto inline-flex min-h-14 items-center border border-[#181A1C] bg-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-white hover:bg-white hover:text-[#181A1C]"
                 >
                   Save my contact
@@ -355,6 +378,8 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
                 <p className="mt-2.5 mb-6 text-base leading-[1.55] text-pretty text-[#181A1C]/78">Your first shoot is $50 off.</p>
                 <a
                   href={bookHref}
+                  data-track="book_shoot"
+                  data-track-detail="Book a shoot (bottom)"
                   className="mt-auto inline-flex min-h-14 items-center border border-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-[#181A1C] hover:bg-[#181A1C] hover:text-white"
                 >
                   Book a shoot
@@ -374,6 +399,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
           </div>
         </section>
       </main>
+      {!preview && <PageTracker slug={slug} />}
 
       <footer className="border-t border-[#181A1C]/10 px-4 py-7">
         <div className="mx-auto flex max-w-[1152px] flex-wrap justify-between gap-x-6 gap-y-2 text-[13px] text-[#181A1C]/62">
@@ -395,7 +421,7 @@ function PhotoGrid({ photos, desktopRows, className }: { photos: AgentPagePhoto[
   const small = 4;
   const large = 3 * desktopRows;
   return (
-    <div className={`grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 ${className ?? ""}`}>
+    <div data-section="photos" className={`grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 ${className ?? ""}`}>
       {photos.slice(0, Math.max(small, large)).map((p, i) => {
         const visibility = i >= small && i < large ? "hidden lg:block" : i < small && i >= large ? "lg:hidden" : "";
         return (

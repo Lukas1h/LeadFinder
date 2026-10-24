@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getEditorListing } from "./actions";
 import { PhotoEditor } from "./PhotoEditor";
 
-export default function PhotoEditorPage({ searchParams }: { searchParams: Promise<{ listing?: string; preset?: string }> }) {
+export default function PhotoEditorPage({ searchParams }: { searchParams: Promise<{ listing?: string; preset?: string; agent?: string }> }) {
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
       <h1 className="mb-1 text-2xl font-semibold">Photo editor</h1>
@@ -18,8 +18,15 @@ export default function PhotoEditorPage({ searchParams }: { searchParams: Promis
   );
 }
 
-async function EditorContent({ searchParams }: { searchParams: Promise<{ listing?: string; preset?: string }> }) {
-  const { listing, preset } = await searchParams;
+async function EditorContent({ searchParams }: { searchParams: Promise<{ listing?: string; preset?: string; agent?: string }> }) {
+  const { listing, preset, agent } = await searchParams;
   const initial = listing && /^[0-9a-f-]{36}$/i.test(listing) ? await getEditorListing(listing) : null;
-  return <PhotoEditor key={initial?.id ?? "none"} initialListing={initial} initialPreset={preset ?? null} />;
+  return (
+    <PhotoEditor
+      key={initial?.id ?? "none"}
+      initialListing={initial}
+      initialPreset={preset ?? null}
+      portfolioAgentId={agent && /^[0-9a-f-]{36}$/i.test(agent) ? agent : null}
+    />
+  );
 }

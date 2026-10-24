@@ -20,17 +20,22 @@ export interface AgentPagePhoto {
   alt: string;
 }
 
+// Strongest first. The last one closes the photo section full-width (an
+// aerial reads best there), so it stays last; the lead photo moves to the front.
 export const AGENT_PAGE_PHOTOS: AgentPagePhoto[] = [
-  ["daltonct-25", "Open-concept living room with sectional sofa and kitchen"],
-  ["alameda-13", "Spacious kitchen with island and wood cabinets"],
-  ["southbank-17", "Backyard fire pit with Adirondack chairs among tall trees"],
-  ["daltonct-01", "Modern single-story home exterior with landscaped yard"],
-  ["daltonct-30", "Primary bedroom with soft natural light"],
-  ["alameda-22", "Living area with sliding door and mountain views"],
-  ["wingfoot-13", "Vaulted living room with sliding glass door"],
-  ["daltonct-26", "Living room with black fireplace wall"],
-  ["alameda-19", "Open kitchen and living space with valley views"],
-  ["southbank-11", "Aerial drone view of a river winding through an Oregon valley"],
+  ["port-2", "Living room with a black fireplace wall and sectional sofa"],
+  ["port-5", "Kitchen with a navy island, quartz counters and wood cabinets"],
+  ["port-3", "Single-story home with a white rail fence and rock wall in fall color"],
+  ["port-1", "Dining nook with a globe pendant light by the kitchen"],
+  ["port-6", "Open kitchen with a center island and stainless appliances"],
+  ["port-7", "Living room with an arched window wall and vaulted beam ceiling"],
+  ["port-4", "Split-level home with a two-car garage among tall trees"],
+  ["port-13", "Bright bedroom with a wood-framed floor mirror"],
+  ["port-10", "Empty living room with a corner of picture windows"],
+  ["port-12", "Kitchen sink under a window with maple cabinets"],
+  ["port-9", "Kids' bedroom with a wooden bunk bed"],
+  ["port-11", "Double-vanity bathroom with a glass-front cabinet"],
+  ["port-8", "Aerial drone view of a home in forested Oregon hills in fall"],
 ].map(([key, alt]) => ({ key, src: `${PF}${key}.jpg`, alt }));
 
 // Douglas County towns; anything else counts as the Eugene side. Used to pick
@@ -40,8 +45,3 @@ const ROSEBURG_AREA = ["roseburg", "sutherlin", "winston", "myrtle creek", "oakl
 export function agentPageRegion(place: string): "eugene" | "roseburg" {
   return ROSEBURG_AREA.some((c) => place.toLowerCase().includes(c)) ? "roseburg" : "eugene";
 }
-
-export const AGENT_PAGE_BA_DEFAULT = {
-  before: `${PF}ba/hamilton-before.jpg`,
-  after: `${PF}ba/hamilton-after.jpg`,
-};

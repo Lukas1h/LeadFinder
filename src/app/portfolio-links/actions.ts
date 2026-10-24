@@ -1,8 +1,21 @@
 "use server";
 
-import { and, desc, eq, ilike, isNotNull, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, bookings, listings, portfolioImages, portfolioLinks, type PortfolioContent, type PortfolioListing } from "@/db/schema";
+import {
+  agents,
+  bookings,
+  listings,
+  portfolioEvents,
+  portfolioImages,
+  portfolioLinks,
+  portfolioSessions,
+  type PortfolioContent,
+  type PortfolioEvent,
+  type PortfolioListing,
+} from "@/db/schema";
+import { parseUserAgent } from "@/lib/galleryViews";
+import { largestPhotoUrl } from "@/lib/photoEdit";
 import { listGalleryMedia } from "@/lib/dropbox";
 import { agentPageRegion } from "@/lib/agentPage";
 import { formatPrice } from "@/lib/format";
@@ -34,6 +47,8 @@ export interface PortfolioPrefill {
   area: string;
   brokerage: string;
   listings: PortfolioListing[];
+  /** Their newest listing with photos, to open in the photo editor for a before/after. */
+  editorListingId: string | null;
 }
 
 const LISTINGS_PREFILLED = 3;
@@ -52,7 +67,15 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
   if (!agent) return null;
 
   const area = agent.homeCity?.trim() || "Eugene";
-  const jobs = await finishedJobs();
+  const [jobs, [newest]] = await Promise.all([
+    finishedJobs(),
+    db
+      .select({ id: listings.id })
+      .from(listings)
+      .where(and(eq(listings.agentId, agent.id), isNotNull(listings.photos)))
+      .orderBy(sql`${listings.listedAt} desc nulls last`, desc(listings.foundAt))
+      .limit(1),
+  ]);
   const city = area.toLowerCase();
   const region = agentPageRegion(area);
   const rank = (jobCity: string) => (jobCity.toLowerCase() === city ? 0 : agentPageRegion(jobCity) === region ? 1 : 2);
@@ -68,6 +91,7 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
     area,
     brokerage: agent.brokerage ?? "",
     listings: nearest,
+    editorListingId: newest?.id ?? null,
   };
 }
 
@@ -185,9 +209,31 @@ export interface PortfolioLinkSummary {
   createdAt: Date;
   viewCount: number;
   lastViewedAt: Date | null;
+  visits: number;
+  activeSeconds: number;
+  contactSaves: number;
+  bookTaps: number;
 }
 
 export async function listPortfolioLinks(): Promise<PortfolioLinkSummary[]> {
+  const visits = db
+    .select({
+      linkId: portfolioSessions.linkId,
+      visits: count().as("visits"),
+      activeSeconds: sql<number>`coalesce(sum(${portfolioSessions.activeSeconds}), 0)::int`.as("active_seconds"),
+    })
+    .from(portfolioSessions)
+    .groupBy(portfolioSessions.linkId)
+    .as("visits");
+  const taps = db
+    .select({
+      linkId: portfolioEvents.linkId,
+      contactSaves: sql<number>`count(*) filter (where ${portfolioEvents.event} = 'save_contact')::int`.as("contact_saves"),
+      bookTaps: sql<number>`count(*) filter (where ${portfolioEvents.event} = 'book_shoot')::int`.as("book_taps"),
+    })
+    .from(portfolioEvents)
+    .groupBy(portfolioEvents.linkId)
+    .as("taps");
   const rows = await db
     .select({
       id: portfolioLinks.id,
@@ -196,10 +242,143 @@ export async function listPortfolioLinks(): Promise<PortfolioLinkSummary[]> {
       createdAt: portfolioLinks.createdAt,
       viewCount: portfolioLinks.viewCount,
       lastViewedAt: portfolioLinks.lastViewedAt,
+      visits: visits.visits,
+      activeSeconds: visits.activeSeconds,
+      contactSaves: taps.contactSaves,
+      bookTaps: taps.bookTaps,
     })
     .from(portfolioLinks)
     .leftJoin(agents, eq(agents.id, portfolioLinks.agentId))
+    .leftJoin(visits, eq(visits.linkId, portfolioLinks.id))
+    .leftJoin(taps, eq(taps.linkId, portfolioLinks.id))
     .orderBy(desc(portfolioLinks.createdAt))
     .limit(50);
-  return rows.map((r) => ({ ...r, url: portfolioUrl(r.slug) }));
+  return rows.map((r) => ({
+    ...r,
+    url: portfolioUrl(r.slug),
+    visits: r.visits ?? 0,
+    activeSeconds: r.activeSeconds ?? 0,
+    contactSaves: r.contactSaves ?? 0,
+    bookTaps: r.bookTaps ?? 0,
+  }));
+}
+
+export interface PortfolioVisit {
+  id: string;
+  startedAt: Date;
+  lastSeenAt: Date;
+  activeSeconds: number;
+  maxScrollPct: number;
+  sectionSeconds: Record<string, number>;
+  screen: string | null;
+  device: string;
+  browser: string;
+  location: string | null;
+  ip: string | null;
+  events: { id: string; event: PortfolioEvent; detail: string | null; at: Date }[];
+}
+
+export interface PortfolioActivity {
+  id: string;
+  slug: string;
+  url: string;
+  agentId: string | null;
+  agentName: string | null;
+  createdAt: Date;
+  area: string | null;
+  viewCount: number;
+  visits: PortfolioVisit[];
+}
+
+/** Everything recorded for one link (src/app/portfolio/[slug]/tracker.tsx), newest visit first. */
+export async function getPortfolioActivity(linkId: string): Promise<PortfolioActivity | null> {
+  const [link] = await db
+    .select({
+      id: portfolioLinks.id,
+      slug: portfolioLinks.slug,
+      agentId: portfolioLinks.agentId,
+      agentName: agents.name,
+      createdAt: portfolioLinks.createdAt,
+      content: portfolioLinks.content,
+      viewCount: portfolioLinks.viewCount,
+    })
+    .from(portfolioLinks)
+    .leftJoin(agents, eq(agents.id, portfolioLinks.agentId))
+    .where(eq(portfolioLinks.id, linkId));
+  if (!link) return null;
+
+  const [sessions, events] = await Promise.all([
+    db.select().from(portfolioSessions).where(eq(portfolioSessions.linkId, linkId)).orderBy(desc(portfolioSessions.startedAt)).limit(100),
+    db.select().from(portfolioEvents).where(eq(portfolioEvents.linkId, linkId)).orderBy(asc(portfolioEvents.at)),
+  ]);
+
+  return {
+    id: link.id,
+    slug: link.slug,
+    url: portfolioUrl(link.slug),
+    agentId: link.agentId,
+    agentName: link.agentName,
+    createdAt: link.createdAt,
+    area: link.content.area ?? null,
+    viewCount: link.viewCount,
+    visits: sessions.map((s) => {
+      const { device, browser } = parseUserAgent(s.userAgent);
+      return {
+        id: s.id,
+        startedAt: s.startedAt,
+        lastSeenAt: s.lastSeenAt,
+        activeSeconds: s.activeSeconds,
+        maxScrollPct: s.maxScrollPct,
+        sectionSeconds: s.sectionSeconds,
+        screen: s.screen,
+        device,
+        browser,
+        location: [s.city, s.region, s.country && s.country !== "US" ? s.country : null].filter(Boolean).join(", ") || null,
+        ip: s.ip,
+        events: events.filter((e) => e.sessionId === s.id).map((e) => ({ id: e.id, event: e.event, detail: e.detail, at: e.at })),
+      };
+    }),
+  };
+}
+
+const LISTING_PHOTO_HOSTS = /^(photos\.zillowstatic\.com|(www\.)?compass\.com)$/;
+
+/** A data: URL from the photo editor, or a listing photo URL fetched at its biggest size. */
+async function imageBytes(src: string): Promise<{ data: Buffer; mimeType: string }> {
+  const dataUrl = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(src);
+  if (dataUrl) return { mimeType: dataUrl[1], data: Buffer.from(dataUrl[2], "base64") };
+  const url = new URL(src);
+  if (url.protocol !== "https:" || !LISTING_PHOTO_HOSTS.test(url.hostname)) throw new Error("Not a listing photo");
+  let res = await fetch(largestPhotoUrl(src));
+  if (!res.ok) res = await fetch(src);
+  if (!res.ok) throw new Error("Couldn't fetch the original photo");
+  return { mimeType: res.headers.get("content-type") ?? "image/jpeg", data: Buffer.from(await res.arrayBuffer()) };
+}
+
+/**
+ * The photo editor's "Use on agent page": saves an edit and the photo it was
+ * made from as the page's before/after, and returns the builder URL with them
+ * filled in — and the listing's agent picked, so the page is about their own
+ * listing. `agentId` covers an editor session started from the builder
+ * without a listing on file.
+ */
+export async function saveEditForAgentPage(input: {
+  before: string;
+  after: string;
+  listingId: string | null;
+  agentId: string | null;
+}): Promise<{ href: string }> {
+  const [before, after] = await Promise.all([imageBytes(input.before), imageBytes(input.after)]);
+  const rows = await db
+    .insert(portfolioImages)
+    .values([before, after])
+    .returning({ id: portfolioImages.id });
+  let agentId = input.agentId;
+  if (input.listingId) {
+    const [listing] = await db.select({ agentId: listings.agentId }).from(listings).where(eq(listings.id, input.listingId));
+    agentId = listing?.agentId ?? agentId;
+  }
+  const params = new URLSearchParams({ before: rows[0].id, after: rows[1].id });
+  if (agentId) params.set("agent", agentId);
+  return { href: `/portfolio-links/new?${params}` };
 }

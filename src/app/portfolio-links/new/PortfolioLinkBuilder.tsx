@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ImagePlus, Loader2, Plus, X } from "lucide-react";
+import Link from "next/link";
+import { ImagePlus, Loader2, Plus, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,7 +26,16 @@ import {
  * "Create portfolio" button, ?agent=<id>) fills in their first name, area,
  * brokerage and Lukas's nearest finished jobs as listings — all editable.
  */
-export function PortfolioLinkBuilder({ initial }: { initial: PortfolioPrefill | null }) {
+export function PortfolioLinkBuilder({
+  initial,
+  initialBefore,
+  initialAfter,
+}: {
+  initial: PortfolioPrefill | null;
+  /** From the photo editor's "Use on agent page" (?before=&after=). */
+  initialBefore: string | null;
+  initialAfter: string | null;
+}) {
   const router = useRouter();
   const [agent, setAgent] = useState<AgentMatch | null>(initial?.agent ?? null);
   const [loadingAgent, setLoadingAgent] = useState(false);
@@ -33,12 +43,13 @@ export function PortfolioLinkBuilder({ initial }: { initial: PortfolioPrefill | 
   const [area, setArea] = useState(initial?.area ?? "");
   const [brokerage, setBrokerage] = useState(initial?.brokerage ?? "");
   const [listings, setListings] = useState<PortfolioListing[]>(initial?.listings ?? []);
+  const [editorListingId, setEditorListingId] = useState<string | null>(initial?.editorListingId ?? null);
   const [video, setVideo] = useState("summit");
-  const [leadPhoto, setLeadPhoto] = useState("daltonct-25");
+  const [leadPhoto, setLeadPhoto] = useState(AGENT_PAGE_PHOTOS[0].key);
   const [showTourOfHomes, setShowTourOfHomes] = useState(true);
   const [showOffer, setShowOffer] = useState(true);
-  const [beforeSrc, setBeforeSrc] = useState<string | null>(null);
-  const [afterSrc, setAfterSrc] = useState<string | null>(null);
+  const [beforeSrc, setBeforeSrc] = useState<string | null>(initialBefore);
+  const [afterSrc, setAfterSrc] = useState<string | null>(initialAfter);
 
   const [creating, setCreating] = useState(false);
   const [result, setResult] = useState<{ slug: string; url: string } | null>(null);
@@ -54,6 +65,7 @@ export function PortfolioLinkBuilder({ initial }: { initial: PortfolioPrefill | 
       setArea(prefill.area);
       setBrokerage(prefill.brokerage);
       setListings(prefill.listings);
+      setEditorListingId(prefill.editorListingId);
     } catch {
       toast.error("Couldn't load that agent's details");
     } finally {
@@ -106,7 +118,7 @@ export function PortfolioLinkBuilder({ initial }: { initial: PortfolioPrefill | 
             Copy
           </Button>
           <Button variant="outline" asChild>
-            <a href={result.url} target="_blank" rel="noopener noreferrer">
+            <a href={`${result.url}?preview=1`} target="_blank" rel="noopener noreferrer">
               Open
             </a>
           </Button>
@@ -154,6 +166,15 @@ export function PortfolioLinkBuilder({ initial }: { initial: PortfolioPrefill | 
           <ImageUpload label="Before" value={beforeSrc} onChange={setBeforeSrc} />
           <ImageUpload label="After" value={afterSrc} onChange={setAfterSrc} />
         </div>
+        <Button variant="outline" size="sm" asChild className="self-start">
+          <Link href={editorHref(editorListingId, agent?.id ?? null)}>
+            <Wand2 />
+            {editorListingId ? "Edit a photo from their listing" : "Make one in the photo editor"}
+          </Link>
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          In the editor, &quot;Use on agent page&quot; on a finished edit brings it back here as the before/after.
+        </p>
       </section>
 
       <section className="flex flex-col gap-3">
@@ -194,7 +215,8 @@ export function PortfolioLinkBuilder({ initial }: { initial: PortfolioPrefill | 
       <section className="flex flex-col gap-1.5">
         <Label>Lead photo (first in the grid)</Label>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-          {AGENT_PAGE_PHOTOS.map((p) => (
+          {/* Not the last photo: it always closes the section full-width. */}
+          {AGENT_PAGE_PHOTOS.slice(0, -1).map((p) => (
             <button
               key={p.key}
               type="button"
@@ -225,6 +247,15 @@ export function PortfolioLinkBuilder({ initial }: { initial: PortfolioPrefill | 
       </Button>
     </div>
   );
+}
+
+/** The photo editor on the agent's newest listing; ?agent= carries them back if that listing has no agent link. */
+function editorHref(listingId: string | null, agentId: string | null): string {
+  const params = new URLSearchParams();
+  if (listingId) params.set("listing", listingId);
+  if (agentId) params.set("agent", agentId);
+  const q = params.toString();
+  return q ? `/photo-editor?${q}` : "/photo-editor";
 }
 
 /** Name autocomplete, same pattern as the booking form's contact field. */

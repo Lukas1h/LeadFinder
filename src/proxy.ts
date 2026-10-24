@@ -166,7 +166,7 @@ export async function proxy(req: NextRequest) {
     } catch (err) {
       console.error("proxy: portfolio slug lookup failed", err);
     }
-    return NextResponse.rewrite(new URL(`/portfolio${pathname}`, req.url), {
+    return NextResponse.rewrite(new URL(`/portfolio${pathname}${req.nextUrl.search}`, req.url), {
       request: { headers: markGalleryView(req.headers) },
     });
   }
