@@ -514,10 +514,29 @@ export const galleryViews = pgTable("gallery_views", {
 
 export type GalleryView = typeof galleryViews.$inferSelect;
 
+/** One of Lukas's own jobs shown as a "Recent listings" card — prefilled from the booking, then hand-edited. */
+export interface PortfolioListing {
+  bookingId: string;
+  /** "Sold", "Pending", "Just listed" — the badge on the photo. */
+  status: string;
+  price: string;
+  beds: string;
+  baths: string;
+  sqft: string;
+  type: string;
+  address: string;
+  city: string;
+  /** The listing agent and brokerage line under the card. */
+  agent: string;
+  brokerage: string;
+  /** Dropbox filenames in that booking's gallery, in carousel order — set when the link is created. */
+  photos: string[];
+}
+
 /**
- * The settings of one agent page (src/app/portfolio/[slug]) — everything else
- * on it (photos, videos, sample listings, pricing) is fixed in
- * lib/agentPage.ts. Every field is optional so older rows still render.
+ * The settings of one agent page (src/app/portfolio/[slug]) — the portfolio
+ * photos, videos and pricing are fixed (lib/agentPage.ts). Every field is
+ * optional so older rows still render.
  */
 export interface PortfolioContent {
   /** "Eugene", "Roseburg" — the hero's "Real estate photo & video in {area}" and the listings heading. */
@@ -532,10 +551,12 @@ export interface PortfolioContent {
   leadPhoto?: string | null;
   showTourOfHomes?: boolean;
   showOffer?: boolean;
-  /** Before/after split at the top. With no beforeSrc, the after photo is shown dulled as a fake "before". */
+  /** Before/after split at the top (video becomes the second hero). With no beforeSrc, the after photo is shown dulled as a fake "before". */
   beforeAfter?: boolean;
+  /** /api/portfolio-image/<id> (an upload) or any image URL. */
   beforeSrc?: string | null;
   afterSrc?: string | null;
+  listings?: PortfolioListing[];
 }
 
 // A personalized agent page (/portfolio/[slug], served bare on
@@ -556,6 +577,27 @@ export const portfolioLinks = pgTable("portfolio_links", {
   viewCount: integer("view_count").notNull().default(0),
   firstViewedAt: timestamp("first_viewed_at", { withTimezone: true }),
   lastViewedAt: timestamp("last_viewed_at", { withTimezone: true }),
+});
+
+// Sent as Postgres hex text ("\\x89504e..."): the neon-http driver posts
+// parameters as JSON, where a raw Buffer wouldn't survive.
+const bytea = customType<{ data: Buffer; driverData: string }>({
+  dataType: () => "bytea",
+  toDriver: (value) => `\\x${value.toString("hex")}`,
+  fromDriver: (value: unknown) =>
+    typeof value === "string"
+      ? Buffer.from(value.startsWith("\\x") ? value.slice(2) : value, "hex")
+      : Buffer.from(value as Uint8Array),
+});
+
+// Before/after photos uploaded in the agent page builder, served publicly by
+// id at /api/portfolio-image/[id]. Shrunk in the browser before upload. In
+// the database like receipts, since there's no blob store in this app.
+export const portfolioImages = pgTable("portfolio_images", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  mimeType: text("mime_type").notNull(),
+  data: bytea("data").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type PortfolioLink = typeof portfolioLinks.$inferSelect;
@@ -1076,17 +1118,6 @@ export type QueuedMessage = typeof queuedMessages.$inferSelect;
 // Finances: what the business spends and drives. Revenue stays on bookings
 // (line items); these are the other side of the ledger. The math that joins
 // them lives in src/lib/finance.
-
-// Sent as Postgres hex text ("\\x89504e..."): the neon-http driver posts
-// parameters as JSON, where a raw Buffer wouldn't survive.
-const bytea = customType<{ data: Buffer; driverData: string }>({
-  dataType: () => "bytea",
-  toDriver: (value) => `\\x${value.toString("hex")}`,
-  fromDriver: (value: unknown) =>
-    typeof value === "string"
-      ? Buffer.from(value.startsWith("\\x") ? value.slice(2) : value, "hex")
-      : Buffer.from(value as Uint8Array),
-});
 
 // One drive, not one booking: a day trip to Klamath Falls for two jobs is one
 // trip, and so is a drive to drop flash drives off for an agent, which has no

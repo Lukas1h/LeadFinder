@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { UserPlus, Phone, PhoneIncoming, MessageCircle, MessagesSquare, Mail, Search, History, CalendarCheck, Pencil, Trash2, Users, Clock } from "lucide-react";
+import { UserPlus, Phone, PhoneIncoming, MessageCircle, MessagesSquare, Mail, Search, History, CalendarCheck, Pencil, Trash2, Users, Clock, Link2 } from "lucide-react";
 import { getAgentTimeline, startPendingInteraction, type TimelineItem } from "./interactionActions";
 import { AddInteractionDialog } from "./AddInteractionDialog";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
@@ -514,6 +514,12 @@ export function AgentDetailDialog({
                 </Button>
               )}
               {!agent.email && <FindEmailButton agent={agent} onSaved={showSaved} />}
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/portfolio-links/new?agent=${agent.id}`}>
+                  <Link2 />
+                  Create portfolio
+                </Link>
+              </Button>
               <Button variant="outline" size="sm" className="ml-auto" asChild>
                 <a href={`/api/agents/${agent.id}/vcard`}>
                   <UserPlus />
