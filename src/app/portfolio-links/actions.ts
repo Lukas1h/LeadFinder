@@ -47,8 +47,6 @@ export interface PortfolioPrefill {
   area: string;
   brokerage: string;
   listings: PortfolioListing[];
-  /** Their newest listing with photos, to open in the photo editor for a before/after. */
-  editorListingId: string | null;
 }
 
 const LISTINGS_PREFILLED = 3;
@@ -67,15 +65,7 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
   if (!agent) return null;
 
   const area = agent.homeCity?.trim() || "Eugene";
-  const [jobs, [newest]] = await Promise.all([
-    finishedJobs(),
-    db
-      .select({ id: listings.id })
-      .from(listings)
-      .where(and(eq(listings.agentId, agent.id), isNotNull(listings.photos)))
-      .orderBy(sql`${listings.listedAt} desc nulls last`, desc(listings.foundAt))
-      .limit(1),
-  ]);
+  const jobs = await finishedJobs();
   const city = area.toLowerCase();
   const region = agentPageRegion(area);
   const rank = (jobCity: string) => (jobCity.toLowerCase() === city ? 0 : agentPageRegion(jobCity) === region ? 1 : 2);
@@ -91,7 +81,6 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
     area,
     brokerage: agent.brokerage ?? "",
     listings: nearest,
-    editorListingId: newest?.id ?? null,
   };
 }
 
@@ -182,13 +171,11 @@ export async function uploadPortfolioImage(formData: FormData): Promise<{ url: s
 
 const PHOTOS_PER_LISTING = 8;
 
-export async function createPortfolioLinkAction(
-  agentId: string | null,
-  content: PortfolioContent
-): Promise<{ slug: string; url: string }> {
-  // Each card's carousel is the first few photos of that job's gallery, as it is now.
-  const withPhotos = await Promise.all(
-    (content.listings ?? []).map(async (l) => {
+/** Each card's carousel is the first few photos of that job's gallery, as it is now — for any listing without photos yet. */
+async function withListingPhotos(cards: PortfolioListing[]): Promise<PortfolioListing[]> {
+  return Promise.all(
+    cards.map(async (l) => {
+      if (l.photos.length > 0) return l;
       const [booking] = await db.select({ link: bookings.dropboxFolderLink }).from(bookings).where(eq(bookings.id, l.bookingId));
       if (!booking?.link) throw new Error(`${l.address || "A listing"} has no gallery`);
       const { photos } = await listGalleryMedia(booking.link).catch(() => {
@@ -197,6 +184,13 @@ export async function createPortfolioLinkAction(
       return { ...l, photos: photos.slice(0, PHOTOS_PER_LISTING).map((p) => p.name) };
     })
   );
+}
+
+export async function createPortfolioLinkAction(
+  agentId: string | null,
+  content: PortfolioContent
+): Promise<{ slug: string; url: string }> {
+  const withPhotos = await withListingPhotos(content.listings ?? []);
   const { slug } = await createPortfolioLink(agentId, { ...content, listings: withPhotos });
   return { slug, url: portfolioUrl(slug) };
 }
@@ -355,30 +349,66 @@ async function imageBytes(src: string): Promise<{ data: Buffer; mimeType: string
   return { mimeType: res.headers.get("content-type") ?? "image/jpeg", data: Buffer.from(await res.arrayBuffer()) };
 }
 
-/**
- * The photo editor's "Use on agent page": saves an edit and the photo it was
- * made from as the page's before/after, and returns the builder URL with them
- * filled in — and the listing's agent picked, so the page is about their own
- * listing. `agentId` covers an editor session started from the builder
- * without a listing on file.
- */
-export async function saveEditForAgentPage(input: {
-  before: string;
-  after: string;
-  listingId: string | null;
-  agentId: string | null;
-}): Promise<{ href: string }> {
+/** Saves a before/after (photo editor data URLs or listing photo URLs) as page images; returns their public URLs. */
+export async function saveBeforeAfter(input: { before: string; after: string }): Promise<{ beforeSrc: string; afterSrc: string }> {
   const [before, after] = await Promise.all([imageBytes(input.before), imageBytes(input.after)]);
-  const rows = await db
-    .insert(portfolioImages)
-    .values([before, after])
-    .returning({ id: portfolioImages.id });
-  let agentId = input.agentId;
+  const rows = await db.insert(portfolioImages).values([before, after]).returning({ id: portfolioImages.id });
+  return { beforeSrc: `/api/portfolio-image/${rows[0].id}`, afterSrc: `/api/portfolio-image/${rows[1].id}` };
+}
+
+/**
+ * The standalone photo editor's "Use on agent page": saves the before/after
+ * and returns the builder URL with them filled in — and the listing's agent
+ * picked, so the page is about their own listing.
+ */
+export async function saveEditForAgentPage(input: { before: string; after: string; listingId: string | null }): Promise<{ href: string }> {
+  const { beforeSrc, afterSrc } = await saveBeforeAfter(input);
+  const params = new URLSearchParams({ before: beforeSrc.split("/").pop()!, after: afterSrc.split("/").pop()! });
   if (input.listingId) {
     const [listing] = await db.select({ agentId: listings.agentId }).from(listings).where(eq(listings.id, input.listingId));
-    agentId = listing?.agentId ?? agentId;
+    if (listing?.agentId) params.set("agent", listing.agentId);
   }
-  const params = new URLSearchParams({ before: rows[0].id, after: rows[1].id });
-  if (agentId) params.set("agent", agentId);
   return { href: `/portfolio-links/new?${params}` };
+}
+
+/** Every photo from every listing of theirs on file, newest listing first — the builder's "Edit a photo from their listing". */
+export async function getAgentListingPhotos(agentId: string): Promise<{ label: string; photos: string[] }[]> {
+  const rows = await db
+    .select({ address: listings.address, city: listings.city, photos: listings.photos })
+    .from(listings)
+    .where(and(eq(listings.agentId, agentId), isNotNull(listings.photos)))
+    .orderBy(sql`${listings.listedAt} desc nulls last`, desc(listings.foundAt))
+    .limit(30);
+  return rows
+    .filter((r) => (r.photos?.length ?? 0) > 0)
+    .map((r) => ({ label: [r.address, r.city].filter(Boolean).join(", ") || "Listing", photos: r.photos! }));
+}
+
+/** An existing link, as the builder's starting state for editing it. */
+export async function getPortfolioLinkForEdit(linkId: string): Promise<{
+  linkId: string;
+  url: string;
+  agent: AgentMatch | null;
+  content: PortfolioContent;
+} | null> {
+  const [row] = await db
+    .select({ id: portfolioLinks.id, slug: portfolioLinks.slug, content: portfolioLinks.content, agentId: portfolioLinks.agentId })
+    .from(portfolioLinks)
+    .where(eq(portfolioLinks.id, linkId));
+  if (!row) return null;
+  const [agent] = row.agentId
+    ? await db.select({ id: agents.id, name: agents.name, phone: agents.phone, email: agents.email }).from(agents).where(eq(agents.id, row.agentId))
+    : [];
+  return { linkId: row.id, url: portfolioUrl(row.slug), agent: agent ?? null, content: row.content };
+}
+
+/** Saves changes to a link in place — same URL, same activity. */
+export async function updatePortfolioLinkAction(linkId: string, agentId: string | null, content: PortfolioContent): Promise<{ slug: string; url: string }> {
+  const [row] = await db.select({ slug: portfolioLinks.slug, content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.id, linkId));
+  if (!row) throw new Error("That link no longer exists");
+  // Listings already on the page keep their photos; new ones get theirs from the gallery.
+  const kept = new Map((row.content.listings ?? []).map((l) => [l.bookingId, l.photos]));
+  const withPhotos = await withListingPhotos((content.listings ?? []).map((l) => ({ ...l, photos: kept.get(l.bookingId) ?? [] })));
+  await db.update(portfolioLinks).set({ agentId, content: { ...content, listings: withPhotos } }).where(eq(portfolioLinks.id, linkId));
+  return { slug: row.slug, url: portfolioUrl(row.slug) };
 }

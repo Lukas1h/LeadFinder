@@ -1,55 +1,60 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import Link from "next/link";
 import { ImagePlus, Loader2, Plus, Wand2, X } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PhotoEditor } from "@/app/photo-editor/PhotoEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { PortfolioListing } from "@/db/schema";
+import type { PortfolioContent, PortfolioListing } from "@/db/schema";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS } from "@/lib/agentPage";
 import { formatPhone } from "@/lib/format";
 import {
   createPortfolioLinkAction,
+  getAgentListingPhotos,
   getPortfolioPrefill,
+  saveBeforeAfter,
   searchAgentsForPortfolio,
   searchJobsForPortfolio,
+  updatePortfolioLinkAction,
   uploadPortfolioImage,
   type AgentMatch,
-  type PortfolioPrefill,
 } from "../actions";
 
+/** Where the builder starts: a new link (maybe prefilled from an agent), or an existing one being edited. */
+export interface BuilderStart {
+  /** Set when editing: saving updates this link in place (same URL, same activity). */
+  linkId: string | null;
+  agent: AgentMatch | null;
+  content: PortfolioContent;
+}
+
 /**
- * Builds one agent page. Picking an agent (or arriving from their profile's
- * "Create portfolio" button, ?agent=<id>) fills in their first name, area,
- * brokerage and Lukas's nearest finished jobs as listings — all editable.
+ * Builds or edits one agent page. Picking an agent (or arriving from their
+ * profile's "Create portfolio" button, ?agent=<id>) fills in their first
+ * name, area, brokerage and Lukas's nearest finished jobs as listings — all
+ * editable.
  */
-export function PortfolioLinkBuilder({
-  initial,
-  initialBefore,
-  initialAfter,
-}: {
-  initial: PortfolioPrefill | null;
-  /** From the photo editor's "Use on agent page" (?before=&after=). */
-  initialBefore: string | null;
-  initialAfter: string | null;
-}) {
+export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
   const router = useRouter();
-  const [agent, setAgent] = useState<AgentMatch | null>(initial?.agent ?? null);
+  const c = start.content;
+  const editing = start.linkId != null;
+  const [agent, setAgent] = useState<AgentMatch | null>(start.agent);
   const [loadingAgent, setLoadingAgent] = useState(false);
-  const [firstName, setFirstName] = useState(initial?.firstName ?? "");
-  const [area, setArea] = useState(initial?.area ?? "");
-  const [brokerage, setBrokerage] = useState(initial?.brokerage ?? "");
-  const [listings, setListings] = useState<PortfolioListing[]>(initial?.listings ?? []);
-  const [editorListingId, setEditorListingId] = useState<string | null>(initial?.editorListingId ?? null);
-  const [video, setVideo] = useState("summit");
-  const [leadPhoto, setLeadPhoto] = useState(AGENT_PAGE_PHOTOS[0].key);
-  const [showTourOfHomes, setShowTourOfHomes] = useState(true);
-  const [showOffer, setShowOffer] = useState(true);
-  const [beforeSrc, setBeforeSrc] = useState<string | null>(initialBefore);
-  const [afterSrc, setAfterSrc] = useState<string | null>(initialAfter);
+  const [firstName, setFirstName] = useState(c.agentFirstName ?? "");
+  const [area, setArea] = useState(c.area ?? "");
+  const [brokerage, setBrokerage] = useState(c.brokerage ?? "");
+  const [listings, setListings] = useState<PortfolioListing[]>(c.listings ?? []);
+  const [video, setVideo] = useState(c.video ?? "summit");
+  const [leadPhoto, setLeadPhoto] = useState(c.leadPhoto ?? AGENT_PAGE_PHOTOS[0].key);
+  const [showTourOfHomes, setShowTourOfHomes] = useState(c.showTourOfHomes ?? true);
+  const [showOffer, setShowOffer] = useState(c.showOffer ?? true);
+  const [beforeSrc, setBeforeSrc] = useState<string | null>(c.beforeAfter ? (c.beforeSrc ?? null) : null);
+  const [afterSrc, setAfterSrc] = useState<string | null>(c.beforeAfter ? (c.afterSrc ?? null) : null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const [creating, setCreating] = useState(false);
   const [result, setResult] = useState<{ slug: string; url: string } | null>(null);
@@ -65,7 +70,6 @@ export function PortfolioLinkBuilder({
       setArea(prefill.area);
       setBrokerage(prefill.brokerage);
       setListings(prefill.listings);
-      setEditorListingId(prefill.editorListingId);
     } catch {
       toast.error("Couldn't load that agent's details");
     } finally {
@@ -76,10 +80,10 @@ export function PortfolioLinkBuilder({
   const updateListing = (i: number, patch: Partial<PortfolioListing>) =>
     setListings((prev) => prev.map((l, j) => (j === i ? { ...l, ...patch } : l)));
 
-  const create = async () => {
+  const save = async () => {
     setCreating(true);
     try {
-      const { slug, url } = await createPortfolioLinkAction(agent?.id ?? null, {
+      const content: PortfolioContent = {
         area: area.trim() || null,
         agentFirstName: firstName.trim() || null,
         brokerage: brokerage.trim() || null,
@@ -92,11 +96,14 @@ export function PortfolioLinkBuilder({
         beforeSrc: afterSrc ? beforeSrc : null,
         afterSrc,
         listings,
-      });
-      setResult({ slug, url });
+      };
+      const saved = start.linkId
+        ? await updatePortfolioLinkAction(start.linkId, agent?.id ?? null, content)
+        : await createPortfolioLinkAction(agent?.id ?? null, content);
+      setResult(saved);
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't create the link");
+      toast.error(err instanceof Error ? err.message : "Couldn't save the link");
     } finally {
       setCreating(false);
     }
@@ -105,7 +112,10 @@ export function PortfolioLinkBuilder({
   if (result) {
     return (
       <div className="flex flex-col gap-4 rounded-lg border p-6">
-        <p className="font-medium">Link ready{agent?.name ? ` for ${agent.name}` : ""}:</p>
+        <p className="font-medium">
+          {editing ? "Saved" : "Link ready"}
+          {agent?.name ? ` for ${agent.name}` : ""}:
+        </p>
         <div className="flex items-center gap-2">
           <Input readOnly value={result.url} className="font-mono text-sm" />
           <Button
@@ -119,7 +129,7 @@ export function PortfolioLinkBuilder({
           </Button>
           <Button variant="outline" asChild>
             <a href={`${result.url}?preview=1`} target="_blank" rel="noopener noreferrer">
-              Open
+              Preview
             </a>
           </Button>
         </div>
@@ -166,15 +176,23 @@ export function PortfolioLinkBuilder({
           <ImageUpload label="Before" value={beforeSrc} onChange={setBeforeSrc} />
           <ImageUpload label="After" value={afterSrc} onChange={setAfterSrc} />
         </div>
-        <Button variant="outline" size="sm" asChild className="self-start">
-          <Link href={editorHref(editorListingId, agent?.id ?? null)}>
-            <Wand2 />
-            {editorListingId ? "Edit a photo from their listing" : "Make one in the photo editor"}
-          </Link>
+        <Button variant="outline" size="sm" className="self-start" disabled={!agent} onClick={() => setEditorOpen(true)}>
+          <Wand2 />
+          Edit a photo from their listing
         </Button>
-        <p className="text-xs text-muted-foreground">
-          In the editor, &quot;Use on agent page&quot; on a finished edit brings it back here as the before/after.
-        </p>
+        {!agent && <p className="text-xs text-muted-foreground">Pick an agent first to edit one of their listing photos.</p>}
+        {agent && (
+          <ListingPhotoEditor
+            agent={agent}
+            open={editorOpen}
+            onOpenChange={setEditorOpen}
+            onUse={(before, after) => {
+              setBeforeSrc(before);
+              setAfterSrc(after);
+              setEditorOpen(false);
+            }}
+          />
+        )}
       </section>
 
       <section className="flex flex-col gap-3">
@@ -241,21 +259,80 @@ export function PortfolioLinkBuilder({
         </label>
       </section>
 
-      <Button onClick={create} disabled={creating || loadingAgent} className="self-start">
+      <Button onClick={save} disabled={creating || loadingAgent} className="self-start">
         {creating && <Loader2 className="size-4 animate-spin" />}
-        Create link
+        {editing ? "Save changes" : "Create link"}
       </Button>
     </div>
   );
 }
 
-/** The photo editor on the agent's newest listing; ?agent= carries them back if that listing has no agent link. */
-function editorHref(listingId: string | null, agentId: string | null): string {
-  const params = new URLSearchParams();
-  if (listingId) params.set("listing", listingId);
-  if (agentId) params.set("agent", agentId);
-  const q = params.toString();
-  return q ? `/photo-editor?${q}` : "/photo-editor";
+/**
+ * "Edit a photo from their listing": every photo from every listing of theirs
+ * on file, in the photo editor itself (embedded); a finished edit comes back
+ * as the page's before/after.
+ */
+function ListingPhotoEditor({
+  agent,
+  open,
+  onOpenChange,
+  onUse,
+}: {
+  agent: AgentMatch;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onUse: (beforeSrc: string, afterSrc: string) => void;
+}) {
+  const [groups, setGroups] = useState<{ agentId: string; groups: { label: string; photos: string[] }[] } | null>(null);
+
+  useEffect(() => {
+    if (!open || groups?.agentId === agent.id) return;
+    let cancelled = false;
+    getAgentListingPhotos(agent.id)
+      .then((g) => !cancelled && setGroups({ agentId: agent.id, groups: g }))
+      .catch(() => toast.error("Couldn't load their listings"));
+    return () => {
+      cancelled = true;
+    };
+  }, [open, agent.id, groups?.agentId]);
+
+  const loaded = groups?.agentId === agent.id ? groups.groups : null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Edit a photo from {agent.name ?? "their"} listings</DialogTitle>
+          <DialogDescription>Pick one, edit it, then use it as the page&apos;s before/after.</DialogDescription>
+        </DialogHeader>
+        {loaded === null ? (
+          <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> Loading their listings…
+          </div>
+        ) : loaded.length === 0 ? (
+          <p className="py-8 text-sm text-muted-foreground">No listings with photos on file for them. Upload a before/after instead.</p>
+        ) : (
+          <PhotoEditor
+            key={agent.id}
+            initialListing={null}
+            embed={{
+              groups: loaded,
+              useLabel: "Use as before/after",
+              onUse: async (before, after) => {
+                try {
+                  const saved = await saveBeforeAfter({ before, after });
+                  onUse(saved.beforeSrc, saved.afterSrc);
+                  toast.success("Before/after added");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Couldn't save the before/after");
+                }
+              },
+            }}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 /** Name autocomplete, same pattern as the booking form's contact field. */

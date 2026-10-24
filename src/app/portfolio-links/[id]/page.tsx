@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { ArrowLeft, CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, MessageCircle, Star, UserPlus, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Eye, MessageCircle, Pencil, Plus, Star, UserPlus, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PortfolioEvent } from "@/db/schema";
 import { getPortfolioActivity, type PortfolioVisit } from "../actions";
 import { formatDuration } from "../duration";
+import { CopyLinkButton } from "../CopyLinkButton";
 
 // Page order, so the bars read top to bottom like the page itself.
 const SECTIONS: { key: string; label: string }[] = [
@@ -70,17 +71,24 @@ async function Activity({ params }: { params: Promise<{ id: string }> }) {
               {activity.area ? `${activity.area} · ` : ""}made {when(activity.createdAt)}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild>
               <a href={`${activity.url}?preview=1`} target="_blank" rel="noopener noreferrer">
-                <ExternalLink />
-                Open (not tracked)
+                <Eye />
+                Preview
               </a>
             </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/portfolio-links/${activity.id}/edit`}>
+                <Pencil />
+                Edit
+              </Link>
+            </Button>
+            <CopyLinkButton url={activity.url} />
             {activity.agentId && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/portfolio-links/new?agent=${activity.agentId}`}>
-                  <CalendarPlus />
+                  <Plus />
                   New link for them
                 </Link>
               </Button>

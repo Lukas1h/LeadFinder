@@ -3,7 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, Crop, Download, ImagePlus, LayoutTemplate, Loader2, PenLine, RotateCcw, Ruler, Search, Sparkles, X } from "lucide-react";
+import {
+  Check,
+  Crop,
+  Download,
+  ImagePlus,
+  LayoutTemplate,
+  Loader2,
+  PenLine,
+  RotateCcw,
+  Ruler,
+  Search,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { PHOTO_PRESETS } from "@/lib/photoPresets";
 import { NO_GEOMETRY, isIdentity, type Geometry } from "@/lib/photoGeometry";
 import { makeZip } from "@/lib/zip";
@@ -33,6 +46,20 @@ interface Photo {
   preview: string;
   source: { url: string } | { data: string; mimeType: string };
   name: string;
+  /** Embedded: which listing it's from, shown as a heading over its photos. */
+  group?: string;
+}
+
+/**
+ * The editor inside another page (the agent page builder): no search or
+ * upload, just the photos given, one at a time, and a finished edit goes
+ * back through onUse instead of being downloaded.
+ */
+export interface EmbeddedEditor {
+  groups: { label: string; photos: string[] }[];
+  /** `before` is the listing photo's URL, or the straightened/cropped copy as a data URL; `after` is the edit's data URL. */
+  onUse: (before: string, after: string) => Promise<void>;
+  useLabel: string;
 }
 
 interface Edit {
@@ -71,20 +98,20 @@ const b64 = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(",") + 1);
 export function PhotoEditor({
   initialListing,
   initialPreset,
-  portfolioAgentId,
+  embed,
 }: {
   initialListing: EditorListing | null;
-  /** Arrived from the agent page builder (?agent=): "Use on agent page" goes back to them even if the listing has no agent link. */
-  portfolioAgentId?: string | null;
+  embed?: EmbeddedEditor;
   /** The preset photos added to the tray start on (?preset=, e.g. sunset-exterior from a twilight gift card). */
   initialPreset?: string | null;
 }) {
-  const startPreset =
-    initialPreset && PHOTO_PRESETS.some((p) => p.id === initialPreset) ? initialPreset : DEFAULT_PRESET;
+  const startPreset = initialPreset && PHOTO_PRESETS.some((p) => p.id === initialPreset) ? initialPreset : DEFAULT_PRESET;
   const addItem = (photo: Photo) => newItem(photo, startPreset);
   const router = useRouter();
   const [listing, setListing] = useState<EditorListing | null>(initialListing);
-  const [photos, setPhotos] = useState<Photo[]>(() => (initialListing ? listingPhotos(initialListing) : []));
+  const [photos, setPhotos] = useState<Photo[]>(() =>
+    embed ? embeddedPhotos(embed) : initialListing ? listingPhotos(initialListing) : []
+  );
   const [items, setItems] = useState<Item[]>([]);
   const [tool, setTool] = useState<Tool | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
@@ -101,7 +128,7 @@ export function PhotoEditor({
     setListing(found);
     setPhotos(listingPhotos(found));
     setItems([]);
-    router.replace(`/photo-editor?listing=${id}${portfolioAgentId ? `&agent=${portfolioAgentId}` : ""}`, { scroll: false });
+    router.replace(`/photo-editor?listing=${id}`, { scroll: false });
   };
 
   const addUploads = async (files: FileList | null) => {
@@ -128,7 +155,12 @@ export function PhotoEditor({
   const inTray = new Set(items.map((it) => it.photo.key));
   const toggle = (photo: Photo) =>
     setItems((prev) =>
-      prev.some((it) => it.photo.key === photo.key) ? prev.filter((it) => it.photo.key !== photo.key) : [...prev, addItem(photo)]
+      prev.some((it) => it.photo.key === photo.key)
+        ? prev.filter((it) => it.photo.key !== photo.key)
+        : // Embedded, it's one photo at a time: picking another replaces it (unless it's mid-edit).
+          embed
+          ? [...prev.filter((it) => it.edit?.status === "working"), addItem(photo)]
+          : [...prev, addItem(photo)]
     );
 
   const openTool = async (item: Item, kind: Tool["kind"]) => {
@@ -220,11 +252,15 @@ export function PhotoEditor({
     setSendingToPage(it.photo.key);
     try {
       const before = it.prepared?.clean ?? ("url" in it.photo.source ? it.photo.source.url : it.photo.preview);
+      if (embed) {
+        await embed.onUse(before, it.edit.image);
+        setSendingToPage(null);
+        return;
+      }
       const { href } = await saveEditForAgentPage({
         before,
         after: it.edit.image,
         listingId: it.photo.key.startsWith("upload-") ? null : (listing?.id ?? null),
-        agentId: portfolioAgentId ?? null,
       });
       router.push(href);
     } catch (error) {
@@ -257,80 +293,94 @@ export function PhotoEditor({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3 rounded-lg border p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <ListingSearch onPick={loadListing} />
-          <span className="text-center text-xs text-muted-foreground">or</span>
-          <Button variant="outline" asChild>
-            <label className="cursor-pointer">
-              <ImagePlus />
-              Upload photos
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  addUploads(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </Button>
-        </div>
-        {listing && (
-          <div className="text-sm">
-            <span className="font-medium">{listing.address ?? "Listing"}</span>
-            {listing.city && <span className="text-muted-foreground">, {listing.city}</span>}
-            {listing.agentName && <span className="text-muted-foreground"> · {listing.agentName}</span>}
-            {listing.score != null && <span className="text-muted-foreground"> · photo score {listing.score}/10</span>}
+      {!embed && (
+        <section className="flex flex-col gap-3 rounded-lg border p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <ListingSearch onPick={loadListing} />
+            <span className="text-center text-xs text-muted-foreground">or</span>
+            <Button variant="outline" asChild>
+              <label className="cursor-pointer">
+                <ImagePlus />
+                Upload photos
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    addUploads(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </Button>
           </div>
-        )}
-      </section>
+          {listing && (
+            <div className="text-sm">
+              <span className="font-medium">{listing.address ?? "Listing"}</span>
+              {listing.city && <span className="text-muted-foreground">, {listing.city}</span>}
+              {listing.agentName && <span className="text-muted-foreground"> · {listing.agentName}</span>}
+              {listing.score != null && <span className="text-muted-foreground"> · photo score {listing.score}/10</span>}
+            </div>
+          )}
+        </section>
+      )}
 
       {photos.length > 0 && (
         <section className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-medium">
-              Photos <span className="text-muted-foreground">· tap to add to the edit, {items.length} of {photos.length} added</span>
+              Photos{" "}
+              <span className="text-muted-foreground">
+                {embed
+                  ? `· ${photos.length} from their listings, tap one to edit it`
+                  : `· tap to add to the edit, ${items.length} of ${photos.length} added`}
+              </span>
             </h2>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setItems((prev) => [...prev, ...photos.filter((p) => !inTray.has(p.key)).map(addItem)])}
-              >
-                Add all
-              </Button>
-              <Button variant="ghost" size="sm" disabled={working > 0} onClick={() => setItems([])}>
-                Clear
-              </Button>
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6 lg:grid-cols-8">
-            {photos.map((photo) => {
-              const on = inTray.has(photo.key);
-              return (
-                <button
-                  key={photo.key}
-                  type="button"
-                  onClick={() => toggle(photo)}
-                  className={cn(
-                    "relative aspect-[4/3] overflow-hidden rounded-md border-2",
-                    on ? "border-primary" : "border-transparent opacity-70 hover:opacity-100"
-                  )}
+            {!embed && (
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setItems((prev) => [...prev, ...photos.filter((p) => !inTray.has(p.key)).map(addItem)])}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo.preview} alt={photo.name} className="h-full w-full object-cover" loading="lazy" />
-                  {on && (
-                    <span className="absolute top-1 right-1 rounded-full bg-primary p-0.5 text-primary-foreground">
-                      <Check className="size-3" />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                  Add all
+                </Button>
+                <Button variant="ghost" size="sm" disabled={working > 0} onClick={() => setItems([])}>
+                  Clear
+                </Button>
+              </div>
+            )}
           </div>
+          {groupPhotos(photos).map(([label, group]) => (
+            <div key={label ?? "all"} className="flex flex-col gap-1">
+              {label && <p className="text-xs text-muted-foreground">{label}</p>}
+              <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6 lg:grid-cols-8">
+                {group.map((photo) => {
+                  const on = inTray.has(photo.key);
+                  return (
+                    <button
+                      key={photo.key}
+                      type="button"
+                      onClick={() => toggle(photo)}
+                      className={cn(
+                        "relative aspect-[4/3] overflow-hidden rounded-md border-2",
+                        on ? "border-primary" : "border-transparent opacity-70 hover:opacity-100"
+                      )}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photo.preview} alt={photo.name} className="h-full w-full object-cover" loading="lazy" />
+                      {on && (
+                        <span className="absolute top-1 right-1 rounded-full bg-primary p-0.5 text-primary-foreground">
+                          <Check className="size-3" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </section>
       )}
 
@@ -350,10 +400,12 @@ export function PhotoEditor({
                 <Sparkles />
                 Edit all
               </Button>
-              <Button size="sm" variant="outline" disabled={done.length === 0} onClick={downloadAll}>
-                <Download />
-                Download all ({done.length})
-              </Button>
+              {!embed && (
+                <Button size="sm" variant="outline" disabled={done.length === 0} onClick={downloadAll}>
+                  <Download />
+                  Download all ({done.length})
+                </Button>
+              )}
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -372,6 +424,7 @@ export function PhotoEditor({
                 onTool={(kind) => openTool(it, kind)}
                 onRun={() => run([it])}
                 onSendToAgentPage={() => sendToAgentPage(it)}
+                sendLabel={embed?.useLabel ?? "Use on agent page"}
                 sendingToPage={sendingToPage === it.photo.key}
                 onRemove={() => setItems((prev) => prev.filter((x) => x.photo.key !== it.photo.key))}
               />
@@ -423,6 +476,7 @@ function ItemCard({
   onRun,
   onSendToAgentPage,
   sendingToPage,
+  sendLabel,
   onRemove,
 }: {
   item: Item;
@@ -433,6 +487,7 @@ function ItemCard({
   onRun: () => void;
   onSendToAgentPage: () => void;
   sendingToPage: boolean;
+  sendLabel: string;
   onRemove: () => void;
 }) {
   const { photo, edit, prepared, geometry, strokes } = item;
@@ -473,7 +528,11 @@ function ItemCard({
             <div className="absolute top-2 left-2 flex gap-1">
               {straightened && <Tag>Straightened</Tag>}
               {cropped && <Tag>{geometry.rotation ? `Rotated ${geometry.rotation.toFixed(1)}°` : "Cropped"}</Tag>}
-              {strokes.length > 0 && <Tag>Removing {strokes.length} mark{strokes.length === 1 ? "" : "s"}</Tag>}
+              {strokes.length > 0 && (
+                <Tag>
+                  Removing {strokes.length} mark{strokes.length === 1 ? "" : "s"}
+                </Tag>
+              )}
             </div>
           )}
         </div>
@@ -526,7 +585,7 @@ function ItemCard({
           <p className="text-xs text-muted-foreground">{edit.label}</p>
           <Button variant="outline" size="sm" className="h-7 text-xs" disabled={sendingToPage} onClick={onSendToAgentPage}>
             {sendingToPage ? <Loader2 className="animate-spin" /> : <LayoutTemplate />}
-            Use on agent page
+            {sendLabel}
           </Button>
         </div>
       )}
@@ -606,6 +665,25 @@ function ListingSearch({ onPick }: { onPick: (id: string) => void }) {
   );
 }
 
+function embeddedPhotos(embed: EmbeddedEditor): Photo[] {
+  return embed.groups.flatMap((g, gi) =>
+    g.photos.map((url, i) => ({
+      key: `embed-${gi}-${i}`,
+      preview: url,
+      source: { url },
+      name: `${g.label} ${i + 1}`,
+      group: g.label,
+    }))
+  );
+}
+
+/** Photos under their listing's heading when they have one, else all together. */
+function groupPhotos(photos: Photo[]): [string | null, Photo[]][] {
+  const groups = new Map<string | null, Photo[]>();
+  for (const p of photos) groups.set(p.group ?? null, [...(groups.get(p.group ?? null) ?? []), p]);
+  return [...groups];
+}
+
 function listingPhotos(listing: EditorListing): Photo[] {
   return listing.photos.map((url, i) => ({
     key: `${listing.id}-${i}`,
@@ -637,7 +715,12 @@ function shrinkImage(file: File): Promise<string> {
 }
 
 function slug(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "photos";
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "photos"
+  );
 }
 
 function saveBlob(blob: Blob, name: string) {

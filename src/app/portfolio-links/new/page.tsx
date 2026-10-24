@@ -22,15 +22,26 @@ const UUID_RE = /^[0-9a-f-]{36}$/i;
 // ?agent=<id> comes from the "Create portfolio" button on an agent's profile.
 async function BuilderContent({ searchParams }: { searchParams: Promise<{ agent?: string; before?: string; after?: string }> }) {
   const { agent, before, after } = await searchParams;
-  const initial = agent && UUID_RE.test(agent) ? await getPortfolioPrefill(agent) : null;
+  const prefill = agent && UUID_RE.test(agent) ? await getPortfolioPrefill(agent) : null;
   // ?before=&after= are portfolio_images ids, from the photo editor's "Use on agent page".
   const image = (id: string | undefined) => (id && UUID_RE.test(id) ? `/api/portfolio-image/${id}` : null);
+  const afterSrc = image(after);
   return (
     <PortfolioLinkBuilder
-      key={[initial?.agent.id, before, after].join("|")}
-      initial={initial}
-      initialBefore={image(before)}
-      initialAfter={image(after)}
+      key={[prefill?.agent.id, before, after].join("|")}
+      start={{
+        linkId: null,
+        agent: prefill?.agent ?? null,
+        content: {
+          agentFirstName: prefill?.firstName,
+          area: prefill?.area,
+          brokerage: prefill?.brokerage,
+          listings: prefill?.listings,
+          beforeAfter: afterSrc != null,
+          beforeSrc: image(before),
+          afterSrc,
+        },
+      }}
     />
   );
 }

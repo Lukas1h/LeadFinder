@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { Activity, Eye, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import { listPortfolioLinks } from "./actions";
 import { formatDuration } from "./duration";
+import { CopyLinkButton } from "./CopyLinkButton";
 
 /**
  * Personalized portfolio links: who they were made for (Lukas's own
@@ -51,14 +53,28 @@ async function LinkList() {
               {[l.contactSaves > 0 && "Saved your contact", l.bookTaps > 0 && "Tapped Book a shoot"].filter(Boolean).join(" · ")}
             </p>
           )}
-          <div className="mt-1 flex items-center justify-between gap-3">
+          <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{l.url}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
             {/* ?preview=1: Lukas opening his own link isn't a visit. */}
-            <a href={`${l.url}?preview=1`} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground underline">
-              {l.url}
-            </a>
-            <Link href={`/portfolio-links/${l.id}`} className="text-xs text-muted-foreground hover:text-foreground">
-              Activity →
-            </Link>
+            <Button variant="outline" size="sm" asChild>
+              <a href={`${l.url}?preview=1`} target="_blank" rel="noopener noreferrer">
+                <Eye />
+                Preview
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/portfolio-links/${l.id}/edit`}>
+                <Pencil />
+                Edit
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/portfolio-links/${l.id}`}>
+                <Activity />
+                Activity
+              </Link>
+            </Button>
+            <CopyLinkButton url={l.url} />
           </div>
         </li>
       ))}
