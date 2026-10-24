@@ -9,7 +9,7 @@ import { GalleryPhoto } from "./GalleryPhoto";
  * they want staged, adds an optional note, and sends — Lukas gets a push and
  * the picks land in the booking's gallery activity. He stages them himself.
  */
-export function GalleryPhotoGrid({ token, names }: { token: string; names: string[] }) {
+export function GalleryPhotoGrid({ token, names, staging }: { token: string; names: string[]; staging: boolean }) {
   const [picking, setPicking] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
@@ -50,7 +50,7 @@ export function GalleryPhotoGrid({ token, names }: { token: string; names: strin
         </p>
       ) : picking ? (
         <p className="text-sm text-[#181A1C]/70 text-center">Tap the photos you&rsquo;d like virtually staged.</p>
-      ) : (
+      ) : !staging ? null : (
         <button
           type="button"
           onClick={() => setPicking(true)}
