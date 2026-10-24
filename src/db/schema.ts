@@ -488,7 +488,8 @@ export interface AirspaceCheck {
 // Every time a client's gallery link is opened or something is downloaded
 // from it — shown in the booking's detail dialog. Location comes from
 // Vercel's IP geolocation headers, so it's city-level and approximate.
-export const GALLERY_EVENTS = ["view", "download_all", "download_video"] as const;
+export const GALLERY_EVENTS = ["view", "download_all", "download_video", "invoice_view", "staging_request"] as const;
+// staging_request: detail is the picked filenames (+ the client note).
 export type GalleryEvent = (typeof GALLERY_EVENTS)[number];
 
 export const galleryViews = pgTable("gallery_views", {

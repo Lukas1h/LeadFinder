@@ -125,6 +125,15 @@ export async function notifyPortfolioView(agentName: string | null, viewCount: n
   });
 }
 
+/** A client picked photos on their gallery to be virtually staged. */
+export async function notifyStagingRequest(address: string | null, count: number, note: string): Promise<void> {
+  await broadcast({
+    title: `Virtual staging request: ${count} photo${count === 1 ? "" : "s"}`,
+    body: `${address ?? "A gallery"}${note ? ` — ${note}` : ""}`,
+    url: "/booked",
+  });
+}
+
 async function broadcast(payload: PushPayload): Promise<void> {
   if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
 

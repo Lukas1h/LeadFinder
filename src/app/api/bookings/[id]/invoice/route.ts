@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { db } from "@/db";
 import { bookings, bookingLineItems, listings, agents } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { formatDate, formatPrice } from "@/lib/format";
+import { recordGalleryEvent } from "@/lib/galleryViews";
 
 // Numbering picks up after 105 — 106 itself was the 1353 Dalton Ct /
 // Chandra Reynolds job, sent by hand before this feature existed, and is
@@ -53,11 +54,18 @@ async function getOrAssignInvoiceNumber(bookingId: string, existing: number | nu
   return next;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
   if (!booking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+  }
+
+  // The gallery's "View invoice" button tags its link, so the client opening
+  // it shows in the booking's gallery activity (Lukas's own opens don't).
+  if (req.nextUrl.searchParams.get("from") === "gallery") {
+    const requestHeaders = new Headers(req.headers);
+    after(() => recordGalleryEvent(id, "invoice_view", requestHeaders));
   }
 
   const [linkedListing, contact, lineItems] = await Promise.all([

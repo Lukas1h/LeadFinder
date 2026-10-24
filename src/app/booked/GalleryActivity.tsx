@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, Download, Film, Link2 } from "lucide-react";
+import { Eye, Download, Film, Link2, Receipt, Sofa } from "lucide-react";
 import { getGalleryActivity, type GalleryActivityItem } from "./actions";
 
 function formatWhen(date: Date): string {
@@ -12,6 +12,8 @@ const EVENT_LABELS: Record<GalleryActivityItem["event"], string> = {
   view: "Opened the gallery",
   download_all: "Downloaded all (.zip)",
   download_video: "Downloaded a video",
+  invoice_view: "Opened the invoice",
+  staging_request: "Asked for virtual staging",
 };
 
 /**
@@ -59,14 +61,14 @@ export function GalleryActivity({ bookingId, open }: { bookingId: string; open: 
       ) : (
         <div className="flex flex-col divide-y divide-border/70 max-h-72 overflow-y-auto">
           {items.map((item) => {
-            const Icon = item.isPreview ? Link2 : item.event === "view" ? Eye : item.event === "download_video" ? Film : Download;
+            const Icon = item.isPreview ? Link2 : item.event === "view" ? Eye : item.event === "download_video" ? Film : item.event === "invoice_view" ? Receipt : item.event === "staging_request" ? Sofa : Download;
             return (
               <div key={item.id} className={`flex items-start gap-2.5 py-2 ${item.isPreview ? "opacity-50" : ""}`}>
                 <Icon className="size-4 shrink-0 mt-0.5 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-foreground">
                     {item.isPreview ? "Link preview (not a person)" : EVENT_LABELS[item.event]}
-                    {item.event === "download_video" && item.detail && (
+                    {(item.event === "download_video" || item.event === "staging_request") && item.detail && (
                       <span className="text-muted-foreground"> · {item.detail}</span>
                     )}
                   </p>

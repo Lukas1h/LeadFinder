@@ -10,7 +10,7 @@ import { eq, sum } from "drizzle-orm";
 import { listGalleryMedia } from "@/lib/dropbox";
 import { firstName } from "@/lib/sms";
 import { recordGalleryEvent } from "@/lib/galleryViews";
-import { GalleryPhoto } from "./GalleryPhoto";
+import { GalleryPhotoGrid } from "./GalleryPhotoGrid";
 
 // The root layout's MobileHeader/BottomTabBar read usePathname(), which
 // can't be prerendered into an instant static shell for a dynamic [token]
@@ -100,7 +100,17 @@ function formatLocation(booking: { address: string | null; city: string | null; 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
   const { token } = await params;
   const booking = await getGalleryBooking(token);
-  return { title: booking ? formatLocation(booking) : "Photo Gallery" };
+  if (!booking) return { title: "Photo Gallery" };
+  const title = formatLocation(booking);
+  // The link preview (iMessage, Facebook…) shows the house's first photo.
+  // Absolute URL: crawlers don't resolve relative og:image paths.
+  const first = booking.dropboxFolderLink
+    ? await listGalleryMedia(booking.dropboxFolderLink).then((m) => m.photos[0], () => undefined)
+    : undefined;
+  const images = first
+    ? [`https://gallery.lukashahn.art/api/gallery/${token}/thumbnail?name=${encodeURIComponent(first.name)}&size=w1024h768`]
+    : undefined;
+  return { title, openGraph: { title, siteName: "Hahn Media", images }, twitter: { card: "summary_large_image", images } };
 }
 
 /** Wraps every branch below (found/not-ready/empty/full) so the fonts, header, and greeting always match. */
@@ -154,7 +164,7 @@ function GalleryVideo({ token, name }: { token: string; name: string }) {
 function InvoiceLink({ bookingId }: { bookingId: string }) {
   return (
     <a
-      href={`/api/bookings/${bookingId}/invoice`}
+      href={`/api/bookings/${bookingId}/invoice?from=gallery`}
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex items-center gap-2 rounded-lg border border-[#181A1C]/15 px-5 py-2.5 text-sm font-semibold hover:bg-[#F9F4F1] transition-colors"
@@ -267,13 +277,7 @@ export default async function GalleryPage({
           <p>No photos yet — check back soon.</p>
         </div>
       ) : photos.length > 0 ? (
-        <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {photos.map((photo) => {
-            const thumbUrl = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(photo.name)}&size=w960h640`;
-            const fullUrl = `/api/gallery/${token}/thumbnail?name=${encodeURIComponent(photo.name)}&size=w2048h1536`;
-            return <GalleryPhoto key={photo.name} thumbUrl={thumbUrl} fullUrl={fullUrl} name={photo.name} />;
-          })}
-        </div>
+        <GalleryPhotoGrid token={token} names={photos.map((p) => p.name)} />
       ) : null}
 
       <footer className="w-full mt-12 pt-6 border-t border-[#181A1C]/10 text-center text-xs text-[#181A1C]/50">
