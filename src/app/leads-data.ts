@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { listings, agents, type Agent, type Listing } from "@/db/schema";
-import { desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { listings, agents, bookings, type Agent, type Listing } from "@/db/schema";
+import { and, desc, eq, getTableColumns, inArray, notExists, sql } from "drizzle-orm";
 import { applyLastContact, lastContactByAgent } from "@/lib/agentLastContact";
 import { byLeadPriority, findAttachedAgent, buildAgentLookups, isUnscored } from "@/lib/pipeline";
 import { refreshLeadSections, lastTextByAgent, isRecentlyTexted, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
@@ -95,7 +95,13 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
     db
       .select(options?.cardPhotosOnly ? { ...getTableColumns(listings), photos: cardPhotos } : getTableColumns(listings))
       .from(listings)
-      .where(eq(listings.status, "new"))
+      // A listing already booked with Lukas is his job, not a lead.
+      .where(
+        and(
+          eq(listings.status, "new"),
+          notExists(db.select({ one: sql`1` }).from(bookings).where(eq(bookings.listingId, listings.id)))
+        )
+      )
       .orderBy(desc(listings.foundAt), listings.id),
     db.select({ id: agents.id, phone: agents.phone, name: agents.name, email: agents.email }).from(agents),
     getQueuedListingIds(),
