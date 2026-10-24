@@ -514,37 +514,35 @@ export const galleryViews = pgTable("gallery_views", {
 
 export type GalleryView = typeof galleryViews.$inferSelect;
 
-export interface PortfolioPhotoRef {
-  bookingId: string;
-  /** The Dropbox filename within that booking's gallery folder. */
-  name: string;
-}
-
-export interface PortfolioHouse {
-  bookingId: string;
-  /** Snapshotted at creation — the booking's own address can change or the row can be deleted later. */
-  address: string | null;
-  city: string | null;
-  /** Filenames within that booking's gallery, in carousel order. */
-  photos: string[];
-}
-
+/**
+ * The settings of one agent page (src/app/portfolio/[slug]) — everything else
+ * on it (photos, videos, sample listings, pricing) is fixed in
+ * lib/agentPage.ts. Every field is optional so older rows still render.
+ */
 export interface PortfolioContent {
-  /** "Eugene", "Roseburg" — the hero's "Real Estate Photography & Video in {area}, Oregon" line. */
-  area: string | null;
-  /** The condensed "best of" grid, hand-picked across any of his galleries. */
-  photos: PortfolioPhotoRef[];
-  video: { youtubeId: string; title: string } | null;
-  houses: PortfolioHouse[];
+  /** "Eugene", "Roseburg" — the hero's "Real estate photo & video in {area}" and the listings heading. */
+  area?: string | null;
+  /** Agent's first name for the "Thanks for taking a look, ___" sign-off; blank hides it. */
+  agentFirstName?: string | null;
+  /** Only used in the prefilled "Book a shoot" text ("this is Sarah with ___"). */
+  brokerage?: string | null;
+  /** A key of AGENT_PAGE_VIDEOS. */
+  video?: string | null;
+  /** A key of AGENT_PAGE_PHOTOS, moved to the front of the grid. */
+  leadPhoto?: string | null;
+  showTourOfHomes?: boolean;
+  showOffer?: boolean;
+  /** Before/after split at the top. With no beforeSrc, the after photo is shown dulled as a fake "before". */
+  beforeAfter?: boolean;
+  beforeSrc?: string | null;
+  afterSrc?: string | null;
 }
 
-// A personalized portfolio page (/portfolio/[slug], served bare on
+// A personalized agent page (/portfolio/[slug], served bare on
 // gallery.lukashahn.art — see proxy.ts) sent in place of the samples email's
-// attachment, mainly for cold outreach: his own best photos, a video, and a
-// few named houses with their galleries, built in the same voice and design
-// as lukashahn.art/real-estate. agentId is for Lukas's own tracking (which
-// push notification to send, and whose name to show him) — it never appears
-// on the page itself, which carries no sign it was made for any one person.
+// attachment, mainly for cold outreach. agentId is for Lukas's own tracking
+// (which push notification to send, and whose name to show him); the page
+// only shows the first name he typed into the content, if any.
 export const portfolioLinks = pgTable("portfolio_links", {
   id: uuid("id").primaryKey().defaultRandom(),
   // Short and unrelated to any token format elsewhere (bookings.galleryToken

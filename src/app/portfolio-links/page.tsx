@@ -29,7 +29,7 @@ export default function PortfolioLinksPage() {
 async function LinkList() {
   const links = await listPortfolioLinks();
   if (links.length === 0) {
-    return <p className="text-sm text-muted-foreground">None yet — "New link" builds one from your galleries.</p>;
+    return <p className="text-sm text-muted-foreground">None yet — &quot;New link&quot; builds one.</p>;
   }
   return (
     <ul className="flex flex-col gap-3">

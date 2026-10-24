@@ -79,7 +79,7 @@ const PUBLIC_PATHS = new Set([
   "/api/compose/cold-outreach",
 ]);
 
-const PUBLIC_PREFIXES = ["/gallery/", "/portfolio/", "/api/gallery/", "/api/portfolio/", "/api/webhooks/", "/api/cron/", "/api/app/", "/.well-known/"];
+const PUBLIC_PREFIXES = ["/gallery/", "/portfolio/", "/api/gallery/", "/api/webhooks/", "/api/cron/", "/api/app/", "/.well-known/"];
 
 const HANDOFF_FILE_RE = /^\/api\/(agents|bookings)\/[^/]+\/(vcard|calendar)$/;
 
@@ -186,6 +186,8 @@ export async function proxy(req: NextRequest) {
   });
 }
 
+// agent-page/ is the agent page's static photos (public/agent-page) — public
+// on every host, and on the gallery host they'd otherwise be read as a token.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|icon\\.svg).*)"],
+  matcher: ["/((?!_next/static|_next/image|agent-page/|favicon\\.ico|manifest\\.webmanifest|icon\\.svg).*)"],
 };

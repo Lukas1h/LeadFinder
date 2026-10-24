@@ -6,28 +6,57 @@ import { db } from "@/db";
 import { agents, portfolioLinks } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { notifyPortfolioView } from "@/lib/push";
+import {
+  AGENT_PAGE_BA_DEFAULT,
+  AGENT_PAGE_PHOTOS,
+  AGENT_PAGE_VIDEOS,
+  agentPageListings,
+  type AgentPagePhoto,
+  type AgentPageVideoKey,
+} from "@/lib/agentPage";
+import { ListingCard, MutableVideo } from "./client";
 
 // Same reasoning as the gallery route: a fresh navigation from outside the
 // app, not an in-app tab switch, so there's no "instant" shell to preserve.
 export const instant = false;
 
 // Same brand pairing as the main site and the client gallery: Noto Serif for
-// the "Hahn Media" wordmark, Outfit for everything else.
-const notoSerif = Noto_Serif({ subsets: ["latin"], weight: ["400", "700"], variable: "--font-portfolio-serif" });
+// headings, Outfit for everything else.
+const notoSerif = Noto_Serif({ subsets: ["latin"], weight: ["400", "700"], style: ["normal", "italic"], variable: "--font-portfolio-serif" });
 const outfit = Outfit({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-portfolio-sans" });
 
 export const metadata: Metadata = {
-  title: "Hahn Media | Real Estate Photography & Video",
+  title: "Hahn Media | Real Estate Photo & Video",
   description: "Real estate photography, drone and video in Oregon.",
 };
 
+const PHONE = "+15414303372";
+const VCARD = [
+  "BEGIN:VCARD",
+  "VERSION:3.0",
+  "N:Hahn;Lukas;;;",
+  "FN:Lukas Hahn",
+  "ORG:Hahn Media",
+  "TITLE:Real Estate Photo & Video",
+  `TEL;TYPE=CELL:${PHONE}`,
+  "EMAIL;TYPE=WORK:lukas@lukashahn.art",
+  "URL:https://lukashahn.art/real-estate",
+  "ADR;TYPE=WORK:;;;Eugene;OR;;USA",
+  "NOTE:Real estate photography\\, walkthrough video & drone. Eugene & Roseburg.",
+  "END:VCARD",
+].join("\r\n");
+const VCARD_HREF = "data:text/vcard;charset=utf-8," + encodeURIComponent(VCARD);
+const VCARD_NAME = "Lukas Hahn - Hahn Media.vcf";
+
+const serif = "font-[family-name:var(--font-portfolio-serif)]";
+const gridClass = "grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-3";
+
 /**
- * A personalized portfolio page, sent in place of the samples email's
- * attachment (mainly for cold outreach) — built in the same voice and
- * design as lukashahn.art/real-estate, but with no sign anywhere that it
- * was made for any one agent. Content is hand-picked per link
- * (src/app/portfolio-links); the page itself just renders it and records
- * the view.
+ * A personalized agent page — Lukas's "Hahn Media Agent Page" design — sent
+ * in place of the samples email's attachment (mainly for cold outreach).
+ * Photos, videos and sample listings are fixed (lib/agentPage.ts); the link's
+ * content only picks the area, video, lead photo, a first name for the
+ * sign-off and a few toggles (src/app/portfolio-links).
  *
  * Public, no login — the slug is the only access control, same spirit as
  * the client gallery's token.
@@ -36,7 +65,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
   const { slug } = await params;
   const [link] = await db.select().from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
   if (!link) notFound();
-  const { content } = link;
+  const c = link.content;
 
   after(async () => {
     await db
@@ -53,159 +82,270 @@ export default async function PortfolioPage({ params }: { params: Promise<{ slug
     await notifyPortfolioView(agentName, link.viewCount + 1).catch((err) => console.error("portfolio view push failed", err));
   });
 
-  const photoUrl = (bookingId: string, name: string, size: string) =>
-    `/api/portfolio/${slug}/photo?bookingId=${bookingId}&name=${encodeURIComponent(name)}&size=${size}`;
+  const area = c.area?.trim() || "Eugene";
+  const firstName = c.agentFirstName?.trim() || "";
+  const brokerage = c.brokerage?.trim() || "";
+  const video = AGENT_PAGE_VIDEOS[(c.video ?? "summit") as AgentPageVideoKey] ?? AGENT_PAGE_VIDEOS.summit;
+  const showOffer = c.showOffer ?? true;
+  const showTour = c.showTourOfHomes ?? true;
+
+  const photos = AGENT_PAGE_PHOTOS.slice();
+  const lead = photos.findIndex((p) => p.key === c.leadPhoto);
+  if (lead > 0) photos.unshift(photos.splice(lead, 1)[0]);
+
+  const ba = c.beforeAfter
+    ? (() => {
+        const after = c.afterSrc?.trim() || AGENT_PAGE_BA_DEFAULT.after;
+        const before = c.beforeSrc?.trim() || (c.afterSrc?.trim() ? null : AGENT_PAGE_BA_DEFAULT.before);
+        return { after, before: before ?? after, dulled: !before };
+      })()
+    : null;
+  const gridTop = ba ? photos.slice(0, 4) : [];
+  const gridBottom = ba ? photos.slice(4, 8) : photos.slice(0, 8);
+  const featureLast = photos[9];
+
+  const who = firstName ? `this is ${firstName}${brokerage ? ` with ${brokerage}` : ""}. ` : "";
+  const bookHref = `sms:${PHONE}?&body=` + encodeURIComponent(`Hi Lukas, ${who}I'd like to book a shoot for a listing in ${area}.`);
 
   return (
-    <div className={`${notoSerif.variable} ${outfit.variable} min-h-screen bg-[#F9F4F1] antialiased`}>
-      <header className="sticky inset-x-0 top-0 z-50 border-b border-[#181A1C]/10 bg-white/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5 sm:px-6">
-          <div className="flex flex-col leading-none">
-            <span className="font-[family-name:var(--font-portfolio-serif)] text-2xl font-bold tracking-tight text-[#181A1C] sm:text-3xl">
-              Hahn Media
-            </span>
-            <span className="mt-0.5 font-[family-name:var(--font-portfolio-sans)] text-[9px] font-medium uppercase tracking-[0.3em] text-[#181A1C]/70 sm:text-[10px]">
-              Real Estate Photo &amp; Video
-            </span>
-          </div>
+    <div className={`${notoSerif.variable} ${outfit.variable} min-h-screen scroll-smooth bg-white font-[family-name:var(--font-portfolio-sans)] text-[#181A1C] antialiased`}>
+      <header className="sticky top-0 z-50 border-b border-[#181A1C]/10 bg-white/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1152px] items-center justify-between gap-4 px-[clamp(16px,3vw,24px)] py-5">
+          <a href="#top" className="flex flex-col leading-none text-[#181A1C]">
+            <span className={`${serif} text-[clamp(24px,3vw,30px)] font-bold tracking-[-0.025em]`}>Hahn Media</span>
+            <span className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.3em] text-[#181A1C]/70">Real Estate Photo &amp; Video</span>
+          </a>
+          <a
+            href={VCARD_HREF}
+            download={VCARD_NAME}
+            className="inline-flex min-h-11 items-center whitespace-nowrap border border-[#181A1C] px-[22px] text-xs font-medium uppercase tracking-[0.3em] text-[#181A1C] hover:bg-[#181A1C] hover:text-white"
+          >
+            Save contact
+          </a>
         </div>
       </header>
 
-      <main className="font-[family-name:var(--font-portfolio-sans)]">
+      <main id="top">
         {/* Hero */}
-        <section className="w-full px-4 pt-14 pb-8 text-center">
-          <h1 className="mb-3 text-xs font-medium uppercase tracking-[0.4em] text-[#995000]">
-            Real Estate Photography &amp; Video{content.area ? ` in ${content.area}` : ""}, Oregon
-          </h1>
-          <p className="mx-auto max-w-2xl font-[family-name:var(--font-portfolio-serif)] text-3xl font-bold leading-tight tracking-tight text-[#D67F1F] md:text-4xl">
-            Cinematic media that sells listings quicker.
-          </p>
-          <div className="mx-auto mt-4 h-[2px] w-11 bg-[#995000]" />
+        <section className="px-4 pt-[clamp(32px,5vw,56px)] pb-[clamp(28px,4vw,40px)] text-center">
+          <div className="mx-auto flex max-w-[760px] flex-col items-center">
+            {showTour && (
+              <p className="mb-3.5 text-[13px] font-medium uppercase tracking-[0.2em] text-[#995000]">Featured in the Eugene Tour of Homes</p>
+            )}
+            <h1 className={`${serif} text-[clamp(34px,5.6vw,58px)] font-bold leading-[1.1] tracking-[-0.02em] text-balance`}>
+              Real estate photo &amp; video in <span className="text-[#D67F1F]">{area}</span>
+            </h1>
+            <p className="mt-4 text-[clamp(17px,2vw,20px)] text-[#181A1C]/75">Cinematic media that sells listings quicker.</p>
+            {showOffer && (
+              <a href={bookHref} className="mt-5 inline-flex items-baseline gap-2.5 bg-[#F9F4F1] px-5 py-2.5 text-[#181A1C] hover:bg-[#F3EAE3]">
+                <span className={`${serif} text-base font-bold text-[#D67F1F]`}>$50 off</span>
+                <span className="text-base font-medium">your first shoot</span>
+              </a>
+            )}
+          </div>
         </section>
 
-        {/* Photo portfolio */}
-        {content.photos.length > 0 && (
-          <section className="mx-auto max-w-5xl px-4 py-10">
-            <h2 className="mb-4 text-center text-xs font-medium uppercase tracking-[0.3em] text-[#181A1C]/70">
-              Photo Portfolio
-            </h2>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-              {content.photos.map((p, i) => (
-                <div
-                  key={`${p.bookingId}-${p.name}`}
-                  className="relative aspect-[3/2] overflow-hidden rounded-lg border border-[#181A1C]/10 bg-[#F9F4F1]"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- proxied Dropbox photo */}
+        {/* Portfolio */}
+        <section id="portfolio" className="px-4">
+          <div className="mx-auto max-w-[1040px]">
+            {ba && (
+              <>
+                <div className="relative aspect-[3/2] w-full overflow-hidden bg-[#F9F4F1]">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- before/after overlay */}
+                  <img src={ba.after} alt="After editing" className="absolute inset-0 h-full w-full object-cover" />
+                  {/* eslint-disable-next-line @next/next/no-img-element -- before/after overlay */}
                   <img
-                    src={photoUrl(p.bookingId, p.name, "w640h480")}
-                    alt="Real estate photography by Hahn Media, Oregon"
-                    loading={i < 4 ? undefined : "lazy"}
-                    className="h-full w-full object-cover"
+                    src={ba.before}
+                    alt="Before editing"
+                    className="absolute inset-0 h-full w-full object-cover [clip-path:polygon(0_0,58%_0,42%_100%,0_100%)]"
+                    style={ba.dulled ? { filter: "brightness(0.72) saturate(0.55) contrast(0.88) sepia(0.12)" } : undefined}
                   />
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Video */}
-        {content.video && (
-          <section className="px-4 pb-4">
-            <h2 className="mb-4 text-center text-xs font-medium uppercase tracking-[0.3em] text-[#181A1C]/70">
-              {content.video.title}
-            </h2>
-            <div className="relative mx-auto aspect-video max-w-3xl overflow-hidden border border-[#181A1C]/10 shadow-xl shadow-black/10">
-              <iframe
-                src={`https://www.youtube-nocookie.com/embed/${content.video.youtubeId}?rel=0&modestbranding=1`}
-                title={content.video.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="absolute inset-0 h-full w-full"
-              />
-            </div>
-          </section>
-        )}
-
-        {/* Houses */}
-        {content.houses.length > 0 && (
-          <section className="mx-auto max-w-5xl px-4 py-10">
-            <h2 className="mb-6 text-center text-xs font-medium uppercase tracking-[0.3em] text-[#181A1C]/70">
-              Recent Work
-            </h2>
-            <div className="flex flex-col gap-8">
-              {content.houses.map((house) => (
-                <div key={house.bookingId}>
-                  <p className="mb-2 text-sm font-medium text-[#181A1C]">
-                    {house.address}
-                    {house.city ? <span className="text-[#181A1C]/60"> · {house.city}</span> : null}
-                  </p>
-                  <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] snap-x snap-mandatory">
-                    {house.photos.map((name) => (
-                      <div
-                        key={name}
-                        className="relative aspect-[3/2] w-64 shrink-0 snap-start overflow-hidden rounded-lg border border-[#181A1C]/10 bg-[#F9F4F1] sm:w-80"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- proxied Dropbox photo */}
-                        <img
-                          src={photoUrl(house.bookingId, name, "w960h640")}
-                          alt={`${house.address ?? "Listing"} — real estate photography by Hahn Media, Oregon`}
-                          loading="lazy"
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    ))}
+                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
+                    <line x1="58" y1="0" x2="42" y2="100" stroke="#ffffff" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                  </svg>
+                  <span className="absolute top-4 left-4 bg-white/92 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]">Before</span>
+                  <span className="absolute top-4 right-4 bg-white/92 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]">After</span>
+                  <div className={`${serif} absolute right-4 bottom-4 max-w-[calc(100%-32px)] bg-white/94 px-[18px] py-3 text-[clamp(15px,1.8vw,19px)] font-bold leading-[1.3]`}>
+                    Preview of what your listing could look like
                   </div>
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
+                <PhotoGrid photos={gridTop} className="mt-3" />
+                <div className="h-3" />
+              </>
+            )}
+            <MutableVideo id={video.id} title={video.title} />
+            <PhotoGrid photos={gridBottom} className="mt-3" />
+            {featureLast && (
+              // eslint-disable-next-line @next/next/no-img-element -- static sample photo
+              <img src={featureLast.src} alt={featureLast.alt} loading="lazy" className="mt-3 aspect-[3/2] w-full bg-[#F9F4F1] object-cover" />
+            )}
+          </div>
+        </section>
 
-        {/* What sets it apart */}
-        <section className="mx-auto max-w-4xl px-4 py-10 text-center">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {/* Why Hahn Media */}
+        <section className="px-4 pt-[clamp(56px,8vw,88px)]">
+          <div className="mx-auto grid max-w-[1040px] grid-cols-[repeat(auto-fit,minmax(240px,1fr))] bg-[#F9F4F1] text-center">
             {[
-              "24-Hour Turnaround",
-              "Free Reshoots",
-              "Flexible Last-Minute Scheduling",
-              "Edited In-House by a Human, Not AI",
-            ].map((line) => (
-              <div key={line} className="rounded-lg border border-[#181A1C]/10 bg-white px-3 py-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#D67F1F]">{line}</p>
+              { title: "Quick turnaround", body: <>Shot within a day or two of booking. Photos delivered in <b>24 hours</b>.</> },
+              { title: "Edited by hand, not AI", body: <>Every photo is edited in house by a <b>real person</b>.</> },
+              {
+                title: "Licensed and insured",
+                body: <><b>FAA Part 107</b> certified drone pilot, fully <b>insured</b>. Your listing and your brokerage are covered.</>,
+              },
+            ].map((f, i) => (
+              <div key={f.title} className={`px-[clamp(24px,3vw,36px)] py-[30px] ${i > 0 ? "border-l border-[#181A1C]/10" : ""}`}>
+                <h3 className={`${serif} text-[21px] font-bold`}>{f.title}</h3>
+                <p className="mt-2 text-base leading-[1.55] text-pretty text-[#181A1C]/78">{f.body}</p>
               </div>
             ))}
           </div>
+        </section>
+
+        {/* Recent listings */}
+        <section className="px-4 pt-[clamp(64px,9vw,104px)]">
+          <div className="mx-auto max-w-[1040px]">
+            <h2 className={`${serif} mb-[clamp(32px,5vw,48px)] text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>
+              Recent listings near {area}
+            </h2>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-4">
+              {agentPageListings(area).map((l) => (
+                <ListingCard key={l.id} listing={l} />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Testimonial */}
+        <section className="mt-[clamp(64px,9vw,104px)] bg-[#F9F4F1] px-4 py-[clamp(56px,8vw,88px)]">
+          <figure className="mx-auto max-w-[720px] text-center">
+            <div className={`${serif} text-[64px] font-bold leading-[0.6] text-[#D67F1F]`}>“</div>
+            <blockquote className={`${serif} mt-4 text-[clamp(19px,2.3vw,23px)] leading-[1.6] font-normal text-pretty`}>
+              <p>
+                I can’t recommend Lukas enough! <strong className="font-bold">The photos for my listing were amazing</strong>, and he went above
+                and beyond by helping my client remove some remaining belongings from the property.
+              </p>
+              <p className="mt-[18px]">
+                It’s rare to find someone who provides such great work while also genuinely caring about the people they’re working with.{" "}
+                <strong className="font-bold">I would highly recommend him to anyone looking for a talented and dependable photographer.</strong>
+              </p>
+            </blockquote>
+            <figcaption className="mt-7 flex flex-col items-center gap-1">
+              <span className="text-base font-semibold">Serenity Thompson</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-[#995000]">Oregon Live Homes</span>
+              <a
+                href="https://maps.app.goo.gl/WMhhHxSnYozHLfBP8"
+                target="_blank"
+                rel="noopener"
+                className="mt-2.5 border-b border-[#995000]/35 pb-0.5 text-sm text-[#995000] hover:text-[#D67F1F]"
+              >
+                Read more reviews on Google
+              </a>
+            </figcaption>
+          </figure>
         </section>
 
         {/* Pricing */}
-        <section className="mx-auto max-w-4xl px-4 py-10">
-          <h2 className="mb-6 text-center text-xs font-medium uppercase tracking-[0.3em] text-[#181A1C]/70">Pricing</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {[
-              { name: "Interior / Exterior Photography", note: "+$100 Aerial Drone Footage", price: "$300" },
-              { name: "Walkthrough Video", note: "+$100 Social Media Edit", price: "$400" },
-              { name: "Photography & Walkthrough Video", note: "Including Drone & Social", price: "$700" },
-            ].map((tier) => (
-              <div key={tier.name} className="rounded-lg border border-[#181A1C]/10 bg-white p-6 text-center">
-                <p className="text-sm font-medium text-[#181A1C]">{tier.name}</p>
-                <p className="mt-1 text-xs text-[#181A1C]/60">{tier.note}</p>
-                <p className="mt-3 font-[family-name:var(--font-portfolio-serif)] text-2xl font-bold text-[#D67F1F]">{tier.price}</p>
+        <section id="pricing" className="px-4 pt-[clamp(64px,9vw,104px)]">
+          <div className="mx-auto max-w-[672px]">
+            <h2 className={`${serif} text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>Pricing</h2>
+            <div className="mt-[clamp(28px,4vw,40px)] border-t border-[#181A1C]/15">
+              <PriceRow name="Interior & Exterior Photography" addOns={["+$100 Aerial Drone Photography", "+$50 Floor Plans"]} price="$300" />
+              <PriceRow name="Walkthrough Video" addOns={["+$100 Agent On-Camera Video"]} price="$400" />
+              <div className="flex items-start justify-between gap-6 bg-[#F9F4F1] px-5 py-7">
+                <div>
+                  <p className="text-lg font-semibold">The Full Package</p>
+                  <p className="mt-2 text-[15px] leading-normal text-[#181A1C]/75">Photography &amp; walkthrough video, including drone and social media edit.</p>
+                </div>
+                <div className="text-right">
+                  <p className={`${serif} whitespace-nowrap text-[30px] font-bold text-[#D67F1F]`}>$700</p>
+                  <p className="mt-1 whitespace-nowrap text-xs font-semibold uppercase tracking-[0.14em] text-[#995000]">Save $200</p>
+                </div>
               </div>
-            ))}
+            </div>
           </div>
         </section>
 
-        {/* Contact */}
-        <section className="border-t border-[#181A1C]/10 px-4 py-10 text-center">
-          <p className="text-sm text-[#181A1C]/70">Reach out to book your shoot.</p>
-          <p className="mt-2 text-sm font-medium text-[#181A1C]">
-            <a href="mailto:lukas@lukashahn.art" className="hover:text-[#D67F1F]">
-              lukas@lukashahn.art
-            </a>{" "}
-            · <a href="tel:+15414303372" className="hover:text-[#D67F1F]">(541) 430-3372</a>
-          </p>
+        {/* Book */}
+        <section id="book" className="px-4 pt-[clamp(72px,10vw,120px)] pb-[clamp(80px,11vw,128px)]">
+          <div className="mx-auto max-w-[880px]">
+            <h2
+              className={`${serif} mb-[clamp(32px,5vw,48px)] text-center text-[clamp(30px,4.4vw,44px)] font-bold leading-[1.15] tracking-[-0.02em] text-balance text-[#D67F1F]`}
+            >
+              Let’s work on your next listing.
+            </h2>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-4">
+              <div className="flex flex-col items-start bg-[#F9F4F1] p-[clamp(28px,4vw,40px)]">
+                <h3 className={`${serif} text-[26px] font-bold`}>No listing right now?</h3>
+                <p className="mt-2.5 mb-6 text-base leading-[1.55] text-pretty text-[#181A1C]/78">
+                  Save my contact so I’m one tap away when your next one comes up.
+                </p>
+                <a
+                  href={VCARD_HREF}
+                  download={VCARD_NAME}
+                  className="mt-auto inline-flex min-h-14 items-center border border-[#181A1C] bg-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-white hover:bg-white hover:text-[#181A1C]"
+                >
+                  Save my contact
+                </a>
+              </div>
+              <div className="flex flex-col items-start border border-[#181A1C]/15 p-[clamp(28px,4vw,40px)]">
+                <h3 className={`${serif} text-[26px] font-bold`}>Have a listing?</h3>
+                <p className="mt-2.5 mb-6 text-base leading-[1.55] text-pretty text-[#181A1C]/78">Your first shoot is $50 off.</p>
+                <a
+                  href={bookHref}
+                  className="mt-auto inline-flex min-h-14 items-center border border-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-[#181A1C] hover:bg-[#181A1C] hover:text-white"
+                >
+                  Book a shoot
+                </a>
+              </div>
+            </div>
+            <p className="mx-auto mt-8 max-w-[480px] text-center text-[15px] leading-[1.55] text-pretty text-[#181A1C]/72">
+              Every shoot guaranteed. If you are not happy with the images, I reshoot at no cost.
+            </p>
+            {firstName && (
+              <p className={`${serif} mt-12 text-center text-xl italic leading-normal`}>
+                Thanks for taking a look, {firstName}. Talk soon!
+                <br />
+                <span className="font-[family-name:var(--font-portfolio-sans)] text-[15px] not-italic text-[#181A1C]/70">— Lukas</span>
+              </p>
+            )}
+          </div>
         </section>
       </main>
+
+      <footer className="border-t border-[#181A1C]/10 px-4 py-7">
+        <div className="mx-auto flex max-w-[1152px] flex-wrap justify-between gap-x-6 gap-y-2 text-[13px] text-[#181A1C]/62">
+          <span>Hahn Media · Lukas Hahn</span>
+          <span>Eugene &amp; Roseburg, Oregon</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function PhotoGrid({ photos, className }: { photos: AgentPagePhoto[]; className?: string }) {
+  if (photos.length === 0) return null;
+  return (
+    <div className={`${gridClass} ${className ?? ""}`}>
+      {photos.map((p) => (
+        // eslint-disable-next-line @next/next/no-img-element -- static sample photo
+        <img key={p.key} src={p.src} alt={p.alt} loading="lazy" className="aspect-[3/2] w-full bg-[#F9F4F1] object-cover" />
+      ))}
+    </div>
+  );
+}
+
+function PriceRow({ name, addOns, price }: { name: string; addOns: string[]; price: string }) {
+  return (
+    <div className="flex items-start justify-between gap-6 border-b border-[#181A1C]/15 px-1 py-7">
+      <div>
+        <p className="text-lg">{name}</p>
+        {addOns.map((a, i) => (
+          <p key={a} className={`${i === 0 ? "mt-2" : "mt-1.5"} text-xs uppercase tracking-[0.15em] text-[#181A1C]/62`}>
+            {a}
+          </p>
+        ))}
+      </div>
+      <p className="font-[family-name:var(--font-portfolio-serif)] whitespace-nowrap text-[26px] font-bold">{price}</p>
     </div>
   );
 }
