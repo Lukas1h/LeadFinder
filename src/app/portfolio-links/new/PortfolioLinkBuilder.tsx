@@ -450,7 +450,7 @@ function JobSearch({ exclude, onPick }: { exclude: string[]; onPick: (job: Portf
   );
 }
 
-const LISTING_FIELDS: { key: keyof Omit<PortfolioListing, "bookingId" | "photos">; label: string; wide?: boolean }[] = [
+const LISTING_FIELDS: { key: keyof Omit<PortfolioListing, "bookingId">; label: string; wide?: boolean }[] = [
   { key: "address", label: "Address", wide: true },
   { key: "city", label: "City", wide: true },
   { key: "status", label: "Badge" },
@@ -485,7 +485,7 @@ function ListingEditor({
           </label>
         ))}
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">Photos: the first few from this job&apos;s gallery.</p>
+      <p className="mt-2 text-xs text-muted-foreground">Photos: 10 from across this job&apos;s gallery, front exterior first.</p>
     </div>
   );
 }

@@ -16,7 +16,6 @@ import {
 } from "@/db/schema";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { largestPhotoUrl } from "@/lib/photoEdit";
-import { listGalleryMedia } from "@/lib/dropbox";
 import { agentPageRegion } from "@/lib/agentPage";
 import { formatPrice } from "@/lib/format";
 import { marketNews } from "@/lib/marketStatus";
@@ -136,7 +135,6 @@ async function finishedJobs(extra?: ReturnType<typeof or>, limit = 60): Promise<
       city: [r.city, [r.state ?? "OR", r.zipcode].filter(Boolean).join(" ")].filter(Boolean).join(", "),
       agent: r.listingAgent ?? r.contactName ?? "",
       brokerage: r.listingBroker ?? r.contactBrokerage ?? "",
-      photos: [],
     };
     return { listing, city: r.city ?? "" };
   });
@@ -169,29 +167,11 @@ export async function uploadPortfolioImage(formData: FormData): Promise<{ url: s
   return { url: `/api/portfolio-image/${row.id}` };
 }
 
-const PHOTOS_PER_LISTING = 8;
-
-/** Each card's carousel is the first few photos of that job's gallery, as it is now — for any listing without photos yet. */
-async function withListingPhotos(cards: PortfolioListing[]): Promise<PortfolioListing[]> {
-  return Promise.all(
-    cards.map(async (l) => {
-      if (l.photos.length > 0) return l;
-      const [booking] = await db.select({ link: bookings.dropboxFolderLink }).from(bookings).where(eq(bookings.id, l.bookingId));
-      if (!booking?.link) throw new Error(`${l.address || "A listing"} has no gallery`);
-      const { photos } = await listGalleryMedia(booking.link).catch(() => {
-        throw new Error(`Couldn't read the gallery for ${l.address || "a listing"}`);
-      });
-      return { ...l, photos: photos.slice(0, PHOTOS_PER_LISTING).map((p) => p.name) };
-    })
-  );
-}
-
 export async function createPortfolioLinkAction(
   agentId: string | null,
   content: PortfolioContent
 ): Promise<{ slug: string; url: string }> {
-  const withPhotos = await withListingPhotos(content.listings ?? []);
-  const { slug } = await createPortfolioLink(agentId, { ...content, listings: withPhotos });
+  const { slug } = await createPortfolioLink(agentId, content);
   return { slug, url: portfolioUrl(slug) };
 }
 
@@ -404,11 +384,7 @@ export async function getPortfolioLinkForEdit(linkId: string): Promise<{
 
 /** Saves changes to a link in place — same URL, same activity. */
 export async function updatePortfolioLinkAction(linkId: string, agentId: string | null, content: PortfolioContent): Promise<{ slug: string; url: string }> {
-  const [row] = await db.select({ slug: portfolioLinks.slug, content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.id, linkId));
+  const [row] = await db.update(portfolioLinks).set({ agentId, content }).where(eq(portfolioLinks.id, linkId)).returning({ slug: portfolioLinks.slug });
   if (!row) throw new Error("That link no longer exists");
-  // Listings already on the page keep their photos; new ones get theirs from the gallery.
-  const kept = new Map((row.content.listings ?? []).map((l) => [l.bookingId, l.photos]));
-  const withPhotos = await withListingPhotos((content.listings ?? []).map((l) => ({ ...l, photos: kept.get(l.bookingId) ?? [] })));
-  await db.update(portfolioLinks).set({ agentId, content: { ...content, listings: withPhotos } }).where(eq(portfolioLinks.id, linkId));
   return { slug: row.slug, url: portfolioUrl(row.slug) };
 }

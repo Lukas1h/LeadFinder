@@ -61,7 +61,8 @@ export function MutableVideo({ id, title }: { id: string; title: string }) {
 const arrowButton =
   "absolute top-1/2 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[22px] border-0 bg-white/90 shadow-[0_1px_4px_rgba(0,0,0,0.2)] hover:bg-white";
 
-export function ListingCard({ listing: l }: { listing: PortfolioListing }) {
+/** A listing card; `photos` are ready-to-load URLs, empty while they stream in. */
+export function ListingCard({ listing: l }: { listing: PortfolioListing & { photos: string[] } }) {
   const [idx, setIdx] = useState(0);
   const n = l.photos.length;
   const step = (dir: number) => setIdx((i) => (i + dir + n) % n);

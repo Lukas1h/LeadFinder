@@ -4,8 +4,10 @@ import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
 import { db } from "@/db";
-import { agents, portfolioLinks } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { agents, bookings, portfolioLinks, type PortfolioListing } from "@/db/schema";
+import { eq, inArray, sql } from "drizzle-orm";
+import { Suspense } from "react";
+import { listingCardPhotoNames } from "@/lib/listingCardPhotos";
 import { notifyPortfolioView } from "@/lib/push";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
@@ -140,10 +142,7 @@ export default async function PortfolioPage({
   const gridTop = ba ? photos.slice(0, 4) : [];
   const gridBottom = ba ? photos.slice(4, 10) : photos.slice(0, 6);
   const featureLast = ba ? null : photos[photos.length - 1];
-  const listings = (c.listings ?? []).map((l) => ({
-    ...l,
-    photos: l.photos.map((name) => `/api/portfolio/${slug}/listing-photo?bookingId=${l.bookingId}&name=${encodeURIComponent(name)}`),
-  }));
+  const listings = c.listings ?? [];
 
   const who = firstName ? `this is ${firstName}${brokerage ? ` with ${brokerage}` : ""}. ` : "";
   const bookHref = `sms:${PHONE}?&body=` + encodeURIComponent(`Hi Lukas, ${who}I'd like to book a shoot for a listing in ${area}.`);
@@ -304,9 +303,10 @@ export default async function PortfolioPage({
                 Recent listings near {area}
               </h2>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-4">
-                {listings.map((l) => (
-                  <ListingCard key={l.bookingId} listing={l} />
-                ))}
+                {/* The cards' photos come from Dropbox, so they stream in after the rest of the page. */}
+                <Suspense fallback={listings.map((l) => <ListingCard key={l.bookingId} listing={{ ...l, photos: [] }} />)}>
+                  <ListingCards slug={slug} listings={listings} />
+                </Suspense>
               </div>
             </div>
           </section>
@@ -431,6 +431,26 @@ export default async function PortfolioPage({
       </footer>
     </div>
   );
+}
+
+/** Each card with its photos (lib/listingCardPhotos.ts), served through the slug-scoped photo route. */
+async function ListingCards({ slug, listings }: { slug: string; listings: PortfolioListing[] }) {
+  const rows = await db
+    .select({ id: bookings.id, link: bookings.dropboxFolderLink })
+    .from(bookings)
+    .where(inArray(bookings.id, listings.map((l) => l.bookingId)));
+  const links = new Map(rows.map((r) => [r.id, r.link]));
+  const cards = await Promise.all(
+    listings.map(async (l) => {
+      const link = links.get(l.bookingId);
+      const names = link ? await listingCardPhotoNames(link).catch(() => []) : [];
+      return {
+        ...l,
+        photos: names.map((name) => `/api/portfolio/${slug}/listing-photo?bookingId=${l.bookingId}&name=${encodeURIComponent(name)}`),
+      };
+    })
+  );
+  return cards.map((l) => <ListingCard key={l.bookingId} listing={l} />);
 }
 
 /**

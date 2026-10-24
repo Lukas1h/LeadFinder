@@ -529,8 +529,7 @@ export interface PortfolioListing {
   /** The listing agent and brokerage line under the card. */
   agent: string;
   brokerage: string;
-  /** Dropbox filenames in that booking's gallery, in carousel order — set when the link is created. */
-  photos: string[];
+  // Its photos aren't stored: lib/listingCardPhotos.ts picks them from the gallery on each view.
 }
 
 /**
