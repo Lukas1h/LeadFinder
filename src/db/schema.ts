@@ -646,6 +646,19 @@ export const portfolioEvents = pgTable("portfolio_events", {
   at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// A photo of a town (a drone shot of Roseburg…) used as an agent page's link
+// preview when the page has no before/after of its own: matched on the page's
+// area, case-insensitively. Set on /portfolio-links/settings.
+export const portfolioTownImages = pgTable("portfolio_town_images", {
+  // Lowercased and trimmed, the way it's matched.
+  town: text("town").primaryKey(),
+  // As typed, for showing.
+  label: text("label").notNull(),
+  // /api/portfolio-image/<id>, like a before/after.
+  imageSrc: text("image_src").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type PortfolioLink = typeof portfolioLinks.$inferSelect;
 export type NewPortfolioLink = typeof portfolioLinks.$inferInsert;
 

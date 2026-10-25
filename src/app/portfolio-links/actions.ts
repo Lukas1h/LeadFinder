@@ -10,6 +10,7 @@ import {
   portfolioImages,
   portfolioLinks,
   portfolioSessions,
+  portfolioTownImages,
   type PortfolioContent,
   type PortfolioEvent,
   type PortfolioListing,
@@ -387,4 +388,45 @@ export async function updatePortfolioLinkAction(linkId: string, agentId: string 
   const [row] = await db.update(portfolioLinks).set({ agentId, content }).where(eq(portfolioLinks.id, linkId)).returning({ slug: portfolioLinks.slug });
   if (!row) throw new Error("That link no longer exists");
   return { slug: row.slug, url: portfolioUrl(row.slug) };
+}
+
+export interface TownImage {
+  town: string;
+  label: string;
+  imageSrc: string;
+}
+
+/** The town photos (link previews for pages without a before/after), A–Z. */
+export async function listTownImages(): Promise<TownImage[]> {
+  return db
+    .select({ town: portfolioTownImages.town, label: portfolioTownImages.label, imageSrc: portfolioTownImages.imageSrc })
+    .from(portfolioTownImages)
+    .orderBy(asc(portfolioTownImages.town));
+}
+
+/** Areas links already use, or agents list in, that have no town photo yet, most common first. */
+export async function townsWithoutImages(): Promise<string[]> {
+  const rows = await db.execute<{ town: string }>(sql`
+    select initcap(t.town) as town from (
+      select lower(trim(content->>'area')) as town from portfolio_links where coalesce(trim(content->>'area'), '') <> ''
+      union all
+      select lower(trim(home_city)) from agents where coalesce(trim(home_city), '') <> ''
+    ) t
+    where t.town not in (select town from portfolio_town_images)
+    group by t.town order by count(*) desc limit 20`);
+  return rows.rows.map((r) => r.town);
+}
+
+export async function saveTownImage(label: string, imageSrc: string): Promise<void> {
+  const trimmed = label.trim();
+  if (!trimmed) throw new Error("Which town is it?");
+  if (!/^\/api\/portfolio-image\/[0-9a-f-]{36}$/i.test(imageSrc)) throw new Error("Upload a photo first");
+  await db
+    .insert(portfolioTownImages)
+    .values({ town: trimmed.toLowerCase(), label: trimmed, imageSrc })
+    .onConflictDoUpdate({ target: portfolioTownImages.town, set: { label: trimmed, imageSrc, updatedAt: new Date() } });
+}
+
+export async function deleteTownImage(town: string): Promise<void> {
+  await db.delete(portfolioTownImages).where(eq(portfolioTownImages.town, town));
 }

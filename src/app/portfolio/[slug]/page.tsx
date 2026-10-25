@@ -1,15 +1,17 @@
+import { createHash } from "node:crypto";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
 import { db } from "@/db";
-import { agents, bookings, portfolioLinks, type PortfolioListing } from "@/db/schema";
+import { agents, bookings, portfolioLinks, portfolioTownImages, type PortfolioContent, type PortfolioListing } from "@/db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import { Suspense } from "react";
 import { listingCardPhotoNames } from "@/lib/listingCardPhotos";
 import { notifyPortfolioView } from "@/lib/push";
-import { MAIN_SITE_URL, PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
+import { PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
+import { LUKAS_PHONE as PHONE } from "@/lib/agentVcard";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { ListingCard, MutableVideo } from "./client";
@@ -35,10 +37,26 @@ const outfit = Outfit({
 
 const SITE = PORTFOLIO_ORIGIN;
 
+async function previewImage(slug: string, c: PortfolioContent | undefined): Promise<string> {
+  const absolute = (src: string) => (src.startsWith("http") ? src : `${SITE}${src}`);
+  if (c?.beforeAfter && c.afterSrc?.trim()) {
+    // The version changes with the photos, so a preview cached for the old pair isn't reused.
+    const v = createHash("sha1").update(`${c.beforeSrc ?? ""}|${c.afterSrc}`).digest("hex").slice(0, 10);
+    return `${SITE}/api/portfolio/${slug}/og-image?v=${v}`;
+  }
+  const town = c?.area?.trim().toLowerCase();
+  if (town) {
+    const [row] = await db.select({ src: portfolioTownImages.imageSrc }).from(portfolioTownImages).where(eq(portfolioTownImages.town, town));
+    if (row) return absolute(row.src);
+  }
+  return absolute((AGENT_PAGE_PHOTOS.find((p) => p.key === c?.leadPhoto) ?? AGENT_PAGE_PHOTOS[0]).src);
+}
+
 /**
- * The link preview (iMessage, Facebook…): the page's hero — the before/after's
- * after photo when it has one, else the lead portfolio photo. Absolute URLs:
- * crawlers don't resolve relative og:image paths.
+ * The link preview (iMessage, Facebook…), most personal first: the page's
+ * own before/after split (drawn by /api/portfolio/[slug]/og-image), else
+ * Lukas's photo of the agent's town (/portfolio-links/settings), else the lead
+ * portfolio photo. Absolute URLs: crawlers don't resolve relative og:image paths.
  */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -47,8 +65,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const area = c?.area?.trim() || "Eugene";
   const title = `Real estate photo & video in ${area} | Hahn Media`;
   const description = "Cinematic media that sells listings quicker.";
-  const hero = (c?.beforeAfter && c.afterSrc?.trim()) || (AGENT_PAGE_PHOTOS.find((p) => p.key === c?.leadPhoto) ?? AGENT_PAGE_PHOTOS[0]).src;
-  const images = [hero.startsWith("http") ? hero : `${SITE}${hero}`];
+  const images = [await previewImage(slug, c)];
   return {
     title,
     description,
@@ -57,25 +74,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-const PHONE = "+15414303372";
-const VCARD = [
-  "BEGIN:VCARD",
-  "VERSION:3.0",
-  // "Photographer" is part of the name itself, so it shows on the card and
-  // searching contacts for "photographer" finds him.
-  "N:Hahn Photographer;Lukas;;;",
-  "FN:Lukas Hahn Photographer",
-  "ORG:Hahn Media",
-  "TITLE:Real Estate Photo & Video",
-  `TEL;TYPE=CELL:${PHONE}`,
-  "EMAIL;TYPE=WORK:lukas@lukashahn.media",
-  `URL:${MAIN_SITE_URL}`,
-  "ADR;TYPE=WORK:;;;Eugene;OR;;USA",
-  "NOTE:Real estate photography\\, walkthrough video & drone. Eugene & Roseburg.",
-  "END:VCARD",
-].join("\r\n");
-const VCARD_HREF = "data:text/vcard;charset=utf-8," + encodeURIComponent(VCARD);
-const VCARD_NAME = "Lukas Hahn - Hahn Media.vcf";
 
 const serif = "font-[family-name:var(--font-portfolio-serif)]";
 
@@ -163,8 +161,7 @@ export default async function PortfolioPage({
             </span>
           </a>
           <a
-            href={VCARD_HREF}
-            download={VCARD_NAME}
+            href={`/api/portfolio/${slug}/vcard`}
             data-track="save_contact"
             data-track-detail="header"
             className="inline-flex min-h-11 items-center whitespace-nowrap border border-[#181A1C] px-[22px] text-xs font-medium uppercase tracking-[0.3em] text-[#181A1C] hover:bg-[#181A1C] hover:text-white"
@@ -178,6 +175,9 @@ export default async function PortfolioPage({
         {/* Hero */}
         <section data-section="hero" className="px-4 pt-[clamp(32px,5vw,56px)] pb-[clamp(28px,4vw,40px)] text-center">
           <div className="mx-auto flex max-w-[760px] flex-col items-center">
+            {firstName && (
+              <p className={`${serif} mb-4 text-[clamp(18px,2.2vw,22px)] italic text-[#181A1C]`}>Thanks for taking a look, {firstName}!</p>
+            )}
             {showTour && (
               <p className="mb-3.5 text-[13px] font-medium uppercase tracking-[0.2em] text-[#995000]">
                 Featured in the Eugene Tour of Homes
@@ -198,6 +198,9 @@ export default async function PortfolioPage({
                 <span className="text-base font-medium">your first shoot</span>
               </a>
             )}
+            <p className="mt-4 max-w-[420px] text-[15px] leading-[1.5] text-pretty text-[#181A1C]/72">
+              <span className="font-semibold text-[#181A1C]">Every shoot guaranteed.</span> Not happy with the images? I reshoot at no cost.
+            </p>
           </div>
         </section>
 
@@ -234,7 +237,7 @@ export default async function PortfolioPage({
                   <div
                     className={`${serif} absolute right-2.5 bottom-2.5 max-w-[calc(100%-20px)] bg-white/94 px-2.5 py-1.5 text-xs font-bold leading-[1.3] sm:right-4 sm:bottom-4 sm:max-w-[calc(100%-32px)] sm:px-[18px] sm:py-3 sm:text-[clamp(15px,1.8vw,19px)]`}
                   >
-                    Preview of what your listing could look like
+                    Quick edit of what your listing could look like
                   </div>
                 </div>
                 <PhotoGrid photos={gridTop} desktopRows={1} className="mt-2 sm:mt-3" />
@@ -318,17 +321,13 @@ export default async function PortfolioPage({
         {/* Testimonial */}
         <section data-section="testimonial" className="mt-[clamp(64px,9vw,104px)] bg-[#F9F4F1] px-4 py-[clamp(56px,8vw,88px)]">
           <figure className="mx-auto max-w-[720px] text-center">
-            <div className={`${serif} text-[64px] font-bold leading-[0.6] text-[#D67F1F]`}>“</div>
-            <blockquote className={`${serif} mt-4 text-[clamp(19px,2.3vw,23px)] leading-[1.6] font-normal text-pretty`}>
+            <div className="text-[26px] leading-none tracking-[0.12em] text-[#D67F1F]" role="img" aria-label="5 out of 5 stars">
+              ★★★★★
+            </div>
+            <blockquote className={`${serif} mt-5 text-[clamp(20px,2.5vw,26px)] leading-[1.5] font-normal text-pretty`}>
               <p>
-                I can’t recommend Lukas enough! <strong className="font-bold">The photos for my listing were amazing</strong>, and he went
-                above and beyond by helping my client remove some remaining belongings from the property.
-              </p>
-              <p className="mt-[18px]">
-                It’s rare to find someone who provides such great work while also genuinely caring about the people they’re working with.{" "}
-                <strong className="font-bold">
-                  I would highly recommend him to anyone looking for a talented and dependable photographer.
-                </strong>
+                “I can’t recommend Lukas enough! <strong className="font-bold">The photos for my listing were amazing</strong>, and he went
+                above and beyond. <strong className="font-bold">A talented and dependable photographer.</strong>”
               </p>
             </blockquote>
             <figcaption className="mt-7 flex flex-col items-center gap-1">
@@ -362,7 +361,7 @@ export default async function PortfolioPage({
                 <div>
                   <p className="text-lg font-semibold">The Full Package</p>
                   <p className="mt-2 text-[15px] leading-normal text-[#181A1C]/75">
-                    Photography &amp; walkthrough video, including drone and social media edit.
+                    Photography &amp; walkthrough video, including drone and agent on-camera video.
                   </p>
                 </div>
                 <div className="text-right">
@@ -389,8 +388,7 @@ export default async function PortfolioPage({
                   Save my contact so I’m one tap away when your next one comes up.
                 </p>
                 <a
-                  href={VCARD_HREF}
-                  download={VCARD_NAME}
+                  href={`/api/portfolio/${slug}/vcard`}
                   data-track="save_contact"
                   data-track-detail="bottom"
                   className="mt-auto inline-flex min-h-14 items-center border border-[#181A1C] bg-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-white hover:bg-white hover:text-[#181A1C]"
@@ -411,9 +409,6 @@ export default async function PortfolioPage({
                 </a>
               </div>
             </div>
-            <p className="mx-auto mt-8 max-w-[480px] text-center text-[15px] leading-[1.55] text-pretty text-[#181A1C]/72">
-              Every shoot guaranteed. If you are not happy with the images, I reshoot at no cost.
-            </p>
             {firstName && (
               <p className={`${serif} mt-12 text-center text-xl italic leading-normal`}>
                 Thanks for taking a look, {firstName}. Talk soon!

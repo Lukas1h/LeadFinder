@@ -505,7 +505,7 @@ async function shrink(file: File): Promise<Blob> {
   );
 }
 
-function ImageUpload({ label, value, onChange }: { label: string; value: string | null; onChange: (url: string | null) => void }) {
+export function ImageUpload({ label, value, onChange }: { label: string; value: string | null; onChange: (url: string | null) => void }) {
   const [uploading, setUploading] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 

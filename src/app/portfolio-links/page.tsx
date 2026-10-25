@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { Activity, Eye, Pencil } from "lucide-react";
+import { Activity, Eye, Pencil, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import { listPortfolioLinks } from "./actions";
@@ -18,9 +18,17 @@ export default function PortfolioLinksPage() {
     <main className="mx-auto w-full max-w-2xl px-6 py-10">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Portfolio links</h1>
-        <Button asChild>
-          <Link href="/portfolio-links/new">New link</Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/portfolio-links/settings">
+              <Settings />
+              Settings
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/portfolio-links/new">New link</Link>
+          </Button>
+        </div>
       </div>
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
         <LinkList />
