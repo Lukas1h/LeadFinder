@@ -54,6 +54,7 @@ struct HomeView: View {
             .task { await appState.followUp.load() }
             .task { await appState.finances.load() }
             .task { await appState.portfolioOverview.load() }
+            .task { await appState.galleryVisits.load() }
             .task { await appState.financeJobs.load() }
             #if DEBUG
             .task {
@@ -117,6 +118,7 @@ struct HomeView: View {
             group.addTask { await state.followUp.load(force: true) }
             group.addTask { await state.finances.load(force: true) }
             group.addTask { await state.portfolioOverview.load(force: true) }
+            group.addTask { await state.galleryVisits.load(force: true) }
             group.addTask { await state.financeJobs.load(force: true) }
         }
     }
@@ -334,14 +336,14 @@ struct HomeView: View {
                         .foregroundStyle(Theme.tertiaryText)
                 }
 
-                let recent = Self.recentBookingEvents(bookings)
+                let recent = appState.galleryVisits.value?.visits ?? []
                 if !recent.isEmpty {
                     Divider().overlay(Theme.cardRaised)
                     HStack(spacing: 6) {
                         Image(systemName: "clock.arrow.circlepath")
                             .font(.caption)
                             .foregroundStyle(Theme.tertiaryText)
-                        Text("Recent activity")
+                        Text("Gallery visits")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Theme.primaryText)
                         Text("\u{00B7} last \(recent.count)")
@@ -351,8 +353,10 @@ struct HomeView: View {
                     // Its own scroll area; a tap opens the booking.
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(recent) { event in
-                                Button { openBooking = event.booking } label: { BookingEventRow(event: event) }
+                            ForEach(recent) { visit in
+                                Button {
+                                    Task { openBooking = try? await APIClient.shared.bookingDetail(visit.bookingId) }
+                                } label: { GalleryVisitRow(visit: visit) }
                                     .buttonStyle(.plain)
                             }
                         }
@@ -361,26 +365,6 @@ struct HomeView: View {
                 }
             }
         }
-    }
-
-    /// What just happened to the jobs: booked, shot, invoiced, paid. Each
-    /// stamp the server keeps on a booking is one event; newest first.
-    private static func recentBookingEvents(_ bookings: BookingsResponse) -> [BookingEvent] {
-        var seen = Set<String>()
-        let all = (bookings.upcoming + (bookings.editing ?? []) + bookings.waitingForPayment + bookings.completed)
-            .filter { seen.insert($0.id).inserted }
-        let events: [BookingEvent] = all.flatMap { booking -> [BookingEvent] in
-            [
-                ("Booked", "calendar.badge.plus", booking.createdAt),
-                ("Shot", "camera", booking.shotAt),
-                ("Invoice sent", "paperplane", booking.invoiceSentAt),
-                ("Completed", "checkmark.circle", booking.completedAt),
-            ].compactMap { title, symbol, stamp in
-                guard let stamp, let date = DateFormatting.parse(stamp) else { return nil }
-                return BookingEvent(booking: booking, title: title, symbol: symbol, at: date)
-            }
-        }
-        return Array(events.sorted { $0.at > $1.at }.prefix(12))
     }
 
     // MARK: - 5. To do
@@ -593,50 +577,58 @@ private extension String {
 
 // MARK: - Pieces
 
-/// One stamp on a booking: when it was booked, shot, invoiced or completed.
-private struct BookingEvent: Identifiable {
-    let booking: Booking
-    let title: String
-    let symbol: String
-    let at: Date
+/// A client opening or downloading from a job's gallery, as a row like the
+/// Messages history's: icon, the job, what they did, who and when.
+private struct GalleryVisitRow: View {
+    let visit: GalleryVisitsResponse.Visit
 
-    var id: String { "\(booking.id)-\(title)" }
-}
-
-/// A row like the Messages history's: icon, the job, what happened, when, and
-/// its price.
-private struct BookingEventRow: View {
-    let event: BookingEvent
+    private var info: (title: String, symbol: String, strong: Bool) {
+        switch visit.event {
+        case "view": ("Opened the gallery", "eye", false)
+        case "download_all": ("Downloaded the photos", "arrow.down.circle", true)
+        case "download_video": ("Downloaded a video", "film", true)
+        case "invoice_view": ("Opened the invoice", "doc.text", false)
+        case "staging_request": ("Asked for staging", "sparkles", true)
+        default: (visit.event, "circle", false)
+        }
+    }
 
     var body: some View {
+        let info = info
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: event.symbol)
+            Image(systemName: info.symbol)
                 .font(.callout)
-                .foregroundStyle(event.title == "Completed" ? Theme.emerald : Theme.tertiaryText)
+                .foregroundStyle(info.strong ? Theme.emerald : Theme.tertiaryText)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
-                Text(event.booking.address?.nilIfBlank ?? event.booking.city?.nilIfBlank ?? "No address")
+                Text(visit.address?.nilIfBlank ?? "No address")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Theme.primaryText)
                     .lineLimit(1)
-                Text(event.title)
+                Text(info.title)
                     .font(.caption)
                     .foregroundStyle(Theme.secondaryText)
-                Text([event.booking.contactName?.nilIfBlank, DateFormatting.dayTime.string(from: event.at)]
-                    .compactMap { $0 }
-                    .joined(separator: " \u{00B7} "))
+                    .lineLimit(1)
+                Text(sub)
                     .font(.caption2)
                     .foregroundStyle(Theme.tertiaryText)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-            Text(BookingFormat.price(event.booking.total))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Theme.primaryText)
+            if info.strong {
+                BadgeChip(text: visit.event == "staging_request" ? "Request" : "Download", tint: Theme.emerald)
+            }
         }
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    /// "Roxanne Wergeland · Oct 24, 2:34 PM · Portland, OR".
+    private var sub: String {
+        [visit.contactName?.nilIfBlank, PortfolioFormat.when(visit.at), visit.location?.nilIfBlank]
+            .compactMap { $0 }
+            .joined(separator: " \u{00B7} ")
     }
 }
 

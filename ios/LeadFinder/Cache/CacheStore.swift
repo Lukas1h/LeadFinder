@@ -10,6 +10,7 @@ enum CacheKey: String, CaseIterable {
     case callerID = "caller-id"
     case messages
     case finances
+    case galleryVisits = "gallery-visits"
     case portfolioOverview = "portfolio-overview"
     case financeJobs = "finance-jobs"
     case financeTrips = "finance-trips"

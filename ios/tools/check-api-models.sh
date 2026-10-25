@@ -36,7 +36,7 @@ done
 
 # Portfolio links: the list, then one link's activity and builder state, plus
 # the builder's lookups. All reads; nothing here creates or saves a link.
-for endpoint in portfolio-links portfolio-links/catalog portfolio-links/overview; do
+for endpoint in portfolio-links portfolio-links/catalog portfolio-links/overview bookings/gallery-visits; do
   name="$(echo "$endpoint" | tr / -)"
   curl -sf -H "Authorization: Bearer $SECRET" "$BASE/api/app/v1/$endpoint" -o "$WORK/$name.json"
   printf '  %-12s %s bytes\n' "$name" "$(wc -c < "$WORK/$name.json" | tr -d ' ')"
@@ -129,6 +129,7 @@ func checkIfThere<T: Decodable>(_ name: String, _ file: String, _ type: T.Type) 
     FileManager.default.fileExists(atPath: file) ? check(name, file, type) : true
 }
 allOK = check("portfolio-links", "\(dir)/portfolio-links.json", PortfolioLinksResponse.self) && allOK
+allOK = check("gallery-visits", "\(dir)/bookings-gallery-visits.json", GalleryVisitsResponse.self) && allOK
 allOK = check("portfolio-overview", "\(dir)/portfolio-links-overview.json", PortfolioOverview.self) && allOK
 allOK = check("portfolio-catalog", "\(dir)/portfolio-links-catalog.json", PortfolioCatalog.self) && allOK
 allOK = checkIfThere("portfolio-activity", "\(dir)/portfolio-activity.json", PortfolioActivityResponse.self) && allOK

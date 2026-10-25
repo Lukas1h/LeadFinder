@@ -993,3 +993,23 @@ struct PortfolioOverview: Codable, Sendable {
     /// Newest first.
     var events: [Event]
 }
+
+/// GET /bookings/gallery-visits: Home's recent client-gallery activity across
+/// every job, link-preview bots left out. Newest first.
+struct GalleryVisitsResponse: Codable, Sendable {
+    struct Visit: Codable, Sendable, Identifiable {
+        var id: String
+        var bookingId: String
+        var address: String?
+        var contactName: String?
+        /// view, download_all, download_video, invoice_view or staging_request.
+        var event: String
+        var detail: String?
+        var at: String
+        var location: String?
+        var device: String
+        var browser: String
+    }
+
+    var visits: [Visit]
+}

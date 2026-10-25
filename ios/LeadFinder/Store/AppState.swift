@@ -74,6 +74,7 @@ final class AppState {
     let agents = Resource<AgentsResponse>(path: "api/app/v1/agents", key: .agents)
     let messages = Resource<MessagesResponse>(path: "api/app/v1/messages", key: .messages)
 
+    let galleryVisits = Resource<GalleryVisitsResponse>(path: "api/app/v1/bookings/gallery-visits", key: .galleryVisits)
     let portfolioOverview = Resource<PortfolioOverview>(path: "api/app/v1/portfolio-links/overview", key: .portfolioOverview)
 
     // Finances: the Overview also feeds Home's money numbers.
