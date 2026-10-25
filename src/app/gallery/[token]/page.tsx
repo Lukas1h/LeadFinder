@@ -284,7 +284,7 @@ export default async function GalleryPage({
       ) : null}
 
       <footer className="w-full mt-12 pt-6 border-t border-[#181A1C]/10 text-center text-xs text-[#181A1C]/50">
-        Lukas Hahn · (541) 430-3372 · lukas@lukashahn.art
+        Lukas Hahn · (541) 430-3372 · lukas@lukashahn.media
       </footer>
     </GalleryShell>
   );

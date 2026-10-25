@@ -68,7 +68,7 @@ const VCARD = [
   "ORG:Hahn Media",
   "TITLE:Real Estate Photo & Video",
   `TEL;TYPE=CELL:${PHONE}`,
-  "EMAIL;TYPE=WORK:lukas@lukashahn.art",
+  "EMAIL;TYPE=WORK:lukas@lukashahn.media",
   `URL:${MAIN_SITE_URL}`,
   "ADR;TYPE=WORK:;;;Eugene;OR;;USA",
   "NOTE:Real estate photography\\, walkthrough video & drone. Eugene & Roseburg.",
