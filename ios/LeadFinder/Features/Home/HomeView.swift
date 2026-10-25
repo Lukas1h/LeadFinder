@@ -43,6 +43,7 @@ struct HomeView: View {
             .navigationDestination(for: FollowUpRoute.self) { _ in FollowUpView() }
             .navigationDestination(for: BookingsRoute.self) { _ in BookingsView() }
             .navigationDestination(for: FinancesRoute.self) { route in FinancesView(tab: route.tab) }
+            .navigationDestination(for: PortfolioLinksRoute.self) { _ in PortfolioLinksView() }
             .sheet(item: $openBooking) { booking in
                 BookingDetailView(booking: booking)
                     .presentationDetents([.large])
@@ -52,6 +53,7 @@ struct HomeView: View {
             .task { await appState.bookings.load() }
             .task { await appState.followUp.load() }
             .task { await appState.finances.load() }
+            .task { await appState.portfolioOverview.load() }
             .task { await appState.financeJobs.load() }
             #if DEBUG
             .task {
@@ -75,6 +77,9 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 22) {
                 ErrorBanner(message: firstError, onRetry: { Task { await reload() } })
 
+                if let overview = appState.portfolioOverview.value {
+                    portfolioSection(overview).id("portfolio")
+                }
                 if let goal = appState.messages.value?.goal {
                     goalSection(goal).id("goal")
                 }
@@ -111,7 +116,48 @@ struct HomeView: View {
             group.addTask { await state.bookings.load(force: true) }
             group.addTask { await state.followUp.load(force: true) }
             group.addTask { await state.finances.load(force: true) }
+            group.addTask { await state.portfolioOverview.load(force: true) }
             group.addTask { await state.financeJobs.load(force: true) }
+        }
+    }
+
+    // MARK: - Portfolio links
+
+    /// How the pages he's sent are doing: how many get opened, how long and
+    /// how far down people read, then what just happened on them. Taps through
+    /// to the links. The numbers are the server's (`/portfolio-links/overview`).
+    private func portfolioSection(_ overview: PortfolioOverview) -> some View {
+        navSection("Portfolio links", see: "Links", value: PortfolioLinksRoute()) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    StatTile(
+                        "Opened",
+                        overview.sent > 0 ? Self.percent(Double(overview.opened) / Double(overview.sent)) : "\u{2014}",
+                        "\(overview.opened) of \(overview.sent) links"
+                    )
+                    StatTile(
+                        "Time on page",
+                        overview.avgActiveSeconds.map { PortfolioFormat.duration(Int($0.rounded())) } ?? "\u{2014}",
+                        "avg per visit"
+                    )
+                    StatTile(
+                        "Scrolled",
+                        overview.avgScrollPct.map { "\(Int($0.rounded()))%" } ?? "\u{2014}",
+                        "avg depth"
+                    )
+                }
+
+                if !overview.events.isEmpty {
+                    Divider().overlay(Theme.cardRaised)
+                    // Sideways, so the card stays short; a tap on the card opens the links.
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: 10) {
+                            ForEach(overview.events) { PortfolioEventChip(event: $0) }
+                        }
+                    }
+                    .scrollClipDisabled()
+                }
+            }
         }
     }
 
@@ -489,6 +535,55 @@ private extension String {
 }
 
 // MARK: - Pieces
+
+/// One thing that happened on a portfolio link: a visit, or a tap in one.
+private struct PortfolioEventChip: View {
+    let event: PortfolioOverview.Event
+
+    private var info: (title: String, symbol: String, strong: Bool) {
+        switch event.event {
+        case "visit": ("Opened", "eye", false)
+        case "save_contact": ("Saved your contact", "person.crop.circle.badge.plus", true)
+        case "book_shoot": ("Tapped Book a shoot", "message", true)
+        case "sound_on": ("Turned sound on", "speaker.wave.2", false)
+        case "sound_off": ("Turned sound off", "speaker.slash", false)
+        case "reviews": ("Opened your reviews", "star", false)
+        default: (event.event, "circle", false)
+        }
+    }
+
+    var body: some View {
+        let info = info
+        VStack(alignment: .leading, spacing: 3) {
+            Label(info.title, systemImage: info.symbol)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(info.strong ? Theme.emerald : Theme.primaryText)
+                .lineLimit(1)
+            Text(event.agentName?.nilIfBlank ?? "No agent attached")
+                .font(.caption)
+                .foregroundStyle(Theme.secondaryText)
+                .lineLimit(1)
+            Text(sub)
+                .font(.caption2)
+                .foregroundStyle(Theme.tertiaryText)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(width: 210, alignment: .leading)
+        .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    /// "Oct 24, 2:34 PM · 2s · 13%" for a visit, the time for a tap.
+    private var sub: String {
+        var parts = [PortfolioFormat.when(event.at)]
+        if event.event == "visit" {
+            if let seconds = event.activeSeconds { parts.append(PortfolioFormat.duration(seconds)) }
+            if let scroll = event.maxScrollPct { parts.append("\(scroll)%") }
+        }
+        return parts.joined(separator: " \u{00B7} ")
+    }
+}
 
 /// A rounded progress bar; the fill turns green once the target is met.
 private struct ProgressBar: View {

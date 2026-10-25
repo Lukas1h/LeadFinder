@@ -965,3 +965,31 @@ struct PortfolioListingPhotosResponse: Codable, Sendable {
 
     var groups: [Group]
 }
+
+/// GET /portfolio-links/overview: Home's portfolio card.
+struct PortfolioOverview: Codable, Sendable {
+    struct Event: Codable, Sendable, Identifiable {
+        var id: String
+        var linkId: String
+        var agentName: String?
+        /// "visit" (a visit as it started), or a tap: save_contact, book_shoot,
+        /// sound_on, sound_off, reviews.
+        var event: String
+        var detail: String?
+        var at: String
+        /// Visits only.
+        var activeSeconds: Int?
+        var maxScrollPct: Int?
+    }
+
+    /// The 50 newest links, which is what the list shows.
+    var sent: Int
+    /// Of those, the ones with at least one visit.
+    var opened: Int
+    var visits: Int
+    /// Per visit; nil until there is one.
+    var avgActiveSeconds: Double?
+    var avgScrollPct: Double?
+    /// Newest first.
+    var events: [Event]
+}
