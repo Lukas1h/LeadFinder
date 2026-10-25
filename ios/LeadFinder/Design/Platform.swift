@@ -219,6 +219,15 @@ enum Platform {
         #endif
     }
 
+    static func copy(_ string: String) {
+        #if os(iOS)
+        UIPasteboard.general.string = string
+        #else
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
+        #endif
+    }
+
     static var pasteboardString: String? {
         #if os(iOS)
         UIPasteboard.general.string

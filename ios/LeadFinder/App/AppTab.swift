@@ -92,7 +92,7 @@ enum DebugLaunchArguments {
         let arguments = ProcessInfo.processInfo.arguments
         guard let flag = arguments.firstIndex(where: { $0.hasPrefix("-tab") }) else { return nil }
 
-        let afterColon = arguments[flag].split(separator: ":").last.map(String.init)
+        let afterColon = arguments[flag].contains(":") ? arguments[flag].split(separator: ":").last.map(String.init) : nil
         let next = flag + 1 < arguments.count ? arguments[flag + 1] : nil
         let value = afterColon ?? next
 
@@ -150,6 +150,19 @@ enum DebugLaunchArguments {
 
     /// `-follow-up [feed key]` opens Follow up from Home, on that tab.
     static var followUpTab: String? { value(after: "-follow-up") }
+
+    /// `-portfolio` opens the portfolio links from the Agents tab; its value
+    /// (`-portfolio-open edit|new`) opens the builder on top, for screenshots.
+    static var opensPortfolio: Bool {
+        ProcessInfo.processInfo.arguments.contains("-portfolio")
+    }
+
+    static var portfolioOpen: String? { value(after: "-portfolio-open") }
+
+    /// `-portfolio-activity` opens the first link's activity.
+    static var opensPortfolioActivity: Bool {
+        ProcessInfo.processInfo.arguments.contains("-portfolio-activity")
+    }
 
     /// `-no-alert-prompt` skips asking for notification permission, which
     /// would otherwise cover a fresh simulator's first screenshot.

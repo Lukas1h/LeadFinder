@@ -779,3 +779,189 @@ struct AgentDetailResponse: Codable, Sendable {
     var listings: [Listing]
     var bookings: [Booking]
 }
+
+// MARK: - Portfolio links (personalized agent pages)
+//
+// The web's /portfolio-links (src/app/portfolio-links/actions.ts) over
+// /api/app/v1/portfolio-links. The public page is r.lukashahn.media/<slug>;
+// `?preview=1` on it means no tracking, no view count, no push.
+
+enum PortfolioSite {
+    /// Where an image's stored path ("/api/portfolio-image/<id>") is served.
+    static let origin = "https://r.lukashahn.media"
+
+    /// A stored image path or catalog src as something to load.
+    static func imageURL(_ src: String?) -> URL? {
+        guard let src = src?.nilIfBlank else { return nil }
+        if src.hasPrefix("http") { return URL(string: src) }
+        return URL(string: origin + src)
+    }
+
+    /// The link as it opens for Lukas himself: not a visit.
+    static func previewURL(_ url: String) -> URL? {
+        URL(string: url + (url.contains("?") ? "&" : "?") + "preview=1")
+    }
+}
+
+/// GET /portfolio-links
+struct PortfolioLinksResponse: Codable, Sendable {
+    var links: [PortfolioLinkSummary]
+}
+
+struct PortfolioLinkSummary: Codable, Sendable, Identifiable, Hashable {
+    var id: String
+    var slug: String
+    /// The plain link to send; never carries `?preview`.
+    var url: String
+    var agentName: String?
+    var createdAt: String
+    var viewCount: Int
+    var lastViewedAt: String?
+    var visits: Int
+    var activeSeconds: Int
+    var contactSaves: Int
+    var bookTaps: Int
+}
+
+/// GET /portfolio-links/:id
+struct PortfolioActivityResponse: Codable, Sendable {
+    var activity: PortfolioActivity
+}
+
+struct PortfolioActivity: Codable, Sendable {
+    var id: String
+    var slug: String
+    var url: String
+    var agentId: String?
+    var agentName: String?
+    var createdAt: String
+    var area: String?
+    var viewCount: Int
+    /// Newest first.
+    var visits: [PortfolioVisit]
+}
+
+struct PortfolioVisit: Codable, Sendable, Identifiable {
+    struct Event: Codable, Sendable, Identifiable {
+        var id: String
+        /// save_contact, book_shoot, sound_on, sound_off, listing_prev,
+        /// listing_next or reviews.
+        var event: String
+        var detail: String?
+        var at: String
+    }
+
+    var id: String
+    var startedAt: String
+    var lastSeenAt: String
+    var activeSeconds: Int
+    var maxScrollPct: Int
+    /// Seconds per page section: hero, before_after, photos, video, why,
+    /// listings, testimonial, pricing, book.
+    var sectionSeconds: [String: Int]
+    var screen: String?
+    var device: String
+    var browser: String
+    var location: String?
+    var ip: String?
+    var events: [Event]
+}
+
+/// A job as a listing card on the page. Its photos aren't stored: the page
+/// picks them from the gallery on each view.
+struct PortfolioListing: Codable, Sendable, Hashable, Identifiable {
+    var bookingId: String
+    /// "Sold", "Pending", "Just listed": the badge on the photo.
+    var status: String
+    var price: String
+    var beds: String
+    var baths: String
+    var sqft: String
+    var type: String
+    var address: String
+    var city: String
+    /// The listing agent and brokerage line under the card.
+    var agent: String
+    var brokerage: String
+
+    var id: String { bookingId }
+}
+
+/// The page's settings (`PortfolioContent` in src/db/schema.ts).
+struct PortfolioContent: Codable, Sendable, Hashable {
+    var area: String?
+    var agentFirstName: String?
+    var brokerage: String?
+    /// A key of the catalog's videos.
+    var video: String?
+    /// A key of the catalog's photos.
+    var leadPhoto: String?
+    var showTourOfHomes: Bool?
+    var showOffer: Bool?
+    var beforeAfter: Bool?
+    /// "/api/portfolio-image/<id>" (an upload) or any image URL.
+    var beforeSrc: String?
+    var afterSrc: String?
+    var listings: [PortfolioListing]?
+}
+
+struct PortfolioAgentMatch: Codable, Sendable, Identifiable, Hashable {
+    var id: String
+    var name: String?
+    var phone: String?
+    var email: String?
+}
+
+/// GET /portfolio-links/:id/edit
+struct PortfolioEditResponse: Codable, Sendable {
+    var linkId: String
+    var url: String
+    var agent: PortfolioAgentMatch?
+    var content: PortfolioContent
+}
+
+/// GET /portfolio-links/prefill?agent=
+struct PortfolioPrefill: Codable, Sendable {
+    var agent: PortfolioAgentMatch
+    var firstName: String
+    var area: String
+    var brokerage: String
+    var listings: [PortfolioListing]
+}
+
+/// GET /portfolio-links/catalog: the builder's fixed choices.
+struct PortfolioCatalog: Codable, Sendable {
+    struct Video: Codable, Sendable, Identifiable, Hashable {
+        var key: String
+        var id: String
+        var title: String
+    }
+
+    struct Photo: Codable, Sendable, Identifiable, Hashable {
+        var key: String
+        var alt: String
+        /// Absolute.
+        var src: String
+
+        var id: String { key }
+    }
+
+    var videos: [Video]
+    /// Strongest first; the last always closes the page's photo section, so
+    /// it can't be the lead photo.
+    var photos: [Photo]
+
+    var leadPhotoChoices: [Photo] { Array(photos.dropLast()) }
+}
+
+/// GET /portfolio-links/listing-photos?agent=
+struct PortfolioListingPhotosResponse: Codable, Sendable {
+    struct Group: Codable, Sendable, Identifiable {
+        var label: String
+        var photos: [String]
+
+        var id: String { label }
+    }
+
+    var groups: [Group]
+}

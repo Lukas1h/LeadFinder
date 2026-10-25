@@ -11,9 +11,10 @@ struct AgentsView: View {
     @State private var query = ""
     @State private var filter: AgentFilter = .all
     @State private var openAgent: AgentsResponse.Row?
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if let agents = appState.agents.value {
                     directory(agents.agents)
@@ -35,16 +36,27 @@ struct AgentsView: View {
             .navigationDestination(for: FollowUpRoute.self) { _ in
                 FollowUpView()
             }
+            .navigationDestination(for: PortfolioLinksRoute.self) { _ in
+                PortfolioLinksView()
+            }
             // Follow up lives here rather than as a tab of its own: it is a view
             // over agents, so it belongs under the directory.
             .toolbar {
-                ToolbarItem(placement: .trailingBar) {
+                ToolbarItemGroup(placement: .trailingBar) {
+                    NavigationLink(value: PortfolioLinksRoute()) {
+                        Label("Portfolio links", systemImage: "link")
+                    }
                     NavigationLink(value: FollowUpRoute()) {
                         Label("Follow up", systemImage: "arrow.triangle.2.circlepath")
                     }
                 }
             }
             .task { await appState.agents.load() }
+            #if DEBUG
+            .task {
+                if DebugLaunchArguments.opensPortfolio { path.append(PortfolioLinksRoute()) }
+            }
+            #endif
             .task {
                 #if DEBUG
                 guard DebugLaunchArguments.opensAgent else { return }
@@ -249,6 +261,7 @@ struct AgentDirectoryDetail: View {
     @State private var openBooking: Booking?
     @State private var contactError: String?
     @State private var logSheet: LogRequest?
+    @State private var portfolio: PortfolioBuilderStart?
     /// Set when Call is tapped, so coming back from the phone call asks how it
     /// went — the web's "how did it go?" prompt.
     @State private var callTappedAt: Date?
@@ -319,6 +332,8 @@ struct AgentDirectoryDetail: View {
         .sheet(item: $openBooking) { booking in
             BookingDetailView(booking: booking)
         }
+        // "Create portfolio": the builder, prefilled for this agent.
+        .sheet(item: $portfolio) { PortfolioBuilderView(start: $0) }
         .sheet(item: $logSheet) { request in
             LogInteractionSheet(agentId: agent.id, agentName: agent.displayName, afterCall: request.afterCall) {
                 Task { await reload() }
@@ -414,6 +429,7 @@ private var header: some View {
         let name = agent.name?.nilIfBlank
         let canSave = phoneDigits != nil || email != nil
         if name != nil || canSave {
+            VStack(spacing: 8) {
             HStack(spacing: 8) {
                 if let name, let url = Self.googleURL(for: name) {
                     Link(destination: url) { contactLabel("Google", "magnifyingglass") }
@@ -424,6 +440,17 @@ private var header: some View {
                     } label: { contactLabel("Save contact", "person.crop.circle.badge.plus") }
                         .buttonStyle(.plain)
                 }
+            }
+            // Opens the builder prefilled for this agent; sends nothing.
+            Button {
+                portfolio = .new(agent: PortfolioAgentMatch(
+                    id: agent.id,
+                    name: agent.name,
+                    phone: agent.phone ?? detail?.agent.phone,
+                    email: email
+                ))
+            } label: { contactLabel("Create portfolio", "link") }
+                .buttonStyle(.plain)
             }
         }
     }

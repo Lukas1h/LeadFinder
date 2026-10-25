@@ -51,6 +51,7 @@ private struct PageHost: View {
         case .booked: NavigationStack { BookingsView() }
         case .schedule: ScheduleView()
         case .finances: NavigationStack { FinancesView() }
+        case .portfolio: NavigationStack { PortfolioLinksView() }
         }
     }
 }

@@ -12,6 +12,12 @@ struct PhotoEditorView: View {
     var listingId: String?
     /// A preset to start on (Follow up's "twilight gift" opens on its own).
     var initialPresetId: String?
+    /// Set by the portfolio builder: pick from these listing groups (an
+    /// agent's own listings) instead of searching, and offer `useLabel` on
+    /// every finished edit, calling `onUse` with the original and the edit.
+    var photoGroups: [PortfolioListingPhotosResponse.Group]?
+    var useLabel: String?
+    var onUse: ((APIClient.EditSource, Data) async throws -> Void)?
 
     @State private var listing: ListingHeader?
     @State private var photos: [EditorPhoto] = []
@@ -25,6 +31,9 @@ struct PhotoEditorView: View {
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var exportFiles: [String: URL] = [:]
     @State private var error: String?
+    @State private var groupIndex = 0
+    /// The photo whose "use" is in flight.
+    @State private var usingId: String?
 
     /// At once: each edit takes 10–25 s, and more in parallel only meets
     /// Gemini's rate limit sooner. Same as the web page.
@@ -49,13 +58,56 @@ struct PhotoEditorView: View {
         .titleDisplay(.inline)
         .task { await loadPresets() }
         .task { if let listingId { await loadListing(listingId) } }
+        .task { if photoGroups != nil { loadGroup(0) } }
         .task(id: query) { await search() }
         .onChange(of: pickerItems) { Task { await addPicked() } }
     }
 
     // MARK: - Source
 
+    @ViewBuilder
     private var sourceSection: some View {
+        if let groups = photoGroups {
+            groupSection(groups)
+        } else {
+            searchSection
+        }
+    }
+
+    /// An agent's own listings, newest first: one menu, then its photos.
+    private func groupSection(_ groups: [PortfolioListingPhotosResponse.Group]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if groups.isEmpty {
+                Text("No listings with photos on file for them. Upload a before/after instead.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+            } else {
+                Picker("Listing", selection: $groupIndex) {
+                    ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
+                        Text("\(group.label) (\(group.photos.count))").tag(index)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: groupIndex) { loadGroup(groupIndex) }
+                .card()
+            }
+        }
+    }
+
+    private func loadGroup(_ index: Int) {
+        guard let groups = photoGroups, groups.indices.contains(index) else { return }
+        let group = groups[index]
+        listing = ListingHeader(address: group.label, detail: nil)
+        photos = group.photos.enumerated().map { number, url in
+            EditorPhoto(id: "group\(index)-\(number)", source: .url(url), name: "\(number + 1)")
+        }
+        selected = []
+        edits = [:]
+        exportFiles = [:]
+        error = nil
+    }
+
+    private var searchSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Theme.tertiaryText)
@@ -267,6 +319,19 @@ struct PhotoEditorView: View {
                 if let file = exportFiles[photo.id] {
                     ShareLink(item: file) { Image(systemName: "square.and.arrow.up") }
                 }
+                if let onUse, let useLabel, case .done(let data, _) = state {
+                    Button {
+                        Task { await use(photo, edit: data, with: onUse) }
+                    } label: {
+                        if usingId == photo.id {
+                            ProgressView()
+                        } else {
+                            Label(useLabel, systemImage: "checkmark.circle.fill")
+                        }
+                    }
+                    .disabled(usingId != nil)
+                    .foregroundStyle(Theme.accent)
+                }
                 Button(role: .destructive) {
                     edits[photo.id] = nil
                     exportFiles[photo.id] = nil
@@ -393,6 +458,17 @@ struct PhotoEditorView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func use(_ photo: EditorPhoto, edit: Data, with onUse: (APIClient.EditSource, Data) async throws -> Void) async {
+        usingId = photo.id
+        defer { usingId = nil }
+        do {
+            try await onUse(photo.source, edit)
+            error = nil
+        } catch {
+            self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
         }
     }
 
