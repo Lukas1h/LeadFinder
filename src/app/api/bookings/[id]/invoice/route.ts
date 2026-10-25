@@ -20,7 +20,7 @@ const BUSINESS = {
   entity: "Lukas Hahn Art LLC",
   phone: "(541) 430-3372",
   email: "lukas@lukashahn.art",
-  website: "lukashahn.art/real-estate",
+  website: "lukashahn.media",
   checkPayee: "Lukas Hahn Art LLC",
   checkAddress: "662 Winston Section RD, Winston, OR 97496",
   venmo: "@lukashahn",

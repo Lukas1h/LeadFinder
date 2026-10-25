@@ -79,7 +79,7 @@ Thanks for your time!
 
 Lukas Hahn
 Hahn Media
-https://www.lukashahn.art/real-estate
+https://lukashahn.media
 (541) 430-3372`;
 
 // Seed copy for the "Blank" email preset (ensureBlankEmailPreset in
@@ -94,7 +94,7 @@ export const BLANK_EMAIL_BODY = `Hello {{firstName}},
 
 Lukas Hahn
 Hahn Media
-https://www.lukashahn.art/real-estate
+https://lukashahn.media
 (541) 430-3372`;
 
 // Seed copy for the "Blank" SMS preset (ensureBlankSmsPreset in

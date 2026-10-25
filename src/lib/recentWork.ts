@@ -3,13 +3,13 @@ import { db } from "@/db";
 import { bookings } from "@/db/schema";
 import { citiesNear } from "@/lib/areaPhrase";
 import { naturalStreetName } from "@/lib/sms";
+import { GALLERY_ORIGIN, MAIN_SITE_URL } from "@/lib/siteUrls";
 
 const DAY = 24 * 60 * 60 * 1000;
 /** "just finished": a job delivered this recently still reads that way. */
 const RECENT_DAYS = 60;
 /** How far back to look for a candidate before giving up on finding one nearby. */
 const LOOKBACK = 80;
-const WEBSITE_URL = "https://www.lukashahn.art/real-estate";
 
 /**
  * The "Response to Text Message" email's {{recentWork}} line (Lukas's own
@@ -33,9 +33,9 @@ export async function recentWorkLine(city: string | null): Promise<string> {
       const street = naturalStreetName(match.address) ?? "a property";
       return (
         `Here's ${street}${match.city ? ` in ${match.city.trim()}` : ""} we just finished, if you'd like to check it out: ` +
-        `https://gallery.lukashahn.art/${match.galleryToken}`
+        `${GALLERY_ORIGIN}/${match.galleryToken}`
       );
     }
   }
-  return `Video work is on our website at: ${WEBSITE_URL}`;
+  return `Video work is on our website at: ${MAIN_SITE_URL}`;
 }

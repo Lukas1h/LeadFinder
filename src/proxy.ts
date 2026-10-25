@@ -3,9 +3,11 @@ import { db } from "@/db";
 import { bookings, portfolioLinks } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { authGateEnabled, isValidSession, safeNextPath, SESSION_COOKIE } from "@/lib/adminSession";
+import { CLIENT_HOSTS, MAIN_SITE_URL } from "@/lib/siteUrls";
 
-// gallery.lukashahn.art is a client-facing-only subdomain — kept
-// completely separate from the admin app's own domains so a client who
+// The client hosts (CLIENT_HOSTS: gallery.lukashahn.media for galleries,
+// r.lukashahn.media for agent pages, and the old gallery.lukashahn.art) are
+// client-facing only — kept completely separate from the admin app's own domains so a client who
 // strips a gallery link down to its root never lands on Lukas's internal
 // tool. A bare /<token> path (no /gallery/ prefix) is rewritten internally
 // to the real /gallery/[token] page, or — for a short slug, PORTFOLIO_SLUG_LENGTH
@@ -23,12 +25,10 @@ import { authGateEnabled, isValidSession, safeNextPath, SESSION_COOKIE } from "@
 // browser away from an invalid token's URL. A direct DB check here (the
 // neon-http driver is fetch-based, genuinely Edge-compatible) gives an
 // actual 307 before any page even starts rendering. This only runs for
-// gallery.lukashahn.art requests — the admin app's own domains return
+// client-host requests — the admin app's own domains return
 // immediately above and never pay this extra round trip.
-const GALLERY_HOST = "gallery.lukashahn.art";
 /** Must match SLUG_LENGTH in lib/portfolioLink.ts. */
 const PORTFOLIO_SLUG_LENGTH = 6;
-const MAIN_SITE_URL = "https://lukashahn.art/real-estate";
 
 // Marks a request as "serving the gallery experience" so layout.tsx (a
 // Server Component) can decide server-side whether to wrap it in the
@@ -127,7 +127,8 @@ function adminGate(req: NextRequest): Response | null {
 
 export async function proxy(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
-  const isGalleryHost = host === GALLERY_HOST || host.startsWith(`${GALLERY_HOST}:`);
+  const hostname = host.split(":")[0];
+  const isGalleryHost = CLIENT_HOSTS.includes(hostname);
   const { pathname } = req.nextUrl;
 
   if (!isGalleryHost) {

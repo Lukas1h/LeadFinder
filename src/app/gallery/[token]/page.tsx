@@ -10,6 +10,7 @@ import { eq, sum } from "drizzle-orm";
 import { listGalleryMedia } from "@/lib/dropbox";
 import { firstName } from "@/lib/sms";
 import { recordGalleryEvent } from "@/lib/galleryViews";
+import { GALLERY_ORIGIN } from "@/lib/siteUrls";
 import { GalleryPhotoGrid } from "./GalleryPhotoGrid";
 
 // The root layout's MobileHeader/BottomTabBar read usePathname(), which
@@ -110,7 +111,7 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
     ? await listGalleryMedia(booking.dropboxFolderLink).then((m) => m.photos[0], () => undefined)
     : undefined;
   const images = first
-    ? [`https://gallery.lukashahn.art/api/gallery/${token}/thumbnail?name=${encodeURIComponent(first.name)}&size=w1024h768`]
+    ? [`${GALLERY_ORIGIN}/api/gallery/${token}/thumbnail?name=${encodeURIComponent(first.name)}&size=w1024h768`]
     : undefined;
   return { title, openGraph: { title, siteName: "Hahn Media", images }, twitter: { card: "summary_large_image", images } };
 }

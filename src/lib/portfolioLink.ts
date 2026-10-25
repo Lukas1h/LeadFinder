@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
+import { PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
 import { portfolioLinks, type PortfolioContent } from "@/db/schema";
 
 // Mixed-case + digits, no 0/O/1/l/I — short and typed by hand without ambiguity
@@ -30,7 +31,7 @@ export async function createPortfolioLink(agentId: string | null, content: Portf
   return { slug };
 }
 
-/** gallery.lukashahn.art, where this and the real client galleries both live — see proxy.ts. */
+/** r.lukashahn.media/<slug> — see proxy.ts. Links made before it live on gallery.lukashahn.art and still work. */
 export function portfolioUrl(slug: string): string {
-  return `https://gallery.lukashahn.art/${slug}`;
+  return `${PORTFOLIO_ORIGIN}/${slug}`;
 }

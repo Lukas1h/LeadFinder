@@ -559,7 +559,7 @@ export interface PortfolioContent {
 }
 
 // A personalized agent page (/portfolio/[slug], served bare on
-// gallery.lukashahn.art — see proxy.ts) sent in place of the samples email's
+// r.lukashahn.media — see proxy.ts) sent in place of the samples email's
 // attachment, mainly for cold outreach. agentId is for Lukas's own tracking
 // (which push notification to send, and whose name to show him); the page
 // only shows the first name he typed into the content, if any.

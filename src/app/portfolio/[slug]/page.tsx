@@ -9,6 +9,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { Suspense } from "react";
 import { listingCardPhotoNames } from "@/lib/listingCardPhotos";
 import { notifyPortfolioView } from "@/lib/push";
+import { MAIN_SITE_URL, PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { ListingCard, MutableVideo } from "./client";
@@ -32,7 +33,7 @@ const outfit = Outfit({
   variable: "--font-portfolio-sans",
 });
 
-const SITE = "https://gallery.lukashahn.art";
+const SITE = PORTFOLIO_ORIGIN;
 
 /**
  * The link preview (iMessage, Facebook…): the page's hero — the before/after's
@@ -60,13 +61,15 @@ const PHONE = "+15414303372";
 const VCARD = [
   "BEGIN:VCARD",
   "VERSION:3.0",
-  "N:Hahn;Lukas;;;",
-  "FN:Lukas Hahn",
+  // "Photographer" is part of the name itself, so it shows on the card and
+  // searching contacts for "photographer" finds him.
+  "N:Hahn Photographer;Lukas;;;",
+  "FN:Lukas Hahn Photographer",
   "ORG:Hahn Media",
   "TITLE:Real Estate Photo & Video",
   `TEL;TYPE=CELL:${PHONE}`,
   "EMAIL;TYPE=WORK:lukas@lukashahn.art",
-  "URL:https://lukashahn.art/real-estate",
+  `URL:${MAIN_SITE_URL}`,
   "ADR;TYPE=WORK:;;;Eugene;OR;;USA",
   "NOTE:Real estate photography\\, walkthrough video & drone. Eugene & Roseburg.",
   "END:VCARD",

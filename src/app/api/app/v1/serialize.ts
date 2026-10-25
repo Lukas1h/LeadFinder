@@ -6,6 +6,7 @@ import { sampleCardPhotos } from "@/lib/cardPhotos";
 import { estimateDriveTime } from "@/lib/driveTime";
 import type { BookingWithDetails } from "@/app/booked/BookedList";
 import type { LeadGroup } from "@/app/leads-data";
+import { GALLERY_ORIGIN } from "@/lib/siteUrls";
 
 /**
  * DB rows → JSON for the iPhone app (/api/app/v1/*).
@@ -176,7 +177,7 @@ export function bookingJson(b: BookingWithDetails) {
     invoiceNumber: b.invoiceNumber,
     invoicedAt: b.invoicedAt,
     dropboxFolderLink: b.dropboxFolderLink,
-    galleryUrl: b.galleryToken ? `https://gallery.lukashahn.art/${b.galleryToken}` : null,
+    galleryUrl: b.galleryToken ? `${GALLERY_ORIGIN}/${b.galleryToken}` : null,
     // "1811 NE Alameda Ave, Eugene, OR" — what the app hands to Maps for the
     // directions sheet. Empty parts are dropped so a half-filled booking
     // doesn't turn into ", , OR".

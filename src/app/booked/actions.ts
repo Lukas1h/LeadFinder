@@ -15,6 +15,7 @@ import { refreshBookingAirspace } from "@/lib/airspace";
 import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { createPaymentLink, deactivatePaymentLink, stripeConfigured } from "@/lib/stripe";
+import { GALLERY_ORIGIN } from "@/lib/siteUrls";
 import type { BookingWithDetails } from "./BookedList";
 
 export interface BookingLineItemInput {
@@ -448,7 +449,7 @@ export async function getOrCreatePaymentLink(bookingId: string): Promise<Payment
     description: ["Hahn Media", booking.invoiceNumber ? `Invoice #${booking.invoiceNumber}` : null, where || null]
       .filter(Boolean)
       .join(" · "),
-    redirectUrl: `https://gallery.lukashahn.art/${token}?paid=1`,
+    redirectUrl: `${GALLERY_ORIGIN}/${token}?paid=1`,
   });
 
   await db
