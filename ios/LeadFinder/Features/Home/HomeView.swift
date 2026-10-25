@@ -77,9 +77,6 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 22) {
                 ErrorBanner(message: firstError, onRetry: { Task { await reload() } })
 
-                if let overview = appState.portfolioOverview.value {
-                    portfolioSection(overview).id("portfolio")
-                }
                 if let goal = appState.messages.value?.goal {
                     goalSection(goal).id("goal")
                 }
@@ -91,6 +88,9 @@ struct HomeView: View {
                 }
                 if let bookings = appState.bookings.value {
                     bookingsSection(bookings).id("bookings")
+                }
+                if let overview = appState.portfolioOverview.value {
+                    portfolioSection(overview).id("portfolio")
                 }
                 toDoSection.id("todo")
             }
@@ -149,13 +149,24 @@ struct HomeView: View {
 
                 if !overview.events.isEmpty {
                     Divider().overlay(Theme.cardRaised)
-                    // Sideways, so the card stays short; a tap on the card opens the links.
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 10) {
-                            ForEach(overview.events) { PortfolioEventChip(event: $0) }
+                    // Its own scroll area, so the card stays a fixed height.
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiaryText)
+                        Text("Recent activity")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.primaryText)
+                        Text("\u{00B7} last \(overview.events.count)")
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiaryText)
+                    }
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(overview.events) { PortfolioEventRow(event: $0) }
                         }
                     }
-                    .scrollClipDisabled()
+                    .frame(height: min(250, CGFloat(overview.events.count) * 66))
                 }
             }
         }
@@ -536,17 +547,19 @@ private extension String {
 
 // MARK: - Pieces
 
-/// One thing that happened on a portfolio link: a visit, or a tap in one.
-private struct PortfolioEventChip: View {
+/// One thing that happened on a portfolio link, laid out like a row of the
+/// Messages tab's history: icon, who, what, when, and a badge for the
+/// ones that matter.
+private struct PortfolioEventRow: View {
     let event: PortfolioOverview.Event
 
     private var info: (title: String, symbol: String, strong: Bool) {
         switch event.event {
-        case "visit": ("Opened", "eye", false)
+        case "visit": ("Opened the page", "eye", false)
         case "save_contact": ("Saved your contact", "person.crop.circle.badge.plus", true)
         case "book_shoot": ("Tapped Book a shoot", "message", true)
-        case "sound_on": ("Turned sound on", "speaker.wave.2", false)
-        case "sound_off": ("Turned sound off", "speaker.slash", false)
+        case "sound_on": ("Turned the sound on", "speaker.wave.2", false)
+        case "sound_off": ("Turned the sound off", "speaker.slash", false)
         case "reviews": ("Opened your reviews", "star", false)
         default: (event.event, "circle", false)
         }
@@ -554,32 +567,45 @@ private struct PortfolioEventChip: View {
 
     var body: some View {
         let info = info
-        VStack(alignment: .leading, spacing: 3) {
-            Label(info.title, systemImage: info.symbol)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(info.strong ? Theme.emerald : Theme.primaryText)
-                .lineLimit(1)
-            Text(event.agentName?.nilIfBlank ?? "No agent attached")
-                .font(.caption)
-                .foregroundStyle(Theme.secondaryText)
-                .lineLimit(1)
-            Text(sub)
-                .font(.caption2)
-                .foregroundStyle(Theme.tertiaryText)
-                .lineLimit(1)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: info.symbol)
+                .font(.callout)
+                .foregroundStyle(info.strong ? Theme.emerald : Theme.tertiaryText)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.agentName?.nilIfBlank ?? "No agent attached")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+                Text(info.title)
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+                Text(sub)
+                    .font(.caption2)
+                    .foregroundStyle(Theme.tertiaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            if info.strong {
+                BadgeChip(text: event.event == "book_shoot" ? "Book" : "Saved", tint: Theme.emerald)
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(width: 210, alignment: .leading)
-        .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// "Oct 24, 2:34 PM · 2s · 13%" for a visit, the time for a tap.
+    /// "Oct 24, 2:34 PM · 2s on page · scrolled 13%" for a visit, else when and where.
     private var sub: String {
         var parts = [PortfolioFormat.when(event.at)]
         if event.event == "visit" {
-            if let seconds = event.activeSeconds { parts.append(PortfolioFormat.duration(seconds)) }
-            if let scroll = event.maxScrollPct { parts.append("\(scroll)%") }
+            if let seconds = event.activeSeconds { parts.append("\(PortfolioFormat.duration(seconds)) on page") }
+            if let scroll = event.maxScrollPct { parts.append("scrolled \(scroll)%") }
+        } else if let detail = event.detail?.nilIfBlank {
+            parts.append(detail)
         }
         return parts.joined(separator: " \u{00B7} ")
     }
