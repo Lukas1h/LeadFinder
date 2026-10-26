@@ -65,12 +65,9 @@ export interface BookingWithDetails {
   dropboxFolderLink: string | null;
   galleryToken: string | null;
   stagingRequestsEnabled: boolean;
-  squareInvoiceId: string | null;
+  // The invoice's Square copy, the client's "Pay Online", and when they paid
+  // it — see src/lib/squareInvoice.ts.
   squareInvoiceUrl: string | null;
-  // The Stripe payment link and the total it was made for, and when the
-  // client paid through it — see src/lib/stripe.ts.
-  paymentLinkUrl: string | null;
-  paymentLinkAmount: number | null;
   paidAt: Date | null;
   // Whether the drone needs ATC authorization at the address — see
   // src/lib/airspace.ts. Null when there's no street address, the check

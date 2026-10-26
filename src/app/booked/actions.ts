@@ -4,7 +4,7 @@ import { randomBytes } from "crypto";
 import { db } from "@/db";
 import { bookings, bookingLineItems, listings, agents, galleryViews, type GalleryEvent, type NewBookingLineItem } from "@/db/schema";
 import { reopenStep } from "./bookingMath";
-import { eq, sum, inArray, ilike, sql, desc } from "drizzle-orm";
+import { eq, inArray, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
@@ -14,8 +14,8 @@ import { estimateDriveTime } from "@/lib/driveTime";
 import { refreshBookingAirspace } from "@/lib/airspace";
 import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import { parseUserAgent } from "@/lib/galleryViews";
-import { createSquareInvoice } from "@/lib/square";
-import { GALLERY_ORIGIN } from "@/lib/siteUrls";
+import { getOrAssignInvoiceNumber } from "@/lib/invoice";
+import { cancelSquareInvoice, syncSquareInvoice } from "@/lib/squareInvoice";
 import type { BookingWithDetails } from "./BookedList";
 
 export interface BookingLineItemInput {
@@ -222,6 +222,13 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
     await db.insert(bookingLineItems).values(validLineItems);
   }
 
+  // A Square copy follows the edit right away, so the gallery's "Pay online"
+  // never charges the old total (a no-op when nothing on the invoice changed).
+  after(async () => {
+    const [row] = await db.select({ squareInvoiceId: bookings.squareInvoiceId }).from(bookings).where(eq(bookings.id, bookingId));
+    if (row?.squareInvoiceId) await syncSquareInvoice(bookingId).catch((err) => console.error("Square invoice sync failed", err));
+  });
+
   revalidatePath("/booked");
   revalidatePath("/pipeline");
   revalidatePath("/messaging");
@@ -294,10 +301,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     dropboxFolderLink: booking.dropboxFolderLink,
     galleryToken: booking.galleryToken,
     stagingRequestsEnabled: booking.stagingRequestsEnabled,
-    squareInvoiceId: booking.squareInvoiceId,
     squareInvoiceUrl: booking.squareInvoiceUrl,
-    paymentLinkUrl: booking.paymentLinkUrl,
-    paymentLinkAmount: booking.paymentLinkAmount,
     paidAt: booking.paidAt,
     airspace: booking.airspace,
     airspaceCheckedAt: booking.airspaceCheckedAt,
@@ -384,10 +388,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       dropboxFolderLink: b.dropboxFolderLink,
       galleryToken: b.galleryToken,
       stagingRequestsEnabled: b.stagingRequestsEnabled,
-      squareInvoiceId: b.squareInvoiceId,
       squareInvoiceUrl: b.squareInvoiceUrl,
-      paymentLinkUrl: b.paymentLinkUrl,
-      paymentLinkAmount: b.paymentLinkAmount,
       paidAt: b.paidAt,
       airspace: b.airspace,
       airspaceCheckedAt: b.airspaceCheckedAt,
@@ -421,68 +422,30 @@ export async function getOrAssignGalleryToken(bookingId: string): Promise<string
   return token;
 }
 
-const LAST_MANUAL_INVOICE_NUMBER = 105;
-
-export async function getOrAssignInvoiceNumber(bookingId: string, existing: number | null): Promise<number> {
-  if (existing != null) return existing;
-
-  const [{ max }] = await db.select({ max: sql<number | null>`max(${bookings.invoiceNumber})` }).from(bookings);
-  const next = (max ?? LAST_MANUAL_INVOICE_NUMBER) + 1;
-
-  await db.update(bookings).set({ invoiceNumber: next, invoicedAt: new Date() }).where(eq(bookings.id, bookingId));
-  return next;
-}
-
-export type PaymentLinkResult = { url: string } | { error: string };
+export type PayLinkResult = { url: string } | { error: string };
 
 /**
- * The booking's Stripe payment link for its current total, made the first
- * time it's asked for and reused after that. If the line items changed since,
- * the old link is switched off and a new one made, so a client can never pay
- * a stale amount. The link also shows on the client gallery as "Pay online".
+ * The booking's "Copy pay link": its invoice's Square payment page, invoicing
+ * the booking first if it hasn't been yet. Same sync as opening the invoice
+ * (lib/squareInvoice.ts), so the link always charges the current total.
  */
-export async function getOrCreatePaymentLink(bookingId: string): Promise<PaymentLinkResult> {
+export async function getOrCreatePayLink(bookingId: string): Promise<PayLinkResult> {
   const booking = await getBookingWithDetails(bookingId);
   if (!booking) return { error: "Booking not found" };
-
   if (booking.paidAt) return { error: "Already paid online" };
-  const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
-  if (total <= 0) return { error: "Add line items first" };
+  if (booking.lineItems.reduce((sum, li) => sum + li.amount, 0) <= 0) return { error: "Add line items first" };
 
-  // Check if a Square invoice is already generated
-  let squareInvoiceUrl = booking.squareInvoiceUrl;
-  
-  if (!squareInvoiceUrl) {
-    const invoiceNumber = await getOrAssignInvoiceNumber(bookingId, booking.invoiceNumber);
-
-    const [contact] = booking.contactAgentId
-      ? await db
-          .select({ email: agents.email })
-          .from(agents)
-          .where(eq(agents.id, booking.contactAgentId))
-      : [];
-
-    const squareInvoice = await createSquareInvoice({
-      bookingId,
-      invoiceNumber,
-      customerName: booking.contactName ?? "Client",
-      customerEmail: contact?.email || undefined,
-      lineItems: booking.lineItems,
-      note: booking.invoiceNote || undefined,
-    });
-    
-    if (squareInvoice) {
-      squareInvoiceUrl = squareInvoice.url;
-      await db.update(bookings).set({
-        squareInvoiceId: squareInvoice.id,
-        squareInvoiceUrl: squareInvoice.url,
-      }).where(eq(bookings.id, bookingId));
-    }
+  await getOrAssignInvoiceNumber(bookingId, booking.invoiceNumber);
+  try {
+    const square = await syncSquareInvoice(bookingId);
+    revalidatePath("/booked");
+    if (square.paid) return { error: "Already paid online" };
+    if (!square.url) return { error: "Square isn't set up (SQUARE_ACCESS_TOKEN / SQUARE_LOCATION_ID)" };
+    return { url: square.url };
+  } catch (err) {
+    console.error("Square invoice sync failed", err);
+    return { error: err instanceof Error ? err.message : "Couldn't make the Square invoice" };
   }
-
-  if (squareInvoiceUrl) return { url: squareInvoiceUrl };
-
-  return { error: "Square invoice generation failed." };
 }
 
 export type AirspaceRecheckResult = { summary: string } | { error: string };
@@ -503,6 +466,8 @@ export async function recheckBookingAirspace(bookingId: string): Promise<Airspac
  * bring this one back.
  */
 export async function deleteBookingInvoice(bookingId: string) {
+  // Its Square copy goes too, so the old "Pay Online" can't still be paid.
+  await cancelSquareInvoice(bookingId).catch((err) => console.error("Square invoice cancel failed", err));
   await db.update(bookings).set({ invoiceNumber: null, invoicedAt: null }).where(eq(bookings.id, bookingId));
   revalidatePath("/booked");
 }

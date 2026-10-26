@@ -15,13 +15,6 @@
       "when": 1790307701164,
       "tag": "0001_follow_up_dismissed",
       "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1793050505224,
-      "tag": "0002_romantic_talisman",
-      "breakpoints": true
     }
   ]
 }

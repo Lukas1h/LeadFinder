@@ -5,8 +5,8 @@ import type { Metadata } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
 import { CheckCircle2, CreditCard, Download, ImageOff, Receipt } from "lucide-react";
 import { db } from "@/db";
-import { bookings, bookingLineItems, listings, agents } from "@/db/schema";
-import { eq, sum } from "drizzle-orm";
+import { bookings, listings, agents } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { listGalleryMedia } from "@/lib/dropbox";
 import { firstName } from "@/lib/sms";
 import { recordGalleryEvent } from "@/lib/galleryViews";
@@ -51,8 +51,6 @@ async function getGalleryBooking(token: string) {
       dropboxFolderLink: bookings.dropboxFolderLink,
       invoiceNumber: bookings.invoiceNumber,
       squareInvoiceUrl: bookings.squareInvoiceUrl,
-      paymentLinkUrl: bookings.paymentLinkUrl,
-      paymentLinkAmount: bookings.paymentLinkAmount,
       paidAt: bookings.paidAt,
       stagingRequestsEnabled: bookings.stagingRequestsEnabled,
     })
@@ -74,19 +72,9 @@ async function getGalleryBooking(token: string) {
     ? await db.select({ name: agents.name }).from(agents).where(eq(agents.id, booking.contactAgentId))
     : [];
 
-  // A link made for an older total stays hidden until a new one is made, so a
-  // client is never asked to pay the wrong amount.
-  const [{ total }] = await db
-    .select({ total: sum(bookingLineItems.amount).mapWith(Number) })
-    .from(bookingLineItems)
-    .where(eq(bookingLineItems.bookingId, booking.id));
-  const paymentLinkUrl =
-    booking.paymentLinkUrl && booking.paymentLinkAmount === (total ?? 0) ? booking.paymentLinkUrl : null;
-
   return {
     id: booking.id,
     squareInvoiceUrl: booking.squareInvoiceUrl,
-    paymentLinkUrl,
     paidAt: booking.paidAt,
     stagingRequestsEnabled: booking.stagingRequestsEnabled,
     dropboxFolderLink: booking.dropboxFolderLink,
@@ -181,9 +169,9 @@ function InvoiceLink({ bookingId }: { bookingId: string }) {
 }
 
 /**
- * "Pay online" for an open Stripe payment link, or a thank-you once paid.
- * ?paid=1 is where Stripe sends the client back after paying, which can beat
- * the webhook that sets paidAt.
+ * "Pay online" for the invoice's Square copy (lib/squareInvoice.ts), or a
+ * thank-you once paid. ?paid=1 still reads as paid, for links made when
+ * payments went through Stripe and landed back here.
  */
 function PayOnline({ url, paid }: { url: string | null; paid: boolean }) {
   if (paid) {
@@ -223,8 +211,7 @@ export default async function GalleryPage({
   after(() => recordGalleryEvent(booking.id, "view", requestHeaders));
 
   const location = formatLocation(booking);
-  const payOnlineUrl = booking.squareInvoiceUrl || booking.paymentLinkUrl;
-  const payOnline = <PayOnline url={payOnlineUrl} paid={Boolean(booking.paidAt) || justPaid === "1"} />;
+  const payOnline = <PayOnline url={booking.squareInvoiceUrl} paid={Boolean(booking.paidAt) || justPaid === "1"} />;
   const greeting = `Hi ${firstName(booking.contactName) ?? "there"}! Please let me know if there are any edits you'd like made or any angles missing and I'll get it taken care of quickly.`;
 
   if (!booking.dropboxFolderLink) {

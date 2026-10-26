@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse, after } from "next/server";
-import { db } from "@/db";
-import { bookings, bookingLineItems, listings, agents } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
 import { formatDate, formatPrice } from "@/lib/format";
 import { recordGalleryEvent } from "@/lib/galleryViews";
-
-
-// Numbering picks up after 105 — 106 itself was the 1353 Dalton Ct /
-// Chandra Reynolds job, sent by hand before this feature existed, and is
-// meant to be (re)created as this app's very first tracked invoice rather
-// than skipped over. See the comment on bookings.invoiceNumber.
-const LAST_MANUAL_INVOICE_NUMBER = 105;
+import { getOrAssignInvoiceNumber, loadInvoiceDetails } from "@/lib/invoice";
+import { syncSquareInvoice } from "@/lib/squareInvoice";
 
 // Fixed business details from Lukas's real invoice template — not
 // booking-specific, so hardcoded here rather than modeled in the DB, same
@@ -37,30 +29,13 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/**
- * Assigns this booking's invoice number the first time it's viewed, then
- * never again — re-opening/re-printing the same booking's invoice always
- * shows the same number. A GET route mutating state is unusual, but this
- * mirrors the vCard route's "plain <a href>, no client JS" simplicity
- * (src/app/api/agents/[id]/vcard/route.ts), and the write is idempotent —
- * every call after the first is a pure read.
- */
-async function getOrAssignInvoiceNumber(bookingId: string, existing: number | null): Promise<number> {
-  if (existing != null) return existing;
-
-  const [{ max }] = await db.select({ max: sql<number | null>`max(${bookings.invoiceNumber})` }).from(bookings);
-  const next = (max ?? LAST_MANUAL_INVOICE_NUMBER) + 1;
-
-  await db.update(bookings).set({ invoiceNumber: next, invoicedAt: new Date() }).where(eq(bookings.id, bookingId));
-  return next;
-}
-
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
-  if (!booking) {
+  const details = await loadInvoiceDetails(id);
+  if (!details) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
+  const { booking, lineItems, total, addressLine, billedToName, billedToSub } = details;
 
   // The gallery's "View invoice" button tags its link, so the client opening
   // it shows in the booking's gallery activity (Lukas's own opens don't).
@@ -69,35 +44,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     after(() => recordGalleryEvent(id, "invoice_view", requestHeaders));
   }
 
-  const [linkedListing, contact, lineItems] = await Promise.all([
-    booking.listingId
-      ? db.select().from(listings).where(eq(listings.id, booking.listingId)).then((r) => r[0] ?? null)
-      : Promise.resolve(null),
-    booking.contactAgentId
-      ? db
-          .select({ name: agents.name, phone: agents.phone, email: agents.email })
-          .from(agents)
-          .where(eq(agents.id, booking.contactAgentId))
-          .then((r) => r[0] ?? null)
-      : Promise.resolve(null),
-    db
-      .select({ description: bookingLineItems.description, amount: bookingLineItems.amount })
-      .from(bookingLineItems)
-      .where(eq(bookingLineItems.bookingId, id)),
-  ]);
-
   const invoiceNumber = await getOrAssignInvoiceNumber(id, booking.invoiceNumber);
   const invoicedAt = booking.invoicedAt ?? new Date();
+  if (booking.invoiceNumber == null) booking.invoiceNumber = invoiceNumber;
 
-  const addressLine = [linkedListing?.address ?? booking.address, linkedListing?.city ?? booking.city, linkedListing?.state ?? booking.state]
-    .filter(Boolean)
-    .join(", ");
-  const billedToName = contact?.name ?? "Client";
-  const billedToSub = linkedListing?.brokerName ?? null;
-
-  const squareInvoiceUrl = booking.squareInvoiceUrl;
-
-  const total = lineItems.reduce((sum, li) => sum + li.amount, 0);
+  // Creates or updates the Square copy (its "Pay Online" page). A Square
+  // hiccup must never cost the invoice itself: the page then just shows the
+  // last link it had.
+  const square = await syncSquareInvoice(id).catch((err) => {
+    console.error("Square invoice sync failed", err);
+    return { url: booking.squareInvoiceUrl, paid: Boolean(booking.paidAt) };
+  });
+  const payOnline = square.paid
+    ? `<span class="paid">Paid, thank you!</span>`
+    : square.url
+      ? `<a href="${escapeHtml(square.url)}" target="_blank" rel="noopener">Pay Online</a>`
+      : "";
 
   const lineItemRows = lineItems
     .map(
@@ -156,10 +118,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     top: 0;
     display: flex;
     justify-content: center;
+    gap: 12px;
     padding: 14px;
     background: #E7E5E3;
   }
-  .print-bar button, .print-bar a {
+  .print-bar button, .print-bar a, .print-bar .paid {
     font-family: 'Outfit', sans-serif;
     font-weight: 600;
     font-size: 14px;
@@ -174,6 +137,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   .print-bar a {
     background: #D67F1F;
   }
+  .print-bar .paid {
+    background: #ffffff;
+    color: #2E7D32;
+    cursor: default;
+  }
   @media print {
     body { background: #ffffff; }
     .print-bar { display: none; }
@@ -183,9 +151,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 </style>
 </head>
 <body>
-  <div class="print-bar" style="gap: 12px;">
+  <div class="print-bar">
+    ${payOnline}
     <button onclick="window.print()">Print / Save as PDF</button>
-    ${squareInvoiceUrl ? `<a href="${escapeHtml(squareInvoiceUrl)}" target="_blank">Pay Online</a>` : booking.paymentLinkUrl ? `<a href="${escapeHtml(booking.paymentLinkUrl)}" target="_blank">Pay Online</a>` : ''}
   </div>
   <section class="page">
     <div style="text-align:center;flex-shrink:0;">

@@ -435,23 +435,18 @@ export const bookings = pgTable("bookings", {
   // Lukas turns it on for this booking (BookingDetailDialog).
   stagingRequestsEnabled: boolean("staging_requests_enabled").notNull().default(false),
 
-  // Square invoice ID and payment URL, created alongside the internal invoice
-  // in the /api/bookings/[id]/invoice route.
+  // The Square copy of this booking's invoice (lib/squareInvoice.ts): same
+  // number, line items and note, made when the invoice is created and shown
+  // to the client as "Pay Online". squareInvoiceSync fingerprints what it was
+  // made from, so a change to the line items or note replaces it before
+  // anyone can pay a stale amount.
   squareInvoiceId: text("square_invoice_id"),
   squareInvoiceUrl: text("square_invoice_url"),
-
-  // A Stripe Payment Link for the booking's total, made on demand from the
-  // booking's detail view (see src/lib/stripe.ts) and shown on the client
-  // gallery as "Pay online". paymentLinkAmount is the total, in whole
-  // dollars, the link was made for: once line items change it no longer
-  // matches, and the gallery hides the link until a new one is made.
-  stripePaymentLinkId: text("stripe_payment_link_id"),
-  paymentLinkUrl: text("payment_link_url"),
-  paymentLinkAmount: integer("payment_link_amount"),
-  // Set by the Stripe webhook when the client pays through the link. Doesn't
-  // complete the booking: that still records the job's hours by hand.
+  squareInvoiceSync: text("square_invoice_sync"),
+  // When the client paid it, from Square (webhook, or the invoice's status
+  // when its page is opened). Doesn't complete the booking: that still
+  // records the job's hours by hand.
   paidAt: timestamp("paid_at", { withTimezone: true }),
-  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
 
   // Where the home he shot stands on the market — the same nightly check and
   // the same four fields as on listings (see there). Kept on the booking too

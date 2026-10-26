@@ -160,8 +160,24 @@ Email is plain text by choice: no HTML, no tracking pixels.
 booking's own), `contact_agent_id`, `job_date`, `date_tentative`,
 `lockbox_code`, `notes`, line items in `booking_line_items` (`description`,
 `amount` in dollars; the total is their sum), `dropbox_folder_link`,
-`gallery_token`, `invoice_number`, `payment_link_url`, `paid_at`, and the
-hours columns.
+`gallery_token`, `invoice_number`, `square_invoice_id` / `square_invoice_url`,
+`paid_at`, and the hours columns.
+
+Invoices: the first open of `/api/bookings/[id]/invoice` ("Create invoice")
+assigns `invoice_number` (`src/lib/invoice.ts`) and makes its Square copy
+(`src/lib/squareInvoice.ts`): same number, line items and note, the property
+address as its title, delivered `SHARE_MANUALLY` so Square never emails or
+texts the client. Its `public_url` is the invoice's and gallery's "Pay
+Online". `square_invoice_sync` fingerprints what it was made from; when the
+line items, note, address or agent change, the next sync (opening the invoice,
+"Copy pay link", or editing the booking) cancels it and makes a new one, so
+only the current total can be paid. A number Square already holds gets a
+`-2`, `-3`… suffix. No Square copy is made for a completed job's invoice.
+Deleting the invoice cancels its Square copy. `paid_at` is set by
+`/api/webhooks/square` (`invoice.payment_made`, needs
+`SQUARE_WEBHOOK_SIGNATURE_KEY`) or when a sync finds it paid. Each agent is
+their own Square customer (`reference_id` `agent:<id>`); with no email on file
+Lukas's own stands in, so the receipt comes to him.
 
 Lifecycle and the Booked page buckets (`groupBookings` in
 `src/app/booked/data.ts`):
@@ -174,7 +190,7 @@ Lifecycle and the Booked page buckets (`groupBookings` in
 | Invoice sent | `invoice_sent_at` set, not completed |
 | Completed | `completed_at` set |
 
-Client gallery: `gallery.lukashahn.art/<gallery_token>`, photos served live
+Client gallery: `gallery.lukashahn.media/<gallery_token>` (old links on gallery.lukashahn.art still work), photos served live
 from Dropbox. `gallery_views` logs `view`, `download_all`, `download_video`,
 `invoice_view`, and `staging_request` (only when `staging_requests_enabled`
 is on for that booking).

@@ -110,7 +110,7 @@ export async function notifyPriceCutRelaunch(notices: PriceCutNotice[]): Promise
   await broadcast(payload);
 }
 
-/** A client paid a booking through its Stripe payment link. */
+/** A client paid a booking's invoice online (its Square copy). */
 export async function notifyPaymentReceived(amountDollars: number, where: string): Promise<void> {
   await broadcast({ title: `Paid online: $${amountDollars.toLocaleString("en-US")}`, body: where, url: "/booked" });
 }
