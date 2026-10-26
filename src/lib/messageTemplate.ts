@@ -14,6 +14,8 @@ export const PHOTOS_MARKER = "{{photos}}";
 
 /** A job he just finished near the agent's town (lib/recentWork.ts), or a nudge to the site with nothing nearby. */
 export const RECENT_WORK_MARKER = "{{recentWork}}";
+/** The agent's portfolio page link (lib/portfolioSend.ts makes one if they have none). */
+export const PORTFOLIO_LINK_MARKER = "{{portfolioLink}}";
 
 /**
  * Renders a preset variant body, substituting {{firstName}}, {{street}},

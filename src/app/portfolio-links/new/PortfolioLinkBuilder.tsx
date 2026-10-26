@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ImagePlus, Loader2, Plus, Wand2, X } from "lucide-react";
+import { ImagePlus, Loader2, MessageCircle, Plus, Wand2, X } from "lucide-react";
+import { firstName as firstNameOf, smsUrl } from "@/lib/sms";
+import { recordPortfolioLinkText } from "@/app/messaging/replyActions";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PhotoEditor } from "@/app/photo-editor/PhotoEditor";
 import { Button } from "@/components/ui/button";
@@ -59,6 +61,20 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
 
   const [creating, setCreating] = useState(false);
   const [result, setResult] = useState<{ slug: string; url: string } | null>(null);
+  const [texting, setTexting] = useState(false);
+
+  /** Records the "Portfolio link" text in their history (and their reply), then opens Messages with it. */
+  const textIt = async () => {
+    if (!agent || !result) return;
+    setTexting(true);
+    const sent = await recordPortfolioLinkText(agent.id, result.url);
+    setTexting(false);
+    if (sent.error || !sent.text || !sent.phone) {
+      toast.error(sent.error ?? "Couldn't record the text");
+      return;
+    }
+    window.location.href = smsUrl(sent.phone, sent.text);
+  };
 
   const pickAgent = async (a: AgentMatch | null) => {
     setAgent(a);
@@ -134,6 +150,12 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
             </a>
           </Button>
         </div>
+        {agent?.phone && (
+          <Button onClick={textIt} disabled={texting}>
+            <MessageCircle />
+            {texting ? "Opening…" : `Text it to ${firstNameOf(agent.name) ?? "them"}`}
+          </Button>
+        )}
         <Button variant="ghost" onClick={() => router.push("/portfolio-links")}>
           Done
         </Button>

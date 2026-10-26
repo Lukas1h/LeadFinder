@@ -21,12 +21,13 @@ import {
   type MessageResult,
   type PresetType,
 } from "@/db/schema";
-import { and, count, eq, inArray, ne } from "drizzle-orm";
+import { and, count, desc, eq, inArray, ne } from "drizzle-orm";
 import { attachmentMetaSql, withContentTypes, type AttachmentMeta } from "@/lib/attachments";
 import { resolvePendingInteraction, startPendingInteraction } from "@/app/agents/interactionActions";
 import { revalidatePath } from "next/cache";
 import { sendEmail } from "@/lib/mailer";
-import { PHOTOS_MARKER, RECENT_WORK_MARKER, renderMessageBody, renderSubject } from "@/lib/messageTemplate";
+import { PHOTOS_MARKER, PORTFOLIO_LINK_MARKER, RECENT_WORK_MARKER, renderMessageBody, renderSubject } from "@/lib/messageTemplate";
+import { portfolioLinkFor } from "@/lib/portfolioSend";
 import { recentWorkLine } from "@/lib/recentWork";
 import { emailFilesFor, splitEmailFiles } from "@/lib/emailPhotos";
 import { normalizeEmail, EMAIL_RE } from "@/lib/normalize";
@@ -101,7 +102,7 @@ async function nextVariants(presetIds: string[]) {
  */
 async function loadQuickActions(
   presetIds: string[],
-  who: { agentName: string | null; address: string | null; city: string | null }
+  who: { agentId: string | null; agentName: string | null; address: string | null; city: string | null }
 ): Promise<QuickAction[]> {
   if (presetIds.length === 0) return [];
   const [presets, variants] = await Promise.all([
@@ -126,6 +127,10 @@ async function loadQuickActions(
         const preset = byId.get(id);
         const variant = variants.get(id);
         if (!preset || !variant) return [];
+        // "Portfolio link": the agent's page, made now if they have none. No agent, no link to send.
+        const usesLink = variant.body.includes(PORTFOLIO_LINK_MARKER);
+        if (usesLink && !who.agentId) return [];
+        const link = usesLink ? await portfolioLinkFor(who.agentId!) : "";
         const files = splitEmailFiles(withContentTypes(preset.attachments), variant.inlinePhotos);
         return [
           {
@@ -136,7 +141,8 @@ async function loadQuickActions(
             // A preview: the email itself shows the photos where the marker is.
             text: renderMessageBody(variant.body, who.agentName, who.address, who.city)
               .replaceAll(PHOTOS_MARKER, files.inlinePhotos.length > 0 ? `[${files.inlinePhotos.length} photos shown here]` : "")
-              .replaceAll(RECENT_WORK_MARKER, recentWork),
+              .replaceAll(RECENT_WORK_MARKER, recentWork)
+              .replaceAll(PORTFOLIO_LINK_MARKER, link),
             subject: variant.subject ? renderSubject(variant.subject, who.agentName) : null,
             attachments: files.attachments,
           },
@@ -165,6 +171,7 @@ export async function getSendDetail(sendId: string): Promise<SendDetail | null> 
   if (!row) return null;
 
   const who = {
+    agentId: row.agent?.id ?? null,
     agentName: greetingName(row.send, row.agent?.name, row.listing?.agentName),
     address: row.listing?.address ?? null,
     city: row.listing?.city ?? null,
@@ -451,7 +458,10 @@ export async function recordQuickActionText(
       type: preset.type,
       channel: "sms",
       sentAt: now,
-      body: renderMessageBody(variant.body, name, row.address, row.city),
+      body: renderMessageBody(variant.body, name, row.address, row.city).replaceAll(
+        PORTFOLIO_LINK_MARKER,
+        variant.body.includes(PORTFOLIO_LINK_MARKER) ? await portfolioLinkFor(agent.id) : ""
+      ),
       recipientName: name,
     })
     .returning({ id: messageSends.id });
@@ -466,4 +476,69 @@ export async function recordQuickActionText(
 
   revalidateAll();
   return {};
+}
+
+/** The SMS template the portfolio builder's "Text it" button sends (its body has {{portfolioLink}}). */
+const PORTFOLIO_PRESET_NAME = "Portfolio link";
+
+/**
+ * The portfolio builder's "Text it to them": records the "Portfolio link"
+ * text as sent to this agent (in their message history, like any quick
+ * action), and records a reply to their latest message, since a link only
+ * goes to someone who answered. Nothing is sent from here — the web opens
+ * Messages with the returned text, and the usual "did it go?" prompt
+ * confirms it. Returns the text and the number to open Messages with.
+ */
+export async function recordPortfolioLinkText(
+  agentId: string,
+  url: string
+): Promise<{ error?: string; text?: string; phone?: string }> {
+  const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
+  if (!agent) return { error: "That agent is gone" };
+  if (!agent.phone) return { error: `${agent.name ?? "They"} have no phone number on file` };
+  const [preset] = await db
+    .select({ id: messagePresets.id, type: messagePresets.type })
+    .from(messagePresets)
+    .where(and(eq(messagePresets.name, PORTFOLIO_PRESET_NAME), eq(messagePresets.channel, "sms"), eq(messagePresets.enabled, true)));
+  if (!preset) return { error: `The "${PORTFOLIO_PRESET_NAME}" text template is missing or off` };
+  const variant = (await nextVariants([preset.id])).get(preset.id);
+  if (!variant) return { error: `"${PORTFOLIO_PRESET_NAME}" has no variant switched on` };
+
+  // Their latest message from Lukas: the one this link answers.
+  const [latest] = await db
+    .select({ id: messageSends.id, channel: messageSends.channel, listingId: messageSends.listingId, recipientName: messageSends.recipientName })
+    .from(messageSends)
+    .where(eq(messageSends.agentId, agent.id))
+    .orderBy(desc(messageSends.sentAt))
+    .limit(1);
+  const name = latest?.recipientName ?? agent.name;
+  const text = renderMessageBody(variant.body, name, null, null).replaceAll(PORTFOLIO_LINK_MARKER, url);
+
+  const now = new Date();
+  if (latest) await recordReply(latest, agent, "samples", `Replied. Sent "${PORTFOLIO_PRESET_NAME}".`);
+  else if (agent.relationshipStatus === "cold" || agent.relationshipStatus === "declined") await setAgentRelationshipStatus(agent.id, "warm");
+  await db.update(agents).set({ lastContactedAt: now }).where(eq(agents.id, agent.id));
+  const [sent] = await db
+    .insert(messageSends)
+    .values({
+      listingId: latest?.listingId ?? null,
+      agentId: agent.id,
+      presetId: preset.id,
+      variantId: variant.id,
+      type: preset.type,
+      channel: "sms",
+      sentAt: now,
+      body: text,
+      recipientName: name,
+    })
+    .returning({ id: messageSends.id });
+  await startPendingInteraction({
+    agentId: agent.id,
+    listingId: latest?.listingId ?? null,
+    channel: "text",
+    messageSendId: sent?.id ?? null,
+  });
+
+  revalidateAll();
+  return { text, phone: agent.phone };
 }
