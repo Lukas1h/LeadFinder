@@ -85,6 +85,7 @@ async function getGalleryBooking(token: string) {
 
   return {
     id: booking.id,
+    squareInvoiceUrl: booking.squareInvoiceUrl,
     paymentLinkUrl,
     paidAt: booking.paidAt,
     stagingRequestsEnabled: booking.stagingRequestsEnabled,
