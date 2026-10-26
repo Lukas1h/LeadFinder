@@ -277,6 +277,7 @@ from portfolio_links l left join agents a on a.id=l.agent_id order by l.created_
 | Follow Up | `src/app/follow-up/` |
 | Portfolio pages | `src/app/portfolio/[slug]/`, `src/app/portfolio-links/`, `src/lib/portfolioLink.ts` |
 | Finances | `src/lib/finance/`, `src/app/finances/` |
+| Photo editor (Gemini; two presets: Bright interior, Sunset exterior) | `src/lib/photoPresets.ts`, `src/lib/photoEdit.ts`, `src/app/photo-editor/` |
 | Push to Lukas's devices | `src/lib/push.ts`, `scripts/notify-me.mjs` |
 | MCP tools (same rules, for reference) | `src/mcp/tools/` |
 | Crons | `vercel.json`, `src/app/api/cron/` |

@@ -23,20 +23,25 @@ const MODEL = "gemini-3.1-flash-image";
 const INPUT_MAX_PX = 896;
 const INPUT_JPEG_QUALITY = 80;
 
-/** The wrapping instruction, verbatim from the test app's geminiService.ts. */
+/**
+ * The wrapping instruction. Started verbatim from the test app; its
+ * interior-only rules (+5 stops, blown-out windows go white) moved into the
+ * presets on 2026-10-26, because applied to every photo they made exteriors
+ * barely change and turned clear windows white.
+ */
 function instructionFor(prompt: string): string {
   return `Master Architectural & Real Estate Photo Retoucher:
 Task:
 ${prompt}
 
 NON-NEGOTIABLE RETOUCHING STANDARDS:
-1. EXTREME HIGH-KEY BRIGHTNESS (+5 STOPS): Make the interior exposure an extra +5 stops brighter. Like borderline blown out. Overexposed! I want the whites and bright surfaces to be so bright and white they are nearly clipping! Flood the room with luminous, airy magazine-grade light.
-2. DO NOT OPEN BLINDS OR SHADES: Strictly NEVER open, raise, remove, or alter window blinds, slats, shades, shutters, or curtains. If blinds are closed or tilted shut, they MUST stay closed exactly as they are in the original image.
-3. IF WINDOWS ARE WHITE AND BLOWN OUT, LEAVE THEM THAT WAY INSTEAD OF HALLUCINATING DATA: If a window pane is pure white or blown out / overexposed in the original image, LEAVE IT PURE WHITE AND BLOWN OUT! Do NOT hallucinate, invent, or generate fake trees, skies, yards, or buildings inside blown-out windows. Only make existing sky blue and existing foliage vibrant green if those details are ALREADY visibly present in the original photo.
-4. AUTOMATIC ARCHITECTURAL STRAIGHTENING: Correct lens distortion and perspective convergence like a professional tilt-shift lens. Make all vertical walls, doorframes, window frames, and cabinet edges 100% plumb/vertical, and level horizontal lines.
-5. AGGRESSIVE FLOOR DE-GLARE (POLARIZER): Completely suppress harsh white window reflections and shiny glare bouncing off the hardwood or tile floor. Restore rich natural wood grain underneath.
-6. NO VIRTUAL STAGING: Do NOT add or remove furniture or change the room's design.
-Return the straightened, ultra-bright architectural HDR photograph.`;
+1. WARM, BRIGHT, PUNCHY: The finished photo is clearly brighter, warmer, and more vibrant than the original: warm golden-white color balance (never cool, blue, or grey), rich color, crisp contrast, open shadows. Never return a photo that looks only slightly changed.
+2. WINDOWS STAY AS THEY ARE: Never fill, paint, or replace any window, glass door, or pane with white or any flat color. Whatever a window shows in the original (the view outside, trees, sky, a neighbor's house, blinds, a reflection) stays visible and recognizable; balance its exposure so the view reads clearly. Only a pane that is already pure blown-out white in the original stays white, and nothing is invented inside it.
+3. NO LIGHTS TURNED ON: Never turn on or add lights. No glowing windows, lamps, fixtures, or bulbs that are off in the original.
+4. DO NOT OPEN BLINDS OR SHADES: Strictly NEVER open, raise, remove, or alter window blinds, slats, shades, shutters, or curtains. If blinds are closed or tilted shut, they MUST stay closed exactly as they are in the original image.
+5. AUTOMATIC ARCHITECTURAL STRAIGHTENING: Correct lens distortion and perspective convergence like a professional tilt-shift lens. Make all vertical walls, doorframes, window frames, and cabinet edges 100% plumb/vertical, and level horizontal lines.
+6. NOTHING ADDED OR REMOVED: Do NOT add, remove, move, or redesign anything (furniture, decor, the house, plants, trees, landscaping) except objects marked in red for removal. Improve the light and color only.
+Return the straightened, bright, warm, vibrant real estate photograph.`;
 }
 
 /**

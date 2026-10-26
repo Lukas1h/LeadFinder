@@ -1,5 +1,9 @@
-// The photo editor's presets, verbatim from Lukas's EstateHDR test app
-// (2026-10-20). The emphatic wording ("Overexposed! ...so white they are
+// The photo editor's presets, started from Lukas's EstateHDR test app
+// (2026-10-20) and reworked 2026-10-26 to his notes: warmer and brighter
+// everywhere, exteriors improved as a whole (2-3 stops) rather than only a
+// new sky, windows keep their view instead of going white, no lights on.
+// The third preset (Max anti-glare) was dropped; its de-glare lives in
+// Bright interior. The emphatic wording ("Overexposed! ...so white they are
 // clipping!", "DO NOT OPEN BLINDS") is deliberate: a corrections-only
 // rewrite (made after the first port's edits invented views) came back
 // dull, and the inventing turned out to come from 2K rendering and
@@ -20,43 +24,31 @@ export const PHOTO_PRESETS: PhotoPreset[] = [
     id: "bright-interior",
     label: "Bright interior",
     description:
-      "+5 stops brighter high-key whites, AI straightening, floor de-glare, keeps blinds untouched & blown-out windows pure white",
+      "Very bright, warm high-key interior, straightened, floor de-glare; windows keep their view, blinds and lights untouched",
     prompt:
-      "Professional real estate flambient HDR edit:\n" +
-      "1. ULTRA-BRIGHT EXPOSURE: Make the interior exposure an extra +5 stops brighter. Like borderline blown out. Overexposed! I want the things to be so white they are clipping! Flood ceilings, walls, and dark corners with ultra-bright, luminous warm-white fill light.\n" +
-      "2. DO NOT OPEN BLINDS: Never open, raise, remove, or alter window blinds, shades, shutters, or curtains. If blinds or shades are closed or partially closed, leave them in their exact original position.\n" +
-      "3. LEAVE BLOWN-OUT WINDOWS WHITE (ZERO HALLUCINATION): If windows are white and blown out in the original photo, LEAVE THEM WHITE AND BLOWN OUT instead of hallucinating data! Do NOT invent or generate fake trees, skies, or outdoor scenery where the window is pure white. Only enhance outdoor sky/foliage vibrancy if clear outdoor details are already visible in the original photo.\n" +
-      "4. STRAIGHTEN GEOMETRY: Automatically straighten all architectural perspective — make all vertical walls, doorframes, cabinetry, and window edges perfectly plumb (90-degree vertical) and level the horizon.\n" +
-      "5. FLOOR ANTI-GLARE: Apply an aggressive polarizer effect to completely eliminate harsh white reflections and glare streaks on the hardwood/tile floor.\n" +
-      "6. Keep all existing furniture and room layout intact.",
+      "Professional real estate flambient HDR interior edit:\n" +
+      "1. ULTRA-BRIGHT, WARM EXPOSURE: Make the interior exposure an extra +5 stops brighter. Like borderline blown out. Overexposed! Whites and bright surfaces nearly clipping. Flood ceilings, walls, and dark corners with luminous, warm golden-white light — warm and inviting, never cool or grey.\n" +
+      "2. VIBRANT: Rich, punchy color in wood, fabrics, plants, and decor, with crisp contrast — magazine-grade, not washed out.\n" +
+      "3. WINDOWS KEEP THEIR VIEW: Do NOT turn windows white. If the original window shows trees, sky, a yard, or a neighboring house, keep that exact view visible — pull its exposure down to match the bright room (window-pull) so it reads clearly. Only a pane that is already pure white in the original stays white, with nothing invented in it.\n" +
+      "4. FLOOR ANTI-GLARE: Apply an aggressive polarizer effect to remove harsh white reflections and glare streaks on hardwood/tile floors and counters, restoring the natural grain.\n" +
+      "5. Keep all existing furniture, decor, and room layout exactly as they are.",
   },
   {
     id: "sunset-exterior",
     label: "Sunset exterior",
     description:
-      "Orange-pink sunset sky, soft even light with no harsh midday shadows, every light stays off, no surface repainted",
+      "Whole photo 2–3 stops brighter, warm and vibrant, with a sunset sky; house, landscape and windows unchanged, no lights on",
     prompt:
-      "Professional real estate exterior edit: replace the sky with a sunset and soften the harsh daylight. This is NOT a dusk photo shoot — no lights come on anywhere.\n" +
-      "1. SKY: Replace the sky with a vibrant, glowing orange-pink sunset along the horizon blending into soft wispy blue evening clouds. The sky is the only thing that may be replaced.\n" +
-      "2. SOFT EVEN LIGHT: Remove all harsh midday sun shadows. Erase the hard-edged shadow patches on the lawn, driveway, siding, and under trees, and relight the whole scene with soft, even, shadowless ambient light, like the minute after the sun has set: the house and yard stay fully visible and bright, lit only by the sky.\n" +
-      "3. NO LIGHTS ANYWHERE: Not one light turns on. No warm or yellow glow in any window — every window stays dim and shows exactly what it showed in the original photo (interior, blinds, or at most a faint reflection of the new sky). Porch lights, garage lights, landscape spotlights, path lights, and lamp posts that are off in the original stay off: no new glow, halo, or lit fixture anywhere in the photo.\n" +
-      "4. NEVER REPAINT ANY SURFACE: Every surface keeps its exact original color and material. A black front door stays black. A black or dark garage door stays dark. Grey siding stays grey, brick stays brick, stone stays stone. Brighten the lighting only — never whiten, lighten, or recolor any painted or finished surface. This exterior rule overrides the interior high-key brightness standard.\n" +
-      "5. STRAIGHTEN GEOMETRY: Straighten all vertical walls, columns, and rooflines so the architecture stands perfectly upright and level.\n" +
-      "6. LANDSCAPING: Keep all existing landscaping without inventing new objects, and make existing lawn, plants, and trees lush green. Do not open or alter window blinds or curtains.\n" +
-      "7. FINAL CHECK: Before returning the image, verify that no window glows, no fixture is lit, and no surface changed color — if any did, fix it before returning.",
-  },
-  {
-    id: "max-anti-glare",
-    label: "Max anti-glare",
-    description:
-      "AI tilt-shift straightening, aggressive floor polarizer, +5 stop bright lift, leaves blinds closed & white windows untouched",
-    prompt:
-      "Professional architectural photo restoration:\n" +
-      "1. Make the interior exposure an extra +5 stops brighter. Like borderline blown out. Overexposed! I want the things to be so white they are clipping!\n" +
-      "2. DO NOT OPEN BLINDS: Keep all window blinds, shades, shutters, and curtains in their exact original state.\n" +
-      "3. IF WINDOWS ARE WHITE AND BLOWN OUT, LEAVE THEM THAT WAY INSTEAD OF HALLUCINATING DATA: Never generate fake outdoor trees or sky inside overexposed white windows. Only boost vibrancy on outdoor details that are already clearly visible.\n" +
-      "4. Straighten all vertical walls, doorframes, and horizontal lines so perspective is 100% square and plumb.\n" +
-      "5. Heavy polarizing filter pass: strip out all specular glare and reflections from floors, glass tables, and countertops.",
+      "Professional real estate exterior edit. Improve the ENTIRE photo, not just the sky. This is NOT a dusk shoot — no lights come on anywhere.\n" +
+      "1. WHOLE-IMAGE EXPOSURE: Raise the exposure of the whole photo by 2–3 stops, like +2.5 EV in Lightroom — house, siding, roof, porch, ground, and trees all obviously brighter than the original, with shadows fully opened up. It reads as a bright daytime listing photo, not an evening one.\n" +
+      "2. WARM, VIBRANT, PUNCHY: Warm golden color balance across the whole scene, rich saturated color, crisp contrast and clarity. Lawn, plants, and trees lush, healthy green. Never flat, dull, or grey.\n" +
+      "3. SKY: Replace the sky with a vibrant orange-pink sunset glow along the horizon blending into soft wispy blue clouds. Only the sky changes to sunset; the house and yard stay bright daylight.\n" +
+      "4. SOFT EVEN LIGHT: Soften harsh midday shadows on the lawn, driveway, and siding so the light is even and flattering.\n" +
+      "5. HOUSE AND LANDSCAPE UNCHANGED: Do not change the house or landscaping themselves — same shape, materials, colors, plants, trees, and objects. Never repaint: a black door stays black, grey siding stays grey, brick stays brick. Ground stays the same material: bark, dirt, gravel, mulch, and patchy or dry grass stay exactly that — never pave, never lay new sod, never add shrubs, plants, or paths. Brighten and warm the light only.\n" +
+      "6. WINDOWS UNTOUCHED: Every window keeps exactly what it shows in the original — the same dark or reflective glass, blinds, or interior. Never turn a window white, never fill it with a flat color, and never make it glow warm or yellow as if a light were on inside.\n" +
+      "7. NO LIGHTS: Every light fixture stays exactly as unlit as in the original. Wall sconces, porch lights, garage lights, lamp posts, landscape lights, and interior lights show no glow, no lit bulb, no halo.\n" +
+      "8. STRAIGHTEN GEOMETRY: Straighten all vertical walls, columns, and rooflines so the house stands perfectly upright and level.\n" +
+      "9. FINAL CHECK: Before returning, confirm the whole photo is clearly brighter and warmer than the original, no window turned white or glows, no light is on, and the house, ground, and plants are the same as the original — fix anything that isn't.",
   },
 ];
 
