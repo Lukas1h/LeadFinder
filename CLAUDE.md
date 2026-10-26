@@ -1,5 +1,12 @@
 @AGENTS.md
 
+# Read docs/AGENT-GUIDE.md first
+
+How the app's data fits together (leads, agents, messages, bookings, schedule,
+follow-ups, funnel, finances) and how to query or change it without MCP. Any
+commit that adds or changes a feature, table, status or rule updates that
+guide in the same commit.
+
 # Delegate to free OpenCode subagents by default
 
 Claude usage costs Lukas money; OpenCode's free models (always `opencode/space-bunny-free`; Lukas said 2026-10-16: no more Big Pickle)
