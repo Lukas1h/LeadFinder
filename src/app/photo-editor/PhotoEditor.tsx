@@ -251,7 +251,8 @@ export function PhotoEditor({
     if (!it.edit?.image) return;
     setSendingToPage(it.photo.key);
     try {
-      const before = it.prepared?.clean ?? ("url" in it.photo.source ? it.photo.source.url : it.photo.preview);
+      // The untouched original, not the cropped/straightened copy sent to the model: the "before" should show the photo as the agent had it.
+      const before = "url" in it.photo.source ? it.photo.source.url : it.photo.preview;
       if (embed) {
         await embed.onUse(before, it.edit.image);
         setSendingToPage(null);
