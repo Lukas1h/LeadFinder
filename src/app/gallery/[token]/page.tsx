@@ -50,6 +50,7 @@ async function getGalleryBooking(token: string) {
       contactAgentId: bookings.contactAgentId,
       dropboxFolderLink: bookings.dropboxFolderLink,
       invoiceNumber: bookings.invoiceNumber,
+      squareInvoiceUrl: bookings.squareInvoiceUrl,
       paymentLinkUrl: bookings.paymentLinkUrl,
       paymentLinkAmount: bookings.paymentLinkAmount,
       paidAt: bookings.paidAt,
@@ -221,7 +222,8 @@ export default async function GalleryPage({
   after(() => recordGalleryEvent(booking.id, "view", requestHeaders));
 
   const location = formatLocation(booking);
-  const payOnline = <PayOnline url={booking.paymentLinkUrl} paid={Boolean(booking.paidAt) || justPaid === "1"} />;
+  const payOnlineUrl = booking.squareInvoiceUrl || booking.paymentLinkUrl;
+  const payOnline = <PayOnline url={payOnlineUrl} paid={Boolean(booking.paidAt) || justPaid === "1"} />;
   const greeting = `Hi ${firstName(booking.contactName) ?? "there"}! Please let me know if there are any edits you'd like made or any angles missing and I'll get it taken care of quickly.`;
 
   if (!booking.dropboxFolderLink) {

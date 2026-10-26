@@ -5,6 +5,8 @@ import { eq, sql } from "drizzle-orm";
 import { formatDate, formatPrice } from "@/lib/format";
 import { recordGalleryEvent } from "@/lib/galleryViews";
 
+import { createSquareInvoice } from "@/lib/square";
+
 // Numbering picks up after 105 — 106 itself was the 1353 Dalton Ct /
 // Chandra Reynolds job, sent by hand before this feature existed, and is
 // meant to be (re)created as this app's very first tracked invoice rather
@@ -74,7 +76,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       : Promise.resolve(null),
     booking.contactAgentId
       ? db
-          .select({ name: agents.name, phone: agents.phone })
+          .select({ name: agents.name, phone: agents.phone, email: agents.email })
           .from(agents)
           .where(eq(agents.id, booking.contactAgentId))
           .then((r) => r[0] ?? null)
@@ -88,12 +90,33 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const invoiceNumber = await getOrAssignInvoiceNumber(id, booking.invoiceNumber);
   const invoicedAt = booking.invoicedAt ?? new Date();
 
-  const total = lineItems.reduce((sum, li) => sum + li.amount, 0);
   const addressLine = [linkedListing?.address ?? booking.address, linkedListing?.city ?? booking.city, linkedListing?.state ?? booking.state]
     .filter(Boolean)
     .join(", ");
   const billedToName = contact?.name ?? "Client";
   const billedToSub = linkedListing?.brokerName ?? null;
+
+  let squareInvoiceUrl = booking.squareInvoiceUrl;
+  if (!squareInvoiceUrl && lineItems.length > 0) {
+    const squareInvoice = await createSquareInvoice({
+      bookingId: id,
+      invoiceNumber,
+      customerName: billedToName,
+      customerEmail: contact?.email || undefined,
+      lineItems,
+      note: booking.invoiceNote || undefined,
+    });
+    
+    if (squareInvoice) {
+      squareInvoiceUrl = squareInvoice.url;
+      await db.update(bookings).set({
+        squareInvoiceId: squareInvoice.id,
+        squareInvoiceUrl: squareInvoice.url,
+      }).where(eq(bookings.id, id));
+    }
+  }
+
+  const total = lineItems.reduce((sum, li) => sum + li.amount, 0);
 
   const lineItemRows = lineItems
     .map(
@@ -155,7 +178,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     padding: 14px;
     background: #E7E5E3;
   }
-  .print-bar button {
+  .print-bar button, .print-bar a {
     font-family: 'Outfit', sans-serif;
     font-weight: 600;
     font-size: 14px;
@@ -165,6 +188,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     border-radius: 8px;
     padding: 10px 20px;
     cursor: pointer;
+    text-decoration: none;
+  }
+  .print-bar a {
+    background: #D67F1F;
   }
   @media print {
     body { background: #ffffff; }
@@ -175,7 +202,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 </style>
 </head>
 <body>
-  <div class="print-bar"><button onclick="window.print()">Print / Save as PDF</button></div>
+  <div class="print-bar" style="gap: 12px;">
+    <button onclick="window.print()">Print / Save as PDF</button>
+    ${squareInvoiceUrl ? `<a href="${escapeHtml(squareInvoiceUrl)}" target="_blank">Pay Online</a>` : booking.paymentLinkUrl ? `<a href="${escapeHtml(booking.paymentLinkUrl)}" target="_blank">Pay Online</a>` : ''}
+  </div>
   <section class="page">
     <div style="text-align:center;flex-shrink:0;">
       <div id="big-logo" style="font-family:'Noto Serif',serif;font-weight:700;font-size:82px;line-height:0.95;color:#181A1C;letter-spacing:-0.01em;display:inline-block;white-space:nowrap;">Hahn Media</div>

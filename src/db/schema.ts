@@ -435,6 +435,11 @@ export const bookings = pgTable("bookings", {
   // Lukas turns it on for this booking (BookingDetailDialog).
   stagingRequestsEnabled: boolean("staging_requests_enabled").notNull().default(false),
 
+  // Square invoice ID and payment URL, created alongside the internal invoice
+  // in the /api/bookings/[id]/invoice route.
+  squareInvoiceId: text("square_invoice_id"),
+  squareInvoiceUrl: text("square_invoice_url"),
+
   // A Stripe Payment Link for the booking's total, made on demand from the
   // booking's detail view (see src/lib/stripe.ts) and shown on the client
   // gallery as "Pay online". paymentLinkAmount is the total, in whole
