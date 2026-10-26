@@ -134,15 +134,29 @@ export async function createSquareInvoice(params: {
       },
     };
 
-    const invoiceRes = await fetch(`${baseUrl}/v2/invoices`, {
+    let invoiceRes = await fetch(`${baseUrl}/v2/invoices`, {
       method: "POST",
       headers,
       body: JSON.stringify(invoicePayload),
     });
 
     if (!invoiceRes.ok) {
-      console.error("Square invoice error:", await invoiceRes.text());
-      return null;
+      const errorText = await invoiceRes.text();
+      if (errorText.includes("already used")) {
+        // Retry with a random suffix if this internal invoice number was already taken in Square (e.g. reused sandbox or recreated internal booking)
+        invoicePayload.invoice.invoice_number = `${params.invoiceNumber}-${Math.floor(Math.random() * 1000)}`;
+        invoicePayload.idempotency_key = `inv_${params.bookingId}_${Date.now()}`;
+        invoiceRes = await fetch(`${baseUrl}/v2/invoices`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(invoicePayload),
+        });
+      }
+      
+      if (!invoiceRes.ok) {
+        console.error("Square invoice error:", errorText, await invoiceRes.text().catch(() => ""));
+        return null;
+      }
     }
 
     const invoiceData = await invoiceRes.json();

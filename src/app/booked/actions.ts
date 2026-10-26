@@ -15,7 +15,6 @@ import { refreshBookingAirspace } from "@/lib/airspace";
 import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { createSquareInvoice } from "@/lib/square";
-import { createPaymentLink, deactivatePaymentLink, stripeConfigured } from "@/lib/stripe";
 import { GALLERY_ORIGIN } from "@/lib/siteUrls";
 import type { BookingWithDetails } from "./BookedList";
 
@@ -450,8 +449,7 @@ export async function getOrCreatePaymentLink(bookingId: string): Promise<Payment
   const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
   if (total <= 0) return { error: "Add line items first" };
 
-  // Square generation!
-  // Note: the original code expected Stripe but we generate Square first.
+  // Check if a Square invoice is already generated
   let squareInvoiceUrl = booking.squareInvoiceUrl;
   
   if (!squareInvoiceUrl) {
@@ -484,34 +482,7 @@ export async function getOrCreatePaymentLink(bookingId: string): Promise<Payment
 
   if (squareInvoiceUrl) return { url: squareInvoiceUrl };
 
-  if (!stripeConfigured()) return { error: "Square invoice generation failed, and Stripe isn't set up yet." };
-
-  if (booking.paymentLinkUrl && booking.paymentLinkAmount === total) return { url: booking.paymentLinkUrl };
-
-  const [row] = await db
-    .select({ oldLinkId: bookings.stripePaymentLinkId })
-    .from(bookings)
-    .where(eq(bookings.id, bookingId));
-
-  // Paying lands the client back on their gallery, which then says thanks.
-  const token = await getOrAssignGalleryToken(bookingId);
-  const where = [booking.address, booking.city].filter(Boolean).join(", ");
-  const link = await createPaymentLink({
-    bookingId,
-    amountDollars: total,
-    description: ["Hahn Media", booking.invoiceNumber ? `Invoice #${booking.invoiceNumber}` : null, where || null]
-      .filter(Boolean)
-      .join(" · "),
-    redirectUrl: `${GALLERY_ORIGIN}/${token}?paid=1`,
-  });
-
-  await db
-    .update(bookings)
-    .set({ stripePaymentLinkId: link.id, paymentLinkUrl: link.url, paymentLinkAmount: total })
-    .where(eq(bookings.id, bookingId));
-  if (row?.oldLinkId) await deactivatePaymentLink(row.oldLinkId).catch(() => {});
-  revalidatePath("/booked");
-  return { url: link.url };
+  return { error: "Square invoice generation failed." };
 }
 
 export type AirspaceRecheckResult = { summary: string } | { error: string };
