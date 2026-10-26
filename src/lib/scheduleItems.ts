@@ -34,8 +34,17 @@ export async function loadScheduleItems(today: string): Promise<ScheduleItem[]> 
       .from(bookings)
       // Not the tentative ones: their date is a placeholder, and a job that
       // isn't settled shouldn't sit on the calendar looking like it is. They
-      // have their own section on the Booked page.
-      .where(and(isNotNull(bookings.jobDate), gte(bookings.jobDate, bookingCutoff), eq(bookings.dateTentative, false))),
+      // have their own section on the Booked page. Nor ones already shot or
+      // completed: the schedule is what's still to shoot.
+      .where(
+        and(
+          isNotNull(bookings.jobDate),
+          gte(bookings.jobDate, bookingCutoff),
+          eq(bookings.dateTentative, false),
+          isNull(bookings.shotAt),
+          isNull(bookings.completedAt)
+        )
+      ),
     // Full rows: tapping a follow-up opens the listing's ListingModal.
     db.select().from(listings).where(isNotNull(listings.followUpAt)),
   ]);
