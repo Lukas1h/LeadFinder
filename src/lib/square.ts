@@ -63,25 +63,28 @@ export async function createSquareInvoice(params: {
     // Square invoices require a primary_recipient with a customer_id.
     // We'll search for the customer by email, or create one.
     let customerId = undefined;
-    if (params.customerEmail) {
-      const searchRes = await fetch(`${baseUrl}/v2/customers/search`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          query: {
-            filter: {
-              email_address: {
-                exact: params.customerEmail
-              }
+    let customerEmail = params.customerEmail;
+    if (!customerEmail || !customerEmail.includes("@")) {
+      customerEmail = "billing@lukashahn.media"; 
+    }
+
+    const searchRes = await fetch(`${baseUrl}/v2/customers/search`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        query: {
+          filter: {
+            email_address: {
+              exact: customerEmail
             }
           }
-        })
-      });
-      if (searchRes.ok) {
-        const searchData = await searchRes.json();
-        if (searchData.customers && searchData.customers.length > 0) {
-          customerId = searchData.customers[0].id;
         }
+      })
+    });
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      if (searchData.customers && searchData.customers.length > 0) {
+        customerId = searchData.customers[0].id;
       }
     }
 
@@ -90,7 +93,7 @@ export async function createSquareInvoice(params: {
         idempotency_key: `cust_${params.bookingId}_${Date.now()}`,
         given_name: params.customerName.split(" ")[0] || "Client",
         family_name: params.customerName.split(" ").slice(1).join(" ") || "",
-        email_address: params.customerEmail,
+        email_address: customerEmail,
       };
       const custRes = await fetch(`${baseUrl}/v2/customers`, {
         method: "POST",
@@ -146,6 +149,9 @@ export async function createSquareInvoice(params: {
         // Retry with a random suffix if this internal invoice number was already taken in Square (e.g. reused sandbox or recreated internal booking)
         invoicePayload.invoice.invoice_number = `${params.invoiceNumber}-${Math.floor(Math.random() * 1000)}`;
         invoicePayload.idempotency_key = `inv_${params.bookingId}_${Date.now()}`;
+        // Re-set customer ID in case it was updated to the valid email customer
+        invoicePayload.invoice.primary_recipient.customer_id = customerId;
+        
         invoiceRes = await fetch(`${baseUrl}/v2/invoices`, {
           method: "POST",
           headers,
