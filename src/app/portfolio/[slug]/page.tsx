@@ -1,11 +1,10 @@
-import { createHash } from "node:crypto";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
 import { db } from "@/db";
-import { agents, bookings, portfolioLinks, portfolioTownImages, type PortfolioContent, type PortfolioListing } from "@/db/schema";
+import { agents, bookings, portfolioLinks, type PortfolioContent, type PortfolioListing } from "@/db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import { Suspense } from "react";
 import { listingCardPhotoNames } from "@/lib/listingCardPhotos";
@@ -37,27 +36,18 @@ const outfit = Outfit({
 
 const SITE = PORTFOLIO_ORIGIN;
 
-async function previewImage(slug: string, c: PortfolioContent | undefined): Promise<string> {
-  const absolute = (src: string) => (src.startsWith("http") ? src : `${SITE}${src}`);
-  if (c?.beforeAfter && c.afterSrc?.trim()) {
-    // The version changes with the photos, so a preview cached for the old pair isn't reused.
-    const v = createHash("sha1").update(`${c.beforeSrc ?? ""}|${c.afterSrc}`).digest("hex").slice(0, 10);
-    return `${SITE}/api/portfolio/${slug}/og-image?v=${v}`;
-  }
-  const town = c?.area?.trim().toLowerCase();
-  if (town) {
-    const [row] = await db.select({ src: portfolioTownImages.imageSrc }).from(portfolioTownImages).where(eq(portfolioTownImages.town, town));
-    if (row) return absolute(row.src);
-  }
-  return absolute((AGENT_PAGE_PHOTOS.find((p) => p.key === c?.leadPhoto) ?? AGENT_PAGE_PHOTOS[0]).src);
+/**
+ * The link preview (iMessage, Facebook…): the page's lead portfolio photo,
+ * the same generic image for every link. It used to show the agent's own
+ * before/after or a photo of their town; Lukas went back to generic
+ * (2026-10-26) so a preview never shows their listing before the page does.
+ * Absolute URL: crawlers don't resolve relative og:image paths.
+ */
+function previewImage(c: PortfolioContent | undefined): string {
+  const src = (AGENT_PAGE_PHOTOS.find((p) => p.key === c?.leadPhoto) ?? AGENT_PAGE_PHOTOS[0]).src;
+  return src.startsWith("http") ? src : `${SITE}${src}`;
 }
 
-/**
- * The link preview (iMessage, Facebook…), most personal first: the page's
- * own before/after split (drawn by /api/portfolio/[slug]/og-image), else
- * Lukas's photo of the agent's town (/portfolio-links/settings), else the lead
- * portfolio photo. Absolute URLs: crawlers don't resolve relative og:image paths.
- */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const [link] = await db.select({ content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
@@ -65,7 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const area = c?.area?.trim() || "Eugene";
   const title = `Real estate photo & video in ${area} | Hahn Media`;
   const description = "Cinematic media that sells listings quicker.";
-  const images = [await previewImage(slug, c)];
+  const images = [previewImage(c)];
   return {
     title,
     description,
