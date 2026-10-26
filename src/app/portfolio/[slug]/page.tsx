@@ -14,7 +14,7 @@ import { PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
 import { LUKAS_PHONE as PHONE } from "@/lib/agentVcard";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
-import { ListingCard, MutableVideo } from "./client";
+import { BeforeAfterSlider, ListingCard, MutableVideo } from "./client";
 import { PageTracker } from "./tracker";
 
 // Same reasoning as the gallery route: a fresh navigation from outside the
@@ -210,32 +210,15 @@ export default async function PortfolioPage({
             {ba && (
               <>
                 <div data-section="before_after" className="relative aspect-[3/2] w-full overflow-hidden bg-[#F9F4F1]">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- before/after overlay */}
-                  <img src={ba.after} alt="After editing" className="absolute inset-0 h-full w-full object-cover" />
-                  {/* eslint-disable-next-line @next/next/no-img-element -- before/after overlay */}
-                  <img
-                    src={ba.before}
-                    alt="Before editing"
-                    className="absolute inset-0 h-full w-full object-cover [clip-path:polygon(0_0,33%_0,17%_100%,0_100%)]"
-                    style={
-                      ba.dulled
-                        ? {
-                            filter: "brightness(0.72) saturate(0.55) contrast(0.88) sepia(0.12)",
-                          }
-                        : undefined
-                    }
-                  />
-                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
-                    <line x1="33" y1="0" x2="17" y2="100" stroke="#ffffff" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-                  </svg>
-                  <span className="absolute top-2.5 left-2.5 bg-white/92 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] sm:top-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">
+                  <BeforeAfterSlider before={ba.before} after={ba.after} dulled={Boolean(ba.dulled)} />
+                  <span className="pointer-events-none absolute top-2.5 left-2.5 bg-white/92 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] sm:top-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">
                     Before
                   </span>
-                  <span className="absolute top-2.5 right-2.5 bg-white/92 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] sm:top-4 sm:right-4 sm:px-3 sm:py-1.5 sm:text-xs">
+                  <span className="pointer-events-none absolute top-2.5 right-2.5 bg-white/92 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] sm:top-4 sm:right-4 sm:px-3 sm:py-1.5 sm:text-xs">
                     After
                   </span>
                   <div
-                    className={`${serif} absolute right-2.5 bottom-2.5 max-w-[calc(100%-20px)] bg-white/94 px-2.5 py-1.5 text-xs font-bold leading-[1.3] sm:right-4 sm:bottom-4 sm:max-w-[calc(100%-32px)] sm:px-[18px] sm:py-3 sm:text-[clamp(15px,1.8vw,19px)]`}
+                    className={`${serif} pointer-events-none absolute right-2.5 bottom-2.5 max-w-[calc(100%-20px)] bg-white/94 px-2.5 py-1.5 text-xs font-bold leading-[1.3] sm:right-4 sm:bottom-4 sm:max-w-[calc(100%-32px)] sm:px-[18px] sm:py-3 sm:text-[clamp(15px,1.8vw,19px)]`}
                   >
                     Quick edit of what your listing could look like
                   </div>

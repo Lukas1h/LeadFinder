@@ -143,3 +143,63 @@ export function ListingCard({ listing: l }: { listing: PortfolioListing & { phot
     </article>
   );
 }
+
+/**
+ * The before/after: the before on the left of a slanted line, the after on
+ * the right. Starts a quarter in so the after shows most, and drags (mouse
+ * or finger) anywhere on the photo. touch-action pan-y keeps a vertical
+ * swipe scrolling the page on phones; only a sideways drag moves the line.
+ */
+export function BeforeAfterSlider({ before, after, dulled }: { before: string; after: string; dulled: boolean }) {
+  const [pos, setPos] = useState(25);
+  const ref = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+  // Half the slant: the line runs from pos+SLANT at the top to pos-SLANT at the bottom.
+  const SLANT = 8;
+  const move = (clientX: number) => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    setPos(Math.min(100 + SLANT, Math.max(-SLANT, ((clientX - rect.left) / rect.width) * 100)));
+  };
+  const top = pos + SLANT;
+  const bottom = pos - SLANT;
+
+  return (
+    <div
+      ref={ref}
+      className="absolute inset-0 cursor-ew-resize select-none [touch-action:pan-y]"
+      onPointerDown={(e) => {
+        dragging.current = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        move(e.clientX);
+      }}
+      onPointerMove={(e) => dragging.current && move(e.clientX)}
+      onPointerUp={() => (dragging.current = false)}
+      onPointerCancel={() => (dragging.current = false)}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- before/after overlay */}
+      <img src={after} alt="After editing" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
+      {/* eslint-disable-next-line @next/next/no-img-element -- before/after overlay */}
+      <img
+        src={before}
+        alt="Before editing"
+        draggable={false}
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+        style={{
+          clipPath: `polygon(0 0, ${top}% 0, ${bottom}% 100%, 0 100%)`,
+          filter: dulled ? "brightness(0.72) saturate(0.55) contrast(0.88) sepia(0.12)" : undefined,
+        }}
+      />
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
+        <line x1={top} y1="0" x2={bottom} y2="100" stroke="#ffffff" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <span
+        className="pointer-events-none absolute top-1/2 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-sm font-bold text-[#181A1C] shadow-md"
+        style={{ left: `${pos}%` }}
+        aria-hidden
+      >
+        ‹ ›
+      </span>
+    </div>
+  );
+}
