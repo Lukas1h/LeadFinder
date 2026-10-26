@@ -8,6 +8,9 @@ struct LeadsView: View {
     /// Sections the server marked collapsed (just "Unlikely matches") start
     /// closed, matching the web page.
     @State private var collapsed: Set<String> = []
+    /// Which "Agents you know" group is showing: "all", or clients, interested,
+    /// warm, office (the web's tabs on that section).
+    @State private var knownFilter = "all"
     @State private var didSetInitialCollapse = false
     @State private var openLead: LeadsResponse.Group?
     @State private var contactKey: String?
@@ -92,7 +95,10 @@ struct LeadsView: View {
                 ForEach(leads.sections) { section in
                     sectionHeader(section)
                     if !collapsed.contains(section.key) {
-                        let groups = section.groups
+                        if section.key == "known" { knownTabs(section.groups) }
+                        let groups = section.key == "known" && knownFilter != "all"
+                            ? section.groups.filter { $0.knownGroup == knownFilter }
+                            : section.groups
                         ForEach(Array(groups.enumerated()), id: \.element.id) { offset, group in
                             card(group)
                                 .onAppear { prefetchPhotos(after: offset, in: groups) }
@@ -111,6 +117,50 @@ struct LeadsView: View {
             .padding(.vertical, 12)
         }
         .refreshable { await appState.leads.load(force: true) }
+    }
+
+    /// The web's tabs over "Agents you know", in its order. Clients are people
+    /// who have paid for a shoot; "Same office" are strangers at a client's
+    /// brokerage. Only shown when there's more than one group to switch between.
+    @ViewBuilder
+    private func knownTabs(_ groups: [LeadsResponse.Group]) -> some View {
+        let order: [(key: String, label: String)] = [
+            ("clients", "Clients"), ("interested", "Interested"), ("warm", "Warm"), ("office", "Same office"),
+        ]
+        let present = order.filter { entry in groups.contains { $0.knownGroup == entry.key } }
+        if present.count > 1 {
+            let tabs = [("all", "All", groups.count)]
+                + present.map { entry in (entry.key, entry.label, groups.filter { $0.knownGroup == entry.key }.count) }
+            let active = tabs.contains { $0.0 == knownFilter } ? knownFilter : "all"
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(tabs, id: \.0) { key, label, count in
+                        let selected = key == active
+                        Button {
+                            withAnimation(.snappy(duration: 0.2)) { knownFilter = key }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(label)
+                                Text("\(count)")
+                                    .font(.caption.weight(.semibold).monospacedDigit())
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 1)
+                                    .background(selected ? Theme.background.opacity(0.25) : Theme.cardRaised, in: Capsule())
+                            }
+                            .font(.subheadline.weight(.medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(selected ? Theme.accent : Theme.card, in: Capsule())
+                            .foregroundStyle(selected ? Theme.background : Theme.primaryText)
+                            .overlay(Capsule().strokeBorder(Theme.border, lineWidth: selected ? 0 : 0.5))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .scrollClipDisabled()
+        }
     }
 
     private func header(_ counts: LeadsResponse.Counts) -> some View {
