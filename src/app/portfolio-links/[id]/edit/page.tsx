@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPortfolioLinkForEdit } from "../../actions";
 import { PortfolioLinkBuilder } from "../../new/PortfolioLinkBuilder";
+import { portfolioPreviewUrl } from "@/lib/siteUrls";
 
 /** Change an existing agent page in place: same URL, and its activity stays with it. */
 export default function EditPortfolioLinkPage({ params }: { params: Promise<{ id: string }> }) {
@@ -28,7 +29,7 @@ async function EditContent({ params }: { params: Promise<{ id: string }> }) {
       </Link>
       <h1 className="mb-1 text-2xl font-semibold">Edit portfolio link</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        <a href={`${link.url}?preview=1`} target="_blank" rel="noopener noreferrer" className="underline">
+        <a href={portfolioPreviewUrl(link.url)} target="_blank" rel="noopener noreferrer" className="underline">
           {link.url}
         </a>{" "}
         keeps its address; changes show the next time it&apos;s opened.

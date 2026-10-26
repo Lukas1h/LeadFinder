@@ -6,6 +6,7 @@ import { formatDate } from "@/lib/format";
 import { listPortfolioLinks } from "./actions";
 import { formatDuration } from "./duration";
 import { CopyLinkButton } from "./CopyLinkButton";
+import { portfolioPreviewUrl } from "@/lib/siteUrls";
 
 /**
  * Personalized portfolio links: who they were made for (Lukas's own
@@ -65,7 +66,7 @@ async function LinkList() {
           <div className="mt-3 flex flex-wrap gap-2">
             {/* ?preview=1: Lukas opening his own link isn't a visit. */}
             <Button variant="outline" size="sm" asChild>
-              <a href={`${l.url}?preview=1`} target="_blank" rel="noopener noreferrer">
+              <a href={portfolioPreviewUrl(l.url)} target="_blank" rel="noopener noreferrer">
                 <Eye />
                 Preview
               </a>

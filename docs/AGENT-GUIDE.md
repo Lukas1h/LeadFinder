@@ -209,7 +209,9 @@ next listing comes up (usually 1–4 weeks after first contact).
 
 - `portfolio_links`: one personal page per agent (`slug`, `agent_id`,
   `content` JSON with photos, video, houses and an optional before/after),
-  served at `r.lukashahn.media/<slug>`. The page never shows who it's for.
+  served at `r.lukashahn.media/portfolio?i=<4-char slug>` (links before
+  2026-10-26: bare `r.lukashahn.media/<6-char slug>`, still served). The
+  page never shows who it's for.
 - `portfolio_sessions` / `portfolio_events`: visits (active seconds, scroll
   depth) and actions (`save_contact`, `book_shoot`, …). Each action sends him
   a push notification.

@@ -15,3 +15,8 @@ export const PORTFOLIO_ORIGIN = "https://r.lukashahn.media";
  * already out there.
  */
 export const CLIENT_HOSTS = ["gallery.lukashahn.media", "r.lukashahn.media", "gallery.lukashahn.art"];
+
+/** The link as it opens for Lukas himself: ?preview=1 means not a visit (no tracking, no push). */
+export function portfolioPreviewUrl(url: string): string {
+  return `${url}${url.includes("?") ? "&" : "?"}preview=1`;
+}

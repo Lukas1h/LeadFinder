@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import type { PortfolioContent, PortfolioListing } from "@/db/schema";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS } from "@/lib/agentPage";
 import { formatPhone } from "@/lib/format";
+import { portfolioPreviewUrl } from "@/lib/siteUrls";
 import {
   createPortfolioLinkAction,
   getAgentListingPhotos,
@@ -128,7 +129,7 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
             Copy
           </Button>
           <Button variant="outline" asChild>
-            <a href={`${result.url}?preview=1`} target="_blank" rel="noopener noreferrer">
+            <a href={portfolioPreviewUrl(result.url)} target="_blank" rel="noopener noreferrer">
               Preview
             </a>
           </Button>

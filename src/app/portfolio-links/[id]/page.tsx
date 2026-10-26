@@ -8,6 +8,7 @@ import type { PortfolioEvent } from "@/db/schema";
 import { getPortfolioActivity, type PortfolioVisit } from "../actions";
 import { formatDuration } from "../duration";
 import { CopyLinkButton } from "../CopyLinkButton";
+import { portfolioPreviewUrl } from "@/lib/siteUrls";
 
 // Page order, so the bars read top to bottom like the page itself.
 const SECTIONS: { key: string; label: string }[] = [
@@ -73,7 +74,7 @@ async function Activity({ params }: { params: Promise<{ id: string }> }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild>
-              <a href={`${activity.url}?preview=1`} target="_blank" rel="noopener noreferrer">
+              <a href={portfolioPreviewUrl(activity.url)} target="_blank" rel="noopener noreferrer">
                 <Eye />
                 Preview
               </a>

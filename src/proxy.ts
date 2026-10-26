@@ -27,7 +27,7 @@ import { CLIENT_HOSTS, MAIN_SITE_URL } from "@/lib/siteUrls";
 // actual 307 before any page even starts rendering. This only runs for
 // client-host requests — the admin app's own domains return
 // immediately above and never pay this extra round trip.
-/** Must match SLUG_LENGTH in lib/portfolioLink.ts. */
+/** The older bare-path agent page slugs (lib/portfolioLink.ts); new ones use /portfolio?i=. */
 const PORTFOLIO_SLUG_LENGTH = 6;
 
 // Marks a request as "serving the gallery experience" so layout.tsx (a
@@ -157,6 +157,20 @@ export async function proxy(req: NextRequest) {
   }
   if (pathname.startsWith("/gallery/") || pathname.startsWith("/portfolio/")) {
     return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
+  }
+
+  // Agent pages as /portfolio?i=<4-char slug> (lib/portfolioLink.ts).
+  if (pathname === "/portfolio") {
+    const slug = req.nextUrl.searchParams.get("i") ?? "";
+    try {
+      const [match] = slug ? await db.select({ id: portfolioLinks.id }).from(portfolioLinks).where(eq(portfolioLinks.slug, slug)) : [];
+      if (!match) return NextResponse.redirect(MAIN_SITE_URL);
+    } catch (err) {
+      console.error("proxy: portfolio slug lookup failed", err);
+    }
+    return NextResponse.rewrite(new URL(`/portfolio/${encodeURIComponent(slug)}`, req.url), {
+      request: { headers: markGalleryView(req.headers) },
+    });
   }
 
   const token = pathname.slice(1);
