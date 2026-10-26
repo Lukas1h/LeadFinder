@@ -216,7 +216,7 @@ export default async function PortfolioPage({
                   <img
                     src={ba.before}
                     alt="Before editing"
-                    className="absolute inset-0 h-full w-full object-cover [clip-path:polygon(0_0,58%_0,42%_100%,0_100%)]"
+                    className="absolute inset-0 h-full w-full object-cover [clip-path:polygon(0_0,33%_0,17%_100%,0_100%)]"
                     style={
                       ba.dulled
                         ? {
@@ -226,7 +226,7 @@ export default async function PortfolioPage({
                     }
                   />
                   <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
-                    <line x1="58" y1="0" x2="42" y2="100" stroke="#ffffff" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                    <line x1="33" y1="0" x2="17" y2="100" stroke="#ffffff" strokeWidth="2" vectorEffect="non-scaling-stroke" />
                   </svg>
                   <span className="absolute top-2.5 left-2.5 bg-white/92 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] sm:top-4 sm:left-4 sm:px-3 sm:py-1.5 sm:text-xs">
                     Before
