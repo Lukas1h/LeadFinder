@@ -5,7 +5,6 @@ import { eq, sql } from "drizzle-orm";
 import { formatDate, formatPrice } from "@/lib/format";
 import { recordGalleryEvent } from "@/lib/galleryViews";
 
-import { createSquareInvoice } from "@/lib/square";
 
 // Numbering picks up after 105 — 106 itself was the 1353 Dalton Ct /
 // Chandra Reynolds job, sent by hand before this feature existed, and is
@@ -96,25 +95,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const billedToName = contact?.name ?? "Client";
   const billedToSub = linkedListing?.brokerName ?? null;
 
-  let squareInvoiceUrl = booking.squareInvoiceUrl;
-  if (!squareInvoiceUrl && lineItems.length > 0) {
-    const squareInvoice = await createSquareInvoice({
-      bookingId: id,
-      invoiceNumber,
-      customerName: billedToName,
-      customerEmail: contact?.email || undefined,
-      lineItems,
-      note: booking.invoiceNote || undefined,
-    });
-    
-    if (squareInvoice) {
-      squareInvoiceUrl = squareInvoice.url;
-      await db.update(bookings).set({
-        squareInvoiceId: squareInvoice.id,
-        squareInvoiceUrl: squareInvoice.url,
-      }).where(eq(bookings.id, id));
-    }
-  }
+  const squareInvoiceUrl = booking.squareInvoiceUrl;
 
   const total = lineItems.reduce((sum, li) => sum + li.amount, 0);
 

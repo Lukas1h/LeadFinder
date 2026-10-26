@@ -4,7 +4,7 @@ import { randomBytes } from "crypto";
 import { db } from "@/db";
 import { bookings, bookingLineItems, listings, agents, galleryViews, type GalleryEvent, type NewBookingLineItem } from "@/db/schema";
 import { reopenStep } from "./bookingMath";
-import { eq, inArray, desc } from "drizzle-orm";
+import { eq, sum, inArray, ilike, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
@@ -14,6 +14,7 @@ import { estimateDriveTime } from "@/lib/driveTime";
 import { refreshBookingAirspace } from "@/lib/airspace";
 import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import { parseUserAgent } from "@/lib/galleryViews";
+import { createSquareInvoice } from "@/lib/square";
 import { createPaymentLink, deactivatePaymentLink, stripeConfigured } from "@/lib/stripe";
 import { GALLERY_ORIGIN } from "@/lib/siteUrls";
 import type { BookingWithDetails } from "./BookedList";
@@ -421,6 +422,18 @@ export async function getOrAssignGalleryToken(bookingId: string): Promise<string
   return token;
 }
 
+const LAST_MANUAL_INVOICE_NUMBER = 105;
+
+export async function getOrAssignInvoiceNumber(bookingId: string, existing: number | null): Promise<number> {
+  if (existing != null) return existing;
+
+  const [{ max }] = await db.select({ max: sql<number | null>`max(${bookings.invoiceNumber})` }).from(bookings);
+  const next = (max ?? LAST_MANUAL_INVOICE_NUMBER) + 1;
+
+  await db.update(bookings).set({ invoiceNumber: next, invoicedAt: new Date() }).where(eq(bookings.id, bookingId));
+  return next;
+}
+
 export type PaymentLinkResult = { url: string } | { error: string };
 
 /**
@@ -433,14 +446,46 @@ export async function getOrCreatePaymentLink(bookingId: string): Promise<Payment
   const booking = await getBookingWithDetails(bookingId);
   if (!booking) return { error: "Booking not found" };
 
-  // Check if a Square invoice is already generated
-  if (booking.squareInvoiceUrl) return { url: booking.squareInvoiceUrl };
-  
-  if (!stripeConfigured()) return { error: "Square invoice not created yet. Click 'Create invoice' first." };
-
   if (booking.paidAt) return { error: "Already paid online" };
   const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
   if (total <= 0) return { error: "Add line items first" };
+
+  // Square generation!
+  // Note: the original code expected Stripe but we generate Square first.
+  let squareInvoiceUrl = booking.squareInvoiceUrl;
+  
+  if (!squareInvoiceUrl) {
+    const invoiceNumber = await getOrAssignInvoiceNumber(bookingId, booking.invoiceNumber);
+
+    const [contact] = booking.contactAgentId
+      ? await db
+          .select({ email: agents.email })
+          .from(agents)
+          .where(eq(agents.id, booking.contactAgentId))
+      : [];
+
+    const squareInvoice = await createSquareInvoice({
+      bookingId,
+      invoiceNumber,
+      customerName: booking.contactName ?? "Client",
+      customerEmail: contact?.email || undefined,
+      lineItems: booking.lineItems,
+      note: booking.invoiceNote || undefined,
+    });
+    
+    if (squareInvoice) {
+      squareInvoiceUrl = squareInvoice.url;
+      await db.update(bookings).set({
+        squareInvoiceId: squareInvoice.id,
+        squareInvoiceUrl: squareInvoice.url,
+      }).where(eq(bookings.id, bookingId));
+    }
+  }
+
+  if (squareInvoiceUrl) return { url: squareInvoiceUrl };
+
+  if (!stripeConfigured()) return { error: "Square invoice generation failed, and Stripe isn't set up yet." };
+
   if (booking.paymentLinkUrl && booking.paymentLinkAmount === total) return { url: booking.paymentLinkUrl };
 
   const [row] = await db
