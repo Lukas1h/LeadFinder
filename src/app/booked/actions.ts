@@ -294,6 +294,8 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     dropboxFolderLink: booking.dropboxFolderLink,
     galleryToken: booking.galleryToken,
     stagingRequestsEnabled: booking.stagingRequestsEnabled,
+    squareInvoiceId: booking.squareInvoiceId,
+    squareInvoiceUrl: booking.squareInvoiceUrl,
     paymentLinkUrl: booking.paymentLinkUrl,
     paymentLinkAmount: booking.paymentLinkAmount,
     paidAt: booking.paidAt,
@@ -382,6 +384,8 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       dropboxFolderLink: b.dropboxFolderLink,
       galleryToken: b.galleryToken,
       stagingRequestsEnabled: b.stagingRequestsEnabled,
+      squareInvoiceId: b.squareInvoiceId,
+      squareInvoiceUrl: b.squareInvoiceUrl,
       paymentLinkUrl: b.paymentLinkUrl,
       paymentLinkAmount: b.paymentLinkAmount,
       paidAt: b.paidAt,
@@ -426,10 +430,14 @@ export type PaymentLinkResult = { url: string } | { error: string };
  * a stale amount. The link also shows on the client gallery as "Pay online".
  */
 export async function getOrCreatePaymentLink(bookingId: string): Promise<PaymentLinkResult> {
-  if (!stripeConfigured()) return { error: "Stripe isn't set up yet (STRIPE_SECRET_KEY)" };
-
   const booking = await getBookingWithDetails(bookingId);
   if (!booking) return { error: "Booking not found" };
+
+  // Check if a Square invoice is already generated
+  if (booking.squareInvoiceUrl) return { url: booking.squareInvoiceUrl };
+  
+  if (!stripeConfigured()) return { error: "Square invoice not created yet. Click 'Create invoice' first." };
+
   if (booking.paidAt) return { error: "Already paid online" };
   const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
   if (total <= 0) return { error: "Add line items first" };

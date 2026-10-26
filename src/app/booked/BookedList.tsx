@@ -65,6 +65,8 @@ export interface BookingWithDetails {
   dropboxFolderLink: string | null;
   galleryToken: string | null;
   stagingRequestsEnabled: boolean;
+  squareInvoiceId: string | null;
+  squareInvoiceUrl: string | null;
   // The Stripe payment link and the total it was made for, and when the
   // client paid through it — see src/lib/stripe.ts.
   paymentLinkUrl: string | null;
