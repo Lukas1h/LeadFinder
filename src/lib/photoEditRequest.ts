@@ -1,5 +1,7 @@
 import { z } from "zod";
+import sharp from "sharp";
 import { editPhoto, presetById } from "@/lib/photoEdit";
+import type { PhotoPreset } from "@/lib/photoPresets";
 
 const body = z.object({
   url: z.string().url().optional(),
@@ -28,7 +30,10 @@ export async function handlePhotoEditRequest(req: Request): Promise<Response> {
   if (!source) return Response.json({ error: "No photo given" }, { status: 400 });
 
   try {
-    const image = await editPhoto(source, instruction, marked ? { data: marked, mimeType: "image/jpeg" } : undefined);
+    const edited = await editPhoto(source, instruction, marked ? { data: marked, mimeType: "image/jpeg" } : undefined);
+    // A typed prompt replaces the preset, so its boost only rides with the preset's own prompt.
+    const boost = !prompt?.trim() && presetId ? presetById(presetId)?.boost : undefined;
+    const image = boost ? await applyBoost(edited.data, boost) : edited;
     return Response.json({ image: `data:${image.mimeType};base64,${image.data}` });
   } catch (error) {
     console.error("photo-editor edit failed", error);
@@ -61,4 +66,19 @@ function taskFor(prompt: string, extra: { notes?: string; marked: boolean; geome
     );
   }
   return parts.join("\n\n");
+}
+
+/** The preset's fixed brighten/warm/saturate pass (see PhotoPreset.boost). */
+async function applyBoost(base64: string, boost: NonNullable<PhotoPreset["boost"]>): Promise<{ mimeType: string; data: string }> {
+  let img = sharp(Buffer.from(base64, "base64"));
+  if (boost.midtones) img = img.gamma(2.2, boost.midtones);
+  img = img
+    .modulate({ brightness: boost.brightness ?? 1, saturation: boost.saturation })
+    .recomb([
+      [1 + boost.warmth, 0, 0],
+      [0, 1 + boost.warmth / 3, 0],
+      [0, 0, 1 - boost.warmth],
+    ]);
+  const out = await img.jpeg({ quality: 92 }).toBuffer();
+  return { mimeType: "image/jpeg", data: out.toString("base64") };
 }

@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { agents, agentInteractions, bookings, listings, messagePresets, messageSends, type Agent, type Listing } from "@/db/schema";
 import { and, eq, gte, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { firstName, naturalStreetName } from "@/lib/sms";
-import { shotAddresses, shotByHim, stillActive } from "./feeds/shared";
+import { shotAddresses, shotByHim, stillActive, volumeLine } from "./feeds/shared";
 
 /**
  * "Free drone shots": one of the Follow up page's feeds (feeds/index.ts),
@@ -242,6 +242,7 @@ export async function getDroneOffers(): Promise<DroneOfferGroup[]> {
       label: [
         target ? `${street ?? "Their listing"} has no aerials` : null,
         town,
+        volumeLine(agent) ?? "no volume data",
         touched ? `last contact ${shortDate(new Date(touched))}` : "no contact logged",
       ]
         .filter(Boolean)

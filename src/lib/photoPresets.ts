@@ -17,6 +17,14 @@ export interface PhotoPreset {
   label: string;
   description: string;
   prompt: string;
+  /**
+   * A fixed brighten/warm/saturate pass run on the model's result
+   * (photoEditRequest.ts). Gemini under-delivers on brightness however the
+   * prompt words it, and pushing harder in words brought back lit fixtures
+   * (2026-10-26), so the extra punch is done in pixels instead. midtones
+   * lifts mids without clipping (keeps window views); brightness scales all.
+   */
+  boost?: { midtones?: number; brightness?: number; saturation: number; warmth: number };
 }
 
 export const PHOTO_PRESETS: PhotoPreset[] = [
@@ -27,17 +35,18 @@ export const PHOTO_PRESETS: PhotoPreset[] = [
       "Very bright, warm high-key interior, straightened, floor de-glare; windows keep their view, blinds and lights untouched",
     prompt:
       "Professional real estate flambient HDR interior edit:\n" +
-      "1. ULTRA-BRIGHT, WARM EXPOSURE: Make the interior exposure an extra +5 stops brighter. Like borderline blown out. Overexposed! Whites and bright surfaces nearly clipping. Flood ceilings, walls, and dark corners with luminous, warm golden-white light — warm and inviting, never cool or grey.\n" +
-      "2. VIBRANT: Rich, punchy color in wood, fabrics, plants, and decor, with crisp contrast — magazine-grade, not washed out.\n" +
+      "1. ULTRA-BRIGHT, WARM EXPOSURE: Make the interior exposure an extra +6 stops brighter. Blown-out bright. Overexposed! Walls, ceilings, and whites glowing and clipping. Not a single dim corner or shadowy area left. Flood ceilings, walls, and dark corners with luminous, warm golden-white light — warm and inviting, never cool or grey.\n" +
+      "2. VERY VIBRANT AND WARM: Heavily boosted vibrance and saturation in wood, fabrics, plants, and decor, crisp punchy contrast, and a strong warm golden tone through the whole room — magazine-grade, never washed out or neutral.\n" +
       "3. WINDOWS KEEP THEIR VIEW: Do NOT turn windows white. If the original window shows trees, sky, a yard, or a neighboring house, keep that exact view visible — pull its exposure down to match the bright room (window-pull) so it reads clearly. Only a pane that is already pure white in the original stays white, with nothing invented in it.\n" +
       "4. FLOOR ANTI-GLARE: Apply an aggressive polarizer effect to remove harsh white reflections and glare streaks on hardwood/tile floors and counters, restoring the natural grain.\n" +
       "5. Keep all existing furniture, decor, and room layout exactly as they are.",
+    boost: { midtones: 3.0, saturation: 1.15, warmth: 0.04 },
   },
   {
     id: "sunset-exterior",
     label: "Sunset exterior",
     description:
-      "Whole photo 2–3 stops brighter, warm and vibrant, with a sunset sky; house, landscape and windows unchanged, no lights on",
+      "Whole photo much brighter, warm and vibrant, with a sunset sky; house, landscape and windows unchanged, no lights on",
     prompt:
       "Professional real estate exterior edit. Improve the ENTIRE photo, not just the sky. This is NOT a dusk shoot — no lights come on anywhere.\n" +
       "1. WHOLE-IMAGE EXPOSURE: Raise the exposure of the whole photo by 2–3 stops, like +2.5 EV in Lightroom — house, siding, roof, porch, ground, and trees all obviously brighter than the original, with shadows fully opened up. It reads as a bright daytime listing photo, not an evening one.\n" +
@@ -49,6 +58,7 @@ export const PHOTO_PRESETS: PhotoPreset[] = [
       "7. NO LIGHTS: Every light fixture stays exactly as unlit as in the original. Wall sconces, porch lights, garage lights, lamp posts, landscape lights, and interior lights show no glow, no lit bulb, no halo.\n" +
       "8. STRAIGHTEN GEOMETRY: Straighten all vertical walls, columns, and rooflines so the house stands perfectly upright and level.\n" +
       "9. FINAL CHECK: Before returning, confirm the whole photo is clearly brighter and warmer than the original, no window turned white or glows, no light is on, and the house, ground, and plants are the same as the original — fix anything that isn't.",
+    boost: { brightness: 1.22, saturation: 1.25, warmth: 0.05 },
   },
 ];
 
