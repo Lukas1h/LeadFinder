@@ -12,6 +12,7 @@ export type FollowUpFeedKey =
   | "new_listings"
   | "relaunch"
   | "samples"
+  | "unopened"
   | "congrats"
   | "twilight_gift"
   | "staging"

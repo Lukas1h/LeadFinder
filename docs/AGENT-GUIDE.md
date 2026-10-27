@@ -214,7 +214,8 @@ Schedule page, the iPhone app and the MCP tool. It shows:
 ### Follow Up feeds
 
 `src/app/follow-up/feeds/` holds one module per tab: New listings, Relaunch
-(price cuts and back on market), Samples, Congrats, Twilight gift, Virtual
+(price cuts and back on market), Samples, Link not opened (`feeds/unopened.ts`:
+Portfolio link sent 3–21 days ago, never opened, no contact since), Congrats, Twilight gift, Virtual
 staging, Graphics, Drone shots (`src/app/follow-up/droneOffers.ts`: free drone
 shots near upcoming jobs), and Check-ins. `feeds/stats.ts` measures the 30-day
 reply rate per tab. The daily texting target (`DAILY_TARGET` in

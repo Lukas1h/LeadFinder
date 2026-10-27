@@ -8,6 +8,7 @@ import { byPriority } from "./shared";
 import { FEED_STATS_DAYS, getFeedStats, type FeedStats } from "./stats";
 import { getStagingGroup } from "./staging";
 import { getTwilightGiftGroup } from "./twilightGifts";
+import { getUnopenedLinkGroup } from "./unopened";
 import type { FeedGroup, FeedItem, FollowUpFeed } from "./types";
 
 export type { FeedGroup, FeedItem, FollowUpFeed, FollowUpFeedKey } from "./types";
@@ -18,6 +19,7 @@ export interface OfferFeeds {
   backOnMarket: FeedGroup;
   twilight: FeedGroup;
   staging: FeedGroup;
+  unopened: FeedGroup;
   graphics: FeedGroup[];
   drone: FeedGroup[];
   stats: Map<string, FeedStats>;
@@ -28,10 +30,11 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
   // established before any of these parallel branches touch the clock, or
   // whichever gets there first (not necessarily this one) fails the build.
   await connection();
-  const [touchUps, backOnMarket, staging, graphics, drone, stats] = await Promise.all([
+  const [touchUps, backOnMarket, staging, unopened, graphics, drone, stats] = await Promise.all([
     getPhotoTouchUpGroups(),
     getBackOnMarketGroup(),
     getStagingGroup(),
+    getUnopenedLinkGroup(),
     getGraphicsGroups(),
     getDroneOffers(),
     getFeedStats(),
@@ -44,6 +47,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
     backOnMarket,
     twilight,
     staging,
+    unopened,
     graphics,
     drone: drone.map((g) => ({
       title: g.title,
@@ -112,6 +116,13 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
       title: "Samples",
       blurb: "You emailed samples two to six weeks ago and neither of you has said anything since.",
       groups: [group("No word since the samples", reason("samples"))],
+    },
+    {
+      key: "unopened",
+      title: "Link not opened",
+      blurb:
+        "They replied and got your portfolio link 3+ days ago, but never opened it. They wanted to see your work and haven’t yet, so a quick nudge with the link again.",
+      groups: [offers.unopened],
     },
     {
       key: "congrats",
