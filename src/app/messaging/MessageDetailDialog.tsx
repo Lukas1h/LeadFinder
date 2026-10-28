@@ -103,6 +103,11 @@ export function MessageDetailDialog({
 
   const runAction = async (action: QuickAction) => {
     if (!shown) return;
+    // "Portfolio link": build their page first; the builder sends it.
+    if (action.builderHref) {
+      window.location.href = action.builderHref;
+      return;
+    }
     if (action.channel === "email") {
       if (agent?.email) void sendEmailAction(action);
       else {
@@ -181,14 +186,14 @@ export function MessageDetailDialog({
             <div className="flex flex-col gap-3 min-w-0">
               {shown.quickActions.map((action, i) => {
                 // An sms: link can't carry a file, so these only go from the phone.
-                const phoneOnly = action.channel === "sms" && action.attachments.length > 0;
+                const phoneOnly = action.channel === "sms" && action.attachments.length > 0 && !action.builderHref;
                 return (
                   <Button
                     key={action.presetId}
                     variant={i === 0 ? "default" : "outline"}
                     className="w-full"
                     onClick={() => runAction(action)}
-                    disabled={busy != null || phoneOnly || (action.channel === "sms" && !phone)}
+                    disabled={busy != null || phoneOnly || (action.channel === "sms" && !phone && !action.builderHref)}
                     title={phoneOnly ? "Has attachments: send it from the iPhone app" : undefined}
                   >
                     {action.channel === "email" ? <Mail /> : phoneOnly ? <Paperclip /> : <MessageCircle />}

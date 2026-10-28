@@ -27,7 +27,6 @@ import { resolvePendingInteraction, startPendingInteraction } from "@/app/agents
 import { revalidatePath } from "next/cache";
 import { sendEmail } from "@/lib/mailer";
 import { PHOTOS_MARKER, PORTFOLIO_LINK_MARKER, RECENT_WORK_MARKER, renderMessageBody, renderSubject } from "@/lib/messageTemplate";
-import { portfolioLinkFor } from "@/lib/portfolioSend";
 import { recentWorkLine } from "@/lib/recentWork";
 import { emailFilesFor, splitEmailFiles } from "@/lib/emailPhotos";
 import { normalizeEmail, EMAIL_RE } from "@/lib/normalize";
@@ -51,6 +50,9 @@ export interface SendDetail {
   quickActions: QuickAction[];
 }
 
+/** The "Portfolio link" SMS template: its quick action opens the builder, whose "Text it" sends it. */
+const PORTFOLIO_PRESET_NAME = "Portfolio link";
+
 /** One button on a sent message: another template, ready to go to the same agent. */
 export interface QuickAction {
   presetId: string;
@@ -63,6 +65,12 @@ export interface QuickAction {
   subject: string | null;
   /** No bytes: the phone fetches each file when it builds the text. */
   attachments: AttachmentMeta[];
+  /**
+   * Set for "Portfolio link": the button opens the portfolio builder for this
+   * agent instead of a text. The builder's "Text it" sends the two texts
+   * (recordPortfolioLinkText) once a link exists.
+   */
+  builderHref: string | null;
 }
 
 /** The enabled variant that has gone out least, ties by label: the same rotation as the send dialogs. */
@@ -127,10 +135,9 @@ async function loadQuickActions(
         const preset = byId.get(id);
         const variant = variants.get(id);
         if (!preset || !variant) return [];
-        // "Portfolio link": the agent's page, made now if they have none. No agent, no link to send.
-        const usesLink = variant.body.includes(PORTFOLIO_LINK_MARKER);
-        if (usesLink && !who.agentId) return [];
-        const link = usesLink ? await portfolioLinkFor(who.agentId!) : "";
+        // "Portfolio link" opens the builder: no agent, nothing to build for.
+        const opensBuilder = preset.name === PORTFOLIO_PRESET_NAME;
+        if (opensBuilder && !who.agentId) return [];
         const files = splitEmailFiles(withContentTypes(preset.attachments), variant.inlinePhotos);
         return [
           {
@@ -141,10 +148,10 @@ async function loadQuickActions(
             // A preview: the email itself shows the photos where the marker is.
             text: renderMessageBody(variant.body, who.agentName, who.address, who.city)
               .replaceAll(PHOTOS_MARKER, files.inlinePhotos.length > 0 ? `[${files.inlinePhotos.length} photos shown here]` : "")
-              .replaceAll(RECENT_WORK_MARKER, recentWork)
-              .replaceAll(PORTFOLIO_LINK_MARKER, link),
+              .replaceAll(RECENT_WORK_MARKER, recentWork),
             subject: variant.subject ? renderSubject(variant.subject, who.agentName) : null,
             attachments: files.attachments,
+            builderHref: opensBuilder ? `/portfolio-links/new?agent=${who.agentId}` : null,
           },
         ];
       })
@@ -458,10 +465,7 @@ export async function recordQuickActionText(
       type: preset.type,
       channel: "sms",
       sentAt: now,
-      body: renderMessageBody(variant.body, name, row.address, row.city).replaceAll(
-        PORTFOLIO_LINK_MARKER,
-        variant.body.includes(PORTFOLIO_LINK_MARKER) ? await portfolioLinkFor(agent.id) : ""
-      ),
+      body: renderMessageBody(variant.body, name, row.address, row.city),
       recipientName: name,
     })
     .returning({ id: messageSends.id });
@@ -478,32 +482,31 @@ export async function recordQuickActionText(
   return {};
 }
 
-/** The SMS template the portfolio builder's "Text it" button sends (its body has {{portfolioLink}}). */
-const PORTFOLIO_PRESET_NAME = "Portfolio link";
-
 /**
- * The portfolio builder's "Text it to them": records the "Portfolio link"
- * text as sent to this agent (in their message history, like any quick
- * action), and records a reply to their latest message, since a link only
- * goes to someone who answered. Nothing is sent from here — the web opens
- * Messages with the returned text, and the usual "did it go?" prompt
- * confirms it. Returns the text and the number to open Messages with.
+ * The two "Portfolio link" texts for one agent, as they'll read: the
+ * template's body first ("Awesome, thanks for taking the time!"), then its
+ * second message with the link filled in ({{portfolioLink}}). No side effects.
  */
-export async function recordPortfolioLinkText(
+export async function portfolioLinkTexts(
   agentId: string,
   url: string
-): Promise<{ error?: string; text?: string; phone?: string }> {
+): Promise<{ error?: string; first?: string; second?: string; phone?: string }> {
+  const ctx = await portfolioLinkContext(agentId);
+  if ("error" in ctx) return { error: ctx.error };
+  return { first: ctx.first, second: ctx.secondTemplate.replaceAll(PORTFOLIO_LINK_MARKER, url), phone: ctx.agent.phone! };
+}
+
+async function portfolioLinkContext(agentId: string) {
   const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
-  if (!agent) return { error: "That agent is gone" };
-  if (!agent.phone) return { error: `${agent.name ?? "They"} have no phone number on file` };
+  if (!agent) return { error: "That agent is gone" } as const;
+  if (!agent.phone) return { error: `${agent.name ?? "They"} have no phone number on file` } as const;
   const [preset] = await db
-    .select({ id: messagePresets.id, type: messagePresets.type })
+    .select({ id: messagePresets.id, type: messagePresets.type, secondMessage: messagePresets.secondMessage })
     .from(messagePresets)
     .where(and(eq(messagePresets.name, PORTFOLIO_PRESET_NAME), eq(messagePresets.channel, "sms"), eq(messagePresets.enabled, true)));
-  if (!preset) return { error: `The "${PORTFOLIO_PRESET_NAME}" text template is missing or off` };
+  if (!preset) return { error: `The "${PORTFOLIO_PRESET_NAME}" text template is missing or off` } as const;
   const variant = (await nextVariants([preset.id])).get(preset.id);
-  if (!variant) return { error: `"${PORTFOLIO_PRESET_NAME}" has no variant switched on` };
-
+  if (!variant) return { error: `"${PORTFOLIO_PRESET_NAME}" has no variant switched on` } as const;
   // Their latest message from Lukas: the one this link answers.
   const [latest] = await db
     .select({ id: messageSends.id, channel: messageSends.channel, listingId: messageSends.listingId, recipientName: messageSends.recipientName })
@@ -512,7 +515,29 @@ export async function recordPortfolioLinkText(
     .orderBy(desc(messageSends.sentAt))
     .limit(1);
   const name = latest?.recipientName ?? agent.name;
-  const text = renderMessageBody(variant.body, name, null, null).replaceAll(PORTFOLIO_LINK_MARKER, url);
+  // The link goes in the second text; an older single-text body carries it itself.
+  const secondTemplate = preset.secondMessage?.trim() ? renderMessageBody(preset.secondMessage, name, null, null) : "";
+  return { agent, preset, variant, latest, name, first: renderMessageBody(variant.body, name, null, null), secondTemplate };
+}
+
+/**
+ * Records the "Portfolio link" texts as sent to this agent (one send in their
+ * message history holding both texts, like any quick action), and a reply to
+ * their latest message, since a link only goes to someone who answered.
+ * Nothing is sent from here. The web opens Messages with the first text and
+ * copies the second (the usual "did it go?" prompt confirms it); the phone
+ * sends both and calls this with `confirmed`.
+ */
+export async function recordPortfolioLinkText(
+  agentId: string,
+  url: string,
+  confirmed = false
+): Promise<{ error?: string; text?: string; second?: string; phone?: string }> {
+  const ctx = await portfolioLinkContext(agentId);
+  if ("error" in ctx) return { error: ctx.error };
+  const { agent, preset, variant, latest, name, first } = ctx;
+  const second = ctx.secondTemplate.replaceAll(PORTFOLIO_LINK_MARKER, url);
+  const firstText = first.replaceAll(PORTFOLIO_LINK_MARKER, url);
 
   const now = new Date();
   if (latest) await recordReply(latest, agent, "samples", `Replied. Sent "${PORTFOLIO_PRESET_NAME}".`);
@@ -528,17 +553,18 @@ export async function recordPortfolioLinkText(
       type: preset.type,
       channel: "sms",
       sentAt: now,
-      body: text,
+      body: second ? `${firstText}\n\n${second}` : firstText,
       recipientName: name,
     })
     .returning({ id: messageSends.id });
-  await startPendingInteraction({
+  const interactionId = await startPendingInteraction({
     agentId: agent.id,
     listingId: latest?.listingId ?? null,
     channel: "text",
     messageSendId: sent?.id ?? null,
   });
+  if (confirmed && interactionId) await resolvePendingInteraction(interactionId, "sent", `Sent "${PORTFOLIO_PRESET_NAME}".`);
 
   revalidateAll();
-  return { text, phone: agent.phone };
+  return { text: firstText, second, phone: agent.phone! };
 }

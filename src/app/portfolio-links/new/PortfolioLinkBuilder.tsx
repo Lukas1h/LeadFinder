@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ImagePlus, Loader2, MessageCircle, Plus, Wand2, X } from "lucide-react";
 import { firstName as firstNameOf, smsUrl } from "@/lib/sms";
+import { copyInTap } from "@/lib/clipboard";
 import { recordPortfolioLinkText } from "@/app/messaging/replyActions";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PhotoEditor } from "@/app/photo-editor/PhotoEditor";
@@ -73,6 +74,10 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
       toast.error(sent.error ?? "Couldn't record the text");
       return;
     }
+    // Two texts, like a template's second message: Messages opens with the
+    // first, and the second (the link) is on the clipboard to paste next.
+    copyInTap(sent.second);
+    if (sent.second) toast.success("Link text copied: paste it as a second message");
     window.location.href = smsUrl(sent.phone, sent.text);
   };
 
@@ -155,6 +160,11 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
             <MessageCircle />
             {texting ? "Opening…" : `Text it to ${firstNameOf(agent.name) ?? "them"}`}
           </Button>
+        )}
+        {agent?.phone && (
+          <p className="-mt-2 text-xs text-muted-foreground">
+            Opens Messages with &ldquo;Awesome, thanks for taking the time!&rdquo; and copies the link text to paste as a second message.
+          </p>
         )}
         <Button variant="ghost" onClick={() => router.push("/portfolio-links")}>
           Done

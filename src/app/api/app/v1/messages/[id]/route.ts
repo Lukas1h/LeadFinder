@@ -43,7 +43,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // text one is built in the app's composer (the files come from
     // /presets/:id/attachments/:attachmentId) and recorded with the same POST
     // once it has gone.
-    quickActions: detail.quickActions,
+    // "Portfolio link" opens the builder (builderHref), which the iPhone app
+    // doesn't do yet: offered as a text it would go out without the link.
+    // Drop this filter once the app opens its builder for these.
+    quickActions: detail.quickActions.filter((a) => !a.builderHref),
     // For app builds from before quick actions: the first email one, which is
     // what "Send samples" (POST ./samples) sends.
     followUpEmail: firstEmail ? { presetId: firstEmail.presetId, name: firstEmail.name } : null,

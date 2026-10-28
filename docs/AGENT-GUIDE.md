@@ -141,8 +141,7 @@ Lisas), and one person can have a phone-only and an email-only record.
 - `message_presets` / `message_preset_variants`: text and email templates,
   A/B variants with `enabled`. Placeholders include `{{firstName}}`,
   `{{area}}`, `{{city}}`, `{{recentWork}}`, `{{portfolioLink}}` (`src/lib/messageTemplate.ts`;
-  the link is the agent's newest portfolio page, made from the builder's
-  prefill if they have none: `src/lib/portfolioSend.ts`).
+  only in the "Portfolio link" template's second text).
 - `message_sends`: one row per templated send (`sent_at`, `responded_at`,
   `result`: `pending | quoted | booked | declined`). This is the per-variant
   stats source.
@@ -237,10 +236,14 @@ next listing comes up (usually 1–4 weeks after first contact).
   the page is served. Older random slugs still work there: 6 chars as
   `r.lukashahn.media/<slug>`, 4 chars as `r.lukashahn.media/portfolio?i=<slug>`.
   The page never shows who it's for.
-- Sending one: the **Portfolio link** SMS template (a quick action on every
-  outreach text template, first in the list) or the builder's **Text it to
-  …** button after saving (`recordPortfolioLinkText`). Both record the send
-  in message history and mark the agent's last message as replied.
+- Sending one: the **Portfolio link** quick action (first on every outreach
+  text template) opens the builder for that agent; after saving, **Text it to
+  …** sends two texts: the template body ("Awesome, thanks for taking the
+  time!") then its second message, the link plus a line. Web opens Messages
+  with the first and copies the second; the iPhone app sends both
+  (`GET`/`POST /api/app/v1/portfolio-links/[id]/text`). Recorded by
+  `recordPortfolioLinkText` (replyActions.ts): one send in message history
+  with both texts, and the agent's last message marked replied.
 - `portfolio_sessions` / `portfolio_events`: visits (active seconds, scroll
   depth) and actions (`save_contact`, `book_shoot`, …). Each action sends him
   a push notification.
