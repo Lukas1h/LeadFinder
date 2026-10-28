@@ -229,9 +229,14 @@ next listing comes up (usually 1–4 weeks after first contact).
 
 - `portfolio_links`: one personal page per agent (`slug`, `agent_id`,
   `content` JSON with photos, video, houses and an optional before/after),
-  served at `r.lukashahn.media/portfolio?i=<4-char slug>` (links before
-  2026-10-26: bare `r.lukashahn.media/<6-char slug>`, still served). The
-  page never shows who it's for.
+  sent as `lukashahn.media/portfolio/<word>` (a slug from
+  `src/lib/portfolioWords.ts`, two words once they run out). The main site is
+  a separate Vercel project (`lukashahnart`) whose `next.config.ts` forwards
+  `/portfolio/*`, `/lf/*` (this app's assetPrefix), `/api/portfolio/*`,
+  `/api/portfolio-image/*` and `/agent-page/*` to `r.lukashahn.media`, where
+  the page is served. Older random slugs still work there: 6 chars as
+  `r.lukashahn.media/<slug>`, 4 chars as `r.lukashahn.media/portfolio?i=<slug>`.
+  The page never shows who it's for.
 - Sending one: the **Portfolio link** SMS template (a quick action on every
   outreach text template, first in the list) or the builder's **Text it to
   …** button after saving (`recordPortfolioLinkText`). Both record the send
