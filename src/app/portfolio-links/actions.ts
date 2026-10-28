@@ -6,6 +6,7 @@ import {
   agents,
   bookings,
   listings,
+  messageSends,
   portfolioEvents,
   portfolioImages,
   portfolioLinks,
@@ -57,6 +58,32 @@ const LISTINGS_PREFILLED = 3;
  * invoiced) jobs with a gallery, nearest first — same city, then same side of
  * the valley — as editable listing cards.
  */
+/**
+ * Where an agent works, worked out now rather than read from agents.homeCity:
+ * that column is filled nightly and only for warm-and-up agents, and a
+ * portfolio link usually goes out the day someone first replies, before it
+ * has been set. The city they list in most (newest wins a tie), else the
+ * city of the listing he last texted them about.
+ */
+async function agentArea(agentId: string): Promise<string | null> {
+  const [top] = await db
+    .select({ city: sql<string>`initcap(lower(trim(${listings.city})))`, n: count() })
+    .from(listings)
+    .where(and(eq(listings.agentId, agentId), isNotNull(listings.city), sql`trim(${listings.city}) <> ''`))
+    .groupBy(sql`1`)
+    .orderBy(desc(count()), desc(sql`max(coalesce(${listings.listedAt}, ${listings.foundAt}))`))
+    .limit(1);
+  if (top?.city) return top.city;
+  const [sent] = await db
+    .select({ city: listings.city })
+    .from(messageSends)
+    .innerJoin(listings, eq(messageSends.listingId, listings.id))
+    .where(and(eq(messageSends.agentId, agentId), isNotNull(listings.city)))
+    .orderBy(desc(messageSends.sentAt))
+    .limit(1);
+  return sent?.city?.trim() || null;
+}
+
 export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPrefill | null> {
   const [agent] = await db
     .select({ id: agents.id, name: agents.name, phone: agents.phone, email: agents.email, homeCity: agents.homeCity, brokerage: agents.brokerage })
@@ -64,7 +91,7 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
     .where(eq(agents.id, agentId));
   if (!agent) return null;
 
-  const area = agent.homeCity?.trim() || "Eugene";
+  const area = (await agentArea(agent.id)) ?? agent.homeCity?.trim() ?? "";
   const jobs = await finishedJobs();
   const city = area.toLowerCase();
   const region = agentPageRegion(area);
