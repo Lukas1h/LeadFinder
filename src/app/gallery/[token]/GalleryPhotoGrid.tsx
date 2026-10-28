@@ -9,7 +9,18 @@ import { GalleryPhoto } from "./GalleryPhoto";
  * they want staged, adds an optional note, and sends — Lukas gets a push and
  * the picks land in the booking's gallery activity. He stages them himself.
  */
-export function GalleryPhotoGrid({ token, names, staging }: { token: string; names: string[]; staging: boolean }) {
+export function GalleryPhotoGrid({
+  token,
+  names,
+  staging,
+  hero = false,
+}: {
+  token: string;
+  names: string[];
+  staging: boolean;
+  /** The share link's layout: the first photo full width above the grid. */
+  hero?: boolean;
+}) {
   const [picking, setPicking] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
@@ -61,8 +72,19 @@ export function GalleryPhotoGrid({ token, names, staging }: { token: string; nam
         </button>
       )}
 
+      {hero && names[0] && (
+        <a href={url(names[0], "w2048h1536")} target="_blank" rel="noopener noreferrer" className="block w-full">
+          {/* eslint-disable-next-line @next/next/no-img-element -- proxied Dropbox photo */}
+          <img
+            src={url(names[0], "w2048h1536")}
+            alt={names[0]}
+            className="w-full aspect-[3/2] object-cover rounded-lg border border-[#181A1C]/10 bg-[#F9F4F1]"
+          />
+        </a>
+      )}
+
       <div className={`w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 ${picking ? "pb-48" : ""}`}>
-        {names.map((name) => (
+        {(hero ? names.slice(1) : names).map((name) => (
           <GalleryPhoto
             key={name}
             name={name}

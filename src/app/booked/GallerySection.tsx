@@ -4,8 +4,8 @@ import { GALLERY_ORIGIN } from "@/lib/siteUrls";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, CreditCard, ImagePlus, Images, Sofa } from "lucide-react";
-import { getOrAssignGalleryToken, getOrCreatePayLink, setStagingRequestsEnabled } from "./actions";
+import { Check, Share2, CreditCard, ImagePlus, Images, Sofa } from "lucide-react";
+import { getOrAssignGalleryToken, getOrAssignShareToken, getOrCreatePayLink, setStagingRequestsEnabled } from "./actions";
 import { Button } from "@/components/ui/button";
 import type { BookingWithDetails } from "./BookedList";
 
@@ -125,6 +125,35 @@ export function PaymentLinkButton({ booking }: { booking: BookingWithDetails }) 
     <Button variant="outline" size="sm" onClick={handleClick} disabled={isPending}>
       {copied ? <Check className="text-green-600" /> : <CreditCard />}
       {isPending ? "Checking Square…" : copied ? "Copied!" : "Copy pay link"}
+    </Button>
+  );
+}
+
+/**
+ * "Copy share link": the same gallery for someone who isn't the client
+ * (showing the listing off), with no invoice or payment and the first photo
+ * as a hero. Its visits show in Gallery activity as "Share link opened".
+ */
+export function ShareGalleryButton({ booking }: { booking: BookingWithDetails }) {
+  const [isPending, startTransition] = useTransition();
+  const [shareToken, setShareToken] = useState(booking.shareToken);
+  const [copied, setCopied] = useState(false);
+  if (!booking.dropboxFolderLink) return null;
+
+  const handleClick = () => {
+    startTransition(async () => {
+      const token = shareToken ?? (await getOrAssignShareToken(booking.id));
+      if (!shareToken) setShareToken(token);
+      await navigator.clipboard.writeText(`${GALLERY_ORIGIN}/${token}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <Button variant="outline" size="sm" onClick={handleClick} disabled={isPending}>
+      {copied ? <Check className="text-green-600" /> : <Share2 />}
+      {isPending ? "Generating…" : copied ? "Copied!" : "Copy share link"}
     </Button>
   );
 }

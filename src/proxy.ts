@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { bookings, portfolioLinks } from "@/db/schema";
+import { byGalleryToken } from "@/lib/galleryToken";
 import { eq } from "drizzle-orm";
 import { authGateEnabled, isValidSession, safeNextPath, SESSION_COOKIE } from "@/lib/adminSession";
 import { CLIENT_HOSTS, MAIN_SITE_URL } from "@/lib/siteUrls";
@@ -200,7 +201,7 @@ export async function proxy(req: NextRequest) {
   }
 
   try {
-    const [match] = await db.select({ id: bookings.id }).from(bookings).where(eq(bookings.galleryToken, token));
+    const [match] = await db.select({ id: bookings.id }).from(bookings).where(byGalleryToken(token));
     if (!match) return NextResponse.redirect(MAIN_SITE_URL);
   } catch (err) {
     // A lookup failure shouldn't strand a real client on a dead page —

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { db } from "@/db";
+import { byGalleryToken } from "@/lib/galleryToken";
 import { bookings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { listGalleryMedia, getTemporaryLink } from "@/lib/dropbox";
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   const [booking] = await db
     .select({ id: bookings.id, dropboxFolderLink: bookings.dropboxFolderLink })
     .from(bookings)
-    .where(eq(bookings.galleryToken, token));
+    .where(byGalleryToken(token));
   if (!booking?.dropboxFolderLink) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Same rule as the thumbnail route: only files this booking's own folder lists.

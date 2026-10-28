@@ -300,6 +300,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     invoicedAt: booking.invoicedAt,
     dropboxFolderLink: booking.dropboxFolderLink,
     galleryToken: booking.galleryToken,
+    shareToken: booking.shareToken,
     stagingRequestsEnabled: booking.stagingRequestsEnabled,
     squareInvoiceUrl: booking.squareInvoiceUrl,
     paidAt: booking.paidAt,
@@ -387,6 +388,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       invoicedAt: b.invoicedAt,
       dropboxFolderLink: b.dropboxFolderLink,
       galleryToken: b.galleryToken,
+      shareToken: b.shareToken,
       stagingRequestsEnabled: b.stagingRequestsEnabled,
       squareInvoiceUrl: b.squareInvoiceUrl,
       paidAt: b.paidAt,
@@ -407,6 +409,20 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
 export async function setStagingRequestsEnabled(bookingId: string, enabled: boolean): Promise<void> {
   await db.update(bookings).set({ stagingRequestsEnabled: enabled }).where(eq(bookings.id, bookingId));
   revalidatePath("/booked");
+}
+
+/**
+ * The gallery's share link token (bookings.shareToken), made the first time
+ * it's asked for: the same gallery for people who aren't the client, with
+ * no invoice or payment. Never reassigned, like the client's token.
+ */
+export async function getOrAssignShareToken(bookingId: string): Promise<string> {
+  const [existing] = await db.select({ shareToken: bookings.shareToken }).from(bookings).where(eq(bookings.id, bookingId));
+  if (existing?.shareToken) return existing.shareToken;
+  const token = randomBytes(24).toString("base64url");
+  await db.update(bookings).set({ shareToken: token }).where(eq(bookings.id, bookingId));
+  revalidatePath("/booked");
+  return token;
 }
 
 export async function getOrAssignGalleryToken(bookingId: string): Promise<string> {

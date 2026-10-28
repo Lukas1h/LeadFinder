@@ -431,6 +431,11 @@ export const bookings = pgTable("bookings", {
   // client-facing /gallery/[token] URL can't also be used to look up the
   // rest of the booking (line items, lockbox code, notes).
   galleryToken: text("gallery_token").unique(),
+  // A second link to the same gallery for people who aren't the client
+  // (showing a listing off): no invoice, no payment, no greeting, the first
+  // photo as a hero. Its own token so its visits log separately (share_view)
+  // and it can't be used to reach the invoice. Assigned on first use.
+  shareToken: text("share_token").unique(),
   // Shows "Request virtual staging" on the client gallery — off unless
   // Lukas turns it on for this booking (BookingDetailDialog).
   stagingRequestsEnabled: boolean("staging_requests_enabled").notNull().default(false),
@@ -491,7 +496,7 @@ export interface AirspaceCheck {
 // Every time a client's gallery link is opened or something is downloaded
 // from it — shown in the booking's detail dialog. Location comes from
 // Vercel's IP geolocation headers, so it's city-level and approximate.
-export const GALLERY_EVENTS = ["view", "download_all", "download_video", "invoice_view", "staging_request"] as const;
+export const GALLERY_EVENTS = ["view", "download_all", "download_video", "invoice_view", "staging_request", "share_view"] as const;
 // staging_request: detail is the picked filenames (+ the client note).
 export type GalleryEvent = (typeof GALLERY_EVENTS)[number];
 

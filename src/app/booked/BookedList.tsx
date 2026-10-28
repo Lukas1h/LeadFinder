@@ -64,6 +64,8 @@ export interface BookingWithDetails {
   // first clicked) — see src/app/gallery/[token]/page.tsx.
   dropboxFolderLink: string | null;
   galleryToken: string | null;
+  /** The gallery's share link for non-clients (null until first copied). */
+  shareToken: string | null;
   stagingRequestsEnabled: boolean;
   // The invoice's Square copy, the client's "Pay Online", and when they paid
   // it — see src/lib/squareInvoice.ts.

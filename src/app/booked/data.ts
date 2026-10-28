@@ -97,6 +97,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       invoicedAt: b.invoicedAt,
       dropboxFolderLink: b.dropboxFolderLink,
       galleryToken: b.galleryToken,
+      shareToken: b.shareToken,
       stagingRequestsEnabled: b.stagingRequestsEnabled,
       squareInvoiceUrl: b.squareInvoiceUrl,
       paidAt: b.paidAt,

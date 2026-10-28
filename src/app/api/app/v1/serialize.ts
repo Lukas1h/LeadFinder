@@ -178,6 +178,8 @@ export function bookingJson(b: BookingWithDetails) {
     invoicedAt: b.invoicedAt,
     dropboxFolderLink: b.dropboxFolderLink,
     galleryUrl: b.galleryToken ? `${GALLERY_ORIGIN}/${b.galleryToken}` : null,
+    // The share link for non-clients (POST ./share-link makes it); null until first made.
+    shareUrl: b.shareToken ? `${GALLERY_ORIGIN}/${b.shareToken}` : null,
     // "1811 NE Alameda Ave, Eugene, OR" — what the app hands to Maps for the
     // directions sheet. Empty parts are dropped so a half-filled booking
     // doesn't turn into ", , OR".

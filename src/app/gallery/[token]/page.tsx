@@ -10,6 +10,7 @@ import { eq } from "drizzle-orm";
 import { listGalleryMedia } from "@/lib/dropbox";
 import { firstName } from "@/lib/sms";
 import { recordGalleryEvent } from "@/lib/galleryViews";
+import { byGalleryToken } from "@/lib/galleryToken";
 import { GALLERY_ORIGIN } from "@/lib/siteUrls";
 import { GalleryPhotoGrid } from "./GalleryPhotoGrid";
 
@@ -53,9 +54,10 @@ async function getGalleryBooking(token: string) {
       squareInvoiceUrl: bookings.squareInvoiceUrl,
       paidAt: bookings.paidAt,
       stagingRequestsEnabled: bookings.stagingRequestsEnabled,
+      shareToken: bookings.shareToken,
     })
     .from(bookings)
-    .where(eq(bookings.galleryToken, token));
+    .where(byGalleryToken(token));
   if (!booking) return null;
 
   // Same "prefer the linked listing's own fields" resolution as
@@ -77,6 +79,8 @@ async function getGalleryBooking(token: string) {
     squareInvoiceUrl: booking.squareInvoiceUrl,
     paidAt: booking.paidAt,
     stagingRequestsEnabled: booking.stagingRequestsEnabled,
+    // Opened through the share link (bookings.shareToken), not the client's own.
+    shared: booking.shareToken === token,
     dropboxFolderLink: booking.dropboxFolderLink,
     invoiceNumber: booking.invoiceNumber,
     contactName: contact?.name ?? null,
@@ -114,7 +118,7 @@ function GalleryShell({ greeting, children }: { greeting: string; children: Reac
         <div className="font-[family-name:var(--font-gallery-serif)] font-bold text-4xl sm:text-5xl tracking-tight">Hahn Media</div>
         <div className="text-xs uppercase tracking-[0.3em] text-[#181A1C]/70">Real Estate Photo &amp; Video</div>
         <div className="w-full h-px bg-[#181A1C]/10 my-6" />
-        <p className="italic text-sm text-[#181A1C]/70 text-center max-w-md mb-6">{greeting}</p>
+        {greeting ? <p className="italic text-sm text-[#181A1C]/70 text-center max-w-md mb-6">{greeting}</p> : <div className="mb-2" />}
         {children}
       </main>
     </div>
@@ -208,11 +212,15 @@ export default async function GalleryPage({
 
   // Shown in the booking's detail dialog — who opened it, when, on what.
   const requestHeaders = new Headers(await headers());
-  after(() => recordGalleryEvent(booking.id, "view", requestHeaders));
+  after(() => recordGalleryEvent(booking.id, booking.shared ? "share_view" : "view", requestHeaders));
 
   const location = formatLocation(booking);
-  const payOnline = <PayOnline url={booking.squareInvoiceUrl} paid={Boolean(booking.paidAt) || justPaid === "1"} />;
-  const greeting = `Hi ${firstName(booking.contactName) ?? "there"}! Please let me know if there are any edits you'd like made or any angles missing and I'll get it taken care of quickly.`;
+  // The share link is for showing the listing off: nothing about the client's job (payment, invoice, edits).
+  const payOnline = booking.shared ? null : <PayOnline url={booking.squareInvoiceUrl} paid={Boolean(booking.paidAt) || justPaid === "1"} />;
+  const invoice = !booking.shared && booking.invoiceNumber ? <InvoiceLink bookingId={booking.id} /> : null;
+  const greeting = booking.shared
+    ? ""
+    : `Hi ${firstName(booking.contactName) ?? "there"}! Please let me know if there are any edits you'd like made or any angles missing and I'll get it taken care of quickly.`;
 
   if (!booking.dropboxFolderLink) {
     return (
@@ -221,7 +229,7 @@ export default async function GalleryPage({
         <p className="mt-2 text-[#181A1C]/60 text-center">Photos aren&rsquo;t ready yet — check back soon.</p>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
           {payOnline}
-          {booking.invoiceNumber && <InvoiceLink bookingId={booking.id} />}
+          {invoice}
         </div>
       </GalleryShell>
     );
@@ -253,7 +261,7 @@ export default async function GalleryPage({
           </a>
         )}
         {payOnline}
-        {booking.invoiceNumber && <InvoiceLink bookingId={booking.id} />}
+        {invoice}
       </div>
 
       {videos.length > 0 && (
@@ -270,7 +278,12 @@ export default async function GalleryPage({
           <p>No photos yet — check back soon.</p>
         </div>
       ) : photos.length > 0 ? (
-        <GalleryPhotoGrid token={token} names={photos.map((p) => p.name)} staging={booking.stagingRequestsEnabled} />
+        <GalleryPhotoGrid
+          token={token}
+          names={photos.map((p) => p.name)}
+          staging={booking.stagingRequestsEnabled && !booking.shared}
+          hero={booking.shared}
+        />
       ) : null}
 
       <footer className="w-full mt-12 pt-6 border-t border-[#181A1C]/10 text-center text-xs text-[#181A1C]/50">

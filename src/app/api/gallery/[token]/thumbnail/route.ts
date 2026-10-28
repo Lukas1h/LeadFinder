@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { byGalleryToken } from "@/lib/galleryToken";
 import { bookings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { listGalleryMedia, getGalleryThumbnail, type GalleryThumbnailSize } from "@/lib/dropbox";
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   const [booking] = await db
     .select({ dropboxFolderLink: bookings.dropboxFolderLink })
     .from(bookings)
-    .where(eq(bookings.galleryToken, token));
+    .where(byGalleryToken(token));
   if (!booking?.dropboxFolderLink) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Never trust a client-supplied path/name directly against the Dropbox
