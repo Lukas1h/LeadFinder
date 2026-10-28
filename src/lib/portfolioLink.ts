@@ -1,30 +1,25 @@
 import { randomInt } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
+import { AGENT_PAGE_ORIGIN, PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
+import { PORTFOLIO_WORDS, isWordSlug } from "@/lib/portfolioWords";
 import { portfolioLinks, type PortfolioContent } from "@/db/schema";
 
-// Four letters/digits, used as /portfolio?i=<slug>: reads like a normal site
-// page rather than a token made for one person. All 62 letters and digits,
-// since it's only ever tapped, never typed: 62^4 ≈ 14.8M ids. Punctuation
-// would add a little (66^4 ≈ 19M) but texting apps drop a trailing "." or
-// "-" from a link. Links made before 2026-10-26 have 6-char slugs as a bare
-// path (gallery/r host /<slug>) and keep working (proxy.ts).
-const SLUG_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const SLUG_LENGTH = 4;
-
-function randomSlug(): string {
-  let out = "";
-  for (let i = 0; i < SLUG_LENGTH; i++) out += SLUG_ALPHABET[randomInt(SLUG_ALPHABET.length)];
-  return out;
-}
-
-/** A fresh slug, guaranteed unused — collisions are astronomically rare at this length but checked anyway. */
+/**
+ * A fresh slug: an unused word from PORTFOLIO_WORDS ("cedar"), or two of them
+ * ("cedar-ridge") once every single word is taken. Links made before
+ * 2026-10-28 have random slugs (6 chars as a bare path, then 4 chars as
+ * ?i=) and keep working (proxy.ts).
+ */
 async function uniqueSlug(): Promise<string> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const slug = randomSlug();
-    const [existing] = await db.select({ id: portfolioLinks.id }).from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
-    if (!existing) return slug;
+  const taken = new Set((await db.select({ slug: portfolioLinks.slug }).from(portfolioLinks)).map((r) => r.slug));
+  const free = PORTFOLIO_WORDS.filter((w) => !taken.has(w));
+  if (free.length > 0) return free[randomInt(free.length)];
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const a = PORTFOLIO_WORDS[randomInt(PORTFOLIO_WORDS.length)];
+    const b = PORTFOLIO_WORDS[randomInt(PORTFOLIO_WORDS.length)];
+    const slug = `${a}-${b}`;
+    if (a !== b && !taken.has(slug)) return slug;
   }
   throw new Error("Couldn't find a free slug — try again");
 }
@@ -36,10 +31,12 @@ export async function createPortfolioLink(agentId: string | null, content: Portf
 }
 
 /**
- * r.lukashahn.media/portfolio?i=<slug> — see proxy.ts. Older 6-char links
- * were a bare /<slug> (here or on gallery.lukashahn.art) and still work, and
- * are shown that way so a copied old link is the one the agent already has.
+ * lukashahn.media/portfolio/<word>: on the main site's own domain (its
+ * project forwards /portfolio/* here, see AGENT_PAGE_ORIGIN). Older random
+ * slugs are shown as they were sent: 6 chars as r.lukashahn.media/<slug>,
+ * 4 chars as r.lukashahn.media/portfolio?i=<slug>.
  */
 export function portfolioUrl(slug: string): string {
+  if (isWordSlug(slug)) return `${AGENT_PAGE_ORIGIN}/portfolio/${slug}`;
   return slug.length === 6 ? `${PORTFOLIO_ORIGIN}/${slug}` : `${PORTFOLIO_ORIGIN}/portfolio?i=${slug}`;
 }

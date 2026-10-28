@@ -201,8 +201,9 @@ export async function proxy(req: NextRequest) {
   });
 }
 
+// lf/_next/ is this app's assets under its assetPrefix (next.config.ts).
 // agent-page/ is the agent page's static photos (public/agent-page) — public
 // on every host, and on the gallery host they'd otherwise be read as a token.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|agent-page/|favicon\\.ico|manifest\\.webmanifest|icon\\.svg).*)"],
+  matcher: ["/((?!_next/static|_next/image|lf/_next/|agent-page/|favicon\\.ico|manifest\\.webmanifest|icon\\.svg).*)"],
 };

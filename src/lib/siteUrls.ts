@@ -6,7 +6,15 @@
 export const MAIN_SITE_URL = "https://lukashahn.media";
 /** Client galleries: <origin>/<token>. */
 export const GALLERY_ORIGIN = "https://gallery.lukashahn.media";
-/** Personalized agent pages: <origin>/<slug>. */
+/**
+ * Agent pages as sent: lukashahn.media/portfolio/<word>. The main site is a
+ * separate Vercel project (lukashahnart) whose next.config forwards
+ * /portfolio/*, /lf/* (this app's assets, see assetPrefix in next.config.ts),
+ * /api/portfolio/*, /api/portfolio-image/* and /agent-page/* to
+ * PORTFOLIO_ORIGIN, so the link carries the business's own domain.
+ */
+export const AGENT_PAGE_ORIGIN = "https://lukashahn.media";
+/** Where agent pages are actually served (and older links point): <origin>/<slug>. */
 export const PORTFOLIO_ORIGIN = "https://r.lukashahn.media";
 
 /**
