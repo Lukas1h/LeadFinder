@@ -155,7 +155,20 @@ export async function proxy(req: NextRequest) {
   if (pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
-  if (pathname.startsWith("/gallery/") || pathname.startsWith("/portfolio/")) {
+  // An agent page (lukashahn.media/portfolio/<word> arrives here forwarded by
+  // the main site): a slug that doesn't exist goes to the main site rather
+  // than a bare not-found page.
+  if (pathname.startsWith("/portfolio/")) {
+    const slug = decodeURIComponent(pathname.slice("/portfolio/".length).split("/")[0] ?? "");
+    try {
+      const [match] = await db.select({ id: portfolioLinks.id }).from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
+      if (!match) return NextResponse.redirect(MAIN_SITE_URL);
+    } catch (err) {
+      console.error("proxy: portfolio slug lookup failed", err);
+    }
+    return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
+  }
+  if (pathname.startsWith("/gallery/")) {
     return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
   }
 
