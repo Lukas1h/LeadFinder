@@ -903,6 +903,8 @@ struct PortfolioContent: Codable, Sendable, Hashable {
     var beforeSrc: String?
     var afterSrc: String?
     var listings: [PortfolioListing]?
+    /// The link preview image, from an area template; nil = the lead photo.
+    var ogImage: String?
 }
 
 struct PortfolioAgentMatch: Codable, Sendable, Identifiable, Hashable {
@@ -927,6 +929,24 @@ struct PortfolioPrefill: Codable, Sendable {
     var area: String
     var brokerage: String
     var listings: [PortfolioListing]
+    /// The area template covering their area, if any (set on the web's Portfolio settings).
+    var template: PortfolioTemplate?
+}
+
+/// An area template's defaults (`PortfolioTemplateContent` in src/db/schema.ts).
+struct PortfolioTemplate: Codable, Sendable {
+    struct Content: Codable, Sendable {
+        var listings: [PortfolioListing]?
+        var showTourOfHomes: Bool?
+        var showOffer: Bool?
+        var video: String?
+        var leadPhoto: String?
+        var ogImage: String?
+    }
+
+    var id: String
+    var name: String
+    var content: Content
 }
 
 /// GET /portfolio-links/catalog: the builder's fixed choices.

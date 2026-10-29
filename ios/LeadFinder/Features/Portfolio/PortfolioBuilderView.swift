@@ -39,6 +39,8 @@ struct PortfolioBuilderView: View {
     @State private var showOffer = true
     @State private var beforeSrc: String?
     @State private var afterSrc: String?
+    @State private var ogImage: String?
+    @State private var templateName: String?
 
     @State private var catalog: PortfolioCatalog?
     @State private var loading = true
@@ -110,6 +112,14 @@ struct PortfolioBuilderView: View {
     private var form: some View {
         Form {
             agentSection
+            if let templateName, linkId == nil {
+                Section {
+                    Text("Using the \u{201C}\(templateName)\u{201D} area template.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .listRowBackground(Theme.card)
+            }
             Section {
                 field("First name", $firstName, "Sarah")
                 field("Area", $area, "Eugene")
@@ -223,6 +233,14 @@ struct PortfolioBuilderView: View {
             area = prefill.area
             brokerage = prefill.brokerage
             listings = prefill.listings
+            // The area template's settings, else back to the defaults.
+            let t = prefill.template?.content
+            templateName = prefill.template?.name
+            showTourOfHomes = t?.showTourOfHomes ?? true
+            showOffer = t?.showOffer ?? true
+            video = t?.video ?? "summit"
+            leadPhoto = t?.leadPhoto ?? catalog?.leadPhotoChoices.first?.key ?? ""
+            ogImage = t?.ogImage
         } catch {
             self.error = "Couldn't load that agent's details."
         }
@@ -470,6 +488,7 @@ struct PortfolioBuilderView: View {
                 leadPhoto = c.leadPhoto ?? leadPhoto
                 showTourOfHomes = c.showTourOfHomes ?? true
                 showOffer = c.showOffer ?? true
+                ogImage = c.ogImage
                 if c.beforeAfter == true {
                     beforeSrc = c.beforeSrc
                     afterSrc = c.afterSrc
@@ -496,7 +515,8 @@ struct PortfolioBuilderView: View {
             beforeAfter: afterSrc != nil,
             beforeSrc: afterSrc != nil ? beforeSrc : nil,
             afterSrc: afterSrc,
-            listings: listings
+            listings: listings,
+            ogImage: ogImage
         )
         do {
             if let linkId {
