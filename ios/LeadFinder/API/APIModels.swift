@@ -676,9 +676,13 @@ struct QuickAction: Codable, Sendable, Identifiable, Hashable {
     var text: String
     var subject: String?
     var attachments: [PresetAttachment]
+    /// Set for "Portfolio link": the button makes the agent's portfolio link
+    /// (PortfolioQuickSendView) instead of opening a text.
+    var builderHref: String?
 
     var id: String { presetId }
     var isEmail: Bool { channel == "email" }
+    var opensPortfolio: Bool { builderHref != nil }
 }
 
 struct PresetsResponse: Codable, Sendable {

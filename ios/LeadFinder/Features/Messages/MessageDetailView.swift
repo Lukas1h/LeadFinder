@@ -30,6 +30,8 @@ struct MessageDetailView: View {
     /// The text quick action whose files are being fetched.
     @State private var preparing: String?
     @State private var openListing: Listing?
+    /// The agent the "Portfolio link" quick action is making a link for.
+    @State private var portfolioFor: PortfolioAgentMatch?
 
     var body: some View {
         ScrollView {
@@ -87,6 +89,12 @@ struct MessageDetailView: View {
         }
         .sheet(isPresented: $askForEmail) { emailEntry }
         .sheet(item: $openListing) { LeadListingSheet(listing: $0, agent: detail?.agent) }
+        .sheet(item: $portfolioFor) { agent in
+            PortfolioQuickSendView(agent: agent) { note in
+                if let id = quickActions.first(where: \.opensPortfolio)?.presetId { actionNotes[id] = note }
+                Task { await appState.messages.load(force: true) }
+            }
+        }
         .confirmationDialog(
             "Email \"\(pendingAction?.name ?? "")\" to \(detail?.agent?.email ?? "them")?",
             isPresented: $confirmEmail,
@@ -100,7 +108,7 @@ struct MessageDetailView: View {
         }
         .confirmationDialog("Quick actions", isPresented: $chooseAction, titleVisibility: .visible) {
             ForEach(quickActions) { action in
-                Button(action.isEmail ? "Email \"\(action.name)\"…" : "Text \"\(action.name)\"…") { begin(action) }
+                Button(action.opensPortfolio ? "Create portfolio…" : action.isEmail ? "Email \"\(action.name)\"…" : "Text \"\(action.name)\"…") { begin(action) }
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -302,9 +310,9 @@ struct MessageDetailView: View {
                     if preparing == action.presetId {
                         ProgressView().controlSize(.small).tint(Theme.background)
                     } else {
-                        Image(systemName: note != nil ? "checkmark" : action.isEmail ? "envelope.fill" : "message.fill")
+                        Image(systemName: note != nil ? "checkmark" : action.opensPortfolio ? "photo.on.rectangle" : action.isEmail ? "envelope.fill" : "message.fill")
                     }
-                    Text(action.name).lineLimit(1)
+                    Text(action.opensPortfolio ? "Create portfolio" : action.name).lineLimit(1)
                 }
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity)
@@ -325,6 +333,7 @@ struct MessageDetailView: View {
     }
 
     private static func caption(for action: QuickAction) -> String {
+        if action.opensPortfolio { return "Makes their portfolio link, then texts it" }
         let files = action.attachments.count
         let with = files == 0 ? "" : files == 1 ? " with \(action.attachments[0].filename)" : " with \(files) files"
         return action.isEmail ? "Sends an email\(with)" : "Opens a text\(with)"
@@ -332,7 +341,10 @@ struct MessageDetailView: View {
 
     private func begin(_ action: QuickAction) {
         guard !isWorking else { return }
-        if action.isEmail {
+        if action.opensPortfolio {
+            guard let agent = detail?.agent else { return }
+            portfolioFor = PortfolioAgentMatch(id: agent.id, name: agent.name, phone: agent.phone ?? send.agentPhone, email: agent.email)
+        } else if action.isEmail {
             // An agent with an address on file is a confirm and one tap; without
             // one the address has to be typed (or pasted) first, as on the web.
             pendingAction = action

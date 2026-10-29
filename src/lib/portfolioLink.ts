@@ -24,10 +24,10 @@ async function uniqueSlug(): Promise<string> {
   throw new Error("Couldn't find a free slug — try again");
 }
 
-export async function createPortfolioLink(agentId: string | null, content: PortfolioContent): Promise<{ slug: string }> {
+export async function createPortfolioLink(agentId: string | null, content: PortfolioContent): Promise<{ id: string; slug: string }> {
   const slug = await uniqueSlug();
-  await db.insert(portfolioLinks).values({ slug, agentId, content });
-  return { slug };
+  const [row] = await db.insert(portfolioLinks).values({ slug, agentId, content }).returning({ id: portfolioLinks.id });
+  return { id: row.id, slug };
 }
 
 /**

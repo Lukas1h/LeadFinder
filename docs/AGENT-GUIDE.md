@@ -248,10 +248,14 @@ next listing comes up (usually 1–4 weeks after first contact).
   The page never shows who it's for.
 - Sending one: the **Portfolio link** quick action (first on every outreach
   text template) opens the builder for that agent; after saving, **Text it to
-  …** sends two texts: the template body ("Awesome, thanks for taking the
-  time!") then its second message, the link plus a line. Web opens Messages
-  with the first and copies the second; the iPhone app sends both
-  (`GET`/`POST /api/app/v1/portfolio-links/[id]/text`). Recorded by
+  …** sends two texts: the template body ("Thanks!") then its second
+  message, the link plus a line. Web opens Messages with the first and copies
+  the second. On the iPhone the quick action opens a summary of the link it
+  would make (area template, listings, toggles from `/prefill`): **Text
+  portfolio link** creates it and sends both texts in turn, **Edit portfolio
+  link** opens the full builder (whose result also has Text it)
+  (`GET`/`POST /api/app/v1/portfolio-links/[id]/text`; create/save return the
+  link `id`). Recorded by
   `recordPortfolioLinkText` (replyActions.ts): one send in message history
   with both texts, and the agent's last message marked replied.
 - `portfolio_sessions` / `portfolio_events`: visits (active seconds, scroll

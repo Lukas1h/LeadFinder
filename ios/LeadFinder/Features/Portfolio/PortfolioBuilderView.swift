@@ -22,6 +22,9 @@ enum PortfolioBuilderStart: Identifiable {
 struct PortfolioBuilderView: View {
     let start: PortfolioBuilderStart
     var onSaved: () -> Void = {}
+    /// Set when there's a screen to report back to (the Portfolio link quick
+    /// action); called with a note once "Text it" has been sent and recorded.
+    var onTexted: ((String) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
 
@@ -49,6 +52,8 @@ struct PortfolioBuilderView: View {
     @State private var error: String?
     @State private var result: APIClient.SavedPortfolioLink?
     @State private var copied = false
+    @State private var texting = false
+    @State private var textNote: String?
 
     @State private var jobQuery = ""
     @State private var jobResults: [PortfolioListing] = []
@@ -564,12 +569,51 @@ struct PortfolioBuilderView: View {
                 }
             }
             .buttonStyle(.bordered)
+            if let id = saved.id, let agent, agent.phone?.nilIfBlank != nil {
+                Button { Task { await textIt(id) } } label: {
+                    HStack(spacing: 8) {
+                        if texting { ProgressView().controlSize(.small) } else { Image(systemName: "message.fill") }
+                        Text("Text it to \(agent.name?.split(separator: " ").first.map(String.init) ?? "them")")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(texting)
+                Text("Sends \u{201C}Thanks!\u{201D}, then the link text, and logs it in their history.")
+                    .font(.caption)
+                    .foregroundStyle(Theme.tertiaryText)
+            }
+            if let textNote {
+                Text(textNote).font(.footnote).foregroundStyle(Theme.positive)
+            }
+            if let error {
+                Text(error).font(.footnote).foregroundStyle(Theme.danger)
+            }
             Text("Creating or saving a link sends nothing to anyone.")
                 .font(.caption)
                 .foregroundStyle(Theme.tertiaryText)
             Spacer()
         }
         .padding(20)
+    }
+
+    private func textIt(_ linkId: String) async {
+        texting = true
+        error = nil
+        defer { texting = false }
+        switch await PortfolioTexter.send(linkId: linkId) {
+        case .sent:
+            textNote = "Portfolio link texted."
+            onTexted?("Portfolio link texted.")
+        case .firstOnly:
+            let note = "Sent \u{201C}Thanks!\u{201D}; the link text wasn't sent and is on the clipboard."
+            textNote = note
+            onTexted?(note)
+        case .cancelled:
+            break
+        case .failed(let message):
+            error = message
+        }
     }
 }
 

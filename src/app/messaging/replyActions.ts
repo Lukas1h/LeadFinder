@@ -484,7 +484,7 @@ export async function recordQuickActionText(
 
 /**
  * The two "Portfolio link" texts for one agent, as they'll read: the
- * template's body first ("Awesome, thanks for taking the time!"), then its
+ * template's body first ("Thanks!"), then its
  * second message with the link filled in ({{portfolioLink}}). No side effects.
  */
 export async function portfolioLinkTexts(

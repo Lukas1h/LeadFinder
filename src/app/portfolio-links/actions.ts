@@ -205,9 +205,9 @@ export async function uploadPortfolioImage(formData: FormData): Promise<{ url: s
 export async function createPortfolioLinkAction(
   agentId: string | null,
   content: PortfolioContent
-): Promise<{ slug: string; url: string }> {
-  const { slug } = await createPortfolioLink(agentId, content);
-  return { slug, url: portfolioUrl(slug) };
+): Promise<{ id: string; slug: string; url: string }> {
+  const { id, slug } = await createPortfolioLink(agentId, content);
+  return { id, slug, url: portfolioUrl(slug) };
 }
 
 export interface PortfolioLinkSummary {
@@ -418,10 +418,10 @@ export async function getPortfolioLinkForEdit(linkId: string): Promise<{
 }
 
 /** Saves changes to a link in place — same URL, same activity. */
-export async function updatePortfolioLinkAction(linkId: string, agentId: string | null, content: PortfolioContent): Promise<{ slug: string; url: string }> {
+export async function updatePortfolioLinkAction(linkId: string, agentId: string | null, content: PortfolioContent): Promise<{ id: string; slug: string; url: string }> {
   const [row] = await db.update(portfolioLinks).set({ agentId, content }).where(eq(portfolioLinks.id, linkId)).returning({ slug: portfolioLinks.slug });
   if (!row) throw new Error("That link no longer exists");
-  return { slug: row.slug, url: portfolioUrl(row.slug) };
+  return { id: linkId, slug: row.slug, url: portfolioUrl(row.slug) };
 }
 
 export interface TownImage {

@@ -8,6 +8,8 @@ extension APIClient {
 
     /// What create and save answer: the link's slug and its public URL.
     struct SavedPortfolioLink: Decodable, Sendable {
+        /// Missing from an older server.
+        let id: String?
         let slug: String
         let url: String
     }
@@ -59,7 +61,26 @@ extension APIClient {
         return response.groups
     }
 
+    /// The two "Portfolio link" texts for a link's agent, in order: the
+    /// template body, then its second message with the link. No side effects.
+    struct PortfolioLinkTexts: Decodable, Sendable {
+        let first: String
+        let second: String?
+        let phone: String
+    }
+
+    func portfolioLinkTexts(linkId: String) async throws -> PortfolioLinkTexts {
+        try await read("api/app/v1/portfolio-links/\(linkId)/text")
+    }
+
     // MARK: - Writes
+
+    /// Records the "Portfolio link" texts as sent (message history, their last message replied). Sends nothing.
+    func recordPortfolioLinkText(linkId: String) async throws {
+        struct Empty: Encodable, Sendable {}
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("POST", "api/app/v1/portfolio-links/\(linkId)/text", body: Empty(), as: OK.self)
+    }
 
     private struct LinkBody: Encodable, Sendable {
         let agentId: String?

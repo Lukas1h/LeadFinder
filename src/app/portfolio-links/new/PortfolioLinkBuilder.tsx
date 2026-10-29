@@ -176,7 +176,7 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
         )}
         {agent?.phone && (
           <p className="-mt-2 text-xs text-muted-foreground">
-            Opens Messages with &ldquo;Awesome, thanks for taking the time!&rdquo; and copies the link text to paste as a second message.
+            Opens Messages with Opens Messages with &ldquo;Awesome, thanks for taking the time!&rdquo; and copiesldquo;Thanks!Opens Messages with &ldquo;Awesome, thanks for taking the time!&rdquo; and copiesrdquo; and copies the link text to paste as a second message.
           </p>
         )}
         <Button variant="ghost" onClick={() => router.push("/portfolio-links")}>
