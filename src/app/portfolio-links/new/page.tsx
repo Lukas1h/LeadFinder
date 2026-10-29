@@ -32,7 +32,9 @@ async function BuilderContent({ searchParams }: { searchParams: Promise<{ agent?
       start={{
         linkId: null,
         agent: prefill?.agent ?? null,
+        templateName: prefill?.template?.name ?? null,
         content: {
+          ...prefill?.template?.content,
           agentFirstName: prefill?.firstName,
           area: prefill?.area,
           brokerage: prefill?.brokerage,

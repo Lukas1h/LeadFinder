@@ -67,5 +67,6 @@ export function parseContent(raw: unknown): PortfolioContent {
     beforeSrc,
     afterSrc,
     listings: listings.map(parseListing),
+    ogImage: text(c.ogImage, "ogImage"),
   };
 }

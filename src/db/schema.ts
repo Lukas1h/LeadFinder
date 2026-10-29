@@ -14,6 +14,7 @@ import {
   customType,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // "passed" and "declined" are both dead ends, but they mean opposite things and
 // conflating them cost real signal: until 2026-09-22 a single "declined" status
@@ -561,7 +562,12 @@ export interface PortfolioContent {
   beforeSrc?: string | null;
   afterSrc?: string | null;
   listings?: PortfolioListing[];
+  /** The link preview image (og:image), from an area template; none = the lead portfolio photo. */
+  ogImage?: string | null;
 }
+
+/** What an area template presets in the builder; every field optional = leave the builder's default. */
+export type PortfolioTemplateContent = Pick<PortfolioContent, "listings" | "showTourOfHomes" | "showOffer" | "video" | "leadPhoto" | "ogImage">;
 
 // A personalized agent page (/portfolio/[slug], served bare on
 // r.lukashahn.media — see proxy.ts) sent in place of the samples email's
@@ -663,6 +669,21 @@ export const portfolioTownImages = pgTable("portfolio_town_images", {
   imageSrc: text("image_src").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Area defaults for the portfolio link builder: when the picked agent's area
+// is one of `towns` (lowercased, trimmed), the builder starts from this
+// template's listings, toggles and preview image instead of its own defaults.
+// Set on /portfolio-links/settings.
+export const portfolioTemplates = pgTable("portfolio_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  towns: text("towns").array().notNull().default(sql`'{}'::text[]`),
+  content: jsonb("content").$type<PortfolioTemplateContent>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PortfolioTemplate = typeof portfolioTemplates.$inferSelect;
 
 export type PortfolioLink = typeof portfolioLinks.$inferSelect;
 export type NewPortfolioLink = typeof portfolioLinks.$inferInsert;

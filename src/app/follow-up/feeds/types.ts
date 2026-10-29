@@ -13,6 +13,7 @@ export type FollowUpFeedKey =
   | "relaunch"
   | "samples"
   | "unopened"
+  | "opened_no_reply"
   | "congrats"
   | "twilight_gift"
   | "staging"

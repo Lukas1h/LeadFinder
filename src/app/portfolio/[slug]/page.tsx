@@ -41,10 +41,11 @@ const SITE = PORTFOLIO_ORIGIN;
  * the same generic image for every link. It used to show the agent's own
  * before/after or a photo of their town; Lukas went back to generic
  * (2026-10-26) so a preview never shows their listing before the page does.
- * Absolute URL: crawlers don't resolve relative og:image paths.
+ * An area template can set its own (content.ogImage, e.g. a drone shot of the
+ * town). Absolute URL: crawlers don't resolve relative og:image paths.
  */
 function previewImage(c: PortfolioContent | undefined): string {
-  const src = (AGENT_PAGE_PHOTOS.find((p) => p.key === c?.leadPhoto) ?? AGENT_PAGE_PHOTOS[0]).src;
+  const src = c?.ogImage || (AGENT_PAGE_PHOTOS.find((p) => p.key === c?.leadPhoto) ?? AGENT_PAGE_PHOTOS[0]).src;
   return src.startsWith("http") ? src : `${SITE}${src}`;
 }
 

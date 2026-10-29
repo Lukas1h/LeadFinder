@@ -9,6 +9,7 @@ import { FEED_STATS_DAYS, getFeedStats, type FeedStats } from "./stats";
 import { getStagingGroup } from "./staging";
 import { getTwilightGiftGroup } from "./twilightGifts";
 import { getUnopenedLinkGroup } from "./unopened";
+import { getOpenedNoReplyGroup } from "./opened";
 import type { FeedGroup, FeedItem, FollowUpFeed } from "./types";
 
 export type { FeedGroup, FeedItem, FollowUpFeed, FollowUpFeedKey } from "./types";
@@ -20,6 +21,7 @@ export interface OfferFeeds {
   twilight: FeedGroup;
   staging: FeedGroup;
   unopened: FeedGroup;
+  openedNoReply: FeedGroup;
   graphics: FeedGroup[];
   drone: FeedGroup[];
   stats: Map<string, FeedStats>;
@@ -30,11 +32,12 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
   // established before any of these parallel branches touch the clock, or
   // whichever gets there first (not necessarily this one) fails the build.
   await connection();
-  const [touchUps, backOnMarket, staging, unopened, graphics, drone, stats] = await Promise.all([
+  const [touchUps, backOnMarket, staging, unopened, openedNoReply, graphics, drone, stats] = await Promise.all([
     getPhotoTouchUpGroups(),
     getBackOnMarketGroup(),
     getStagingGroup(),
     getUnopenedLinkGroup(),
+    getOpenedNoReplyGroup(),
     getGraphicsGroups(),
     getDroneOffers(),
     getFeedStats(),
@@ -48,6 +51,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
     twilight,
     staging,
     unopened,
+    openedNoReply,
     graphics,
     drone: drone.map((g) => ({
       title: g.title,
@@ -121,8 +125,15 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
       key: "unopened",
       title: "Link not opened",
       blurb:
-        "They replied and got your portfolio link 3+ days ago, but never opened it. They wanted to see your work and haven’t yet, so a quick nudge with the link again.",
+        "They replied and got your portfolio link 3+ days ago, but never opened it. They wanted to see your work and haven’t yet, so a quick nudge.",
       groups: [offers.unopened],
+    },
+    {
+      key: "opened_no_reply",
+      title: "Opened, no reply",
+      blurb:
+        "They got your portfolio link 3+ days ago and opened it, but haven’t said anything since. Thank them for looking and offer a first-time discount on their next listing.",
+      groups: [offers.openedNoReply],
     },
     {
       key: "congrats",

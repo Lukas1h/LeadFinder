@@ -34,6 +34,8 @@ export interface BuilderStart {
   linkId: string | null;
   agent: AgentMatch | null;
   content: PortfolioContent;
+  /** The area template the content came from, shown as a note. */
+  templateName?: string | null;
 }
 
 /**
@@ -58,6 +60,8 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
   const [showOffer, setShowOffer] = useState(c.showOffer ?? true);
   const [beforeSrc, setBeforeSrc] = useState<string | null>(c.beforeAfter ? (c.beforeSrc ?? null) : null);
   const [afterSrc, setAfterSrc] = useState<string | null>(c.beforeAfter ? (c.afterSrc ?? null) : null);
+  const [ogImage, setOgImage] = useState<string | null>(c.ogImage ?? null);
+  const [templateName, setTemplateName] = useState<string | null>(start.templateName ?? null);
   const [editorOpen, setEditorOpen] = useState(false);
 
   const [creating, setCreating] = useState(false);
@@ -92,6 +96,14 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
       setArea(prefill.area);
       setBrokerage(prefill.brokerage);
       setListings(prefill.listings);
+      // The area template's settings, else back to the builder's defaults.
+      const t = prefill.template?.content;
+      setTemplateName(prefill.template?.name ?? null);
+      setShowTourOfHomes(t?.showTourOfHomes ?? true);
+      setShowOffer(t?.showOffer ?? true);
+      setVideo(t?.video ?? "summit");
+      setLeadPhoto(t?.leadPhoto ?? AGENT_PAGE_PHOTOS[0].key);
+      setOgImage(t?.ogImage ?? null);
     } catch {
       toast.error("Couldn't load that agent's details");
     } finally {
@@ -118,6 +130,7 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
         beforeSrc: afterSrc ? beforeSrc : null,
         afterSrc,
         listings,
+        ogImage,
       };
       const saved = start.linkId
         ? await updatePortfolioLinkAction(start.linkId, agent?.id ?? null, content)
@@ -179,6 +192,9 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
         <Label>Agent</Label>
         <AgentSearch value={agent} onChange={pickAgent} />
         {loadingAgent && <p className="text-xs text-muted-foreground">Filling in from their profile…</p>}
+        {!loadingAgent && templateName && !editing && (
+          <p className="text-xs text-muted-foreground">Using the &ldquo;{templateName}&rdquo; area template.</p>
+        )}
       </section>
 
       <section className="grid gap-4 sm:grid-cols-3">
@@ -290,6 +306,14 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
           <input type="checkbox" checked={showOffer} onChange={(e) => setShowOffer(e.target.checked)} />
           Show the $50-off first shoot offer
         </label>
+      </section>
+
+      <section className="flex flex-col gap-1.5">
+        <Label>Link preview image</Label>
+        <p className="text-xs text-muted-foreground">What a texted link shows. None = the lead photo.</p>
+        <div className="max-w-xs">
+          <ImageUpload label="Preview" value={ogImage} onChange={setOgImage} />
+        </div>
       </section>
 
       <Button onClick={save} disabled={creating || loadingAgent} className="self-start">
@@ -425,7 +449,7 @@ function AgentSearch({ value, onChange }: { value: AgentMatch | null; onChange: 
 }
 
 /** Adds one of Lukas's finished jobs as a listing card. */
-function JobSearch({ exclude, onPick }: { exclude: string[]; onPick: (job: PortfolioListing) => void }) {
+export function JobSearch({ exclude, onPick }: { exclude: string[]; onPick: (job: PortfolioListing) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PortfolioListing[]>([]);
   const [open, setOpen] = useState(false);

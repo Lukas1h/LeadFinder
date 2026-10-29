@@ -11,8 +11,10 @@ import {
   portfolioImages,
   portfolioLinks,
   portfolioSessions,
+  portfolioTemplates,
   portfolioTownImages,
   type PortfolioContent,
+  type PortfolioTemplateContent,
   type PortfolioEvent,
   type PortfolioListing,
 } from "@/db/schema";
@@ -48,6 +50,8 @@ export interface PortfolioPrefill {
   area: string;
   brokerage: string;
   listings: PortfolioListing[];
+  /** The area template for their area, if one covers it: its settings go on top of the builder's defaults. */
+  template: { id: string; name: string; content: PortfolioTemplateContent } | null;
 }
 
 const LISTINGS_PREFILLED = 3;
@@ -92,6 +96,7 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
   if (!agent) return null;
 
   const area = (await agentArea(agent.id)) ?? agent.homeCity?.trim() ?? "";
+  const template = await templateForArea(area);
   const jobs = await finishedJobs();
   const city = area.toLowerCase();
   const region = agentPageRegion(area);
@@ -107,7 +112,9 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
     firstName: agent.name?.trim().split(/\s+/)[0] ?? "",
     area,
     brokerage: agent.brokerage ?? "",
-    listings: nearest,
+    // A template's listings, when it sets any, replace the nearest jobs.
+    listings: template?.content.listings?.length ? template.content.listings : nearest,
+    template: template ? { id: template.id, name: template.name, content: template.content } : null,
   };
 }
 
@@ -456,4 +463,64 @@ export async function saveTownImage(label: string, imageSrc: string): Promise<vo
 
 export async function deleteTownImage(town: string): Promise<void> {
   await db.delete(portfolioTownImages).where(eq(portfolioTownImages.town, town));
+}
+
+export interface PortfolioTemplateSummary {
+  id: string;
+  name: string;
+  towns: string[];
+  content: PortfolioTemplateContent;
+}
+
+/** Area templates (settings page), A–Z. */
+export async function listPortfolioTemplates(): Promise<PortfolioTemplateSummary[]> {
+  return db
+    .select({ id: portfolioTemplates.id, name: portfolioTemplates.name, towns: portfolioTemplates.towns, content: portfolioTemplates.content })
+    .from(portfolioTemplates)
+    .orderBy(asc(portfolioTemplates.name));
+}
+
+/** The template covering an area (case-insensitive town match), newest edit wins if two claim the same town. */
+export async function templateForArea(area: string): Promise<PortfolioTemplateSummary | null> {
+  const town = area.trim().toLowerCase();
+  if (!town) return null;
+  const [row] = await db
+    .select({ id: portfolioTemplates.id, name: portfolioTemplates.name, towns: portfolioTemplates.towns, content: portfolioTemplates.content })
+    .from(portfolioTemplates)
+    .where(sql`${town} = any(${portfolioTemplates.towns})`)
+    .orderBy(desc(portfolioTemplates.updatedAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Creates (no id) or replaces a template. Towns are stored lowercased; content keeps only what a template can set. */
+export async function savePortfolioTemplate(input: { id: string | null; name: string; towns: string[]; content: PortfolioTemplateContent }): Promise<{ id: string }> {
+  const name = input.name.trim();
+  if (!name) throw new Error("Give the template a name");
+  const towns = [...new Set(input.towns.map((t) => t.trim().toLowerCase()).filter(Boolean))];
+  if (towns.length === 0) throw new Error("Add at least one city");
+  const c = input.content;
+  const content: PortfolioTemplateContent = {
+    listings: c.listings ?? [],
+    showTourOfHomes: c.showTourOfHomes ?? true,
+    showOffer: c.showOffer ?? true,
+    video: c.video ?? null,
+    leadPhoto: c.leadPhoto ?? null,
+    ogImage: c.ogImage || null,
+  };
+  if (input.id) {
+    const [row] = await db
+      .update(portfolioTemplates)
+      .set({ name, towns, content, updatedAt: new Date() })
+      .where(eq(portfolioTemplates.id, input.id))
+      .returning({ id: portfolioTemplates.id });
+    if (!row) throw new Error("That template no longer exists");
+    return row;
+  }
+  const [row] = await db.insert(portfolioTemplates).values({ name, towns, content }).returning({ id: portfolioTemplates.id });
+  return row;
+}
+
+export async function deletePortfolioTemplate(id: string): Promise<void> {
+  await db.delete(portfolioTemplates).where(eq(portfolioTemplates.id, id));
 }

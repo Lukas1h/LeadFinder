@@ -1,8 +1,6 @@
 import { db } from "@/db";
 import { agents, messagePresets, messageSends, portfolioLinks, portfolioSessions } from "@/db/schema";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
-import { firstName } from "@/lib/sms";
-import { portfolioUrl } from "@/lib/portfolioLink";
 import { byPriority, loadContactHistory, shortDate, volumeLine } from "./shared";
 import type { FeedGroup, FeedItem } from "./types";
 
@@ -70,13 +68,12 @@ export async function getUnopenedLinkGroup(): Promise<FeedGroup> {
     // Anything from either side after the link (a minute's slack for the send's own record) means it's moved on.
     if ((history.lastTouch.get(agent.id) ?? 0) > at + 60_000) continue;
 
-    const name = firstName(agent.name);
     const lastIn = history.lastIn.get(agent.id) ?? 0;
     items.push({
       agent,
       lastReplyAt: lastIn ? new Date(lastIn) : null,
       label: [`Link sent ${shortDate(new Date(at))}, not opened`, volumeLine(agent)].filter(Boolean).join(" · "),
-      suggestion: `Hey ${name ?? "there"}! Just making sure my portfolio came through, here it is again: ${portfolioUrl(slug)} Would love to hear what you think!`,
+      suggestion: "Appreciate you taking the time to check it out.",
       listing: null,
       editorHref: null,
     });

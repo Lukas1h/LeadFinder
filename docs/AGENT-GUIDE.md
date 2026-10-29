@@ -222,7 +222,9 @@ Schedule page, the iPhone app and the MCP tool. It shows:
 
 `src/app/follow-up/feeds/` holds one module per tab: New listings, Relaunch
 (price cuts and back on market), Samples, Link not opened (`feeds/unopened.ts`:
-Portfolio link sent 3–21 days ago, never opened, no contact since), Congrats, Twilight gift, Virtual
+Portfolio link sent 3–21 days ago, never opened, no contact since), Opened, no
+reply (`feeds/opened.ts`: same window, opened, nothing from them since; offers a
+first-time discount), Congrats, Twilight gift, Virtual
 staging, Graphics, Drone shots (`src/app/follow-up/droneOffers.ts`: free drone
 shots near upcoming jobs), and Check-ins. `feeds/stats.ts` measures the 30-day
 reply rate per tab. The daily texting target (`DAILY_TARGET` in
@@ -257,6 +259,12 @@ next listing comes up (usually 1–4 weeks after first contact).
   a push notification.
 - `portfolio_images`: stored before/after photos. `portfolio_town_images`:
   per-town hero images.
+- `portfolio_templates`: area defaults for the builder (`name`, `towns` text[]
+  lowercased, `content` = listings, showOffer, showTourOfHomes, video,
+  leadPhoto, ogImage). Edited on `/portfolio-links/settings`. When a picked
+  agent's area matches a town, `getPortfolioPrefill` returns it as `template`
+  and its listings replace the nearest jobs. `content.ogImage` on a link
+  overrides the link preview image (default: the lead photo).
 
 ### Finances
 
