@@ -204,6 +204,11 @@ shows no invoice, payment, staging or greeting, puts the first photo as a hero,
 and logs `share_view` instead of `view`. `byGalleryToken()` (`src/lib/galleryToken.ts`)
 resolves either token.
 
+Flambient (the Mac photo app) makes galleries with `POST /api/app/v1/bookings/[id]/gallery`
+`{ dropboxFolderLink, replace? }` → `{ url }`: sets the folder link and assigns the gallery token,
+sends nothing. A different folder already on the booking answers 409 `{ existing }` unless `replace`.
+The folder must be in the same Dropbox account as `DROPBOX_REFRESH_TOKEN` (thumbnails load by path).
+
 Booking credit: `attributeBookingToSend()` in `src/lib/agentIdentity.ts`
 links a booking to the outreach send that won it.
 
