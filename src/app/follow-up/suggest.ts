@@ -50,8 +50,9 @@ export function suggestFollowUpText(input: {
     case "news": {
       const what =
         news?.kind === "sold" ? "closed" : news?.kind === "pending" ? "went pending" : "went under contract";
-      const home = street ?? "your listing";
-      return `${hey} Saw ${home} ${what}, congrats!!${news?.shot ? " Glad I got to shoot that one!" : ""}`;
+      const greeting = name ? `Hey there ${name},` : "Hey there,";
+      const home = street ? `${street} property` : "property";
+      return `${greeting} saw that your ${home} ${what} the other day, congrats!!${news?.shot ? " Glad I got to shoot that one!" : ""}`;
     }
 
     case "price_cut":
