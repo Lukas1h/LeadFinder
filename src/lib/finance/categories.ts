@@ -18,6 +18,7 @@ export const EXPENSE_CATEGORIES = [
   { value: "equipment", label: "Equipment", deductible: 100, hint: "Cameras, drones, lenses, rigging." },
   { value: "repairs", label: "Equipment repairs", deductible: 100, hint: null },
   { value: "software", label: "Software & cloud", deductible: 100, hint: "Subscriptions, APIs, hosting." },
+  { value: "fees", label: "Payment fees", deductible: 100, hint: "Square's cut of a payment. Logged automatically for Square invoices." },
   { value: "marketing", label: "Marketing & printing", deductible: 100, hint: null },
   { value: "supplies", label: "Office supplies", deductible: 100, hint: null },
   { value: "client_items", label: "For clients", deductible: 100, hint: "Flash drives, prints, gifts (gifts cap at $25 a person)." },

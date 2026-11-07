@@ -292,6 +292,9 @@ The app is the books (since 2026-10-16).
   `deductible_percent`, optional `booking_id` / `trip_id`. Receipts are in
   `receipts` (bytea).
 - Income comes from booking line items, earned once a job is shot, invoiced or completed (`earnedDate` in `ledger.ts`).
+  Income is the full invoice even when Square takes a cut: the fee is its own `fees` expense
+  (vendor `Square`, `booking_id` set), logged by `recordSquareFee()` in `src/lib/squareInvoice.ts`
+  when the payment comes in, or by the nightly market-status cron once Square settles it.
   The logic is in `src/lib/finance/` (`ledger.ts`, `reports.ts`, `tax.ts`).
 
 ## Example queries

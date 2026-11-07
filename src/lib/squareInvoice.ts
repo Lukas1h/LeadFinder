@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, notExists, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { bookings } from "@/db/schema";
+import { bookings, expenses } from "@/db/schema";
 import { loadInvoiceDetails, type InvoiceDetails } from "@/lib/invoice";
 import { notifyPaymentReceived } from "@/lib/push";
 import { idempotencyKey, SquareError, squareConfigured, squareFetch, squareLocationId } from "@/lib/square";
@@ -16,6 +16,7 @@ const FALLBACK_EMAIL = "lukas@lukashahn.media";
 
 interface SquareInvoice {
   id: string;
+  order_id?: string;
   version: number;
   status: string;
   public_url?: string;
@@ -88,7 +89,84 @@ export async function markSquareInvoicePaid(squareInvoiceId: string, amountCents
   if (!booking) return false;
   const details = await loadInvoiceDetails(booking.id);
   await markPaid(booking.id, amountCents, details?.addressLine ?? "");
+  await recordSquareFee(booking.id).catch(() => {});
   return true;
+}
+
+/** The expense row that holds a booking's Square fee. */
+const FEE_VENDOR = "Square";
+
+/**
+ * Logs Square's processing fee on a paid invoice as a "Payment fees" expense
+ * tied to the booking, so income stays the full invoice (what the client
+ * paid, what goes on the 1099-K) and the fee is a deduction, the way the
+ * books are meant to show it. Square can take a while to settle the fee on a
+ * payment, so this returns false until it has one and the nightly pass
+ * (recordMissingSquareFees) tries again. Logs it once per booking.
+ */
+export async function recordSquareFee(bookingId: string): Promise<boolean> {
+  const [booking] = await db
+    .select({ squareInvoiceId: bookings.squareInvoiceId, paidAt: bookings.paidAt })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId));
+  if (!booking?.squareInvoiceId || !booking.paidAt) return false;
+  const [logged] = await db
+    .select({ id: expenses.id })
+    .from(expenses)
+    .where(and(eq(expenses.bookingId, bookingId), eq(expenses.category, "fees"), eq(expenses.vendor, FEE_VENDOR)));
+  if (logged) return true;
+
+  const { invoice } = await squareFetch<{ invoice: SquareInvoice }>("GET", `/v2/invoices/${booking.squareInvoiceId}`);
+  if (invoice.status !== "PAID" || !invoice.order_id) return false;
+  const { order } = await squareFetch<{ order: { tenders?: { payment_id?: string }[] } }>("GET", `/v2/orders/${invoice.order_id}`);
+  let feeCents = 0;
+  let paidOn: Date | null = null;
+  for (const tender of order.tenders ?? []) {
+    if (!tender.payment_id) continue;
+    const { payment } = await squareFetch<{
+      payment: { created_at?: string; processing_fee?: { amount_money?: { amount?: number } }[] };
+    }>("GET", `/v2/payments/${tender.payment_id}`);
+    // Not settled yet: try again on the nightly pass rather than log a partial fee.
+    if (!payment.processing_fee?.length) return false;
+    feeCents += payment.processing_fee.reduce((sum, f) => sum + (f.amount_money?.amount ?? 0), 0);
+    if (payment.created_at) paidOn = new Date(payment.created_at);
+  }
+  if (feeCents <= 0) return false;
+
+  const details = await loadInvoiceDetails(bookingId);
+  await db.insert(expenses).values({
+    date: oregonDate(paidOn ?? booking.paidAt),
+    amountCents: feeCents,
+    vendor: FEE_VENDOR,
+    description: `Square fee: ${details?.addressLine || "invoice"}`,
+    category: "fees",
+    deductiblePercent: 100,
+    bookingId,
+  });
+  return true;
+}
+
+/** Nightly: fees for Square payments from the last two weeks that didn't have one settled when they came in. */
+export async function recordMissingSquareFees(): Promise<number> {
+  if (!squareConfigured()) return 0;
+  const unlogged = await db
+    .select({ id: bookings.id })
+    .from(bookings)
+    .where(
+      and(
+        isNotNull(bookings.squareInvoiceId),
+        gte(bookings.paidAt, sql`now() - interval '14 days'`),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(expenses)
+            .where(and(eq(expenses.bookingId, bookings.id), eq(expenses.category, "fees"), eq(expenses.vendor, FEE_VENDOR)))
+        )
+      )
+    );
+  let logged = 0;
+  for (const { id } of unlogged) if (await recordSquareFee(id).catch(() => false)) logged++;
+  return logged;
 }
 
 async function cancel(invoice: SquareInvoice): Promise<void> {
@@ -181,6 +259,7 @@ export async function syncSquareInvoice(bookingId: string): Promise<SquareInvoic
     existing = (await squareFetch<{ invoice: SquareInvoice }>("GET", `/v2/invoices/${booking.squareInvoiceId}`)).invoice;
     if (existing.status === "PAID") {
       await markPaid(booking.id, existing.payment_requests?.[0]?.total_completed_amount_money?.amount, details.addressLine);
+      await recordSquareFee(booking.id).catch(() => {});
       return { url: booking.squareInvoiceUrl, paid: true };
     }
     // Partly paid in Square: leave it alone rather than cancel money already taken.
