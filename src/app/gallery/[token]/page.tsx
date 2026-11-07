@@ -203,10 +203,10 @@ export default async function GalleryPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ paid?: string }>;
+  searchParams: Promise<{ paid?: string; hideName?: string }>;
 }) {
   const { token } = await params;
-  const { paid: justPaid } = await searchParams;
+  const { paid: justPaid, hideName } = await searchParams;
   const booking = await getGalleryBooking(token);
   if (!booking) notFound();
 
@@ -218,9 +218,10 @@ export default async function GalleryPage({
   // The share link is for showing the listing off: nothing about the client's job (payment, invoice, edits).
   const payOnline = booking.shared ? null : <PayOnline url={booking.squareInvoiceUrl} paid={Boolean(booking.paidAt) || justPaid === "1"} />;
   const invoice = !booking.shared && booking.invoiceNumber ? <InvoiceLink bookingId={booking.id} /> : null;
+  // ?hideName (any value) greets "Hi there!" — for passing the client's own link to someone else.
   const greeting = booking.shared
     ? ""
-    : `Hi ${firstName(booking.contactName) ?? "there"}! Please let me know if there are any edits you'd like made or any angles missing and I'll get it taken care of quickly.`;
+    : `Hi ${(hideName === undefined && firstName(booking.contactName)) || "there"}! Please let me know if there are any edits you'd like made or any angles missing and I'll get it taken care of quickly.`;
 
   if (!booking.dropboxFolderLink) {
     return (

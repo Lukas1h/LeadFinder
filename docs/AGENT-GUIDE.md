@@ -204,6 +204,9 @@ shows no invoice, payment, staging or greeting, puts the first photo as a hero,
 and logs `share_view` instead of `view`. `byGalleryToken()` (`src/lib/galleryToken.ts`)
 resolves either token.
 
+Adding `?hideName` (any value) to the client's own gallery link swaps the greeting's
+first name for "Hi there!"; everything else stays the same.
+
 Flambient (the Mac photo app) makes galleries with `POST /api/app/v1/bookings/[id]/gallery`
 `{ dropboxFolderLink, replace? }` → `{ url }`: sets the folder link and assigns the gallery token,
 sends nothing. A different folder already on the booking answers 409 `{ existing }` unless `replace`.
