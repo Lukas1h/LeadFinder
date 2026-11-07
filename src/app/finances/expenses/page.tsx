@@ -37,6 +37,8 @@ async function Expenses() {
     pricePerGallon: e.pricePerGallon,
     paidPersonally: e.paidPersonally,
     spreadMonths: e.spreadMonths,
+    refunded: e.refundedCents / 100,
+    refundedOn: e.refundedOn,
     bookingId: e.bookingId,
     tripId: e.tripId,
     receiptNumber: e.receiptNumber,

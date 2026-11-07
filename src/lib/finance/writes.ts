@@ -97,6 +97,9 @@ export interface ExpenseInput {
   pricePerGallon: number | null;
   paidPersonally: boolean;
   spreadMonths: number;
+  /** Dollars refunded so far (0 for none, the whole amount for a full refund). */
+  refunded?: number;
+  refundedOn?: string | null;
   bookingId: string | null;
   tripId: string | null;
   notes: string | null;
@@ -108,10 +111,17 @@ export async function writeExpense(id: string | null, input: ExpenseInput): Prom
   if (!Number.isFinite(input.amount) || input.amount < 0) return { error: "Enter the amount" };
   if (!input.description.trim()) return { error: "Say what it was" };
   if (!EXPENSE_CATEGORIES.some((c) => c.value === input.category)) return { error: "Pick a category" };
+  const amountCents = Math.round(input.amount * 100);
+  const refundedCents = Math.round((input.refunded ?? 0) * 100);
+  if (!Number.isFinite(refundedCents) || refundedCents < 0) return { error: "Enter the refund amount" };
+  if (refundedCents > amountCents) return { error: "The refund can't be more than the expense" };
+  if (refundedCents > 0 && input.refundedOn && !isDate(input.refundedOn)) return { error: "Pick the refund date" };
 
   const values = {
     date: input.date,
-    amountCents: Math.round(input.amount * 100),
+    amountCents,
+    refundedCents,
+    refundedOn: refundedCents > 0 ? input.refundedOn || pacificDate(new Date()) : null,
     vendor: input.vendor?.trim() || null,
     description: input.description.trim(),
     category: input.category,

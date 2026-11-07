@@ -292,6 +292,9 @@ The app is the books (since 2026-10-16).
 - `expenses`: `date`, `amount_cents`, `vendor`, `category` (see
   `EXPENSE_CATEGORIES` in `src/lib/finance/categories.ts`; gas and car upkeep
   are 0% deductible because the mileage rate covers them),
+  `refunded_cents` / `refunded_on` (a full or partial refund, set in the expense
+  dialog; every total uses `amount_cents - refunded_cents`; API: `refunded`,
+  `refundedOn`, `netAmount`),
   `deductible_percent`, optional `booking_id` / `trip_id`. Receipts are in
   `receipts` (bytea).
 - Income comes from booking line items, earned once a job is shot, invoiced or completed (`earnedDate` in `ledger.ts`).

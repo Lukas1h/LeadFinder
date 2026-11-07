@@ -20,6 +20,8 @@ export interface ExpenseRow {
   pricePerGallon: number | null;
   paidPersonally: boolean;
   spreadMonths: number;
+  refunded: number;
+  refundedOn: string | null;
   bookingId: string | null;
   tripId: string | null;
   receiptNumber: number | null;
@@ -40,6 +42,8 @@ function toDraft(e: ExpenseRow): ExpenseDraft {
     pricePerGallon: e.pricePerGallon != null ? String(e.pricePerGallon) : "",
     paidPersonally: e.paidPersonally,
     yearly: e.spreadMonths > 1,
+    refunded: e.refunded > 0 ? e.refunded.toFixed(2) : "",
+    refundedOn: e.refundedOn ?? "",
     bookingId: e.bookingId,
     tripId: e.tripId,
     notes: e.notes ?? "",
@@ -49,6 +53,9 @@ function toDraft(e: ExpenseRow): ExpenseDraft {
 }
 
 /** Every expense by month, newest first. Tap one to edit it. */
+/** What it cost after any refund. */
+const net = (e: ExpenseRow) => e.amount - e.refunded;
+
 export function ExpenseList({ expenses }: { expenses: ExpenseRow[] }) {
   const [draft, setDraft] = useState<ExpenseDraft>(() => blankExpense());
   const [open, setOpen] = useState(false);
@@ -68,7 +75,7 @@ export function ExpenseList({ expenses }: { expenses: ExpenseRow[] }) {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {expenses.length} expenses · {formatMoney(expenses.reduce((s, e) => s + e.amount, 0))} all time
+          {expenses.length} expenses · {formatMoney(expenses.reduce((s, e) => s + net(e), 0))} all time
         </p>
         <Button size="sm" onClick={() => edit(blankExpense())}>
           <Plus />
@@ -83,8 +90,8 @@ export function ExpenseList({ expenses }: { expenses: ExpenseRow[] }) {
             <div className="flex items-baseline justify-between text-sm">
               <span className="font-medium text-foreground">{monthLabel(month)}</span>
               <span className="text-muted-foreground">
-                {formatMoney(business.reduce((s, e) => s + e.amount, 0))} ·{" "}
-                {formatMoney(rows.reduce((s, e) => s + (e.amount * e.deductiblePercent) / 100, 0))} deductible
+                {formatMoney(business.reduce((s, e) => s + net(e), 0))} ·{" "}
+                {formatMoney(rows.reduce((s, e) => s + (net(e) * e.deductiblePercent) / 100, 0))} deductible
               </span>
             </div>
             <Card className="p-0 gap-0">
@@ -103,11 +110,15 @@ export function ExpenseList({ expenses }: { expenses: ExpenseRow[] }) {
                       {e.vendor ? ` · ${e.vendor}` : ""}
                       {e.spreadMonths > 1 ? " · yearly" : ""}
                       {e.paidPersonally ? " · personal card" : ""}
+                      {e.refunded > 0 ? (e.refunded >= e.amount ? " · refunded" : ` · ${formatMoney(e.refunded)} refunded`) : ""}
                     </span>
                   </span>
                   {e.hasReceipt && <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />}
                   <span className="w-20 shrink-0 text-right">
-                    <span className="block text-foreground">{formatMoney(e.amount)}</span>
+                    <span className="block text-foreground">
+                      {e.refunded > 0 && <span className="mr-1 text-xs text-muted-foreground line-through">{formatMoney(e.amount)}</span>}
+                      {formatMoney(net(e))}
+                    </span>
                     <span className="block text-xs text-muted-foreground">
                       {e.deductiblePercent === 100 ? "deductible" : e.deductiblePercent === 0 ? "not deductible" : `${e.deductiblePercent}% deductible`}
                     </span>

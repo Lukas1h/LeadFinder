@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { expenses } from "@/db/schema";
-import { isNotNull, or } from "drizzle-orm";
+import { isNotNull, or, sql } from "drizzle-orm";
 import type { BookingCosts } from "@/app/booked/BookedList";
 import { loadLedger } from "./ledger";
 import { dollars, jobCosts } from "./math";
@@ -25,7 +25,7 @@ export async function loadBookingCosts(): Promise<(bookingId: string) => Booking
         category: expenses.category,
         date: expenses.date,
         description: expenses.description,
-        amountCents: expenses.amountCents,
+        amountCents: sql<number>`${expenses.amountCents} - ${expenses.refundedCents}`.mapWith(Number),
         deductiblePercent: expenses.deductiblePercent,
       })
       .from(expenses)

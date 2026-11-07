@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileText, ScanText, Trash2 } from "lucide-react";
+import { FileText, ScanText, Trash2, Undo2 } from "lucide-react";
+import { formatMoney } from "@/lib/finance/format";
 import { deleteExpense, getLinkOptions, readReceipt, saveExpense, type LinkOptions } from "./actions";
 import { EXPENSE_CATEGORIES, expenseCategory } from "@/lib/finance/categories";
 import { pacificDate } from "@/lib/finance/math";
@@ -34,6 +35,9 @@ export interface ExpenseDraft {
   pricePerGallon: string;
   paidPersonally: boolean;
   yearly: boolean;
+  /** Dollars refunded, "" for none. */
+  refunded: string;
+  refundedOn: string;
   bookingId: string | null;
   tripId: string | null;
   notes: string;
@@ -53,6 +57,8 @@ export function blankExpense(overrides: Partial<ExpenseDraft> = {}): ExpenseDraf
     pricePerGallon: "",
     paidPersonally: false,
     yearly: false,
+    refunded: "",
+    refundedOn: "",
     bookingId: null,
     tripId: null,
     notes: "",
@@ -176,6 +182,8 @@ export function ExpenseDialog({
         pricePerGallon: num(expense.pricePerGallon),
         paidPersonally: expense.paidPersonally,
         spreadMonths: expense.yearly ? 12 : 1,
+        refunded: num(expense.refunded) ?? 0,
+        refundedOn: expense.refundedOn || null,
         bookingId: expense.bookingId,
         tripId: expense.tripId,
         notes: expense.notes,
@@ -201,6 +209,11 @@ export function ExpenseDialog({
     onOpenChange(false);
     router.refresh();
   };
+
+  const refunded = Number(expense.refunded) || 0;
+  const startRefund = (full: boolean) =>
+    set({ refunded: full ? expense.amount : "", refundedOn: expense.refundedOn || pacificDate(new Date()) });
+  const showRefund = expense.refunded !== "" || expense.refundedOn !== "";
 
   const nearbyTrips = (options?.trips ?? []).filter(
     (t) => t.id === expense.tripId || Math.abs(new Date(t.date).getTime() - new Date(expense.date).getTime()) <= 4 * 86400000
@@ -401,6 +414,62 @@ export function ExpenseDialog({
                 </Select>
               </div>
             </div>
+
+            {expense.id && (
+              <div className="flex flex-col gap-2 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">Refund</span>
+                  {showRefund ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => set({ refunded: "", refundedOn: "" })}>
+                      Remove refund
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => startRefund(true)}>
+                        <Undo2 />
+                        Refunded in full
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => startRefund(false)}>
+                        Part of it
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {showRefund && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="expense-refunded">Amount back</Label>
+                        <Input
+                          id="expense-refunded"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={expense.refunded}
+                          onChange={(e) => set({ refunded: e.target.value })}
+                          placeholder="$"
+                          autoFocus={!expense.refunded}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="expense-refunded-on">Refunded on</Label>
+                        <Input
+                          id="expense-refunded-on"
+                          type="date"
+                          value={expense.refundedOn}
+                          onChange={(e) => set({ refundedOn: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Counts as {formatMoney(Math.max(0, (Number(expense.amount) || 0) - refunded))} in your costs and deductions.
+                      Include the item&rsquo;s tax in a partial refund.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="expense-notes">Notes</Label>

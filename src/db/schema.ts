@@ -1270,6 +1270,11 @@ export const expenses = pgTable("expenses", {
   // A yearly charge (Upbeat, ZillAPI) is spread over this many months in the
   // monthly view, starting the month it was paid. Taxes count it when paid.
   spreadMonths: integer("spread_months").notNull().default(1),
+  // Money back on it: all of amountCents (returned) or part (one item off
+  // the order). Everything that adds up costs and deductions uses
+  // amountCents - refundedCents; refundedOn is when the refund came in.
+  refundedCents: integer("refunded_cents").notNull().default(0),
+  refundedOn: date("refunded_on", { mode: "string" }),
   bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
   tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
   // The paper trail's number, continuing the finances repo's 101, 102, ...

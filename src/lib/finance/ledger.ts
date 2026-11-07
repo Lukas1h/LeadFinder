@@ -85,7 +85,7 @@ export async function loadLedger(): Promise<Ledger> {
       (e): LedgerExpense => ({
         id: e.id,
         date: e.date,
-        amountCents: e.amountCents,
+        amountCents: e.amountCents - e.refundedCents,
         category: e.category,
         deductiblePercent: e.deductiblePercent,
         gallons: e.gallons,

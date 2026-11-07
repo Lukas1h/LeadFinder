@@ -45,17 +45,18 @@ export async function GET(req: Request) {
   } else if (kind === "expenses") {
     const rows = await db.select().from(expenses).orderBy(asc(expenses.date));
     body = csv([
-      ["Date", "Amount", "Vendor", "Description", "Category", "Deductible %", "Deductible amount", "Receipt #", "Paid personally", "Notes"],
+      ["Date", "Amount", "Refunded", "Vendor", "Description", "Category", "Deductible %", "Deductible amount", "Receipt #", "Paid personally", "Notes"],
       ...rows
         .filter((e) => inYear(e.date))
         .map((e) => [
           e.date,
           (e.amountCents / 100).toFixed(2),
+          (e.refundedCents / 100).toFixed(2),
           e.vendor,
           e.description,
           expenseCategory(e.category).label,
           e.deductiblePercent,
-          ((e.amountCents * e.deductiblePercent) / 10000).toFixed(2),
+          (((e.amountCents - e.refundedCents) * e.deductiblePercent) / 10000).toFixed(2),
           e.receiptNumber,
           e.paidPersonally ? "TRUE" : "FALSE",
           e.notes,
