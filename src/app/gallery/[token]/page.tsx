@@ -54,6 +54,7 @@ async function getGalleryBooking(token: string) {
       squareInvoiceUrl: bookings.squareInvoiceUrl,
       paidAt: bookings.paidAt,
       stagingRequestsEnabled: bookings.stagingRequestsEnabled,
+      hidePayOnline: bookings.hidePayOnline,
       shareToken: bookings.shareToken,
     })
     .from(bookings)
@@ -79,6 +80,7 @@ async function getGalleryBooking(token: string) {
     squareInvoiceUrl: booking.squareInvoiceUrl,
     paidAt: booking.paidAt,
     stagingRequestsEnabled: booking.stagingRequestsEnabled,
+    hidePayOnline: booking.hidePayOnline,
     // Opened through the share link (bookings.shareToken), not the client's own.
     shared: booking.shareToken === token,
     dropboxFolderLink: booking.dropboxFolderLink,
@@ -216,7 +218,7 @@ export default async function GalleryPage({
 
   const location = formatLocation(booking);
   // The share link is for showing the listing off: nothing about the client's job (payment, invoice, edits).
-  const payOnline = booking.shared ? null : <PayOnline url={booking.squareInvoiceUrl} paid={Boolean(booking.paidAt) || justPaid === "1"} />;
+  const payOnline = booking.shared ? null : <PayOnline url={booking.hidePayOnline ? null : booking.squareInvoiceUrl} paid={Boolean(booking.paidAt) || justPaid === "1"} />;
   const invoice = !booking.shared && booking.invoiceNumber ? <InvoiceLink bookingId={booking.id} /> : null;
   // ?hideName (any value) greets "Hi there!" — for passing the client's own link to someone else.
   const greeting = booking.shared

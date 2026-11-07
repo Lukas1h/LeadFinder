@@ -99,6 +99,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       galleryToken: b.galleryToken,
       shareToken: b.shareToken,
       stagingRequestsEnabled: b.stagingRequestsEnabled,
+      hidePayOnline: b.hidePayOnline,
       squareInvoiceUrl: b.squareInvoiceUrl,
       paidAt: b.paidAt,
       airspace: b.airspace,

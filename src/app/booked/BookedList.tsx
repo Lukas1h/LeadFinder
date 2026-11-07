@@ -67,6 +67,7 @@ export interface BookingWithDetails {
   /** The gallery's share link for non-clients (null until first copied). */
   shareToken: string | null;
   stagingRequestsEnabled: boolean;
+  hidePayOnline: boolean;
   // The invoice's Square copy, the client's "Pay Online", and when they paid
   // it — see src/lib/squareInvoice.ts.
   squareInvoiceUrl: string | null;

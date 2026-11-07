@@ -440,6 +440,9 @@ export const bookings = pgTable("bookings", {
   // Shows "Request virtual staging" on the client gallery — off unless
   // Lukas turns it on for this booking (BookingDetailDialog).
   stagingRequestsEnabled: boolean("staging_requests_enabled").notNull().default(false),
+  // Leaves "Pay online" off the gallery and invoice (paid some other way, or
+  // not asking yet). "Paid, thank you!" still shows once it's paid.
+  hidePayOnline: boolean("hide_pay_online").notNull().default(false),
 
   // The Square copy of this booking's invoice (lib/squareInvoice.ts): same
   // number, line items and note, made when the invoice is created and shown

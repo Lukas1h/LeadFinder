@@ -302,6 +302,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     galleryToken: booking.galleryToken,
     shareToken: booking.shareToken,
     stagingRequestsEnabled: booking.stagingRequestsEnabled,
+    hidePayOnline: booking.hidePayOnline,
     squareInvoiceUrl: booking.squareInvoiceUrl,
     paidAt: booking.paidAt,
     airspace: booking.airspace,
@@ -390,6 +391,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       galleryToken: b.galleryToken,
       shareToken: b.shareToken,
       stagingRequestsEnabled: b.stagingRequestsEnabled,
+      hidePayOnline: b.hidePayOnline,
       squareInvoiceUrl: b.squareInvoiceUrl,
       paidAt: b.paidAt,
       airspace: b.airspace,
@@ -405,6 +407,12 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
  * re-opening "Get client gallery link" always returns the same URL instead
  * of silently breaking one already sent to a client.
  */
+/** Hides or shows "Pay online" on the booking's gallery and invoice. */
+export async function setHidePayOnline(bookingId: string, hidden: boolean): Promise<void> {
+  await db.update(bookings).set({ hidePayOnline: hidden }).where(eq(bookings.id, bookingId));
+  revalidatePath("/booked");
+}
+
 /** Turns the client gallery's "Request virtual staging" button on or off. */
 export async function setStagingRequestsEnabled(bookingId: string, enabled: boolean): Promise<void> {
   await db.update(bookings).set({ stagingRequestsEnabled: enabled }).where(eq(bookings.id, bookingId));

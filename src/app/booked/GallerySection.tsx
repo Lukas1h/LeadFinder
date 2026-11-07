@@ -4,8 +4,8 @@ import { GALLERY_ORIGIN } from "@/lib/siteUrls";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, Share2, CreditCard, ImagePlus, Images, Sofa } from "lucide-react";
-import { getOrAssignGalleryToken, getOrAssignShareToken, getOrCreatePayLink, setStagingRequestsEnabled } from "./actions";
+import { Check, Share2, CreditCard, Eye, EyeOff, ImagePlus, Images, Sofa } from "lucide-react";
+import { getOrAssignGalleryToken, getOrAssignShareToken, getOrCreatePayLink, setHidePayOnline, setStagingRequestsEnabled } from "./actions";
 import { Button } from "@/components/ui/button";
 import type { BookingWithDetails } from "./BookedList";
 
@@ -82,6 +82,31 @@ export function StagingToggleButton({ booking }: { booking: BookingWithDetails }
     <Button variant={enabled ? "secondary" : "outline"} size="sm" onClick={handleClick} disabled={isPending}>
       {enabled ? <Check className="text-green-600" /> : <Sofa />}
       {enabled ? "Staging on gallery" : "Offer staging"}
+    </Button>
+  );
+}
+
+/** Takes "Pay online" off the gallery and invoice for this booking, or puts it back. */
+export function HidePayOnlineButton({ booking }: { booking: BookingWithDetails }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [hidden, setHidden] = useState(booking.hidePayOnline);
+  if (booking.paidAt) return null;
+
+  const handleClick = () => {
+    const next = !hidden;
+    setHidden(next);
+    startTransition(async () => {
+      await setHidePayOnline(booking.id, next);
+      toast.success(next ? "Pay online hidden from gallery and invoice" : "Pay online shown again");
+      router.refresh();
+    });
+  };
+
+  return (
+    <Button variant={hidden ? "secondary" : "outline"} size="sm" onClick={handleClick} disabled={isPending}>
+      {hidden ? <EyeOff /> : <Eye />}
+      {hidden ? "Pay online hidden" : "Hide pay online"}
     </Button>
   );
 }

@@ -204,6 +204,9 @@ shows no invoice, payment, staging or greeting, puts the first photo as a hero,
 and logs `share_view` instead of `view`. `byGalleryToken()` (`src/lib/galleryToken.ts`)
 resolves either token.
 
+`hide_pay_online` (booking dialog: **Hide pay online**) leaves the Pay online button off
+the gallery and the invoice; "Paid, thank you!" still shows once paid.
+
 Adding `?hideName` (any value) to the client's own gallery link swaps the greeting's
 first name for "Hi there!"; everything else stays the same.
 

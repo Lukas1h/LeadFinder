@@ -57,7 +57,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   });
   const payOnline = square.paid
     ? `<span class="paid">Paid, thank you!</span>`
-    : square.url
+    : square.url && !booking.hidePayOnline
       ? `<a href="${escapeHtml(square.url)}" target="_blank" rel="noopener">Pay Online</a>`
       : "";
 
