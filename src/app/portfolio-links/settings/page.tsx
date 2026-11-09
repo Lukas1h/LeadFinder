@@ -2,11 +2,12 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listPortfolioTemplates, listTownImages, townsWithoutImages } from "../actions";
+import { getSiteListingsForSettings, listPortfolioTemplates, listTownImages, townsWithoutImages } from "../actions";
+import { SiteListingsEditor } from "./SiteListingsEditor";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { TownImagesEditor } from "./TownImagesEditor";
 
-/** Settings for agent pages: for now, the photo each town's links preview with. */
+/** Settings for agent pages (area templates, town preview photos) and the main website's recent listings. */
 export default function PortfolioSettingsPage() {
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-10">
@@ -21,6 +22,13 @@ export default function PortfolioSettingsPage() {
       </p>
       <Suspense fallback={<Skeleton className="h-24 w-full" />}>
         <Templates />
+      </Suspense>
+      <h2 className="mt-6 text-lg font-medium">Website listings</h2>
+      <p className="mb-4 text-sm text-muted-foreground">
+        The &quot;Recent listings&quot; cards on lukashahn.media, the same as on an agent page. Three fill one row.
+      </p>
+      <Suspense fallback={<Skeleton className="h-24 w-full" />}>
+        <SiteListings />
       </Suspense>
       <h2 className="mt-6 text-lg font-medium">Town preview photos</h2>
       <p className="mb-4 text-sm text-muted-foreground">
@@ -37,6 +45,11 @@ export default function PortfolioSettingsPage() {
 async function Towns() {
   const [images, suggestions] = await Promise.all([listTownImages(), townsWithoutImages()]);
   return <TownImagesEditor images={images} suggestions={suggestions} />;
+}
+
+async function SiteListings() {
+  const { listings, picked } = await getSiteListingsForSettings();
+  return <SiteListingsEditor listings={listings} picked={picked} />;
 }
 
 async function Templates() {

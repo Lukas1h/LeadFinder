@@ -56,6 +56,8 @@ function markGalleryView(headers: Headers): Headers {
 //   /login                  the sign-in page and its Server Action POST
 //   /gallery/…              client galleries opened on an admin domain
 //   /api/gallery/…          client downloads, gated by gallery token
+//   /api/site-listings…     the main website's "Recent listings": jobs
+//                           Lukas picked to show publicly, and their photos
 //   /api/unsubscribe        signed token in the URL, from an email footer
 //   /api/webhooks/…         Svix-signed (AgentMail)
 //   /api/cron/…             CRON_SECRET
@@ -80,7 +82,7 @@ const PUBLIC_PATHS = new Set([
   "/api/compose/cold-outreach",
 ]);
 
-const PUBLIC_PREFIXES = ["/gallery/", "/portfolio/", "/api/gallery/", "/api/portfolio/", "/api/portfolio-image/", "/api/webhooks/", "/api/cron/", "/api/app/", "/.well-known/"];
+const PUBLIC_PREFIXES = ["/gallery/", "/portfolio/", "/api/gallery/", "/api/portfolio/", "/api/portfolio-image/", "/api/site-listings", "/api/webhooks/", "/api/cron/", "/api/app/", "/.well-known/"];
 
 const HANDOFF_FILE_RE = /^\/api\/(agents|bookings)\/[^/]+\/(vcard|calendar)$/;
 

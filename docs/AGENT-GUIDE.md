@@ -284,6 +284,13 @@ next listing comes up (usually 1–4 weeks after first contact).
   agent's area matches a town, `getPortfolioPrefill` returns it as `template`
   and its listings replace the nearest jobs. `content.ogImage` on a link
   overrides the link preview image (default: the lead photo).
+- Main website "Recent listings": `app_settings.site_listing_ids` (booking ids,
+  in order; null = the three newest finished jobs), picked under **Website
+  listings** on `/portfolio-links/settings`. `GET /api/site-listings` (public)
+  returns the same cards as an agent page, built live, with photos from
+  `/api/site-listings/photo` (only jobs currently shown). The `lukashahnart`
+  project's home page fetches it from `r.lukashahn.media` every 5 minutes
+  (`app/(real-estate)/RecentListings.tsx`) and hides the section when empty.
 
 ### Finances
 

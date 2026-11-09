@@ -4,6 +4,7 @@ import { and, asc, count, desc, eq, ilike, isNotNull, or, sql } from "drizzle-or
 import { db } from "@/db";
 import {
   agents,
+  appSettings,
   bookings,
   listings,
   messageSends,
@@ -21,8 +22,8 @@ import {
 import { parseUserAgent } from "@/lib/galleryViews";
 import { largestPhotoUrl } from "@/lib/photoEdit";
 import { agentPageRegion } from "@/lib/agentPage";
-import { formatPrice } from "@/lib/format";
-import { marketNews } from "@/lib/marketStatus";
+import { finishedJobs } from "@/lib/portfolioJobs";
+import { getSiteListingIds, getSiteListings } from "@/lib/siteListings";
 import { createPortfolioLink, portfolioUrl } from "@/lib/portfolioLink";
 
 export interface AgentMatch {
@@ -124,68 +125,6 @@ export async function searchJobsForPortfolio(query: string): Promise<PortfolioLi
   if (trimmed.length < 2) return [];
   const like = `%${trimmed}%`;
   return (await finishedJobs(or(ilike(bookings.address, like), ilike(bookings.city, like)), 8)).map((j) => j.listing);
-}
-
-/** Finished jobs with a gallery, newest first, as listing cards — plus the bare city, for ranking by distance. */
-async function finishedJobs(extra?: ReturnType<typeof or>, limit = 60): Promise<{ listing: PortfolioListing; city: string }[]> {
-  const rows = await db
-    .select({
-      bookingId: bookings.id,
-      address: bookings.address,
-      city: bookings.city,
-      state: bookings.state,
-      completedAt: bookings.completedAt,
-      invoicedAt: bookings.invoicedAt,
-      marketStatus: bookings.marketStatus,
-      price: listings.price,
-      beds: listings.bedrooms,
-      baths: listings.bathrooms,
-      sqft: listings.livingArea,
-      homeType: listings.homeType,
-      zipcode: listings.zipcode,
-      listingAgent: listings.agentName,
-      listingBroker: listings.brokerName,
-      contactName: agents.name,
-      contactBrokerage: agents.brokerage,
-    })
-    .from(bookings)
-    .leftJoin(listings, eq(listings.id, bookings.listingId))
-    .leftJoin(agents, eq(agents.id, bookings.contactAgentId))
-    .where(and(isNotNull(bookings.dropboxFolderLink), or(isNotNull(bookings.completedAt), isNotNull(bookings.invoicedAt)), extra))
-    .orderBy(desc(bookings.completedAt), desc(bookings.invoicedAt))
-    .limit(limit);
-
-  return rows.map((r) => {
-    const finished = r.completedAt ?? r.invoicedAt;
-    const recent = finished != null && Date.now() - finished.getTime() < 45 * 24 * 60 * 60 * 1000;
-    const listing: PortfolioListing = {
-      bookingId: r.bookingId,
-      status: marketLabel(r.marketStatus) ?? (recent ? "Just listed" : "Recent work"),
-      price: r.price != null ? formatPrice(r.price) : "",
-      beds: r.beds != null ? String(Number(r.beds)) : "",
-      baths: r.baths != null ? String(Number(r.baths)) : "",
-      sqft: r.sqft != null ? r.sqft.toLocaleString("en-US") : "",
-      type: homeTypeLabel(r.homeType),
-      address: r.address ?? "",
-      city: [r.city, [r.state ?? "OR", r.zipcode].filter(Boolean).join(" ")].filter(Boolean).join(", "),
-      agent: r.listingAgent ?? r.contactName ?? "",
-      brokerage: r.listingBroker ?? r.contactBrokerage ?? "",
-    };
-    return { listing, city: r.city ?? "" };
-  });
-}
-
-/** The card badge for a job whose listing has moved on (lib/marketStatus.ts's nightly check). */
-function marketLabel(status: string | null): string | null {
-  const kind = marketNews(status);
-  return kind === "sold" ? "Sold" : kind === "pending" ? "Pending" : kind === "under_contract" ? "Under contract" : null;
-}
-
-/** Zillow's "SINGLE_FAMILY" → "Single family". */
-function homeTypeLabel(homeType: string | null): string {
-  if (!homeType) return "";
-  const words = homeType.toLowerCase().replace(/_/g, " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -523,4 +462,20 @@ export async function savePortfolioTemplate(input: { id: string | null; name: st
 
 export async function deletePortfolioTemplate(id: string): Promise<void> {
   await db.delete(portfolioTemplates).where(eq(portfolioTemplates.id, id));
+}
+
+/** The main website's "Recent listings" as it shows now, and whether they were picked or are the newest-jobs default. */
+export async function getSiteListingsForSettings(): Promise<{ listings: PortfolioListing[]; picked: boolean }> {
+  const [ids, listings] = await Promise.all([getSiteListingIds(), getSiteListings()]);
+  return { listings, picked: ids.length > 0 };
+}
+
+/** Saves the jobs the main website shows, in order; none = back to the newest three. */
+export async function saveSiteListings(bookingIds: string[]): Promise<void> {
+  const ids = [...new Set(bookingIds)];
+  const siteListingIds = ids.length ? ids : null;
+  await db
+    .insert(appSettings)
+    .values({ id: "singleton", siteListingIds })
+    .onConflictDoUpdate({ target: appSettings.id, set: { siteListingIds } });
 }

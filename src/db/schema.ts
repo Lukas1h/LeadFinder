@@ -786,6 +786,12 @@ export const appSettings = pgTable("app_settings", {
   // bracket the business's profit lands in.
   vehicleMpg: real("vehicle_mpg").notNull().default(20),
   otherWagesMonthly: integer("other_wages_monthly").notNull().default(0),
+
+  // The jobs shown as "Recent listings" on the main website (lukashahn.media),
+  // picked on /portfolio-links/settings and served by /api/site-listings. Only
+  // the ids: each card is built live (status, price) like the builder's.
+  // Null or empty = the three newest finished jobs (lib/siteListings.ts).
+  siteListingIds: uuid("site_listing_ids").array(),
 });
 
 export type AppSettings = typeof appSettings.$inferSelect;
