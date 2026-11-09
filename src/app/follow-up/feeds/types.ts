@@ -14,6 +14,7 @@ export type FollowUpFeedKey =
   | "samples"
   | "unopened"
   | "opened_no_reply"
+  | "drone_booking"
   | "congrats"
   | "twilight_gift"
   | "staging"

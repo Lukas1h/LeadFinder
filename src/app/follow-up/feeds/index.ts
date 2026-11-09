@@ -10,6 +10,7 @@ import { getStagingGroup } from "./staging";
 import { getTwilightGiftGroup } from "./twilightGifts";
 import { getUnopenedLinkGroup } from "./unopened";
 import { getOpenedNoReplyGroup } from "./opened";
+import { getDroneBookingGroup } from "./droneBooking";
 import type { FeedGroup, FeedItem, FollowUpFeed } from "./types";
 
 export type { FeedGroup, FeedItem, FollowUpFeed, FollowUpFeedKey } from "./types";
@@ -22,6 +23,7 @@ export interface OfferFeeds {
   staging: FeedGroup;
   unopened: FeedGroup;
   openedNoReply: FeedGroup;
+  droneBooking: FeedGroup;
   graphics: FeedGroup[];
   drone: FeedGroup[];
   stats: Map<string, FeedStats>;
@@ -32,12 +34,13 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
   // established before any of these parallel branches touch the clock, or
   // whichever gets there first (not necessarily this one) fails the build.
   await connection();
-  const [touchUps, backOnMarket, staging, unopened, openedNoReply, graphics, drone, stats] = await Promise.all([
+  const [touchUps, backOnMarket, staging, unopened, openedNoReply, droneBooking, graphics, drone, stats] = await Promise.all([
     getPhotoTouchUpGroups(),
     getBackOnMarketGroup(),
     getStagingGroup(),
     getUnopenedLinkGroup(),
     getOpenedNoReplyGroup(),
+    getDroneBookingGroup(),
     getGraphicsGroups(),
     getDroneOffers(),
     getFeedStats(),
@@ -52,6 +55,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
     staging,
     unopened,
     openedNoReply,
+    droneBooking,
     graphics,
     drone: drone.map((g) => ({
       title: g.title,
@@ -143,6 +147,13 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
         group("Homes you shot", (e) => e.reason === "news" && e.label.endsWith("you shot it")),
         group("Their sales", (e) => e.reason === "news" && !e.label.endsWith("you shot it")),
       ],
+    },
+    {
+      key: "drone_booking",
+      title: "Free drone with booking",
+      blurb:
+        "Warm and interested agents you’ve texted before and haven’t been in touch with for 3+ weeks. Free drone with any shoot booked through December. Biggest agents first: most deals a year, then highest average price.",
+      groups: [offers.droneBooking],
     },
     {
       key: "twilight_gift",

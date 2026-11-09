@@ -240,7 +240,10 @@ Schedule page, the iPhone app and the MCP tool. It shows:
 (price cuts and back on market), Samples, Link not opened (`feeds/unopened.ts`:
 Portfolio link sent 3–21 days ago, never opened, no contact since), Opened, no
 reply (`feeds/opened.ts`: same window, opened, nothing from them since; offers free
-drone shots on a first shoot), Congrats, Twilight gift, Virtual
+drone shots on a first shoot), Free drone with booking
+(`feeds/droneBooking.ts`: warm/interested agents he has texted, no contact in
+3+ weeks, not offered yet, most deals/yr then highest avg price first; text
+from the "Free drone with booking" SMS template), Congrats, Twilight gift, Virtual
 staging, Graphics, Drone shots (`src/app/follow-up/droneOffers.ts`: free drone
 shots near upcoming jobs), and Check-ins. `feeds/stats.ts` measures the 30-day
 reply rate per tab. The daily texting target (`DAILY_TARGET` in
