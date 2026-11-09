@@ -117,12 +117,19 @@ export function sameArea(cityA: string | null, cityB: string): boolean {
   return a != null && b != null && Math.abs(a - b) <= SAME_AREA_MINUTES;
 }
 
+// Cloud brokerages (eXp, Real Broker, Fathom, LPT, Epique) have no office:
+// agents work from home, so two in the same town usually don't know each other
+// and naming one to the other isn't a connection.
+const CLOUD_BROKERAGE = /^(exp realty|real broker|fathom realty|lpt realty|epique realty)\b/;
+
 /** The client to name for a lead: same office, and one of their jobs near any of the agent's listings. */
 export function officeClientFor(
   offices: Map<string, OfficeClient[]>,
   brokerName: string | null,
   listingCities: (string | null)[]
 ): OfficeClient | null {
-  const clients = offices.get(officeKey(brokerName) ?? "") ?? [];
+  const key = officeKey(brokerName) ?? "";
+  if (CLOUD_BROKERAGE.test(key)) return null;
+  const clients = offices.get(key) ?? [];
   return clients.find((c) => c.cities.some((city) => listingCities.some((l) => sameArea(l, city)))) ?? null;
 }
