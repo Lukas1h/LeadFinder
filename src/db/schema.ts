@@ -909,6 +909,12 @@ export const messagePresets = pgTable("message_presets", {
   // for a lead whose agent is in the same office as a client (see
   // lib/clientOffices.ts); never for anyone else, since the line would be false.
   sameOffice: boolean("same_office").notNull().default(false),
+  // A same-office template written for one office only (RE/MAX Integrity in
+  // Roseburg, where he shoots for several agents: "I do photography for a few
+  // of the agents at your office"). Matched by officeKey and sameArea in
+  // lib/clientOffices.ts; for that office it replaces the general one.
+  officeBrokerage: text("office_brokerage"),
+  officeCity: text("office_city"),
 
   // Marks the one system preset per type whose "variants" aren't
   // hand-written — each is drafted live per listing by draftMessage() (see

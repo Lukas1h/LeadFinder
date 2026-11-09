@@ -142,6 +142,10 @@ Lisas), and one person can have a phone-only and an email-only record.
   A/B variants with `enabled`. Placeholders include `{{firstName}}`,
   `{{area}}`, `{{city}}`, `{{recentWork}}`, `{{portfolioLink}}` (`src/lib/messageTemplate.ts`;
   only in the "Portfolio link" template's second text).
+  `same_office` templates (`{{officeClient}}`) are only offered when the
+  lead's agent shares an office with a client; one with `office_brokerage`
+  (+ optional `office_city`) set is for that office only and replaces the
+  general one there (RE/MAX Integrity, Roseburg).
 - `message_sends`: one row per templated send (`sent_at`, `responded_at`,
   `result`: `pending | quoted | booked | declined`). This is the per-variant
   stats source.

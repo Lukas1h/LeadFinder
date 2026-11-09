@@ -1,6 +1,6 @@
 "use server";
 
-import { clientOffices, officeClientFor } from "@/lib/clientOffices";
+import { clientOffices, officeClientFor, officeKey, sameArea } from "@/lib/clientOffices";
 import { db } from "@/db";
 import {
   listings,
@@ -169,6 +169,8 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       sitting: messagePresets.sitting,
       secondMessage: messagePresets.secondMessage,
       sameOffice: messagePresets.sameOffice,
+      officeBrokerage: messagePresets.officeBrokerage,
+      officeCity: messagePresets.officeCity,
       variantId: messagePresetVariants.id,
       label: messagePresetVariants.label,
       body: messagePresetVariants.body,
@@ -212,10 +214,25 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   const office = listingAgent ? officeClientFor(offices, listing.brokerName, [listing.city]) : null;
   const officeClient = office && office.agentId !== listingAgent?.id && listingAgent?.status !== "declined" ? office : null;
 
+  // An office template is a false statement for anyone else, so it's only
+  // offered when it fits. One written for this very office replaces the general one.
+  const groups = Array.from(rowsByPreset.values());
+  const forThisOffice = (p: (typeof rows)[number]) =>
+    officeClient != null &&
+    officeKey(p.officeBrokerage) === officeKey(listing.brokerName) &&
+    (!p.officeCity || sameArea(listing.city, p.officeCity));
+  const officeSpecific = groups.some((group) => group[0].sameOffice && forThisOffice(group[0]));
+  const offered = groups.filter((group) => {
+    const p = group[0];
+    if (!p.sameOffice) return true;
+    if (!officeClient) return false;
+    return p.officeBrokerage ? forThisOffice(p) : !officeSpecific;
+  });
+
   const aiPreset = await getAiPreset(type);
   const facts = listingMatchFacts(listing);
   const recommendedPresetId = pickRecommendedPreset(
-    Array.from(rowsByPreset.values()).map((group) => ({ ...group[0], id: group[0].presetId })),
+    offered.map((group) => ({ ...group[0], id: group[0].presetId })),
     aiPreset,
     facts,
     await isKnownAgent(listing.agentId),
@@ -227,8 +244,6 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   // template comes first (the iPhone app does), and that is an opener.
   const blankForTexted = recommendedPresetId == null && facts.leadSection === "texted";
 
-  // An office template is a false statement for anyone else, so it's only offered when it fits.
-  const offered = Array.from(rowsByPreset.values()).filter((group) => !group[0].sameOffice || officeClient);
   const presets: PresetOption[] = offered.map((group) => {
     const minCount = Math.min(...group.map((r) => countByVariant.get(r.variantId) ?? 0));
     const leastUsed = group
