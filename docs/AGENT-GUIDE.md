@@ -261,10 +261,14 @@ next listing comes up (usually 1–4 weeks after first contact).
   text template) opens the builder for that agent; after saving, **Text it to
   …** sends two texts: the template body ("Thanks!") then its second
   message, the link plus a line. Web opens Messages with the first and copies
-  the second. On the iPhone the quick action opens a summary of the link it
-  would make (area template, listings, toggles from `/prefill`): **Text
-  portfolio link** creates it and sends both texts in turn, **Edit portfolio
-  link** opens the full builder (whose result also has Text it)
+  the second. On the iPhone every message to an agent gets a **Create
+  portfolio** quick action, whether or not its template lists Portfolio link
+  (the app adds it; the API still hides the template's own builder action from
+  the app). It opens a short summary of the page it would make (area template,
+  listings, toggles from `/prefill`): **Send** creates the link and sends both
+  texts in turn, then closes back to the message history; **Edit** opens the
+  builder on that unsaved page (`.draft` start, Done hands it back) and a link
+  already made by a cancelled Send is re-saved before texting
   (`GET`/`POST /api/app/v1/portfolio-links/[id]/text`; create/save return the
   link `id`). Recorded by
   `recordPortfolioLinkText` (replyActions.ts): one send in message history

@@ -2,16 +2,121 @@ import PhotosUI
 import SwiftUI
 
 /// Where the builder starts: a new link (maybe for an agent already picked,
-/// as from their profile's "Create portfolio"), or an existing one.
+/// as from their profile's "Create portfolio"), an existing one, or a page
+/// that isn't saved yet (the Create portfolio quick action's), which is
+/// edited in place and handed back rather than saved.
 enum PortfolioBuilderStart: Identifiable {
     case new(agent: PortfolioAgentMatch?)
     case editing(linkId: String)
+    case draft(PortfolioDraft)
 
     var id: String {
         switch self {
         case .new(let agent): "new-\(agent?.id ?? "")"
         case .editing(let linkId): "edit-\(linkId)"
+        case .draft(let draft): "draft-\(draft.agent?.id ?? "")"
         }
+    }
+}
+
+/// One agent page while it's being put together: everything the builder
+/// edits, as one value, so it can be filled in one go (no fields popping in
+/// one by one), handed between screens, and compared to spot unsaved edits.
+struct PortfolioDraft: Hashable, Sendable {
+    var agent: PortfolioAgentMatch?
+    var firstName = ""
+    var area = ""
+    var brokerage = ""
+    var listings: [PortfolioListing] = []
+    var video = "summit"
+    /// A key of the catalog's photos; blank = its first choice.
+    var leadPhoto = ""
+    var showTourOfHomes = true
+    var showOffer = true
+    var beforeSrc: String?
+    var afterSrc: String?
+    /// The link preview image, from an area template; nil = the lead photo.
+    var ogImage: String?
+    /// The area template it was filled in from, if any.
+    var templateName: String?
+
+    init(agent: PortfolioAgentMatch? = nil) {
+        self.agent = agent
+    }
+
+    /// Filled in for an agent as the web builder does on picking them: their
+    /// first name, area and brokerage, and the area template's listings and
+    /// settings (else their nearest jobs and the defaults).
+    init(prefill: PortfolioPrefill, agent: PortfolioAgentMatch) {
+        self.agent = agent
+        firstName = prefill.firstName
+        area = prefill.area
+        brokerage = prefill.brokerage
+        listings = Self.unique(prefill.listings)
+        let t = prefill.template?.content
+        templateName = prefill.template?.name
+        showTourOfHomes = t?.showTourOfHomes ?? true
+        showOffer = t?.showOffer ?? true
+        video = t?.video ?? "summit"
+        leadPhoto = t?.leadPhoto ?? ""
+        ogImage = t?.ogImage
+    }
+
+    init(saved: PortfolioEditResponse) {
+        let c = saved.content
+        agent = saved.agent
+        firstName = c.agentFirstName ?? ""
+        area = c.area ?? ""
+        brokerage = c.brokerage ?? ""
+        listings = Self.unique(c.listings ?? [])
+        video = c.video ?? "summit"
+        leadPhoto = c.leadPhoto ?? ""
+        showTourOfHomes = c.showTourOfHomes ?? true
+        showOffer = c.showOffer ?? true
+        ogImage = c.ogImage
+        if c.beforeAfter == true {
+            beforeSrc = c.beforeSrc
+            afterSrc = c.afterSrc
+        }
+    }
+
+    var content: PortfolioContent {
+        PortfolioContent(
+            area: area.nilIfBlank,
+            agentFirstName: firstName.nilIfBlank,
+            brokerage: brokerage.nilIfBlank,
+            video: video,
+            leadPhoto: leadPhoto.nilIfBlank,
+            showTourOfHomes: showTourOfHomes,
+            showOffer: showOffer,
+            // Only the after is needed: on its own it's shown against a dulled copy of itself.
+            beforeAfter: afterSrc != nil,
+            beforeSrc: afterSrc != nil ? beforeSrc : nil,
+            afterSrc: afterSrc,
+            listings: listings,
+            ogImage: ogImage
+        )
+    }
+
+    /// The listings are keyed by job in the form, so a job twice would confuse it.
+    private static func unique(_ listings: [PortfolioListing]) -> [PortfolioListing] {
+        var seen = Set<String>()
+        return listings.filter { seen.insert($0.bookingId).inserted }
+    }
+}
+
+/// The builder's fixed choices, fetched once per launch: they only change
+/// with a deploy, and waiting on them every time the sheet opens was most of
+/// its loading spinner.
+@MainActor
+enum PortfolioCatalogCache {
+    private static var catalog: PortfolioCatalog?
+
+    static func load() async throws -> PortfolioCatalog {
+        if let catalog { return catalog }
+        let fetched = try await APIClient.shared.portfolioCatalog()
+        catalog = fetched
+        return fetched
     }
 }
 
@@ -19,31 +124,21 @@ enum PortfolioBuilderStart: Identifiable {
 /// agent fills in their first name, area, brokerage and Lukas's nearest
 /// finished jobs as listings, all editable. Saving only writes the link:
 /// nothing is sent to anyone. Editing saves in place (same URL, same activity).
+/// A `.draft` start saves nothing: "Done" hands the page back (`onDone`).
 struct PortfolioBuilderView: View {
     let start: PortfolioBuilderStart
     var onSaved: () -> Void = {}
-    /// Set when there's a screen to report back to (the Portfolio link quick
-    /// action); called with a note once "Text it" has been sent and recorded.
-    var onTexted: ((String) -> Void)? = nil
+    /// Set with a `.draft` start: called with the edited page on "Done".
+    var onDone: ((PortfolioDraft) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
 
     @State private var linkId: String?
-    @State private var agent: PortfolioAgentMatch?
+    @State private var draft = PortfolioDraft()
+    /// The page as it was opened, so a swipe down can't throw edits away.
+    @State private var initial = PortfolioDraft()
     @State private var query = ""
     @State private var suggestions: [PortfolioAgentMatch] = []
-    @State private var firstName = ""
-    @State private var area = ""
-    @State private var brokerage = ""
-    @State private var listings: [PortfolioListing] = []
-    @State private var video = "summit"
-    @State private var leadPhoto = ""
-    @State private var showTourOfHomes = true
-    @State private var showOffer = true
-    @State private var beforeSrc: String?
-    @State private var afterSrc: String?
-    @State private var ogImage: String?
-    @State private var templateName: String?
 
     @State private var catalog: PortfolioCatalog?
     @State private var loading = true
@@ -65,6 +160,7 @@ struct PortfolioBuilderView: View {
     private enum Side { case before, after }
 
     private var editing: Bool { linkId != nil }
+    private var isDraft: Bool { onDone != nil }
 
     var body: some View {
         NavigationStack {
@@ -72,13 +168,21 @@ struct PortfolioBuilderView: View {
                 if let result {
                     resultView(result)
                 } else if loading {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    VStack(spacing: 10) {
+                        ProgressView()
+                        if case .new(let agent?) = start {
+                            Text("Filling in \(agent.name?.nilIfBlank ?? "their") page…")
+                                .font(.footnote)
+                                .foregroundStyle(Theme.tertiaryText)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     form
                 }
             }
             .background(Theme.background)
-            .navigationTitle(editing ? "Edit link" : "New link")
+            .navigationTitle(isDraft ? "Edit portfolio" : editing ? "Edit link" : "New link")
             .titleDisplay(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -89,7 +193,7 @@ struct PortfolioBuilderView: View {
                         if saving {
                             ProgressView()
                         } else {
-                            Button(editing ? "Save" : "Create") { Task { await save() } }
+                            Button(isDraft ? "Done" : editing ? "Save" : "Create") { Task { await save() } }
                                 .fontWeight(.semibold)
                                 .disabled(loadingAgent || uploading != nil)
                         }
@@ -97,10 +201,10 @@ struct PortfolioBuilderView: View {
                 }
             }
             .sheet(isPresented: $showListingEditor) {
-                if let agent {
+                if let agent = draft.agent {
                     ListingPhotoEditorSheet(agent: agent) { before, after in
-                        beforeSrc = before
-                        afterSrc = after
+                        draft.beforeSrc = before
+                        draft.afterSrc = after
                         showListingEditor = false
                     }
                 }
@@ -109,6 +213,7 @@ struct PortfolioBuilderView: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationBackground(Theme.background)
+        .interactiveDismissDisabled(result == nil && !loading && draft != initial)
         .task { await begin() }
     }
 
@@ -117,18 +222,18 @@ struct PortfolioBuilderView: View {
     private var form: some View {
         Form {
             agentSection
-            if let templateName, linkId == nil {
+            if let templateName = draft.templateName, linkId == nil {
                 Section {
-                    Text("Using the \u{201C}\(templateName)\u{201D} area template.")
+                    Label("Filled in from the \u{201C}\(templateName)\u{201D} area template.", systemImage: "square.stack")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondaryText)
                 }
                 .listRowBackground(Theme.card)
             }
             Section {
-                field("First name", $firstName, "Sarah")
-                field("Area", $area, "Eugene")
-                field("Brokerage", $brokerage, "")
+                field("First name", $draft.firstName, "Sarah")
+                field("Area", $draft.area, "Eugene")
+                field("Brokerage", $draft.brokerage, "")
             } header: {
                 Text("About them")
             } footer: {
@@ -142,8 +247,8 @@ struct PortfolioBuilderView: View {
             leadPhotoSection
 
             Section {
-                Toggle("Show \u{201C}Featured in the Eugene Tour of Homes\u{201D}", isOn: $showTourOfHomes)
-                Toggle("Show the $50-off first shoot offer", isOn: $showOffer)
+                Toggle("Show \u{201C}Featured in the Eugene Tour of Homes\u{201D}", isOn: $draft.showTourOfHomes)
+                Toggle("Show the $50-off first shoot offer", isOn: $draft.showOffer)
             }
             .listRowBackground(Theme.card)
 
@@ -153,6 +258,7 @@ struct PortfolioBuilderView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .tint(Theme.accent)
     }
 
@@ -170,7 +276,7 @@ struct PortfolioBuilderView: View {
 
     private var agentSection: some View {
         Section {
-            if let agent {
+            if let agent = draft.agent {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(agent.name?.nilIfBlank ?? "Unknown agent").font(.headline)
@@ -179,16 +285,22 @@ struct PortfolioBuilderView: View {
                         }
                     }
                     Spacer()
-                    Button {
-                        self.agent = nil
-                        query = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.tertiaryText)
+                    // The quick action's page is for the agent the message went to.
+                    if !isDraft {
+                        Button {
+                            draft.agent = nil
+                            query = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.tertiaryText)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 if loadingAgent {
-                    Text("Filling in from their profile…").font(.caption).foregroundStyle(Theme.secondaryText)
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Filling in from their profile…").font(.caption).foregroundStyle(Theme.secondaryText)
+                    }
                 }
             } else {
                 TextField("Start typing a name", text: $query)
@@ -201,6 +313,8 @@ struct PortfolioBuilderView: View {
                                 .font(.caption)
                                 .foregroundStyle(Theme.secondaryText)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -208,7 +322,7 @@ struct PortfolioBuilderView: View {
         } header: {
             Text("Agent")
         } footer: {
-            if agent == nil { Text("Optional, but it's what fills in the rest, and lets you see who opened it.") }
+            if draft.agent == nil { Text("Optional, but it's what fills in the rest, and lets you see who opened it.") }
         }
         .listRowBackground(Theme.card)
         .task(id: query) { await searchAgents() }
@@ -216,36 +330,38 @@ struct PortfolioBuilderView: View {
 
     private func searchAgents() async {
         let text = query.trimmingCharacters(in: .whitespaces)
-        guard agent == nil, text.count >= 2 else {
+        guard draft.agent == nil, text.count >= 2 else {
             suggestions = []
             return
         }
         try? await Task.sleep(for: .milliseconds(250))
         guard !Task.isCancelled else { return }
-        suggestions = (try? await APIClient.shared.searchPortfolioAgents(text)) ?? []
+        let found = (try? await APIClient.shared.searchPortfolioAgents(text)) ?? []
+        guard !Task.isCancelled else { return }
+        suggestions = found
     }
 
-    /// Picking an agent replaces the text fields and listings with theirs, as the web does.
+    /// Picking an agent replaces the page with theirs, as the web does.
     private func pick(_ match: PortfolioAgentMatch) async {
-        agent = match
+        draft.agent = match
         suggestions = []
         query = ""
         loadingAgent = true
         defer { loadingAgent = false }
+        await fill(for: match)
+    }
+
+    /// Their page in one assignment, so the form changes once rather than
+    /// field by field.
+    private func fill(for match: PortfolioAgentMatch) async {
         do {
             let prefill = try await APIClient.shared.portfolioPrefill(agentId: match.id)
-            firstName = prefill.firstName
-            area = prefill.area
-            brokerage = prefill.brokerage
-            listings = prefill.listings
-            // The area template's settings, else back to the defaults.
-            let t = prefill.template?.content
-            templateName = prefill.template?.name
-            showTourOfHomes = t?.showTourOfHomes ?? true
-            showOffer = t?.showOffer ?? true
-            video = t?.video ?? "summit"
-            leadPhoto = t?.leadPhoto ?? catalog?.leadPhotoChoices.first?.key ?? ""
-            ogImage = t?.ogImage
+            var filled = PortfolioDraft(prefill: prefill, agent: match)
+            if filled.leadPhoto.isEmpty { filled.leadPhoto = catalog?.leadPhotoChoices.first?.key ?? "" }
+            // Photos already put on the page stay.
+            filled.beforeSrc = draft.beforeSrc
+            filled.afterSrc = draft.afterSrc
+            draft = filled
         } catch {
             self.error = "Couldn't load that agent's details."
         }
@@ -256,22 +372,19 @@ struct PortfolioBuilderView: View {
     private var beforeAfterSection: some View {
         Section {
             HStack(spacing: 10) {
-                imageSlot("Before", src: $beforeSrc, pick: $beforePick, side: .before)
-                    .frame(maxWidth: .infinity)
-                imageSlot("After", src: $afterSrc, pick: $afterPick, side: .after)
-                    .frame(maxWidth: .infinity)
+                imageSlot("Before", src: $draft.beforeSrc, pick: $beforePick, side: .before)
+                imageSlot("After", src: $draft.afterSrc, pick: $afterPick, side: .after)
             }
-            .frame(maxWidth: .infinity)
             .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
 
             Button { showListingEditor = true } label: {
                 Label("Edit a photo from their listing", systemImage: "wand.and.stars")
             }
-            .disabled(agent == nil)
+            .disabled(draft.agent == nil)
         } header: {
             Text("Before / after")
         } footer: {
-            Text(agent == nil
+            Text(draft.agent == nil
                  ? "Leads the page when there's an after photo, with the video under it. Pick an agent first to edit one of their listing photos."
                  : "Leads the page when there's an after photo, with the video under it; without one, the video is the hero. No before photo = the after shown dulled.")
         }
@@ -280,26 +393,24 @@ struct PortfolioBuilderView: View {
         .onChange(of: afterPick) { Task { await upload(afterPick, side: .after) } }
     }
 
+    /// A fixed-size tile either way, so picking, uploading or clearing a
+    /// photo never changes the row's height.
     private func imageSlot(_ label: String, src: Binding<String?>, pick: Binding<PhotosPickerItem?>, side: Side) -> some View {
         ZStack(alignment: .topLeading) {
             if let url = PortfolioSite.imageURL(src.wrappedValue) {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    ProgressView()
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 110)
-                .clipped()
-                .overlay(alignment: .topTrailing) {
-                    Button { src.wrappedValue = nil } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.white, .black.opacity(0.55))
-                            .font(.title3)
-                            .padding(5)
+                RemoteImage(photo: url.absoluteString, size: .card)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 110)
+                    .clipped()
+                    .overlay(alignment: .topTrailing) {
+                        Button { src.wrappedValue = nil } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.white, .black.opacity(0.55))
+                                .font(.title3)
+                                .padding(5)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                }
                 Text(label)
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 6)
@@ -322,11 +433,14 @@ struct PortfolioBuilderView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 110)
                     .background(Theme.cardRaised)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(uploading != nil)
             }
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 110)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border, lineWidth: 0.5))
     }
@@ -349,7 +463,7 @@ struct PortfolioBuilderView: View {
                 return
             }
             let path = try await APIClient.shared.uploadPortfolioImage(jpeg: jpeg)
-            if side == .before { beforeSrc = path } else { afterSrc = path }
+            if side == .before { draft.beforeSrc = path } else { draft.afterSrc = path }
         } catch {
             self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
         }
@@ -359,24 +473,30 @@ struct PortfolioBuilderView: View {
 
     private var listingsSection: some View {
         Section {
-            ForEach(listings.indices, id: \.self) { index in
+            // By job, not by position: removing one by index while its row
+            // was still on screen read past the end of the array.
+            ForEach($draft.listings) { $listing in
                 DisclosureGroup {
-                    listingFields($listings[index])
-                    Button("Remove listing", role: .destructive) { listings.remove(at: index) }
+                    listingFields($listing)
+                    Button("Remove listing", role: .destructive) {
+                        let id = listing.id
+                        withAnimation { draft.listings.removeAll { $0.id == id } }
+                    }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(listings[index].address.nilIfBlank ?? "No address").font(.subheadline.weight(.medium))
-                        Text([listings[index].status, listings[index].city, listings[index].price].filter { !$0.isEmpty }.joined(separator: " · "))
+                        Text(listing.address.nilIfBlank ?? "No address").font(.subheadline.weight(.medium))
+                        Text([listing.status, listing.city, listing.price].filter { !$0.isEmpty }.joined(separator: " · "))
                             .font(.caption)
                             .foregroundStyle(Theme.secondaryText)
                     }
                 }
             }
+            .onDelete { draft.listings.remove(atOffsets: $0) }
             TextField("Add a job by address or city", text: $jobQuery)
                 .autocorrectionDisabled()
-            ForEach(jobResults.filter { job in !listings.contains { $0.bookingId == job.bookingId } }) { job in
+            ForEach(jobResults.filter { job in !draft.listings.contains { $0.bookingId == job.bookingId } }) { job in
                 Button {
-                    listings.append(job)
+                    withAnimation { draft.listings.append(job) }
                     jobQuery = ""
                     jobResults = []
                 } label: {
@@ -386,13 +506,15 @@ struct PortfolioBuilderView: View {
                             .font(.caption)
                             .foregroundStyle(Theme.secondaryText)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
         } header: {
             Text("Recent listings")
         } footer: {
-            Text("Your finished jobs; none = the section is hidden. Each card's photos are 10 from across that job's gallery, front exterior first.")
+            Text("Your finished jobs; none = the section is hidden. Each card's photos are 10 from across that job's gallery, front exterior first. Swipe one to remove it.")
         }
         .listRowBackground(Theme.card)
         .task(id: jobQuery) {
@@ -403,7 +525,9 @@ struct PortfolioBuilderView: View {
             }
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
-            jobResults = (try? await APIClient.shared.searchPortfolioJobs(text)) ?? []
+            let found = (try? await APIClient.shared.searchPortfolioJobs(text)) ?? []
+            guard !Task.isCancelled else { return }
+            jobResults = found
         }
     }
 
@@ -425,34 +549,27 @@ struct PortfolioBuilderView: View {
 
     private var videoSection: some View {
         Section("Video") {
-            Picker("Video", selection: $video) {
+            Picker("Video", selection: $draft.video) {
                 ForEach(catalog?.videos ?? []) { Text($0.title).tag($0.key) }
             }
         }
         .listRowBackground(Theme.card)
     }
 
+    /// A plain grid rather than a lazy one: a lazy grid inside a Form row
+    /// can't size itself up front, so the row grew as photos arrived and the
+    /// whole form jumped.
     private var leadPhotoSection: some View {
-        Section {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
-                ForEach(catalog?.leadPhotoChoices ?? []) { photo in
-                    Button { leadPhoto = photo.key } label: {
-                        AsyncImage(url: URL(string: photo.src)) { image in
-                            image.resizable().scaledToFill()
-                        } placeholder: {
-                            Theme.cardRaised
-                        }
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(3 / 2, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .strokeBorder(leadPhoto == photo.key ? Theme.accent : .clear, lineWidth: 3)
-                        )
-                        .opacity(leadPhoto == photo.key ? 1 : 0.7)
+        let choices = catalog?.leadPhotoChoices ?? []
+        let rows = stride(from: 0, to: choices.count, by: 3).map { Array(choices[$0..<min($0 + 3, choices.count)]) }
+        return Section {
+            Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+                ForEach(rows, id: \.first?.key) { row in
+                    GridRow {
+                        ForEach(row) { photo in leadPhotoTile(photo) }
+                        // Keep a short last row's tiles the same width.
+                        ForEach(row.count..<3, id: \.self) { _ in Color.clear.aspectRatio(3 / 2, contentMode: .fit) }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(photo.alt)
                 }
             }
             .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
@@ -462,73 +579,77 @@ struct PortfolioBuilderView: View {
         .listRowBackground(Theme.card)
     }
 
+    private func leadPhotoTile(_ photo: PortfolioCatalog.Photo) -> some View {
+        let selected = draft.leadPhoto == photo.key
+        return Button { draft.leadPhoto = photo.key } label: {
+            Color.clear
+                .aspectRatio(3 / 2, contentMode: .fit)
+                .overlay { RemoteImage(photo: photo.src, size: .card) }
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(selected ? Theme.accent : .clear, lineWidth: 3)
+                )
+                .opacity(selected ? 1 : 0.7)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(photo.alt)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
     // MARK: - Loading and saving
 
+    /// Everything is fetched before the form shows, so it appears filled in
+    /// rather than empty and then rearranging itself.
     private func begin() async {
-        defer { loading = false }
+        guard loading else { return }
         do {
-            catalog = try await APIClient.shared.portfolioCatalog()
+            catalog = try await PortfolioCatalogCache.load()
         } catch {
             self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
         }
-        leadPhoto = catalog?.leadPhotoChoices.first?.key ?? ""
 
         switch start {
         case .new(let preset):
             if let preset {
-                loading = false
-                await pick(preset)
+                draft = PortfolioDraft(agent: preset)
+                await fill(for: preset)
             }
         case .editing(let id):
             do {
                 let existing = try await APIClient.shared.portfolioLinkForEdit(id)
                 linkId = existing.linkId
-                agent = existing.agent
-                let c = existing.content
-                firstName = c.agentFirstName ?? ""
-                area = c.area ?? ""
-                brokerage = c.brokerage ?? ""
-                listings = c.listings ?? []
-                video = c.video ?? "summit"
-                leadPhoto = c.leadPhoto ?? leadPhoto
-                showTourOfHomes = c.showTourOfHomes ?? true
-                showOffer = c.showOffer ?? true
-                ogImage = c.ogImage
-                if c.beforeAfter == true {
-                    beforeSrc = c.beforeSrc
-                    afterSrc = c.afterSrc
-                }
+                draft = PortfolioDraft(saved: existing)
             } catch {
                 self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
             }
+        case .draft(let given):
+            draft = given
         }
+        if draft.leadPhoto.isEmpty { draft.leadPhoto = catalog?.leadPhotoChoices.first?.key ?? "" }
+        initial = draft
+        loading = false
     }
 
     private func save() async {
+        if let onDone {
+            onDone(draft)
+            dismiss()
+            return
+        }
         saving = true
         error = nil
         defer { saving = false }
-        let content = PortfolioContent(
-            area: area.nilIfBlank,
-            agentFirstName: firstName.nilIfBlank,
-            brokerage: brokerage.nilIfBlank,
-            video: video,
-            leadPhoto: leadPhoto.nilIfBlank,
-            showTourOfHomes: showTourOfHomes,
-            showOffer: showOffer,
-            // Only the after is needed: on its own it's shown against a dulled copy of itself.
-            beforeAfter: afterSrc != nil,
-            beforeSrc: afterSrc != nil ? beforeSrc : nil,
-            afterSrc: afterSrc,
-            listings: listings,
-            ogImage: ogImage
-        )
         do {
+            let saved: APIClient.SavedPortfolioLink
             if let linkId {
-                result = try await APIClient.shared.updatePortfolioLink(id: linkId, agentId: agent?.id, content: content)
+                saved = try await APIClient.shared.updatePortfolioLink(id: linkId, agentId: draft.agent?.id, content: draft.content)
             } else {
-                result = try await APIClient.shared.createPortfolioLink(agentId: agent?.id, content: content)
+                saved = try await APIClient.shared.createPortfolioLink(agentId: draft.agent?.id, content: draft.content)
             }
+            initial = draft
+            withAnimation(.easeInOut(duration: 0.2)) { result = saved }
             onSaved()
         } catch {
             self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
@@ -538,7 +659,8 @@ struct PortfolioBuilderView: View {
     // MARK: - Result
 
     private func resultView(_ saved: APIClient.SavedPortfolioLink) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let agent = draft.agent
+        return VStack(alignment: .leading, spacing: 14) {
             Text("\(editing ? "Saved" : "Link ready")\(agent?.name.flatMap { " for \($0)" } ?? ""):")
                 .font(.headline)
                 .foregroundStyle(Theme.primaryText)
@@ -579,7 +701,7 @@ struct PortfolioBuilderView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(texting)
-                Text("Sends \u{201C}Thanks!\u{201D}, then the link text, and logs it in their history.")
+                Text("Sends the Portfolio link template's two texts, then logs it in their history.")
                     .font(.caption)
                     .foregroundStyle(Theme.tertiaryText)
             }
@@ -604,11 +726,8 @@ struct PortfolioBuilderView: View {
         switch await PortfolioTexter.send(linkId: linkId) {
         case .sent:
             textNote = "Portfolio link texted."
-            onTexted?("Portfolio link texted.")
         case .firstOnly:
-            let note = "Sent \u{201C}Thanks!\u{201D}; the link text wasn't sent and is on the clipboard."
-            textNote = note
-            onTexted?(note)
+            textNote = "Sent the first text; the link text wasn't sent and is on the clipboard."
         case .cancelled:
             break
         case .failed(let message):

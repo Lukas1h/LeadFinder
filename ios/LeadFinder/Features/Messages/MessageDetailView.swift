@@ -14,6 +14,7 @@ struct MessageDetailView: View {
     var startsQuickActions = false
 
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State private var detail: MessageDetailResponse?
     @State private var isWorking = false
     @State private var error: String?
@@ -32,6 +33,9 @@ struct MessageDetailView: View {
     @State private var openListing: Listing?
     /// The agent the "Portfolio link" quick action is making a link for.
     @State private var portfolioFor: PortfolioAgentMatch?
+    /// Set once the portfolio texts have both gone: this screen closes too,
+    /// back to the message history.
+    @State private var closeAfterPortfolio = false
 
     var body: some View {
         ScrollView {
@@ -80,18 +84,23 @@ struct MessageDetailView: View {
         .task {
             await load()
             if startsQuickActions, !didApply {
-                if quickActions.count == 1 {
+                // Create portfolio is always offered, so it alone opens the
+                // choice rather than jumping straight into it.
+                if quickActions.count == 1, !quickActions[0].opensPortfolio {
                     begin(quickActions[0])
-                } else if quickActions.count > 1 {
+                } else if !quickActions.isEmpty {
                     chooseAction = true
                 }
             }
         }
         .sheet(isPresented: $askForEmail) { emailEntry }
         .sheet(item: $openListing) { LeadListingSheet(listing: $0, agent: detail?.agent) }
-        .sheet(item: $portfolioFor) { agent in
-            PortfolioQuickSendView(agent: agent) { note in
+        .sheet(item: $portfolioFor, onDismiss: {
+            if closeAfterPortfolio { dismiss() }
+        }) { agent in
+            PortfolioQuickSendView(agent: agent) { note, done in
                 if let id = quickActions.first(where: \.opensPortfolio)?.presetId { actionNotes[id] = note }
+                closeAfterPortfolio = done
                 Task { await appState.messages.load(force: true) }
             }
         }
@@ -297,9 +306,14 @@ struct MessageDetailView: View {
 
     // MARK: - Quick actions
 
+    /// The template's quick actions, then Create portfolio, which every
+    /// message to an agent gets.
     private var quickActions: [QuickAction] {
         // Without the agent there's nobody to send to.
-        detail?.agent == nil ? [] : detail?.quickActions ?? []
+        guard let detail, let agent = detail.agent else { return [] }
+        let template = detail.quickActions ?? []
+        if template.contains(where: \.opensPortfolio) { return template }
+        return template + [QuickAction.createPortfolio(agentId: agent.id)]
     }
 
     private func quickActionButton(_ action: QuickAction) -> some View {
@@ -333,7 +347,7 @@ struct MessageDetailView: View {
     }
 
     private static func caption(for action: QuickAction) -> String {
-        if action.opensPortfolio { return "Makes their portfolio link, then texts it" }
+        if action.opensPortfolio { return "Fills in their page for a look, then texts the link" }
         let files = action.attachments.count
         let with = files == 0 ? "" : files == 1 ? " with \(action.attachments[0].filename)" : " with \(files) files"
         return action.isEmail ? "Sends an email\(with)" : "Opens a text\(with)"
@@ -491,5 +505,22 @@ struct MessageDetailView: View {
             // disappointment, not a reason for an error screen.
             detail = nil
         }
+    }
+}
+
+private extension QuickAction {
+    /// Not a template: opens PortfolioQuickSendView, which texts the
+    /// "Portfolio link" template's messages itself.
+    static func createPortfolio(agentId: String) -> QuickAction {
+        QuickAction(
+            presetId: "create-portfolio",
+            name: "Create portfolio",
+            channel: "sms",
+            variantId: "",
+            text: "",
+            subject: nil,
+            attachments: [],
+            builderHref: "/portfolio-links/new?agent=\(agentId)"
+        )
     }
 }
