@@ -24,8 +24,9 @@ const DAY = 24 * 60 * 60 * 1000;
 const MIN_GAP_DAYS = 21;
 const PRESET_NAME = "Free drone with booking";
 const FALLBACK =
-  "Hey {{firstName}}, winter's slowing down on my end, so I'm including free drone with any shoot booked through December. Anything coming up before the end of the year? No worries if not!";
-const OFFERED_RE = /free drone with any shoot/i;
+  "Hey {{firstName}}, I'm including complimentary drone shots with any shoot booked through the end of the year, to help winter listings stand out. Anything coming up before then? No worries if not!";
+// The first wording (free drone … through December) and the current one.
+const OFFERED_RE = /(free|complimentary) drone( shots)? with any shoot/i;
 
 export async function getDroneBookingGroup(): Promise<FeedGroup> {
   const group: FeedGroup = { title: "Haven’t talked in 3+ weeks", items: [], heldBack: 0 };
