@@ -189,6 +189,9 @@ struct FollowUpResponse: Codable, Sendable {
         /// A text to start from, written by the server for this reason and
         /// agent. Fills Messages; nothing is sent until he sends it.
         var suggestion: String?
+        /// Feed items only: a second text to send right after (the template's
+        /// second message). Optional: older servers don't send it.
+        var secondMessage: String?
         /// Tracked listings, for the card's "12 listings". Optional: a response
         /// cached before the server sent it still decodes.
         var listingCount: Int?

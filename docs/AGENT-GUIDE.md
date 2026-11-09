@@ -243,7 +243,9 @@ reply (`feeds/opened.ts`: same window, opened, nothing from them since; offers f
 drone shots on a first shoot), Free drone with booking
 (`feeds/droneBooking.ts`: warm/interested agents he has texted, no contact in
 3+ weeks, not offered yet, most deals/yr then highest avg price first; text
-from the "Free drone with booking" SMS template), Congrats, Twilight gift, Virtual
+from the "Free drone with booking" SMS template, whose second message rides
+along as the card's `secondText`: copied on the web Text tap, a second Messages
+sheet on iOS), Congrats, Twilight gift, Virtual
 staging, Graphics, Drone shots (`src/app/follow-up/droneOffers.ts`: free drone
 shots near upcoming jobs), and Check-ins. `feeds/stats.ts` measures the 30-day
 reply rate per tab. The daily texting target (`DAILY_TARGET` in

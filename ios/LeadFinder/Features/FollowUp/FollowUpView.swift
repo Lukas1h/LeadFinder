@@ -530,7 +530,7 @@ struct FollowUpView: View {
                         }
                     }
                     iconButton("message", label: "Text \(agent.displayName)") {
-                        text(agent, digits: digits, body: item.suggestion ?? "", feedKey: feedKey)
+                        text(agent, digits: digits, body: item.suggestion ?? "", second: item.secondMessage, feedKey: feedKey)
                     }
                 }
                 if let email, let url = URL(string: "mailto:\(email)") {
@@ -539,7 +539,7 @@ struct FollowUpView: View {
             }
 
             if let suggestion = item.suggestion?.nilIfBlank {
-                suggestedText(suggestion, agent: agent, digits: digits, feedKey: feedKey)
+                suggestedText(suggestion, second: item.secondMessage, agent: agent, digits: digits, feedKey: feedKey)
             }
             if let listing = item.listing {
                 Button { openListing = listing } label: { ListingRow(listing: listing, showsChevron: true) }
@@ -571,9 +571,9 @@ struct FollowUpView: View {
     /// A text to start from, written by the server for this reason. Tapping it
     /// opens Messages with it, as the card's Text button does; nothing goes
     /// out until he sends it.
-    private func suggestedText(_ suggestion: String, agent: Agent, digits: String?, feedKey: String? = nil) -> some View {
+    private func suggestedText(_ suggestion: String, second: String? = nil, agent: Agent, digits: String?, feedKey: String? = nil) -> some View {
         Button {
-            if let digits { text(agent, digits: digits, body: suggestion, feedKey: feedKey) }
+            if let digits { text(agent, digits: digits, body: suggestion, second: second, feedKey: feedKey) }
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Suggested text")
@@ -584,6 +584,13 @@ struct FollowUpView: View {
                     .foregroundStyle(Theme.primaryText)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
+                if let second = second?.nilIfBlank {
+                    Text("Then: \u{201C}\(second)\u{201D}")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondaryText)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -629,7 +636,9 @@ struct FollowUpView: View {
 
     /// Opens Messages to this agent with the suggested text written, for him
     /// to edit and send. Only a text that went out is recorded.
-    private func text(_ agent: Agent, digits: String, body: String, feedKey: String? = nil) {
+    /// `second`, when set, goes out the way ContactSheet sends a template's
+    /// second message: Messages opens again with it once the first is sent.
+    private func text(_ agent: Agent, digits: String, body: String, second: String? = nil, feedKey: String? = nil) {
         contactError = nil
         MessageComposer.present(recipients: [digits], body: body) { outcome in
             switch outcome {
@@ -639,6 +648,10 @@ struct FollowUpView: View {
                 break
             case .sent:
                 Task {
+                    // Before the reload below, which takes this card away.
+                    if let second = second?.nilIfBlank {
+                        _ = await MessageComposer.present(recipients: [digits], body: second)
+                    }
                     do {
                         try await APIClient.shared.confirmAgentTextSent(agentId: agent.id, followUpFeed: feedKey)
                         await appState.followUp.load(force: true)
