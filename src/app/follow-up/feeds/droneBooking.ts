@@ -16,7 +16,8 @@ import type { FeedGroup, FeedItem } from "./types";
  * offer. Biggest agents first: more deals a year, then higher average price.
  *
  * The text is the "Free drone with booking" template's (Messages settings),
- * so it can be edited there; FALLBACK only if that template is gone.
+ * second text included, so both can be edited there; FALLBACK only if that
+ * template is gone.
  */
 
 export const FEED_KEY = "drone_booking";
@@ -24,9 +25,9 @@ const DAY = 24 * 60 * 60 * 1000;
 const MIN_GAP_DAYS = 21;
 const PRESET_NAME = "Free drone with booking";
 const FALLBACK =
-  "Hey {{firstName}}, I'm including complimentary drone shots with any shoot booked through the end of the year, to help winter listings stand out. Anything coming up before then? No worries if not!";
-// The first wording (free drone … through December) and the current one.
-const OFFERED_RE = /(free|complimentary) drone( shots)? with any shoot/i;
+  "Hi {{firstName}}! I'm including complimentary drone shots with any property booked through the end of the year, to help winter listings stand out, Thought I’d let you know.";
+// Every wording so far: "free drone with any shoot", "complimentary drone shots with any shoot/property".
+const OFFERED_RE = /(free|complimentary) drone( shots)? with any (shoot|property)/i;
 
 export async function getDroneBookingGroup(): Promise<FeedGroup> {
   const group: FeedGroup = { title: "Haven’t talked in 3+ weeks", items: [], heldBack: 0 };
@@ -55,7 +56,7 @@ export async function getDroneBookingGroup(): Promise<FeedGroup> {
       .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))
       .where(and(inArray(messageSends.agentId, ids), eq(messagePresets.channel, "sms"))),
     db
-      .select({ body: messagePresetVariants.body })
+      .select({ body: messagePresetVariants.body, secondMessage: messagePresets.secondMessage })
       .from(messagePresetVariants)
       .innerJoin(messagePresets, eq(messagePresetVariants.presetId, messagePresets.id))
       .where(and(eq(messagePresets.name, PRESET_NAME), eq(messagePresetVariants.enabled, true)))
@@ -84,6 +85,7 @@ export async function getDroneBookingGroup(): Promise<FeedGroup> {
       lastReplyAt: lastIn ? new Date(lastIn) : null,
       label: [last ? `Last in touch ${shortDate(new Date(last))}` : null, volumeLine(agent)].filter(Boolean).join(" · "),
       suggestion: renderMessageBody(body, agent.name, null),
+      secondText: template?.secondMessage ?? null,
       listing: null,
       editorHref: null,
     });

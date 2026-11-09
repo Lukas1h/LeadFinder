@@ -50,6 +50,7 @@ export async function GET(req: Request) {
     headline: e.label,
     reason: key,
     suggestion: e.suggestion,
+    secondMessage: e.secondText ?? null,
     editorHref: e.editorHref,
     listingCount: counts[e.agent.id] ?? 0,
     avgDaysBetweenListings: resolveAvgDaysBetweenListings(e.agent, dates[e.agent.id] ?? []),

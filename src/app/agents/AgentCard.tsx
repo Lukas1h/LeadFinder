@@ -12,6 +12,7 @@ import { RelationshipBadge } from "@/app/badges";
 import { scoreAgent } from "@/lib/agentBadge";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
+import { copyInTap } from "@/lib/clipboard";
 import { FOLLOW_UP_SNOOZE_DAYS, snoozeLabel } from "@/app/follow-up/snooze";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export function AgentCard({
   lastReplyAt,
   lead,
   textBody,
+  textSecond,
   followUpFeed,
   children,
 }: {
@@ -41,6 +43,8 @@ export function AgentCard({
   lead?: ReactNode;
   /** What the Text button opens Messages with. Empty when not given. */
   textBody?: string;
+  /** A second text, copied to the clipboard on the Text tap so it's one paste in Messages. */
+  textSecond?: string | null;
   /** The Follow up feed this card is in, recorded with a call or text so each feed's reply rate can be measured. */
   followUpFeed?: string;
   /** Full-width extra row under the card, e.g. the listing they just put up. */
@@ -169,6 +173,7 @@ export function AgentCard({
                 // Filled in on the click, not in the markup: the link's shape
                 // depends on the device, which the server can't see.
                 if (textBody) e.currentTarget.href = smsUrl(agent.phone!, textBody);
+                copyInTap(textSecond);
                 logHandoff("text");
               }}
               aria-label={`Text ${agent.name ?? agent.phone}`}

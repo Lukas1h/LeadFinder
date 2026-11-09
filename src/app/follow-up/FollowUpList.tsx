@@ -63,6 +63,7 @@ export function FollowUpList({
       followUpDismiss={dismiss}
       lastReplyAt={e.lastReplyAt}
       textBody={e.suggestion}
+      textSecond={e.secondText}
       followUpFeed={feedKey}
       lead={
         // The reason leads: it's what the text will be about. A plain check-in is the absence of one, so it's muted.
@@ -91,6 +92,7 @@ export function FollowUpList({
           </button>
         </div>
         <p className="text-sm text-foreground mt-1">{e.suggestion}</p>
+        {e.secondText && <p className="text-xs text-muted-foreground mt-1">Then: &ldquo;{e.secondText}&rdquo;</p>}
       </div>
       {e.listing ? (
         <ListingRow listing={e.listing} />

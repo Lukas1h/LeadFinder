@@ -29,6 +29,8 @@ export interface FeedItem {
   label: string;
   /** A text to start from, in his voice. */
   suggestion: string;
+  /** A second text to send right after (a template's secondMessage), copied on the Text tap. */
+  secondText?: string | null;
   /** The listing the offer is about, when there is one. */
   listing: Listing | null;
   /** Where to do the work once they say yes: the photo editor with this listing loaded. */
