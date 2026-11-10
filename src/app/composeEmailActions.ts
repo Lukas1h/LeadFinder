@@ -439,6 +439,10 @@ export async function sendListingEmail(input: SendListingEmailInput): Promise<{ 
         label: `AI · ${now.toLocaleDateString()}`,
         subject,
         body,
+        // A one-off send kept for its stats, never a template to rotate. The
+        // queue files these under a regular preset, where enabled meant the
+        // compose page started offering someone else's email (2026-11-10).
+        enabled: false,
       })
       .returning({ id: messagePresetVariants.id });
     resolvedVariantId = variant.id;

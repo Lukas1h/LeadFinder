@@ -245,9 +245,10 @@ export async function sendQueuedEmail(id: string): Promise<{ error?: string }> {
   // sendComposeEmail doesn't, so do it here for listing-less emails.
   let variantId = q.variantId ?? AI_DRAFT_VARIANT_SENTINEL;
   if (!q.listingId && variantId === AI_DRAFT_VARIANT_SENTINEL) {
+    // Archived from the start: a one-off send kept for its stats, never a template to rotate.
     const [variant] = await db
       .insert(messagePresetVariants)
-      .values({ presetId, label: `AI · ${new Date().toLocaleDateString()}`, subject: q.subject, body: q.body })
+      .values({ presetId, label: `AI · ${new Date().toLocaleDateString()}`, subject: q.subject, body: q.body, enabled: false })
       .returning({ id: messagePresetVariants.id });
     variantId = variant.id;
   }

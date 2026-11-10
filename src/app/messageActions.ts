@@ -461,7 +461,8 @@ export async function sendMessage(
   if (variantId === AI_DRAFT_VARIANT_SENTINEL) {
     const [variant] = await db
       .insert(messagePresetVariants)
-      .values({ presetId, label: `AI · ${now.toLocaleDateString()}`, body: finalText })
+      // Archived from the start: a one-off send kept for its stats, never a template to rotate.
+      .values({ presetId, label: `AI · ${now.toLocaleDateString()}`, body: finalText, enabled: false })
       .returning({ id: messagePresetVariants.id });
     resolvedVariantId = variant.id;
   }
