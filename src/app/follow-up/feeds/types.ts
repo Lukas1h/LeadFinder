@@ -12,6 +12,7 @@ export type FollowUpFeedKey =
   | "new_listings"
   | "relaunch"
   | "samples"
+  | "photo_offer_replies"
   | "unopened"
   | "opened_no_reply"
   | "drone_booking"

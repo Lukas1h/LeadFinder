@@ -11,6 +11,7 @@ import { getTwilightGiftGroup } from "./twilightGifts";
 import { getUnopenedLinkGroup } from "./unopened";
 import { getOpenedNoReplyGroup } from "./opened";
 import { getDroneBookingGroup } from "./droneBooking";
+import { getPhotoOfferRepliesGroup } from "./photoOfferReplies";
 import type { FeedGroup, FeedItem, FollowUpFeed } from "./types";
 
 export type { FeedGroup, FeedItem, FollowUpFeed, FollowUpFeedKey } from "./types";
@@ -23,6 +24,7 @@ export interface OfferFeeds {
   staging: FeedGroup;
   unopened: FeedGroup;
   openedNoReply: FeedGroup;
+  photoOfferReplies: FeedGroup;
   droneBooking: FeedGroup;
   graphics: FeedGroup[];
   drone: FeedGroup[];
@@ -34,12 +36,13 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
   // established before any of these parallel branches touch the clock, or
   // whichever gets there first (not necessarily this one) fails the build.
   await connection();
-  const [touchUps, backOnMarket, staging, unopened, openedNoReply, droneBooking, graphics, drone, stats] = await Promise.all([
+  const [touchUps, backOnMarket, staging, unopened, openedNoReply, photoOfferReplies, droneBooking, graphics, drone, stats] = await Promise.all([
     getPhotoTouchUpGroups(),
     getBackOnMarketGroup(),
     getStagingGroup(),
     getUnopenedLinkGroup(),
     getOpenedNoReplyGroup(),
+    getPhotoOfferRepliesGroup(),
     getDroneBookingGroup(),
     getGraphicsGroups(),
     getDroneOffers(),
@@ -55,6 +58,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
     staging,
     unopened,
     openedNoReply,
+    photoOfferReplies,
     droneBooking,
     graphics,
     drone: drone.map((g) => ({
@@ -118,6 +122,13 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
         },
         ...(touchUpSitting ? [notShown(touchUpSitting)] : []),
       ],
+    },
+    {
+      key: "photo_offer_replies",
+      title: "Photo offer replies",
+      blurb:
+        "They answered your text offering to shoot a listing, then the conversation stopped: nothing either way for 3+ days. The listing is still for sale and nobody's booked you, so check back on it.",
+      groups: [offers.photoOfferReplies],
     },
     {
       key: "samples",

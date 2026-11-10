@@ -247,7 +247,12 @@ Schedule page, the iPhone app and the MCP tool. It shows:
 ### Follow Up feeds
 
 `src/app/follow-up/feeds/` holds one module per tab: New listings, Relaunch
-(price cuts and back on market), Samples, Link not opened (`feeds/unopened.ts`:
+(price cuts and back on market), Photo offer replies
+(`feeds/photoOfferReplies.ts`: replied in the last 45 days to a "Bad Photos",
+"Coming Soon" or photo-offer AI draft text, then 3+ days of nothing either way,
+listing still for sale and not shot by him, agent not cold/declined, send not
+marked booked/declined),
+Samples, Link not opened (`feeds/unopened.ts`:
 Portfolio link sent 3–21 days ago, never opened, no contact since), Opened, no
 reply (`feeds/opened.ts`: same window, opened, nothing from them since; offers free
 drone shots on a first shoot), Free drone with booking
