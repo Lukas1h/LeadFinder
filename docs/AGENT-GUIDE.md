@@ -147,6 +147,13 @@ Lisas), and one person can have a phone-only and an email-only record.
   (+ optional `office_city`) set is for that office only and replaces the
   general one there (RE/MAX Integrity, Roseburg). Cloud brokerages (eXp,
   Real Broker, Fathom, LPT, Epique) never count as a shared office.
+- `agent_status_changes`: every change to an agent's `relationship_status`
+  since 2026-11-09 (`from_status`, `to_status`, `changed_at`), written by a
+  database trigger (`drizzle/0006_agent_status_changes.sql`, applied with
+  `scripts/apply-sql.mts`), so no app code writes it and every path is caught.
+  `attribution` is the outreach in the 14 days before: `feed:<FollowUpFeedKey>`,
+  `template:<preset name>`, `outreach:<channel>` (an untemplated text/call/email)
+  or `manual`; the ids of that send, outbound interaction and latest reply are kept.
 - `message_sends`: one row per templated send (`sent_at`, `responded_at`,
   `result`: `pending | quoted | booked | declined`). This is the per-variant
   stats source.
@@ -348,6 +355,10 @@ select event, detail, at, city, user_agent from gallery_views where booking_id='
 
 -- Business miles by month
 select to_char(date::date,'YYYY-MM') m, sum(miles) from trips group by 1 order by 1;
+
+-- Warm -> interested by what caused it
+select attribution, count(*) from agent_status_changes
+where from_status = 'warm' and to_status = 'interested' group by 1 order by 2 desc;
 
 -- Portfolio page engagement
 select l.slug, a.name, l.view_count,

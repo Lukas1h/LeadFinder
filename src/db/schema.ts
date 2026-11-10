@@ -1163,6 +1163,35 @@ export const agentInteractions = pgTable("agent_interactions", {
 export type AgentInteraction = typeof agentInteractions.$inferSelect;
 export type NewAgentInteraction = typeof agentInteractions.$inferInsert;
 
+// Every change to an agent's relationshipStatus, with what most likely caused
+// it. Written only by a database trigger (drizzle/0006_agent_status_changes.sql),
+// so a change from any path (web, iPhone, MCP, a script) is caught and no app
+// code writes here. Started 2026-11-09; nothing before then is recorded.
+//
+// Attribution is the outreach in the ATTRIBUTION window before the change:
+// the latest outbound text/call/email (its Follow Up feed, if from one), the
+// latest templated send (its preset), and the latest reply. `attribution` is
+// the one-line verdict: "feed:drone_booking", "template:Free drone with
+// booking", or "manual" when nothing went out in the window.
+export const agentStatusChanges = pgTable("agent_status_changes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  // Null for an agent created with a status already set.
+  fromStatus: agentRelationshipStatusEnum("from_status"),
+  toStatus: agentRelationshipStatusEnum("to_status").notNull(),
+  changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  attribution: text("attribution").notNull(),
+  followUpFeed: text("follow_up_feed"),
+  presetId: uuid("preset_id").references(() => messagePresets.id, { onDelete: "set null" }),
+  messageSendId: uuid("message_send_id").references(() => messageSends.id, { onDelete: "set null" }),
+  outboundInteractionId: uuid("outbound_interaction_id").references(() => agentInteractions.id, { onDelete: "set null" }),
+  inboundInteractionId: uuid("inbound_interaction_id").references(() => agentInteractions.id, { onDelete: "set null" }),
+});
+
+export type AgentStatusChange = typeof agentStatusChanges.$inferSelect;
+
 // Messages written ahead of time and sent later — a batch of listing texts
 // to work through, or an email that shouldn't go out the instant someone
 // replies. Channel-agnostic: each row is a text or an email. Nothing here
