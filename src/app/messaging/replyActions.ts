@@ -21,7 +21,7 @@ import {
   type MessageResult,
   type PresetType,
 } from "@/db/schema";
-import { and, count, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { attachmentMetaSql, withContentTypes, type AttachmentMeta } from "@/lib/attachments";
 import { resolvePendingInteraction, startPendingInteraction } from "@/app/agents/interactionActions";
 import { revalidatePath } from "next/cache";
@@ -181,7 +181,7 @@ export async function getSendDetail(sendId: string): Promise<SendDetail | null> 
     agentId: row.agent?.id ?? null,
     agentName: greetingName(row.send, row.agent?.name, row.listing?.agentName),
     address: row.listing?.address ?? null,
-    city: row.listing?.city ?? null,
+    city: row.listing?.city ?? row.agent?.homeCity ?? null,
   };
   const quickActions = await loadQuickActions(row.quickActionPresetIds, who);
 
@@ -288,7 +288,8 @@ async function loadSend(sendId: string) {
       quickActionPresetIds: messagePresets.quickActionPresetIds,
       listingAgentName: listings.agentName,
       address: listings.address,
-      city: listings.city,
+      // No listing on the send (a cold text): where the agent mostly lists.
+      city: sql<string | null>`coalesce(${listings.city}, ${agents.homeCity})`,
     })
     .from(messageSends)
     .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))

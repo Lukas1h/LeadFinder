@@ -141,7 +141,10 @@ Lisas), and one person can have a phone-only and an email-only record.
 - `message_presets` / `message_preset_variants`: text and email templates,
   A/B variants with `enabled`. Placeholders include `{{firstName}}`,
   `{{area}}`, `{{city}}`, `{{recentWork}}`, `{{portfolioLink}}` (`src/lib/messageTemplate.ts`;
-  only in the "Portfolio link" template's second text).
+  only in the "Portfolio link" template's second text). `{{area}}` uses the
+  listing's city, else the agent's `home_city` in reply quick actions; with
+  neither it's "around Oregon" ("{{area}} as well as most of the state"
+  becomes "around most of Oregon").
   `same_office` templates (`{{officeClient}}`) are only offered when the
   lead's agent shares an office with a client; one with `office_brokerage`
   (+ optional `office_city`) set is for that office only and replaces the

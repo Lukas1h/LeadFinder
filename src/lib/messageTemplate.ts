@@ -21,7 +21,9 @@ export const PORTFOLIO_LINK_MARKER = "{{portfolioLink}}";
  * Renders a preset variant body, substituting {{firstName}}, {{street}},
  * {{city}} and {{area}} — the per-city "where I work" phrase the AI drafts
  * use too ("in the Portland area", "here in Roseburg", "here around the
- * coast"; see areaPhrase). With no city it's "around Oregon".
+ * coast"; see areaPhrase). With no city it's "around Oregon" — and the
+ * "{{area}} as well as most of the state" line becomes "around most of
+ * Oregon" rather than naming the state twice.
  */
 export function renderMessageBody(
   body: string,
@@ -37,6 +39,7 @@ export function renderMessageBody(
     .replaceAll("{{firstName}}", name ?? "there")
     .replaceAll("{{street}}", street)
     .replaceAll("{{city}}", cityName)
+    .replaceAll("{{area}} as well as most of the state", areaPhrase(city) ? "{{area}} as well as most of the state" : "around most of Oregon")
     .replaceAll("{{area}}", areaPhrase(city) ?? "around Oregon")
     .replaceAll("{{officeClient}}", firstName(officeClient) ?? "someone in your office");
 }
