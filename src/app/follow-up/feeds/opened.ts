@@ -70,7 +70,7 @@ export async function getOpenedNoReplyGroup(): Promise<FeedGroup> {
       agent,
       lastReplyAt: lastIn ? new Date(lastIn) : null,
       label: [`Link sent ${shortDate(new Date(at))}, opened, no reply`, volumeLine(agent)].filter(Boolean).join(" · "),
-      suggestion: "Anything coming up for you in November? I'd love to include free drone shots on your first shoot with me.",
+      suggestion: "Anything in the pipeline for the rest of the year? I'd love to include complimentary drone shots on a property if so!",
       listing: null,
       editorHref: null,
     });

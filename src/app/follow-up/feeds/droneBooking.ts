@@ -25,7 +25,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const MIN_GAP_DAYS = 21;
 const PRESET_NAME = "Free drone with booking";
 const FALLBACK =
-  "Hi {{firstName}}! I'm including complimentary drone shots with any property booked through the end of the year, to help winter listings stand out, Thought I’d let you know.";
+  "Hi {{firstName}}! I'm including complimentary drone shots with any property booked through the end of the year, to help winter listings stand out, thought I’d let you know.";
 // Every wording so far: "free drone with any shoot", "complimentary drone shots with any shoot/property".
 const OFFERED_RE = /(free|complimentary) drone( shots)? with any (shoot|property)/i;
 
