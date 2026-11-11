@@ -6,6 +6,7 @@ import {
   integer,
   numeric,
   real,
+  doublePrecision,
   timestamp,
   date,
   boolean,
@@ -57,6 +58,13 @@ export const listings = pgTable("listings", {
   city: text("city"),
   state: text("state"),
   zipcode: text("zipcode"),
+  // Map position of the address, for "near" matching (the Shot one near you
+  // feed). From the US Census geocoder, OpenStreetMap as fallback
+  // (src/lib/geocode.ts). geocodedAt set with lat null = looked up, no match.
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
+  geocodedAt: timestamp("geocoded_at", { withTimezone: true }),
+  geocodeSource: text("geocode_source"),
   price: integer("price"),
   bedrooms: numeric("bedrooms"),
   bathrooms: numeric("bathrooms"),
@@ -358,6 +366,13 @@ export const bookings = pgTable("bookings", {
   address: text("address"),
   city: text("city"),
   state: text("state"),
+  // Map position of the address, for "near" matching (the Shot one near you
+  // feed). From the US Census geocoder, OpenStreetMap as fallback
+  // (src/lib/geocode.ts). geocodedAt set with lat null = looked up, no match.
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
+  geocodedAt: timestamp("geocoded_at", { withTimezone: true }),
+  geocodeSource: text("geocode_source"),
   contactAgentId: uuid("contact_agent_id").references(() => agents.id, { onDelete: "set null" }),
 
   // The outreach this job traces back to, so a preset variant can be credited

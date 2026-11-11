@@ -7,6 +7,8 @@ import { estimateDriveTime } from "@/lib/driveTime";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
 import { attributeBookingToSend } from "@/lib/agentIdentity";
 import { refreshBookingAirspace } from "@/lib/airspace";
+import { geocodeBooking } from "@/lib/geocode";
+import { after } from "next/server";
 import { text, errorText } from "./shared";
 import { reopenStep } from "@/app/booked/bookingMath";
 
@@ -180,6 +182,9 @@ export function registerBookingTools(server: McpServer): void {
 
       // Awaited, unlike the app's form, so the reply can carry the warning.
       await refreshBookingAirspace(booking.id);
+      // The booking's map position, for the "Shot one near you" feed: after
+      // the reply, so a slow map lookup doesn't hold it up.
+      after(() => geocodeBooking(booking.id));
 
       const joined = await joinedBooking(booking.id);
       return text(joined);

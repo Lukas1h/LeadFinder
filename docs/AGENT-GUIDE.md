@@ -124,6 +124,21 @@ contacted onward.
 Priorities: weak photos first, no video second. Don't chase luxury with price
 floors.
 
+Map positions: `listings` and `bookings` both have `lat`, `lng`,
+`geocoded_at`, `geocode_source` (`census`, `osm`, or `osm_street` = matched
+only the street, not the house, so not used for distance; `geocoded_at` set
+with `lat` null = looked up, no match). Filled by `src/lib/geocode.ts` when a
+listing syncs in (`insertAndEnrichListings`) and when a booking is created or
+edited; a booking linked to a listing gets the listing's address.
+`scripts/geocode-backfill.mts` fills anything missing (dry run by default,
+`--write` to save). `src/lib/nearShoots.ts` matches listings to his shoots
+from the last 30 days: within 1 mile in town, 3 miles where the shoot has
+fewer than 5 listings within a mile (`scripts/analyze-shoot-proximity.mts`
+is the analysis behind those numbers). The Leads page's **Near your shoots**
+section (right below Agents you know) holds cold leads near a recent shoot,
+never declined agents or Unlikely matches; the iPhone API still sees those
+cards in their normal sections.
+
 ### Agents
 
 `agents`: `name`, `phone`, `email`, `brokerage`, `home_city`,
@@ -255,7 +270,10 @@ marked booked/declined),
 Samples, Link not opened (`feeds/unopened.ts`:
 Portfolio link sent 3–21 days ago, never opened, no contact since), Opened, no
 reply (`feeds/opened.ts`: same window, opened, nothing from them since; offers free
-drone shots on a first shoot), Free drone with booking
+drone shots on a first shoot), Shot one near you (`feeds/nearShoot.ts`: warm, interested and client
+agents with a for-sale listing near a home he shot in the last 30 days, no
+contact in 10 days, not offered in 45; he texts a photo from that shoot),
+Free drone with booking
 (`feeds/droneBooking.ts`: warm/interested agents he has texted, no contact in
 3+ weeks, not offered yet, most deals/yr then highest avg price first; text
 from the "Free drone with booking" SMS template, whose second message rides

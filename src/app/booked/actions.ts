@@ -12,6 +12,7 @@ import { bumpAgentRelationshipOnMilestone, resolveSendOutcome } from "@/app/acti
 import { attributeBookingToSend } from "@/lib/agentIdentity";
 import { estimateDriveTime } from "@/lib/driveTime";
 import { refreshBookingAirspace } from "@/lib/airspace";
+import { geocodeBooking } from "@/lib/geocode";
 import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { getOrAssignInvoiceNumber } from "@/lib/invoice";
@@ -144,6 +145,8 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   // Is the drone allowed there without ATC authorization? A few seconds of
   // map lookups, so after the response: saving stays instant.
   after(() => refreshBookingAirspace(booking.id));
+  // The booking's map position, for the "Shot one near you" feed.
+  after(() => geocodeBooking(booking.id));
 
   // Credit the outreach that won the job, so a preset variant gets the revenue
   // it actually produced — see attributeBookingToSend.
@@ -213,6 +216,9 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
 
   // Re-checks the airspace only if the address changed (see refreshBookingAirspace).
   after(() => refreshBookingAirspace(bookingId));
+  // Re-geocoding always is fine: one cheap lookup, and it keeps the map
+  // position right when the address or linked listing changed.
+  after(() => geocodeBooking(bookingId));
 
   await db.delete(bookingLineItems).where(eq(bookingLineItems.bookingId, bookingId));
   const validLineItems: NewBookingLineItem[] = input.lineItems

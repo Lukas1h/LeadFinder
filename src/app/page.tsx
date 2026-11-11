@@ -6,6 +6,9 @@ import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
 import { NewBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, OfficeClientBadge, UnscoredBadge } from "./badges";
+import { NearShootBadge } from "./NearShootBadge";
+import { milesLabel } from "@/lib/nearShoots";
+import { shortDate } from "@/app/follow-up/feeds/shared";
 import { FEW_PHOTOS_THRESHOLD, isUnscored } from "@/lib/pipeline";
 import { isBuilderListing, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER } from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
@@ -66,11 +69,26 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
 
   // Cards show a handful of each listing's photos; the listing dialog fetches
   // the whole gallery when it opens (see ListingModal).
-  const { known, sections, openLeadCount, queuedCount, agentCount, addressById, unscoredCount } = await getLeadsBoard({
+  const { known, sections, near, openLeadCount, queuedCount, agentCount, addressById, unscoredCount } = await getLeadsBoard({
     cardPhotosOnly: true,
   });
 
-  function card(g: LeadGroup) {
+  // "Near your shoots" pulls cards out of their normal sections (they stay in
+  // `sections` for the iPhone API) and puts the most recently shot first.
+  const nearKeys = new Set(near.keys());
+  const groupByKey = new Map<string, LeadGroup>();
+  for (const key of LEAD_SECTION_ORDER) for (const g of sections[key]) groupByKey.set(g.key, g);
+  const nearGroups = [...near.entries()]
+    .flatMap(([key, match]) => {
+      const group = groupByKey.get(key);
+      return group ? [{ group, ...match }] : [];
+    })
+    .sort(
+      (a, b) =>
+        b.near.shoot.shotAt.getTime() - a.near.shoot.shotAt.getTime() || a.near.miles - b.near.miles
+    );
+
+  function card(g: LeadGroup, nearMatch?: { near: { shoot: { address: string; shotAt: Date }; miles: number } }) {
     const lead = g.best;
     const agent = g.agent;
     const ids = g.entries.map((e) => e.lead.id);
@@ -96,6 +114,13 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
             {lead.score != null && <PhotoScoreBadge score={lead.score} reasoning={lead.scoreReasoning} />}
             {isUnscored(lead) && <UnscoredBadge />}
             {isBuilderListing(lead.brokerName) && <Badge variant="outline">Builder</Badge>}
+            {nearMatch && (
+              <NearShootBadge
+                address={nearMatch.near.shoot.address}
+                miles={milesLabel(nearMatch.near.miles)}
+                date={shortDate(nearMatch.near.shoot.shotAt)}
+              />
+            )}
             {agent?.relationshipStatus === "declined" && (
               <AgentDeclinedBadge
                 agent={agent}
@@ -181,8 +206,22 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
               </details>
             </section>
           )}
+          {nearGroups.length > 0 && (
+            <section>
+              {known.length > 0 && <Separator className="mb-8" />}
+              <details className="group/details" open>
+                <summary className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
+                  <span className="flex items-center gap-1">
+                    <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
+                    Near your shoots ({nearGroups.length})
+                  </span>
+                </summary>
+                <div className="flex flex-col gap-4 mt-3">{nearGroups.map((m) => card(m.group, m))}</div>
+              </details>
+            </section>
+          )}
           {LEAD_SECTION_ORDER.map((key, index) => {
-            const items = sections[key];
+            const items = sections[key].filter((g) => !nearKeys.has(g.key));
             if (items.length === 0) return null;
             const isUnlikely = key === "unlikely";
             const all = shown.has(key);
@@ -190,7 +229,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
             const hidden = items.length - visible.length;
             return (
               <section key={key}>
-                {(index > 0 || known.length > 0) && <Separator className="mb-8" />}
+                {(index > 0 || known.length > 0 || nearGroups.length > 0) && <Separator className="mb-8" />}
                 <details className="group/details" open={!isUnlikely || all}>
                   <summary className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
                     <span className="flex items-center gap-1">
@@ -202,7 +241,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
                     )}
                   </summary>
                   <div className="flex flex-col gap-4 mt-3">
-                    {visible.map(card)}
+                    {visible.map((g) => card(g))}
                     {hidden > 0 && (
                       <Link
                         href={`/?show=${[...shown, key].join(",")}`}

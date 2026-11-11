@@ -9,6 +9,8 @@ import type { KnownAgentGroup } from "@/app/KnownAgentLeads";
 import { clientOffices, officeClientFor, type OfficeClient } from "@/lib/clientOffices";
 import { estimateDriveMinutes } from "@/lib/driveTime";
 import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
+import { getRecentShoots, nearestShoot, type NearShoot } from "@/lib/nearShoots";
+import { shotAddresses } from "@/app/follow-up/feeds/shared";
 
 /**
  * Everything the Leads page shows, as data.
@@ -48,6 +50,14 @@ export interface LeadGroup {
 export interface LeadsBoard {
   known: LeadGroup[];
   sections: Record<LeadSection, LeadGroup[]>;
+  /**
+   * Cold groups with a listing near a home he shot in the last 30 days, by
+   * LeadGroup.key: the nearest such shoot, and the lead in the group that
+   * matched (not necessarily its best). The page renders these as its "Near
+   * your shoots" section — but they stay in `sections` too, unchanged, because
+   * the iPhone app's API reads that and must keep seeing the same cards.
+   */
+  near: Map<string, { near: NearShoot; leadId: string }>;
   /** Lead cards that are actually new (queued ones are excluded — see getQueuedListingIds). */
   openLeadCount: number;
   queuedCount: number;
@@ -91,7 +101,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
   // that's loaded for the ~9,000 of them; the full rows are fetched below for
   // just the few hundred on the board. Loading every full row was 4 MB of the
   // page's 8, on every load.
-  const [leads, agentKeys, queuedIds, lastContact, offices] = await Promise.all([
+  const [leads, agentKeys, queuedIds, lastContact, offices, recentShoots, shotKeys] = await Promise.all([
     db
       .select(options?.cardPhotosOnly ? { ...getTableColumns(listings), photos: cardPhotos } : getTableColumns(listings))
       .from(listings)
@@ -107,6 +117,11 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
     getQueuedListingIds(),
     lastContactByAgent(),
     clientOffices(),
+    // Where he has shot lately, and every address he has ever shot: a listing
+    // near the former can be led with "I just shot a home a few blocks from
+    // your listing"; one at the latter is his own work, not a lead.
+    getRecentShoots(),
+    shotAddresses(),
   ]);
   // A listing with a message waiting in the Queue has been handled — it lives
   // in the Pipeline's Queued section until that message is sent (see
@@ -202,6 +217,24 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
     };
   });
 
+  // "Near your shoots": a cold group with an open listing near a home he shot
+  // in the last 30 days, so the first text can open with "I just shot a home a
+  // few blocks from your listing". Any entry can match; the nearest one across
+  // the group wins. Never someone he knows (they're in Agents you know), an
+  // Unlikely lead, or an agent who declined. Keys stay in `sections` as well —
+  // see LeadsBoard.near.
+  const near = new Map<string, { near: NearShoot; leadId: string }>();
+  for (const g of groups) {
+    if (g.known || g.section === "unlikely") continue;
+    if (g.agent && (g.agent.relationshipStatus === "declined" || g.agent.declinedAt)) continue;
+    let match: { near: NearShoot; leadId: string } | null = null;
+    for (const { lead } of g.entries) {
+      const nearest = nearestShoot(lead, recentShoots, shotKeys);
+      if (nearest && (!match || nearest.miles < match.near.miles)) match = { near: nearest, leadId: lead.id };
+    }
+    if (match) near.set(g.key, match);
+  }
+
   const known = groups.filter((g) => g.known);
   const sections: Record<LeadSection, LeadGroup[]> = { photo: [], video: [], backup: [], texted: [], unlikely: [] };
   for (const g of groups) if (!g.known) sections[g.section].push(g);
@@ -241,7 +274,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
   const recent = Date.now() - 3 * 24 * 60 * 60 * 1000;
   const unscoredCount = openLeads.filter((l) => isUnscored(l) && l.foundAt.getTime() > recent).length;
 
-  return { known, sections, openLeadCount: openLeads.length, queuedCount, agentCount, addressById, unscoredCount };
+  return { known, sections, near, openLeadCount: openLeads.length, queuedCount, agentCount, addressById, unscoredCount };
 }
 
 /** Who to text first: listed before coming soon, then nearer, then a local number (see the sort above). */

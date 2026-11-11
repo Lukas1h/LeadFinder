@@ -12,6 +12,7 @@ import { getUnopenedLinkGroup } from "./unopened";
 import { getOpenedNoReplyGroup } from "./opened";
 import { getDroneBookingGroup } from "./droneBooking";
 import { getPhotoOfferRepliesGroup } from "./photoOfferReplies";
+import { getNearShootGroup } from "./nearShoot";
 import type { FeedGroup, FeedItem, FollowUpFeed } from "./types";
 
 export type { FeedGroup, FeedItem, FollowUpFeed, FollowUpFeedKey } from "./types";
@@ -25,6 +26,7 @@ export interface OfferFeeds {
   unopened: FeedGroup;
   openedNoReply: FeedGroup;
   photoOfferReplies: FeedGroup;
+  nearShoot: FeedGroup;
   droneBooking: FeedGroup;
   graphics: FeedGroup[];
   drone: FeedGroup[];
@@ -36,13 +38,14 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
   // established before any of these parallel branches touch the clock, or
   // whichever gets there first (not necessarily this one) fails the build.
   await connection();
-  const [touchUps, backOnMarket, staging, unopened, openedNoReply, photoOfferReplies, droneBooking, graphics, drone, stats] = await Promise.all([
+  const [touchUps, backOnMarket, staging, unopened, openedNoReply, photoOfferReplies, nearShoot, droneBooking, graphics, drone, stats] = await Promise.all([
     getPhotoTouchUpGroups(),
     getBackOnMarketGroup(),
     getStagingGroup(),
     getUnopenedLinkGroup(),
     getOpenedNoReplyGroup(),
     getPhotoOfferRepliesGroup(),
+    getNearShootGroup(),
     getDroneBookingGroup(),
     getGraphicsGroups(),
     getDroneOffers(),
@@ -59,6 +62,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
     unopened,
     openedNoReply,
     photoOfferReplies,
+    nearShoot,
     droneBooking,
     graphics,
     drone: drone.map((g) => ({
@@ -129,6 +133,13 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
       blurb:
         "They answered your text offering to shoot a listing, then the conversation stopped: nothing either way for 3+ days. The listing is still for sale and nobody's booked you, so check back on it.",
       groups: [offers.photoOfferReplies],
+    },
+    {
+      key: "near_shoot",
+      title: "Shot one near you",
+      blurb:
+        "Warm agents and clients with a listing for sale near a home you shot in the last 30 days (within a mile in town, 3 miles in the country). Text them a photo from that shoot: fresh local work is a real reason to reach out.",
+      groups: [notShown(offers.nearShoot)],
     },
     {
       key: "samples",

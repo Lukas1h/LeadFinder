@@ -8,6 +8,7 @@ import { FEW_PHOTOS_THRESHOLD, WARM_AGENT_STATUSES } from "@/lib/pipeline";
 import { linkListingToAgent } from "@/lib/agentIdentity";
 import { isUnderPriceFloor, hasInHouseMedia, isBuilderListing, refreshLeadSections } from "@/lib/leadSections";
 import { dropDuplicateListings } from "@/lib/listingDedupe";
+import { geocodeListings } from "@/lib/geocode";
 import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -377,6 +378,15 @@ export async function insertAndEnrichListings(
     await notifyWarmListings(warmNotices);
   } else {
     await notifyNewListings(insertedRows.length, options?.notificationUrl);
+  }
+
+  // Map positions for "Shot one near you". Last, so the map lookups don't
+  // delay the enrichment, notifications or the response; a geocode that fails
+  // (services down, no match) must never break the sync.
+  try {
+    await geocodeListings(insertedRows.map((row) => row.id));
+  } catch (err) {
+    console.warn("sync: geocoding the new listings failed:", err);
   }
 
   if (insertedRows.length > 0) {

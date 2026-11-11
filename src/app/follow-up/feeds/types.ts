@@ -13,6 +13,7 @@ export type FollowUpFeedKey =
   | "relaunch"
   | "samples"
   | "photo_offer_replies"
+  | "near_shoot"
   | "unopened"
   | "opened_no_reply"
   | "drone_booking"
