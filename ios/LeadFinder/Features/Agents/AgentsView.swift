@@ -12,69 +12,79 @@ struct AgentsView: View {
     @State private var filter: AgentFilter = .all
     @State private var openAgent: AgentsResponse.Row?
     @State private var path = NavigationPath()
+    /// Pushed inside another tab's stack (the iPhone's Follow up tab) rather
+    /// than standing as its own: no stack of its own, and no links back to
+    /// Follow up. The Mac sidebar still shows it on its own.
+    var embedded = false
 
     var body: some View {
-        NavigationStack(path: $path) {
-            Group {
-                if let agents = appState.agents.value {
-                    directory(agents.agents)
-                } else if appState.agents.error != nil {
-                    loadFailure
-                } else {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-            .background(Theme.background)
-            .navigationTitle("Agents")
-            // Detail is a sheet, not a push: it's a look at one agent, not a
-            // place you keep navigating from.
-            .sheet(item: $openAgent) { agent in
-                AgentDirectoryDetail(agent: agent)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            }
-            .navigationDestination(for: FollowUpRoute.self) { _ in
-                FollowUpView()
-            }
-            .navigationDestination(for: PortfolioLinksRoute.self) { _ in
-                PortfolioLinksView()
-            }
-            // Follow up lives here rather than as a tab of its own: it is a view
-            // over agents, so it belongs under the directory.
-            .toolbar {
-                ToolbarItemGroup(placement: .trailingBar) {
-                    NavigationLink(value: PortfolioLinksRoute()) {
-                        Label("Portfolio links", systemImage: "link")
+        if embedded {
+            page
+        } else {
+            NavigationStack(path: $path) {
+                page
+                    .navigationDestination(for: FollowUpRoute.self) { _ in
+                        FollowUpView()
                     }
-                    NavigationLink(value: FollowUpRoute()) {
-                        Label("Follow up", systemImage: "arrow.triangle.2.circlepath")
+                    .navigationDestination(for: PortfolioLinksRoute.self) { _ in
+                        PortfolioLinksView()
                     }
-                }
+                    .toolbar {
+                        ToolbarItemGroup(placement: .trailingBar) {
+                            NavigationLink(value: PortfolioLinksRoute()) {
+                                Label("Portfolio links", systemImage: "link")
+                            }
+                            NavigationLink(value: FollowUpRoute()) {
+                                Label("Follow up", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                        }
+                    }
+                    #if DEBUG
+                    .task {
+                        if DebugLaunchArguments.opensPortfolio { path.append(PortfolioLinksRoute()) }
+                    }
+                    #endif
             }
-            .task { await appState.agents.load() }
+        }
+    }
+
+    private var page: some View {
+        Group {
+            if let agents = appState.agents.value {
+                directory(agents.agents)
+            } else if appState.agents.error != nil {
+                loadFailure
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .background(Theme.background)
+        .navigationTitle("Agents")
+        // Detail is a sheet, not a push: it's a look at one agent, not a
+        // place you keep navigating from.
+        .sheet(item: $openAgent) { agent in
+            AgentDirectoryDetail(agent: agent)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .task { await appState.agents.load() }
+        .task {
             #if DEBUG
-            .task {
-                if DebugLaunchArguments.opensPortfolio { path.append(PortfolioLinksRoute()) }
+            guard DebugLaunchArguments.opensAgent else { return }
+            for _ in 0..<60 {
+                if let first = appState.agents.value?.agents.first {
+                    openAgent = first
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(250))
             }
             #endif
-            .task {
-                #if DEBUG
-                guard DebugLaunchArguments.opensAgent else { return }
-                for _ in 0..<60 {
-                    if let first = appState.agents.value?.agents.first {
-                        openAgent = first
-                        return
-                    }
-                    try? await Task.sleep(for: .milliseconds(250))
-                }
-                #endif
-            }
-            .searchField(
-                text: $query,
-                prompt: "Name, brokerage or phone"
-            )
-            .safeAreaInset(edge: .top) { filterBar }
         }
+        .searchField(
+            text: $query,
+            prompt: "Name, brokerage or phone"
+        )
+        .safeAreaInset(edge: .top) { filterBar }
     }
 
     private func directory(_ all: [AgentsResponse.Row]) -> some View {

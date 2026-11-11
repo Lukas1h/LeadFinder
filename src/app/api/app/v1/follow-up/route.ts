@@ -75,6 +75,8 @@ export async function GET(req: Request) {
       key: f.key,
       title: f.title,
       blurb: f.blurb,
+      // How the feed has done lately: reach, replies, and warm agents turned interested (feeds/stats.ts).
+      stats: f.stats ?? null,
       groups: f.groups.map((g) => ({ title: g.title, heldBack: g.heldBack, items: g.items.map(feedItem(f.key)) })),
     })),
     // The drone feed alone, in the shape builds from before feeds read (2026-10-11 to 10-21).

@@ -203,15 +203,20 @@ export function FollowUpList({
 
       {active === COMING_UP ? (
         comingUp || <p className="text-sm text-muted-foreground">Everyone you know is due now.</p>
-      ) : feed && feed.count + feed.groups.reduce((n, g) => n + g.heldBack, 0) > 0 ? (
+      ) : feed && (feed.count + feed.groups.reduce((n, g) => n + g.heldBack, 0) > 0 || feed.stats) ? (
         <section>
           <p className="text-sm text-muted-foreground">{feed.blurb}</p>
           {feed.stats && (
             <p className="text-xs text-muted-foreground mt-1">
               Last {feed.stats.days} days: {feed.stats.replied} of {feed.stats.reached} reached from here replied
               {feed.stats.reached > 0 && ` (${Math.round((feed.stats.replied / feed.stats.reached) * 100)}%)`}
+              {feed.stats.warm > 0 &&
+                ` · ${feed.stats.converted} of ${feed.stats.warm} warm turned interested (${Math.round(
+                  (feed.stats.converted / feed.stats.warm) * 100
+                )}%)`}
             </p>
           )}
+          {feed.groups.length === 0 && <p className="text-sm text-muted-foreground mt-5">Nobody here right now.</p>}
           {feed.groups.map((g) => (
             <div key={g.title} className="mt-5">
               {feed.groups.length > 1 && <h3 className="text-sm font-medium text-foreground">{g.title}</h3>}

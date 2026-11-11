@@ -41,10 +41,12 @@ const link = (href: NavLink["href"]) => NAV_LINKS.find((l) => l.href === href)!;
  * paired page, so every page belongs to exactly one tab.
  */
 export const MOBILE_TABS: { tab: NavLink; companion: NavLink; also?: NavLink[] }[] = [
-  // Pipeline gave its header spot to Follow up, but still belongs to Leads:
-  // reached from the link at the bottom of Leads (and import notifications),
-  // with the same "‹ Leads" back link as a companion page.
-  { tab: link("/"), companion: link("/follow-up"), also: [link("/pipeline"), link("/photo-editor")] },
+  // Pipeline is reached from the link at the bottom of Leads (and import
+  // notifications), with the same "‹ Leads" back link as a companion page.
+  { tab: link("/"), companion: link("/pipeline"), also: [link("/photo-editor")] },
+  // A tab of its own since 2026-11-10: following up is as much of the work as
+  // new leads. Portfolio links are what most follow-ups send.
+  { tab: link("/follow-up"), companion: link("/portfolio-links") },
   // Finances is reached from the link on the Booked page.
   { tab: link("/booked"), companion: link("/schedule"), also: [link("/finances")] },
   { tab: link("/messaging"), companion: link("/queue") },

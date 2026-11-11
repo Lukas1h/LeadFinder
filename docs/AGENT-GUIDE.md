@@ -270,7 +270,7 @@ marked booked/declined),
 Samples, Link not opened (`feeds/unopened.ts`:
 Portfolio link sent 3–21 days ago, never opened, no contact since), Opened, no
 reply (`feeds/opened.ts`: same window, opened, nothing from them since; offers free
-drone shots on a first shoot), Shot one near you (`feeds/nearShoot.ts`: warm, interested and client
+drone shots on a first shoot), Shot one near you (`feeds/nearShoot.ts`: warm and interested
 agents with a for-sale listing near a home he shot in the last 30 days, no
 contact in 10 days, not offered in 45; he texts a photo from that shoot),
 Free drone with booking
@@ -280,8 +280,17 @@ from the "Free drone with booking" SMS template, whose second message rides
 along as the card's `secondText`: copied on the web Text tap, a second Messages
 sheet on iOS), Congrats, Twilight gift, Virtual
 staging, Graphics, Drone shots (`src/app/follow-up/droneOffers.ts`: free drone
-shots near upcoming jobs), and Check-ins. `feeds/stats.ts` measures the 30-day
-reply rate per tab. The daily texting target (`DAILY_TARGET` in
+shots near upcoming jobs), and Check-ins. `feeds/stats.ts` measures each tab
+over 30 days: agents reached from it (texts/calls started on its cards,
+`agent_interactions.follow_up_feed`), how many replied within a week, how many
+were warm when reached, and how many of those turned interested or better
+since (from `agent_status_changes`). A tab with nobody due still shows when it
+has numbers. On the iPhone, Follow up is a tab (Agents and Portfolio links
+hang off its header) and lists the tabs as categories with those numbers; on
+the web it's a mobile tab too. `src/lib/funnelSplit.ts` gives Home's funnel
+card its Cold row (first outreach texts in 30 days: replied, now interested)
+and Follow up row (the same stats across all tabs, each agent once), served
+as `funnel` on `GET /api/app/v1/messages`. The daily texting target (`DAILY_TARGET` in
 `src/app/follow-up/data.ts`) moves with live reply rates on purpose.
 
 ### Funnel and portfolio pages

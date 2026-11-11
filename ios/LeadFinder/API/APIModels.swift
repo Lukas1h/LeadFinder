@@ -209,10 +209,23 @@ struct FollowUpResponse: Codable, Sendable {
         var key: String
         var title: String
         var blurb: String?
+        /// How the feed has done lately (server's feeds/stats.ts); nil until anyone's been reached from it.
+        var stats: FeedStats?
         var groups: [FeedGroup]
 
         var id: String { key }
         var itemCount: Int { groups.reduce(0) { $0 + $1.items.count } }
+    }
+
+    /// Agents reached from a feed in the last `days`, how many replied within
+    /// a week, how many were warm then, and how many of those turned
+    /// interested since. `warm`/`converted` are optional for older servers.
+    struct FeedStats: Codable, Sendable {
+        var reached: Int
+        var replied: Int
+        var warm: Int?
+        var converted: Int?
+        var days: Int
     }
 
     struct FeedGroup: Codable, Sendable, Identifiable {
@@ -629,6 +642,21 @@ struct MessagesResponse: Codable, Sendable {
 
     /// Optional so a copy cached before the server sent it still decodes.
     var goal: Goal?
+    /// Home's funnel card split two ways (server's lib/funnelSplit.ts), last `days`:
+    /// cold first texts, and agents reached from a Follow Up card. Nil from older servers.
+    var funnel: FunnelSplit?
+
+    struct FunnelSplit: Codable, Sendable {
+        struct Cold: Codable, Sendable {
+            var reached: Int
+            var replied: Int
+            var interested: Int
+        }
+
+        var days: Int
+        var cold: Cold
+        var followUp: FollowUpResponse.FeedStats
+    }
     var stats: Stats
     var sends: [Send]
 }

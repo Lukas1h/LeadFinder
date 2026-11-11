@@ -57,6 +57,6 @@ export interface FollowUpFeed {
   /** A plain "it's been a while" rather than a reason; its cards' lines are muted. */
   muted?: boolean;
   /** How texts from this feed have done lately (feeds/stats.ts), once there are any. */
-  stats?: { reached: number; replied: number; days: number };
+  stats?: { reached: number; replied: number; warm: number; converted: number; days: number };
   groups: FeedGroup[];
 }

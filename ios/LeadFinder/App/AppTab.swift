@@ -1,29 +1,29 @@
 import SwiftUI
 
-/// The iPhone's tab bar contents: Home, Leads, Schedule, Messages, Agents.
+/// The iPhone's tab bar contents: Home, Leads, Follow up, Schedule, Messages.
 ///
-/// iOS only — the Mac app has a sidebar (`Mac/Sidebar.swift`) rather than tabs,
-/// and a `TabView` is not what a Mac window wants. `AppTab` itself is shared,
-/// because the Mac sidebar's order and names are the same four things.
+/// iOS only — the Mac app has a sidebar (`Mac/RootView.swift`) rather than tabs,
+/// and a `TabView` is not what a Mac window wants.
 ///
-/// Follow up is deliberately not a tab: it is a board over agents, so it hangs
-/// off the Agents tab's header; bookings hang off Schedule's. Home (added
-/// 2026-10-14) gathers the stat cards that used to be split across Messages
-/// and Bookings. Five is the most a phone's tab bar holds before "More".
+/// Follow up became a tab on 2026-11-10: it's as much of the work as new
+/// leads. Five is the most a phone's tab bar holds before "More", so the agent
+/// directory moved under Follow up's header (it used to be the other way
+/// round); bookings hang off Schedule's. Home (added 2026-10-14) gathers the
+/// stat cards that used to be split across Messages and Bookings.
 enum AppTab: Int, Hashable, CaseIterable {
     case home
     case leads
+    case followUp
     case schedule
     case messages
-    case agents
 
     var title: String {
         switch self {
         case .home: "Home"
         case .leads: "Leads"
+        case .followUp: "Follow up"
         case .schedule: "Schedule"
         case .messages: "Messages"
-        case .agents: "Agents"
         }
     }
 
@@ -31,9 +31,9 @@ enum AppTab: Int, Hashable, CaseIterable {
         switch self {
         case .home: "square.grid.2x2"
         case .leads: "sparkles"
+        case .followUp: "arrow.triangle.2.circlepath"
         case .schedule: "calendar"
         case .messages: "paperplane"
-        case .agents: "person.2"
         }
     }
 }
@@ -54,6 +54,10 @@ struct RootTabView: View {
                 .tabItem { Label(AppTab.leads.title, systemImage: AppTab.leads.icon) }
                 .tag(AppTab.leads)
 
+            FollowUpTab()
+                .tabItem { Label(AppTab.followUp.title, systemImage: AppTab.followUp.icon) }
+                .tag(AppTab.followUp)
+
             ScheduleView()
                 .tabItem { Label(AppTab.schedule.title, systemImage: AppTab.schedule.icon) }
                 .tag(AppTab.schedule)
@@ -61,10 +65,6 @@ struct RootTabView: View {
             MessagesView()
                 .tabItem { Label(AppTab.messages.title, systemImage: AppTab.messages.icon) }
                 .tag(AppTab.messages)
-
-            AgentsView()
-                .tabItem { Label(AppTab.agents.title, systemImage: AppTab.agents.icon) }
-                .tag(AppTab.agents)
         }
         .tint(Theme.accent)
         // Whenever the schedule or the bookings reload, re-plan the alerts.
@@ -80,6 +80,41 @@ struct RootTabView: View {
             #endif
         }
     }
+}
+
+/// The Follow up tab: the feed list, with the agent directory and portfolio
+/// links a tap away in its header.
+struct FollowUpTab: View {
+    @State private var path = NavigationPath()
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            FollowUpView()
+                .navigationDestination(for: AgentsRoute.self) { _ in AgentsView(embedded: true) }
+                .navigationDestination(for: PortfolioLinksRoute.self) { _ in PortfolioLinksView() }
+                .toolbar {
+                    ToolbarItemGroup(placement: .trailingBar) {
+                        NavigationLink(value: PortfolioLinksRoute()) {
+                            Label("Portfolio links", systemImage: "link")
+                        }
+                        NavigationLink(value: AgentsRoute()) {
+                            Label("Agents", systemImage: "person.2")
+                        }
+                    }
+                }
+                #if DEBUG
+                .task {
+                    if DebugLaunchArguments.opensPortfolio { path.append(PortfolioLinksRoute()) }
+                    if DebugLaunchArguments.opensAgent { path.append(AgentsRoute()) }
+                }
+                #endif
+        }
+    }
+}
+
+/// The agent directory, pushed from the Follow up tab.
+struct AgentsRoute: Hashable {
+    init() {}
 }
 
 #endif

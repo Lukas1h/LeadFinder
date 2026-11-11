@@ -1,9 +1,15 @@
 import SwiftUI
 
-/// The Follow up board. Reached from the Agents tab's header rather than being
-/// a tab of its own, so it brings no NavigationStack with it — the one it is
-/// pushed onto supplies the bar and the back button.
+/// The Follow up board. Brings no NavigationStack with it: the Follow up tab
+/// (and Home, and the Mac sidebar) supply the bar and the back button.
+///
+/// Since 2026-11-10 the board is two levels: the categories (feeds) as a list,
+/// each with who's due and how it's doing (reply rate, warm turned
+/// interested), and a category's cards one tap in. The same view draws both:
+/// `feedKey` nil is the list, set is that one category.
 struct FollowUpView: View {
+    /// One category's cards (pushed from the list), or nil for the list itself.
+    var feedKey: String? = nil
     @Environment(AppState.self) private var appState
     @State private var query = ""
     @State private var openAgent: Agent?
@@ -24,11 +30,9 @@ struct FollowUpView: View {
     @State private var logAgent: Agent?
     /// The feed key a call was started from, sent with the call's log.
     @State private var callFeed: String?
-    /// The selected tab: a feed's key, or `comingUp`.
-    @State private var tab: String?
     @State private var editor: EditorLink?
 
-    private static let comingUp = "coming_up"
+    fileprivate static let comingUp = "coming_up"
 
     /// A "photo editor" deep link from a feed card.
     private struct EditorLink: Identifiable {
@@ -56,7 +60,13 @@ struct FollowUpView: View {
             }
         }
         .background(Theme.background)
-        .navigationTitle("Follow up")
+        .navigationTitle(title)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(feedKey == nil ? .automatic : .inline)
+        #endif
+        .navigationDestination(for: FollowUpFeedRoute.self) { route in
+            FollowUpView(feedKey: route.key)
+        }
         // The same agent sheet the directory opens, so an agent looks and
         // behaves the same wherever you tap them.
         .sheet(item: $openAgent) { agent in
@@ -97,11 +107,6 @@ struct FollowUpView: View {
         }
         .refreshable { await appState.followUp.load(force: true) }
         .task { await appState.followUp.load() }
-        #if DEBUG
-        .task {
-            if let key = DebugLaunchArguments.followUpTab, key != "-" { tab = key }
-        }
-        #endif
         .searchField(
             text: $query,
             prompt: "Search name, notes, phone"
@@ -134,8 +139,9 @@ struct FollowUpView: View {
 
     // MARK: - Feeds (the page since 2026-10-21)
 
-    /// One tab per feed with the day/week counter above, as the web's page.
-    /// A feed with nobody in it doesn't get a tab; "Coming up" is last.
+    /// The list of categories with the day/week counter above it, or (with
+    /// `feedKey`) one category's cards. A category with nobody due still shows
+    /// when it has numbers, dimmed, so its track record stays in view.
     @ViewBuilder
     private func feedContent(_ response: FollowUpResponse, feeds: [FollowUpResponse.Feed]) -> some View {
         let shown: [FollowUpResponse.Feed] = feeds.compactMap { feed in
@@ -145,13 +151,9 @@ struct FollowUpView: View {
                 group.items = group.items.filter { matches($0.agent) }
                 return group.items.isEmpty && (trimmedQuery.isEmpty ? (group.heldBack ?? 0) == 0 : true) ? nil : group
             }
-            return feed.itemCount > 0 ? feed : nil
+            return feed.itemCount > 0 || (trimmedQuery.isEmpty && (feed.stats?.reached ?? 0) > 0) ? feed : nil
         }
         let upcoming = (response.upcoming ?? []).filter { matches($0.agent) }
-        let tabs: [(key: String, title: String, count: Int)] =
-            shown.map { ($0.key, $0.title, $0.itemCount) }
-            + (upcoming.isEmpty ? [] : [(Self.comingUp, "Coming up", upcoming.count)])
-        let active = tabs.first { $0.key == tab }?.key ?? tabs.first?.key
 
         VStack(alignment: .leading, spacing: 0) {
             ErrorBanner(
@@ -163,32 +165,36 @@ struct FollowUpView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    if let stats = response.stats {
-                        HStack(spacing: 12) {
-                            counter("Today", stats.today)
-                            counter("This week", stats.week)
-                        }
-                    }
-
                     if let contactError {
                         Text(contactError)
                             .font(.caption)
                             .foregroundStyle(Theme.danger)
                     }
 
-                    if tabs.isEmpty {
-                        emptyState
-                    } else {
-                        tabBar(tabs, active: active)
-                        if active == Self.comingUp {
+                    if let feedKey {
+                        if feedKey == Self.comingUp {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Not due yet. Interested agents come back 2 weeks after your last contact, warm agents after 3, clients after 4, or sooner if they list or sell something.")
                                     .font(.footnote)
                                     .foregroundStyle(Theme.secondaryText)
                                 ForEach(upcoming) { upcomingRow($0) }
                             }
-                        } else if let feed = shown.first(where: { $0.key == active }) {
+                        } else if let feed = shown.first(where: { $0.key == feedKey }) {
                             feedBody(feed)
+                        } else {
+                            EmptyStateView(icon: "checkmark.circle", title: "Nobody here right now", message: "Everyone in this category has been followed up.")
+                        }
+                    } else {
+                        if let stats = response.stats {
+                            HStack(spacing: 12) {
+                                counter("Today", stats.today)
+                                counter("This week", stats.week)
+                            }
+                        }
+                        if shown.isEmpty && upcoming.isEmpty {
+                            emptyState
+                        } else {
+                            categoryList(shown, upcoming: upcoming.count)
                         }
                     }
                 }
@@ -199,6 +205,78 @@ struct FollowUpView: View {
             }
             .scrollDismissesKeyboard(.immediately)
         }
+    }
+
+    private var title: String {
+        guard let feedKey else { return "Follow up" }
+        if feedKey == Self.comingUp { return "Coming up" }
+        return appState.followUp.value?.feeds?.first { $0.key == feedKey }?.title ?? "Follow up"
+    }
+
+    /// Every category as one row: name, who's due, and how it's been doing.
+    /// The ones with people waiting first, in the server's order.
+    private func categoryList(_ feeds: [FollowUpResponse.Feed], upcoming: Int) -> some View {
+        let ordered = feeds.filter { $0.itemCount > 0 } + feeds.filter { $0.itemCount == 0 }
+        return VStack(spacing: 0) {
+            ForEach(Array(ordered.enumerated()), id: \.element.key) { index, feed in
+                if index > 0 { Divider().padding(.leading, 14) }
+                NavigationLink(value: FollowUpFeedRoute(key: feed.key)) {
+                    categoryRow(title: feed.title, count: feed.itemCount, stats: feed.stats)
+                }
+                .buttonStyle(.plain)
+            }
+            if upcoming > 0 {
+                Divider().padding(.leading, 14)
+                NavigationLink(value: FollowUpFeedRoute(key: Self.comingUp)) {
+                    categoryRow(title: "Coming up", count: upcoming, stats: nil, muted: true)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .card(padding: 0)
+    }
+
+    private func categoryRow(title: String, count: Int, stats: FollowUpResponse.FeedStats?, muted: Bool = false) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(count == 0 ? Theme.secondaryText : Theme.primaryText)
+                if let line = Self.performance(stats) {
+                    Text(line)
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondaryText)
+                } else if !muted {
+                    Text("No texts from here yet")
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiaryText)
+                }
+            }
+            Spacer(minLength: 8)
+            Text("\(count)")
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3)
+                .background(count == 0 ? Theme.cardRaised : Theme.accent.opacity(muted ? 0.15 : 0.9), in: Capsule())
+                .foregroundStyle(count == 0 || muted ? Theme.secondaryText : Theme.background)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.tertiaryText)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+    }
+
+    /// "31% reply (12 of 39) · 13% warm → interested", over the server's window.
+    fileprivate static func performance(_ stats: FollowUpResponse.FeedStats?) -> String? {
+        guard let stats, stats.reached > 0 else { return nil }
+        let pct = { (n: Int, of: Int) in "\(Int((Double(n) / Double(of) * 100).rounded()))%" }
+        var parts = ["\(pct(stats.replied, stats.reached)) reply (\(stats.replied) of \(stats.reached))"]
+        if let warm = stats.warm, warm > 0 {
+            parts.append("\(pct(stats.converted ?? 0, warm)) warm → interested")
+        }
+        return parts.joined(separator: " · ")
     }
 
     /// Follow-ups done (back in touch after a gap) against the pace, and how
@@ -235,46 +313,6 @@ struct FollowUpView: View {
         .card(padding: 14)
     }
 
-    private func tabBar(_ tabs: [(key: String, title: String, count: Int)], active: String?) -> some View {
-        ScrollViewReader { proxy in
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(tabs, id: \.key) { item in
-                    let selected = item.key == active
-                    Button {
-                        withAnimation(.snappy(duration: 0.2)) { tab = item.key }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(item.title)
-                            Text("\(item.count)")
-                                .font(.caption.weight(.semibold).monospacedDigit())
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(selected ? Theme.background.opacity(0.25) : Theme.cardRaised, in: Capsule())
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(selected ? Theme.accent : Theme.card, in: Capsule())
-                        .foregroundStyle(selected ? Theme.background : Theme.primaryText)
-                        .overlay(Capsule().strokeBorder(Theme.border, lineWidth: selected ? 0 : 0.5))
-                    }
-                    .buttonStyle(.plain)
-                    .id(item.key)
-                }
-            }
-        }
-        .scrollClipDisabled()
-        // Keeps the chosen tab on screen, however it was chosen.
-        .onChange(of: active) { _, key in
-            if let key { withAnimation { proxy.scrollTo(key, anchor: .center) } }
-        }
-        .task(id: active) {
-            if let active { proxy.scrollTo(active, anchor: .center) }
-        }
-        }
-    }
-
     /// A feed's blurb, then its groups of cards. Every card carries the
     /// feed's key so Text and Call count toward that feed's reply rate.
     private func feedBody(_ feed: FollowUpResponse.Feed) -> some View {
@@ -285,6 +323,17 @@ struct FollowUpView: View {
                 Text(blurb)
                     .font(.footnote)
                     .foregroundStyle(Theme.secondaryText)
+            }
+            if let line = Self.performance(feed.stats) {
+                Text("Last \(feed.stats?.days ?? 30) days: \(line)")
+                    .font(.caption)
+                    .foregroundStyle(Theme.tertiaryText)
+            }
+            if feed.itemCount == 0 {
+                Text("Nobody here right now.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+                    .padding(.top, 8)
             }
             ForEach(feed.groups) { group in
                 VStack(alignment: .leading, spacing: 12) {
@@ -979,4 +1028,9 @@ private struct FollowUpAgentRow: View {
 /// says which screen it is and can't collide with another view's.
 struct FollowUpRoute: Hashable {
     init() {}
+}
+
+/// One Follow up category, pushed from the list.
+struct FollowUpFeedRoute: Hashable {
+    let key: String
 }

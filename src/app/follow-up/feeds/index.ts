@@ -138,7 +138,7 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
       key: "near_shoot",
       title: "Shot one near you",
       blurb:
-        "Warm agents and clients with a listing for sale near a home you shot in the last 30 days (within a mile in town, 3 miles in the country). Text them a photo from that shoot: fresh local work is a real reason to reach out.",
+        "Warm and interested agents with a listing for sale near a home you shot in the last 30 days (within a mile in town, 3 miles in the country). Text them a photo from that shoot: fresh local work is a real reason to reach out.",
       groups: [notShown(offers.nearShoot)],
     },
     {
@@ -223,7 +223,9 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
         ...(s ? { stats: { ...s, days: FEED_STATS_DAYS } } : {}),
       };
     })
-    .filter((f) => f.groups.length > 0);
+    // An empty feed still shows when it has a track record: its numbers are
+    // how he decides which feeds are worth working.
+    .filter((f) => f.groups.length > 0 || (f.stats?.reached ?? 0) > 0);
 }
 
 function fromBoard(e: FollowUpItem): FeedItem {

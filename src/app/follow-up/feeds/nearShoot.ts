@@ -13,7 +13,7 @@ import type { FeedGroup } from "./types";
  * and he attaches a photo from it himself, so fresh local work does the
  * selling: no offer, no discount, no work to make first.
  *
- * Who shows: interested, warm, regular and client agents, not declined or
+ * Who shows: warm and interested agents (not clients), not declined or
  * snoozed, with an active listing that getRecentShoots/nearestShoot puts
  * within the shoot's radius (src/lib/nearShoots.ts: 1 mile in town, 3 in the
  * country), untouched for MIN_GAP_DAYS, not offered this in OFFERED_DAYS. One
@@ -37,7 +37,7 @@ export async function getNearShootGroup(): Promise<FeedGroup> {
     .from(agents)
     .where(
       and(
-        inArray(agents.relationshipStatus, ["interested", "warm", "regular", "worked_once"]),
+        inArray(agents.relationshipStatus, ["interested", "warm"]),
         isNull(agents.declinedAt)
       )
     );

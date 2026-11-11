@@ -292,6 +292,28 @@ struct HomeView: View {
                         rate: goal.rates.book
                     )
                 }
+                if let split = appState.messages.value?.funnel {
+                    Divider()
+                    FunnelSplitRow(
+                        label: "Cold",
+                        reached: split.cold.reached,
+                        replied: split.cold.replied,
+                        interested: split.cold.interested,
+                        interestedOf: split.cold.reached,
+                        interestedSub: "of texted"
+                    )
+                    FunnelSplitRow(
+                        label: "Follow up",
+                        reached: split.followUp.reached,
+                        replied: split.followUp.replied,
+                        interested: split.followUp.converted ?? 0,
+                        interestedOf: split.followUp.warm ?? 0,
+                        interestedSub: "of warm"
+                    )
+                    Text("Last \(split.days) days. Cold: first texts to new agents. Follow up: agents reached from a Follow up card, warm ones turned interested.")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.tertiaryText)
+                }
             }
         }
     }
@@ -386,7 +408,7 @@ struct HomeView: View {
                 }
                 if let followUp = appState.followUp.value, let target = followUp.dailyTarget {
                     divider
-                    NavigationLink(value: FollowUpRoute()) {
+                    Button { selection = .followUp } label: {
                         todoLabel(icon: "heart", title: "Follow-ups", detail: nil, done: followUp.doneToday ?? 0, target: target)
                     }
                     .buttonStyle(.plain)
@@ -740,6 +762,39 @@ private struct QuotaRow: View {
             }
             ProgressBar(fraction: target > 0 ? Double(done) / Double(target) : 1, met: met)
         }
+    }
+}
+
+/// One way in (cold texts or follow-ups): how many reached, the reply rate
+/// and the interested rate, side by side.
+private struct FunnelSplitRow: View {
+    let label: String
+    let reached: Int
+    let replied: Int
+    let interested: Int
+    let interestedOf: Int
+    let interestedSub: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            FunnelStep(label: label, value: "\(reached)", sub: "reached", rate: nil)
+            FunnelStep(
+                label: "Reply",
+                value: Self.percent(replied, of: reached),
+                sub: "\(replied) of \(reached)",
+                rate: reached > 0 ? Double(replied) / Double(reached) : nil
+            )
+            FunnelStep(
+                label: "Interested",
+                value: Self.percent(interested, of: interestedOf),
+                sub: "\(interested) \(interestedSub)",
+                rate: interestedOf > 0 ? Double(interested) / Double(interestedOf) : nil
+            )
+        }
+    }
+
+    private static func percent(_ n: Int, of total: Int) -> String {
+        total > 0 ? "\(Int((Double(n) / Double(total) * 100).rounded()))%" : "–"
     }
 }
 
