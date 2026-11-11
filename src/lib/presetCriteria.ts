@@ -57,7 +57,9 @@ export function matchesCriteria(
   // worked out from the map (lib/nearShoots.ts) and passed in as nearShoot.
   if (preset.leadSection != null) {
     const sections = presetSections(preset.leadSection);
-    if (!sections.includes(listing.leadSection ?? "") && !(listing.nearShoot && sections.includes(NEAR_SECTION))) return false;
+    // Like the page, near never claims a Texted before or Unlikely lead (hard rule 5, docs/AGENT-GUIDE.md).
+    const nearHere = listing.nearShoot && listing.leadSection !== "texted" && listing.leadSection !== "unlikely";
+    if (!sections.includes(listing.leadSection ?? "") && !(nearHere && sections.includes(NEAR_SECTION))) return false;
   }
   if (preset.comingSoon != null && preset.comingSoon !== listing.isComingSoon) return false;
   if (preset.sitting != null && preset.sitting !== listing.sitting) return false;
@@ -146,9 +148,9 @@ export function pickRecommendedPreset(
   if (sameOffice && officePreset && facts.leadSection !== "texted") return officePreset.id;
   if (knownAgent && aiPreset) return aiPreset.id;
   // A stranger near a home he just shot gets the template written for that
-  // ("Near your shoots"), whatever section the lead sits in otherwise. Not
-  // for someone already texted: it's an opener too.
-  if (facts.nearShoot && facts.leadSection !== "texted") {
+  // ("Near your shoots"), whatever section the lead sits in otherwise. Never
+  // for someone already texted (hard rule 5, docs/AGENT-GUIDE.md).
+  if (facts.nearShoot && facts.leadSection !== "texted" && facts.leadSection !== "unlikely") {
     const near = presets.find(
       (p) => !p.protected && !p.sameOffice && presetSections(p.leadSection).includes(NEAR_SECTION) && matchesCriteria(p, facts)
     );

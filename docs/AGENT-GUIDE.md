@@ -41,6 +41,15 @@ pages, and his books (trips, expenses, receipts, taxes).
    Date-only columns (`trips.date`, `reminders.date`) are already Pacific dates.
 4. Shipping code: see `CLAUDE.md` (work on `main`, build-check, push, verify
    the Vercel deploy).
+5. **A texted-before agent's leads only ever go in "Texted before".** A cold
+   agent he has texted (and who never answered) gets the `texted` section for
+   every later listing, whatever the photos, price or anything else, and no
+   other Leads section, grouping or template targeting may pull them out
+   (texted within the last week: `unlikely` instead). Every other section's
+   templates open with "Hey, I'm Lukas", which they've already had. Any new
+   section or grouping on the Leads page has to leave `texted` (and
+   `unlikely`) groups alone. "Near your shoots" got this wrong once
+   (2026-11-10). The rule lives in `leadSection()` (`src/lib/leadSections.ts`).
 
 ## Talking to the database
 
@@ -135,8 +144,8 @@ edited; a booking linked to a listing gets the listing's address.
 from the last 30 days: within 1 mile in town, 3 miles where the shoot has
 fewer than 5 listings within a mile (`scripts/analyze-shoot-proximity.mts`
 is the analysis behind those numbers). The Leads page's **Near your shoots**
-section (right below Agents you know) holds cold leads near a recent shoot,
-never declined agents or Unlikely matches; the iPhone API sends it as its
+section (right below Agents you know) holds never-texted cold leads near a
+recent shoot, never Texted before, Unlikely or declined agents (hard rule 5); the iPhone API sends it as its
 own `near` section. A template can target it: `lead_section` may include
 `near` ("Near your shoots" in the template form), and for a stranger's lead
 near a recent shoot that template is recommended over any other

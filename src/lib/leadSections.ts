@@ -177,6 +177,11 @@ export function leadSection(listing: LeadSectionInput): LeadSection {
   // starts "Hey there, I'm Lukas" and they've had that one. They get their own
   // section whatever the listing looks like. People who answered are warm or
   // better by now and keep the section the listing earns.
+  //
+  // HARD RULE (Lukas, 2026-11-10): texted-before leads go in "Texted before"
+  // and nowhere else. Nothing built on top of the sections may pull them into
+  // another one: no new Leads-page grouping (like "Near your shoots"), and no
+  // template targeting another section. See docs/AGENT-GUIDE.md, hard rule 5.
   if (listing.lastContactedAt && (listing.relationshipStatus ?? "cold") === "cold") return "texted";
   if (!goodPhotos && fresh) return "photo";
   if (price != null && price > LEAD_VIDEO_PRICE && goodPhotos && fresh) return "video";

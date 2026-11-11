@@ -217,7 +217,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
     };
   });
 
-  // "Near your shoots": a cold group with an open listing near a home he shot
+  // "Near your shoots": a never-texted cold group with an open listing near a home he shot
   // in the last 30 days, so the first text can open with "I just shot a home a
   // few blocks from your listing". Any entry can match; the nearest one across
   // the group wins. Never someone he knows (they're in Agents you know), an
@@ -225,7 +225,10 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
   // see LeadsBoard.near.
   const near = new Map<string, { near: NearShoot; leadId: string }>();
   for (const g of groups) {
-    if (g.known || g.section === "unlikely") continue;
+    // Never a Texted before (or Unlikely) group: those stay in their own
+    // section whatever else is true of them (leadSection(), and hard rule 5
+    // in docs/AGENT-GUIDE.md).
+    if (g.known || g.section === "unlikely" || g.section === "texted") continue;
     if (g.agent && (g.agent.relationshipStatus === "declined" || g.agent.declinedAt)) continue;
     let match: { near: NearShoot; leadId: string } | null = null;
     for (const { lead } of g.entries) {
