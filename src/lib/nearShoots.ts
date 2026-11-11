@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { bookings, listings } from "@/db/schema";
 import { and, eq, isNotNull, or } from "drizzle-orm";
 import { addressKey } from "@/app/follow-up/data";
+import { shotAddresses } from "@/app/follow-up/feeds/shared";
 
 /**
  * "Shot one near you": which of his recent shoots is close to a listing, so a
@@ -168,4 +169,14 @@ export function distancePhrase(miles: number): string {
 /** "0.3 mi" / "2.1 mi". */
 export function milesLabel(miles: number): string {
   return `${miles < 0.1 ? "<0.1" : miles.toFixed(1)} mi`;
+}
+
+/**
+ * Whether this one listing is near a recent shoot, for the Send dialog's
+ * template pick (a template can target the Leads page's "Near your shoots").
+ */
+export async function isNearRecentShoot(listing: Parameters<typeof nearestShoot>[0]): Promise<boolean> {
+  if (listing.lat == null || listing.lng == null) return false;
+  const [shoots, shot] = await Promise.all([getRecentShoots(), shotAddresses()]);
+  return nearestShoot(listing, shoots, shot) != null;
 }

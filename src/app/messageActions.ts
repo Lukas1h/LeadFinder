@@ -26,6 +26,7 @@ import {
 } from "@/lib/messageTemplate";
 import { draftMessage } from "@/lib/draftMessage";
 import { isKnownAgent, listingAgeDays, listingMatchFacts, pickRecommendedPreset, type PresetCriteria } from "@/lib/presetCriteria";
+import { isNearRecentShoot } from "@/lib/nearShoots";
 import { startPendingInteraction } from "@/app/agents/interactionActions";
 import { touchAgentContact } from "@/app/actions";
 
@@ -230,7 +231,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   });
 
   const aiPreset = await getAiPreset(type);
-  const facts = listingMatchFacts(listing);
+  const facts = listingMatchFacts(listing, await isNearRecentShoot(listing));
   const recommendedPresetId = pickRecommendedPreset(
     offered.map((group) => ({ ...group[0], id: group[0].presetId })),
     aiPreset,

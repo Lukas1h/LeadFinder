@@ -45,13 +45,20 @@ export function matchesCriteria(
     leadSection: string | null;
     isComingSoon: boolean;
     sitting: boolean;
+    /** Near a recent shoot: the Leads page's "Near your shoots" (lib/nearShoots.ts). */
+    nearShoot?: boolean;
   }
 ): boolean {
   // Section is the one criterion that isn't a measurement of the property, so
   // a preset can be pointed at the Leads-page section rather than at a score
   // band. Null on the preset means no constraint, like every other field. It
   // can name several, comma-separated ("backup,video"): see presetSections.
-  if (preset.leadSection != null && !presetSections(preset.leadSection).includes(listing.leadSection ?? "")) return false;
+  // "near" isn't a stored section: it's the Leads page's "Near your shoots",
+  // worked out from the map (lib/nearShoots.ts) and passed in as nearShoot.
+  if (preset.leadSection != null) {
+    const sections = presetSections(preset.leadSection);
+    if (!sections.includes(listing.leadSection ?? "") && !(listing.nearShoot && sections.includes(NEAR_SECTION))) return false;
+  }
   if (preset.comingSoon != null && preset.comingSoon !== listing.isComingSoon) return false;
   if (preset.sitting != null && preset.sitting !== listing.sitting) return false;
   if (preset.minScore != null && (listing.score == null || listing.score < preset.minScore)) return false;
@@ -96,8 +103,11 @@ export function criteriaCount(preset: PresetCriteria): number {
 
 export type ListingMatchFacts = Parameters<typeof matchesCriteria>[1];
 
+/** The Leads page's "Near your shoots", as a value a preset's leadSection can name. */
+export const NEAR_SECTION = "near";
+
 /** The listing facts every criterion is checked against. */
-export function listingMatchFacts(listing: Listing): ListingMatchFacts {
+export function listingMatchFacts(listing: Listing, nearShoot = false): ListingMatchFacts {
   const ageDays = listingAgeDays(listing.listedAt, listing.foundAt);
   return {
     score: listing.score,
@@ -107,6 +117,7 @@ export function listingMatchFacts(listing: Listing): ListingMatchFacts {
     leadSection: listing.leadSection ?? leadSectionForListing(listing),
     isComingSoon: listing.isComingSoon,
     sitting: isSitting(ageDays, listing.priceCutAt),
+    nearShoot,
   };
 }
 
@@ -134,6 +145,15 @@ export function pickRecommendedPreset(
   // already texted.
   if (sameOffice && officePreset && facts.leadSection !== "texted") return officePreset.id;
   if (knownAgent && aiPreset) return aiPreset.id;
+  // A stranger near a home he just shot gets the template written for that
+  // ("Near your shoots"), whatever section the lead sits in otherwise. Not
+  // for someone already texted: it's an opener too.
+  if (facts.nearShoot && facts.leadSection !== "texted") {
+    const near = presets.find(
+      (p) => !p.protected && !p.sameOffice && presetSections(p.leadSection).includes(NEAR_SECTION) && matchesCriteria(p, facts)
+    );
+    if (near) return near.id;
+  }
   let recommendedPresetId: string | null = null;
   let bestCriteriaCount = -1;
   for (const preset of presets) {

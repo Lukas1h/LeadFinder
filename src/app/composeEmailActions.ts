@@ -28,6 +28,7 @@ import { emailFilesFor } from "@/lib/emailPhotos";
 import { draftEmailMessage } from "@/lib/draftMessage";
 import type { PresetOption, MessageOptions } from "@/app/messageActions";
 import { isKnownAgent, listingAgeDays, listingMatchFacts, pickRecommendedPreset } from "@/lib/presetCriteria";
+import { isNearRecentShoot } from "@/lib/nearShoots";
 import { normalizeEmail, normalizeName, normalizePhone, EMAIL_RE } from "@/lib/normalize";
 
 /**
@@ -185,7 +186,7 @@ export async function getComposeEmailOptions(listingContext?: {
     ? pickRecommendedPreset(
         Array.from(rowsByPreset.values()).map((group) => ({ ...group[0], id: group[0].presetId })),
         aiPreset,
-        listingMatchFacts(listing),
+        listingMatchFacts(listing, await isNearRecentShoot(listing)),
         await isKnownAgent(listing.agentId)
       )
     : (Array.from(rowsByPreset.values()).find((group) => !group[0].protected)?.[0].presetId ?? null);

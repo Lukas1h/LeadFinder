@@ -45,6 +45,7 @@ function toNumberOrNull(value: string): number | null {
 
 
 const LEAD_SECTION_CHOICES: [string, string][] = [
+  ["near", "Near your shoots"],
   ["photo", "Photo opportunities"],
   ["video", "Video opportunities"],
   ["backup", "Backup opportunities"],

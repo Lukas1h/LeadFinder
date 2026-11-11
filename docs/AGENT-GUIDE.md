@@ -136,8 +136,12 @@ from the last 30 days: within 1 mile in town, 3 miles where the shoot has
 fewer than 5 listings within a mile (`scripts/analyze-shoot-proximity.mts`
 is the analysis behind those numbers). The Leads page's **Near your shoots**
 section (right below Agents you know) holds cold leads near a recent shoot,
-never declined agents or Unlikely matches; the iPhone API still sees those
-cards in their normal sections.
+never declined agents or Unlikely matches; the iPhone API sends it as its
+own `near` section. A template can target it: `lead_section` may include
+`near` ("Near your shoots" in the template form), and for a stranger's lead
+near a recent shoot that template is recommended over any other
+(`pickRecommendedPreset`). The "Near your shoots" template started as a copy
+of Backup Option without its score/price limits, for Lukas to rewrite.
 
 ### Agents
 
