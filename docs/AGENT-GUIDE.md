@@ -162,9 +162,11 @@ Eugene to Salem, Medford, Ashland, the coast, Bend, plus any city missing from
 the drive table). Salem and the rest of Marion County are regional. The Leads
 page has a tab per market (`/?market=local|regional|portland`, Local by
 default); `getLeadsBoard({ market })` filters the board and always returns
-`marketCounts` for all three. On the Portland tab, nearness is distance from
-Oregon City (`portlandBand`: geocode, else a city table) and the 541-first
-area-code step is skipped; the other tabs keep the drive bands from Winston.
+`marketCounts` for all three. The Portland tab is sorted purely by miles from
+Oregon City (`milesFromOregonCity`: geocode, else a city table; unknown last),
+with no coming-soon or area-code steps; the other tabs keep the drive bands
+from Winston. Cards' drive time comes from `listingDriveTime()`: from Winston
+for local/regional, "~25 min from Oregon City" for Portland.
 Sections, templates and hard rule 5 are the same in every market. The iPhone
 API takes `?market=` too (left out = all markets, for older builds) and
 returns `markets` (key, label, count). Portland jobs pay Lukas less, so

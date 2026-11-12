@@ -11,7 +11,7 @@ import { ListingRow } from "./ListingRow";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { Card } from "@/components/ui/card";
 import { sampleCardPhotos } from "@/lib/cardPhotos";
-import { estimateDriveTime } from "@/lib/driveTime";
+import { listingDriveTime } from "@/lib/markets";
 
 /**
  * One agent on the Leads page. Outreach is about the person now — most texts
@@ -42,7 +42,7 @@ export function AgentLeadCard({
   actions: ReactNode;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
-  const driveTime = lead.city ? estimateDriveTime(lead.city) : null;
+  const driveTime = listingDriveTime(lead);
   const [showOthers, setShowOthers] = useState(false);
   const name = agent?.name ?? agentName ?? "No agent listed";
   const total = others.length + 1;

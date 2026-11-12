@@ -17,13 +17,21 @@ struct LeadsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let leads = appState.leads.value {
-                    leadsList(leads)
-                } else if appState.leads.error != nil {
-                    loadFailure
-                } else {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: 0) {
+                // Outside the list, so a market switch only swaps the cards
+                // below: the tabs never disappear or jump.
+                marketTabs
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                Group {
+                    if let leads = appState.leads.value {
+                        leadsList(leads)
+                            .id(appState.leadsMarket)
+                    } else if appState.leads.error != nil {
+                        loadFailure
+                    } else {
+                        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
             }
             .background(Theme.background)
@@ -64,7 +72,12 @@ struct LeadsView: View {
             .onReceive(NotificationCenter.default.publisher(for: .leadsDidChange)) { _ in
                 Task { await appState.leads.load(force: true) }
             }
-            .task { await appState.leads.load() }
+            .task {
+                await appState.leads.load()
+                // The other two markets in the background, so switching tabs
+                // shows cards straight away instead of a spinner.
+                await appState.preloadLeadMarkets()
+            }
             .task {
                 guard !didSetInitialCollapse else { return }
                 didSetInitialCollapse = true
@@ -87,7 +100,6 @@ struct LeadsView: View {
                 )
                 .padding(.horizontal, 16)
 
-                marketTabs(leads.markets)
                 header(leads.counts)
 
                 // Every card is its own child of the LazyVStack. Wrapping a
@@ -167,7 +179,12 @@ struct LeadsView: View {
     /// Local | Regional | Portland, as on the web (lib/markets.ts). Each
     /// market is its own board, sorted by nearness to who shoots it: Winston
     /// for local and regional, the Oregon City photographer for Portland.
-    private func marketTabs(_ markets: [LeadsResponse.Market]?) -> some View {
+    private var marketTabs: some View {
+        // Counts are the same on every market's response; use whichever is loaded.
+        let markets = appState.leads.value?.markets
+            ?? appState.leadsLocal.value?.markets
+            ?? appState.leadsRegional.value?.markets
+            ?? appState.leadsPortland.value?.markets
         let fallback: [LeadsResponse.Market] = [
             .init(key: "local", label: "Local", count: 0),
             .init(key: "regional", label: "Regional", count: 0),
@@ -179,7 +196,9 @@ struct LeadsView: View {
                 let selected = market.key == appState.leadsMarket
                 Button {
                     guard !selected else { return }
-                    withAnimation(.snappy(duration: 0.2)) { appState.leadsMarket = market.key }
+                    // No animation: animating hundreds of cards out and in
+                    // is what made the switch stutter.
+                    appState.leadsMarket = market.key
                     Task { await appState.leads.load() }
                 } label: {
                     HStack(spacing: 5) {

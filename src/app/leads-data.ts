@@ -11,7 +11,7 @@ import { estimateDriveMinutes } from "@/lib/driveTime";
 import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
 import { getRecentShoots, nearestShoot, type NearShoot } from "@/lib/nearShoots";
 import { shotAddresses } from "@/app/follow-up/feeds/shared";
-import { marketFor, portlandBand, type Market } from "@/lib/markets";
+import { marketFor, milesFromOregonCity, type Market } from "@/lib/markets";
 
 /**
  * Everything the Leads page shows, as data.
@@ -329,19 +329,24 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
 
 /**
  * Who to text first: listed before coming soon, then nearer, then a local
- * number (see the sort above). On the Portland tab the drive from Winston says
- * nothing (the photographer shoots those), so distance from Oregon City stands
- * in for it and the area code is left out — 503/971 is the local number up
- * there.
+ * number (see the sort above). The Portland tab is simply nearest to Oregon
+ * City first (the photographer is based there; Lukas asked for a plain
+ * distance sort, 2026-11-12): the drive from Winston says nothing there and
+ * 503/971 is the local number. Unknown distance sorts last.
  */
 function outreachRank(a: LeadGroup, b: LeadGroup, market: Market | null): number {
+  if (market === "portland") return portlandDistance(a) - portlandDistance(b);
   const listed = Number(a.best.isComingSoon) - Number(b.best.isComingSoon);
   if (listed) return listed;
-  if (market === "portland") return portlandBand(a.best) - portlandBand(b.best);
   return (
     driveBand(a.best.city) - driveBand(b.best.city) ||
     areaBand(a.agent?.phone ?? a.best.agentPhone) - areaBand(b.agent?.phone ?? b.best.agentPhone)
   );
+}
+
+/** Miles from Oregon City to the group's best listing; unknown is Infinity. */
+function portlandDistance(g: LeadGroup): number {
+  return milesFromOregonCity(g.best) ?? Infinity;
 }
 
 /** 541/458 (southern and central Oregon) first, Portland and Vancouver numbers last. */

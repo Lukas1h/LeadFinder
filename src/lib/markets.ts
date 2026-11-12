@@ -1,4 +1,4 @@
-import { estimateDriveMinutes } from "@/lib/driveTime";
+import { estimateDriveMinutes, estimateDriveTime } from "@/lib/driveTime";
 
 /**
  * The three markets Lukas works, each its own tab on the Leads page and its
@@ -180,4 +180,32 @@ export function portlandBand(place: MarketPlace): number {
 export function parseMarket(value: string | string[] | null | undefined): Market | null {
   const v = Array.isArray(value) ? value[0] : value;
   return v === "local" || v === "regional" || v === "portland" ? v : null;
+}
+
+/**
+ * Rough drive minutes from Oregon City, from straight-line miles: metro roads
+ * wind about 1.3x the straight line at ~45 mph, plus a few minutes getting
+ * going (12 mi to downtown Portland ≈ 25 min, 21 mi to Hillsboro ≈ 40).
+ */
+function minutesFromOregonCity(miles: number): number {
+  return Math.round((5 + miles * 1.6) / 5) * 5;
+}
+
+function durationLabel(minutes: number): string {
+  if (minutes < 60) return `~${Math.max(5, minutes)} min`;
+  const m = minutes % 60;
+  return `~${Math.floor(minutes / 60)}h${m ? ` ${m}m` : ""}`;
+}
+
+/**
+ * The drive time a listing's card shows: from Winston for local and regional
+ * listings (driveTime.ts), from the Oregon City photographer for Portland
+ * ones, so a Portland card doesn't read "~3h drive".
+ */
+export function listingDriveTime(place: MarketPlace): string | null {
+  if (marketFor(place) === "portland") {
+    const miles = milesFromOregonCity(place);
+    return miles == null ? null : `${durationLabel(minutesFromOregonCity(miles))} from Oregon City`;
+  }
+  return place.city ? estimateDriveTime(place.city) : null;
 }

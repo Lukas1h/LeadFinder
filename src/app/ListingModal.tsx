@@ -15,7 +15,7 @@ import { AgentRow } from "./AgentRow";
 import { LinkAgentForm } from "./LinkAgentForm";
 import { FindLinkButton } from "./FindLinkButton";
 import { formatPrice, formatDate } from "@/lib/format";
-import { estimateDriveTime } from "@/lib/driveTime";
+import { listingDriveTime } from "@/lib/markets";
 import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -140,10 +140,10 @@ export function ListingModal({
             </h2>
             <div className="text-sm text-muted-foreground flex items-center gap-1.5">
               {[lead.city, lead.state, lead.zipcode].filter(Boolean).join(", ")}
-              {lead.city && estimateDriveTime(lead.city) && (
+              {listingDriveTime(lead) && (
                 <span className="flex items-center gap-1">
                   <Car className="size-3.5" />
-                  {estimateDriveTime(lead.city)}
+                  {listingDriveTime(lead)}
                 </span>
               )}
             </div>

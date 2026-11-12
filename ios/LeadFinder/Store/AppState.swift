@@ -76,6 +76,14 @@ final class AppState {
     var leadsMarket: String = UserDefaults.standard.string(forKey: "leadsMarket") ?? "local" {
         didSet { UserDefaults.standard.set(leadsMarket, forKey: "leadsMarket") }
     }
+    /// Loads the markets not on screen (cached first, then the network), so a
+    /// tab switch has cards to show immediately.
+    func preloadLeadMarkets() async {
+        for resource in [leadsLocal, leadsRegional, leadsPortland] where resource !== leads {
+            await resource.load()
+        }
+    }
+
     var leads: Resource<LeadsResponse> {
         switch leadsMarket {
         case "regional": leadsRegional
