@@ -225,7 +225,8 @@ struct FollowUpResponse: Codable, Sendable {
         var replied: Int
         var warm: Int?
         var converted: Int?
-        var days: Int
+        /// Only the per-feed stats carry it; the Home funnel's followUp row doesn't.
+        var days: Int?
     }
 
     struct FeedGroup: Codable, Sendable, Identifiable {
