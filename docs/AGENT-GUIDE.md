@@ -152,6 +152,24 @@ near a recent shoot that template is recommended over any other
 (`pickRecommendedPreset`). The "Near your shoots" template started as a copy
 of Backup Option without its score/price limits, for Lukas to rewrite.
 
+**Markets** (`src/lib/markets.ts`, since 2026-11-12). Every listing is in one
+of three markets, computed from its city/state (never stored):
+`local` (within 45 min of Winston: Roseburg, Sutherlin, Glide, Myrtle Creek…),
+`portland` (Multnomah, Washington, Clackamas, Yamhill and Columbia counties
+plus Clark County WA; shot by a subcontracted photographer based in Oregon
+City, Lukas edits), and `regional` (everything else he drives to himself,
+Eugene to Salem, Medford, Ashland, the coast, Bend, plus any city missing from
+the drive table). Salem and the rest of Marion County are regional. The Leads
+page has a tab per market (`/?market=local|regional|portland`, Local by
+default); `getLeadsBoard({ market })` filters the board and always returns
+`marketCounts` for all three. On the Portland tab, nearness is distance from
+Oregon City (`portlandBand`: geocode, else a city table) and the 541-first
+area-code step is skipped; the other tabs keep the drive bands from Winston.
+Sections, templates and hard rule 5 are the same in every market. The iPhone
+API takes `?market=` too (left out = all markets, for older builds) and
+returns `markets` (key, label, count). Portland jobs pay Lukas less, so
+Portland outreach is on top of the home markets, never instead of them.
+
 ### Agents
 
 `agents`: `name`, `phone`, `email`, `brokerage`, `home_city`,
@@ -316,7 +334,10 @@ hang off its header) and lists the tabs as categories with those numbers; on
 the web it's a mobile tab too. `src/lib/funnelSplit.ts` gives Home's funnel
 card its Cold row (first outreach texts in 30 days: replied, now interested)
 and Follow up row (the same stats across all tabs, each agent once), served
-as `funnel` on `GET /api/app/v1/messages`. The daily texting target (`DAILY_TARGET` in
+as `funnel` on `GET /api/app/v1/messages`, plus `byMarket` (the same two
+rows per market; an agent's market is that of the listing their first cold
+text was about, else `agentMarkets()` in `src/lib/agentMarket.ts`: latest
+listing, then `home_city`, then a 503/971/360 number = Portland). The daily texting target (`DAILY_TARGET` in
 `src/app/follow-up/data.ts`) moves with live reply rates on purpose.
 
 ### Funnel and portfolio pages

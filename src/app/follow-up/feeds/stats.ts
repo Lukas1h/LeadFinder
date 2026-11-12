@@ -1,5 +1,7 @@
 import { db } from "@/db";
 import { agentInteractions, agentStatusChanges, agents, messageSends } from "@/db/schema";
+import { agentMarkets } from "@/lib/agentMarket";
+import type { Market } from "@/lib/markets";
 import { and, gt, inArray, isNotNull } from "drizzle-orm";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -23,10 +25,19 @@ export interface FeedStats {
 
 const empty = (): FeedStats => ({ reached: 0, replied: 0, warm: 0, converted: 0 });
 
+/** `empty()`, one entry per market — the shape the Home funnel's market tabs want. */
+const emptyByMarket = (): Record<Market, FeedStats> => ({
+  local: empty(),
+  regional: empty(),
+  portland: empty(),
+});
+
 /**
  * How each feed is doing, from the calls and texts started on its cards
  * (agentInteractions.followUpFeed, recorded since 2026-10-21), plus `all`:
- * every agent reached from any feed, once (the Home funnel's Follow up row).
+ * every agent reached from any feed, once (the Home funnel's Follow up row),
+ * and `allByMarket`: the same tally split by the market each agent is in
+ * (lib/agentMarket.ts). Summing `allByMarket` gives `all` back.
  *
  * A reply is an inbound call/text/email, or a send marked responded, within a
  * week of it. Warm → interested comes from agent_status_changes (a trigger,
@@ -34,7 +45,11 @@ const empty = (): FeedStats => ({ reached: 0, replied: 0, warm: 0, converted: 0 
  * after the reach starts from warm, or there's been none and they're warm now;
  * converted if a change after the reach went from warm to interested or better.
  */
-export async function getFeedStatsWithTotal(): Promise<{ byFeed: Map<string, FeedStats>; all: FeedStats }> {
+export async function getFeedStatsWithTotal(): Promise<{
+  byFeed: Map<string, FeedStats>;
+  all: FeedStats;
+  allByMarket: Record<Market, FeedStats>;
+}> {
   const since = new Date(Date.now() - FEED_STATS_DAYS * DAY);
   const starts = await db
     .select({
@@ -47,11 +62,12 @@ export async function getFeedStatsWithTotal(): Promise<{ byFeed: Map<string, Fee
     .where(and(isNotNull(agentInteractions.followUpFeed), gt(agentInteractions.occurredAt, since)));
   const byFeed = new Map<string, FeedStats>();
   const all = empty();
+  const allByMarket = emptyByMarket();
   const reachedStarts = starts.filter((s) => s.outcome !== "not_sent");
-  if (reachedStarts.length === 0) return { byFeed, all };
+  if (reachedStarts.length === 0) return { byFeed, all, allByMarket };
 
   const ids = [...new Set(reachedStarts.map((s) => s.agentId))];
-  const [inbound, responded, changes, current] = await Promise.all([
+  const [inbound, responded, changes, current, markets] = await Promise.all([
     db
       .select({ agentId: agentInteractions.agentId, at: agentInteractions.occurredAt, direction: agentInteractions.direction })
       .from(agentInteractions)
@@ -70,6 +86,7 @@ export async function getFeedStatsWithTotal(): Promise<{ byFeed: Map<string, Fee
       .from(agentStatusChanges)
       .where(and(inArray(agentStatusChanges.agentId, ids), gt(agentStatusChanges.changedAt, since))),
     db.select({ id: agents.id, status: agents.relationshipStatus }).from(agents).where(inArray(agents.id, ids)),
+    agentMarkets(ids),
   ]);
 
   const replies = new Map<string, number[]>();
@@ -113,8 +130,13 @@ export async function getFeedStatsWithTotal(): Promise<{ byFeed: Map<string, Fee
     tally(entry, agentId, at);
     byFeed.set(feed, entry);
   }
-  for (const [agentId, at] of firstAny) tally(all, agentId, at);
-  return { byFeed, all };
+  for (const [agentId, at] of firstAny) {
+    tally(all, agentId, at);
+    // agentMarkets gives every id a market; regional only catches an id with
+    // no agents row at all, so the buckets always add back up to `all`.
+    tally(allByMarket[markets.get(agentId) ?? "regional"], agentId, at);
+  }
+  return { byFeed, all, allByMarket };
 }
 
 /** Per feed only, for the Follow Up page. */

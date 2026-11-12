@@ -67,7 +67,22 @@ final class Resource<Value: Decodable & Sendable> {
 @MainActor
 @Observable
 final class AppState {
-    let leads = Resource<LeadsResponse>(path: "api/app/v1/leads", key: .leads)
+    /// The Leads tab, one board per market (server's lib/markets.ts), each
+    /// cached on its own so switching markets is instant. `leads` is whichever
+    /// one is picked; the pick survives relaunches.
+    let leadsLocal = Resource<LeadsResponse>(path: "api/app/v1/leads?market=local", key: .leads)
+    let leadsRegional = Resource<LeadsResponse>(path: "api/app/v1/leads?market=regional", key: .leadsRegional)
+    let leadsPortland = Resource<LeadsResponse>(path: "api/app/v1/leads?market=portland", key: .leadsPortland)
+    var leadsMarket: String = UserDefaults.standard.string(forKey: "leadsMarket") ?? "local" {
+        didSet { UserDefaults.standard.set(leadsMarket, forKey: "leadsMarket") }
+    }
+    var leads: Resource<LeadsResponse> {
+        switch leadsMarket {
+        case "regional": leadsRegional
+        case "portland": leadsPortland
+        default: leadsLocal
+        }
+    }
     let followUp = Resource<FollowUpResponse>(path: "api/app/v1/follow-up", key: .followUp)
     let schedule = Resource<ScheduleResponse>(path: "api/app/v1/schedule", key: .schedule)
     let bookings = Resource<BookingsResponse>(path: "api/app/v1/bookings", key: .bookings)

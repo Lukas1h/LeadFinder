@@ -43,7 +43,7 @@ actor APIClient {
         guard let base = AppConfig.baseURL else { throw APIError.notConfigured }
         guard let secret = AppConfig.apiSecret else { throw APIError.notConfigured }
 
-        var request = URLRequest(url: base.appendingPathComponent(path))
+        var request = URLRequest(url: Self.url(base, path))
         request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
@@ -597,6 +597,17 @@ actor APIClient {
     /// or per message the app has ever looked at.
     func read<T: Decodable & Sendable>(_ path: String) async throws -> T {
         try await read(path, query: [])
+    }
+
+    /// A cached endpoint's path may carry a query ("api/app/v1/leads?market=portland");
+    /// `appendingPathComponent` would percent-encode its "?", so it's split off
+    /// and attached as a real query.
+    static func url(_ base: URL, _ path: String) -> URL {
+        let parts = path.split(separator: "?", maxSplits: 1)
+        let url = base.appendingPathComponent(String(parts.first ?? ""))
+        guard parts.count == 2, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        components.percentEncodedQuery = String(parts[1])
+        return components.url ?? url
     }
 
     /// `URL.appendingPathComponent` percent-encodes a "?", so a query string has

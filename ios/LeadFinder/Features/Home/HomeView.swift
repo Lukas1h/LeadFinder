@@ -25,6 +25,8 @@ struct HomeView: View {
     @Binding var selection: AppTab
     @State private var openBooking: Booking?
     @State private var path = NavigationPath()
+    /// Which market the funnel's Cold / Follow up rows show: "all" or a market key.
+    @State private var funnelMarket = "all"
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -294,20 +296,32 @@ struct HomeView: View {
                 }
                 if let split = appState.messages.value?.funnel {
                     Divider()
+                    if split.byMarket != nil {
+                        Picker("Market", selection: $funnelMarket) {
+                            Text("All").tag("all")
+                            Text("Local").tag("local")
+                            Text("Regional").tag("regional")
+                            Text("Portland").tag("portland")
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    let market = split.byMarket?[funnelMarket]
+                    let cold = market?.cold ?? split.cold
+                    let followUp = market?.followUp ?? split.followUp
                     FunnelSplitRow(
                         label: "Cold",
-                        reached: split.cold.reached,
-                        replied: split.cold.replied,
-                        interested: split.cold.interested,
-                        interestedOf: split.cold.reached,
+                        reached: cold.reached,
+                        replied: cold.replied,
+                        interested: cold.interested,
+                        interestedOf: cold.reached,
                         interestedSub: "of texted"
                     )
                     FunnelSplitRow(
                         label: "Follow up",
-                        reached: split.followUp.reached,
-                        replied: split.followUp.replied,
-                        interested: split.followUp.converted ?? 0,
-                        interestedOf: split.followUp.warm ?? 0,
+                        reached: followUp.reached,
+                        replied: followUp.replied,
+                        interested: followUp.converted ?? 0,
+                        interestedOf: followUp.warm ?? 0,
                         interestedSub: "of warm"
                     )
                     Text("Last \(split.days) days. Cold: first texts to new agents. Follow up: agents reached from a Follow up card, warm ones turned interested.")

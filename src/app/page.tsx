@@ -17,6 +17,7 @@ import { LeadsSkeleton } from "./loading";
 import Link from "next/link";
 import { KnownAgentLeads } from "./KnownAgentLeads";
 import { getLeadsBoard, type LeadGroup } from "./leads-data";
+import { MARKET_LABELS, MARKET_ORDER, parseMarket } from "@/lib/markets";
 
 // Server Action timeouts are controlled by the maxDuration of the page
 // they're invoked from — triggerManualSync (RefreshButton's action, in
@@ -47,7 +48,7 @@ const SCORING_DOWN_COUNT = 10;
  */
 const SECTION_LIMIT = 60;
 
-type LeadsSearchParams = Promise<{ show?: string | string[] }>;
+type LeadsSearchParams = Promise<{ show?: string | string[]; market?: string | string[] }>;
 
 export default function LeadsPage({ searchParams }: { searchParams: LeadsSearchParams }) {
   return (
@@ -63,15 +64,20 @@ export default function LeadsPage({ searchParams }: { searchParams: LeadsSearchP
 async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams }) {
   // Deliberately NOT "use cache" — see the comment in src/app/pipeline/page.tsx.
 
-  const { show } = await searchParams;
+  const { show, market: marketParam } = await searchParams;
   // Sections asked for in full: ?show=backup, ?show=backup,unlikely.
   const shown = new Set(([] as string[]).concat(show ?? []).flatMap((s) => s.split(",")).filter(Boolean));
+  // Local is the default tab: most of his work is there, and it keeps the
+  // bare "/" he has bookmarked behaving as it always has.
+  const market = parseMarket(marketParam) ?? "local";
 
   // Cards show a handful of each listing's photos; the listing dialog fetches
   // the whole gallery when it opens (see ListingModal).
-  const { known, sections, near, openLeadCount, queuedCount, agentCount, addressById, unscoredCount } = await getLeadsBoard({
-    cardPhotosOnly: true,
-  });
+  const { known, sections, near, openLeadCount, queuedCount, agentCount, addressById, unscoredCount, marketCounts } =
+    await getLeadsBoard({
+      cardPhotosOnly: true,
+      market,
+    });
 
   // "Near your shoots" pulls cards out of their normal sections (they stay in
   // `sections` for the iPhone API) and puts the most recently shot first.
@@ -172,6 +178,25 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
         </div>
       </header>
 
+      {/* One tab per market. The counts are over every market, so a quiet tab
+          still shows where the work is. */}
+      <nav aria-label="Market" className="mb-6 flex rounded-lg border bg-muted p-1 text-sm">
+        {MARKET_ORDER.map((m) => (
+          <Link
+            key={m}
+            href={`/?market=${m}`}
+            aria-current={m === market ? "page" : undefined}
+            className={`flex-1 whitespace-nowrap rounded-md px-3 py-1.5 text-center transition-colors ${
+              m === market
+                ? "bg-background font-medium text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {MARKET_LABELS[m]} ({marketCounts[m]})
+          </Link>
+        ))}
+      </nav>
+
       {unscoredCount >= SCORING_DOWN_COUNT && (
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
           <p className="font-medium">Photo scoring isn&rsquo;t running</p>
@@ -189,7 +214,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
       {openLeadCount === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 text-center py-16 text-muted-foreground">
           <PartyPopper className="size-8" />
-          <p>You&rsquo;re all caught up — no new leads right now.</p>
+          <p>You&rsquo;re all caught up — no new leads in this market.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-8">
@@ -244,7 +269,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
                     {visible.map((g) => card(g))}
                     {hidden > 0 && (
                       <Link
-                        href={`/?show=${[...shown, key].join(",")}`}
+                        href={`/?market=${market}&show=${[...shown, key].join(",")}`}
                         scroll={false}
                         className="self-center rounded-md border px-4 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
                       >

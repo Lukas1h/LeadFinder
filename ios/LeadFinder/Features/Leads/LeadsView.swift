@@ -87,6 +87,7 @@ struct LeadsView: View {
                 )
                 .padding(.horizontal, 16)
 
+                marketTabs(leads.markets)
                 header(leads.counts)
 
                 // Every card is its own child of the LazyVStack. Wrapping a
@@ -161,6 +162,48 @@ struct LeadsView: View {
             }
             .scrollClipDisabled()
         }
+    }
+
+    /// Local | Regional | Portland, as on the web (lib/markets.ts). Each
+    /// market is its own board, sorted by nearness to who shoots it: Winston
+    /// for local and regional, the Oregon City photographer for Portland.
+    private func marketTabs(_ markets: [LeadsResponse.Market]?) -> some View {
+        let fallback: [LeadsResponse.Market] = [
+            .init(key: "local", label: "Local", count: 0),
+            .init(key: "regional", label: "Regional", count: 0),
+            .init(key: "portland", label: "Portland", count: 0),
+        ]
+        let tabs = markets ?? fallback
+        return HStack(spacing: 4) {
+            ForEach(tabs) { market in
+                let selected = market.key == appState.leadsMarket
+                Button {
+                    guard !selected else { return }
+                    withAnimation(.snappy(duration: 0.2)) { appState.leadsMarket = market.key }
+                    Task { await appState.leads.load() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(market.label)
+                        if markets != nil {
+                            Text("\(market.count)")
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(selected ? Theme.secondaryText : Theme.tertiaryText)
+                        }
+                    }
+                    .font(.subheadline.weight(selected ? .semibold : .medium))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(selected ? Theme.cardRaised : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(selected ? Theme.primaryText : Theme.secondaryText)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border, lineWidth: 0.5))
+        .padding(.horizontal, 16)
     }
 
     private func header(_ counts: LeadsResponse.Counts) -> some View {

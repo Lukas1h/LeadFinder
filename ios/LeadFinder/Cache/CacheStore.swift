@@ -3,6 +3,8 @@ import Foundation
 /// Cache keys. One per endpoint, so a stale `/schedule` never invalidates Leads.
 enum CacheKey: String, CaseIterable {
     case leads
+    case leadsRegional = "leads-regional"
+    case leadsPortland = "leads-portland"
     case followUp = "follow-up"
     case schedule
     case bookings

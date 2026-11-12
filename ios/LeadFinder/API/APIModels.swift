@@ -155,8 +155,19 @@ struct LeadsResponse: Codable, Sendable {
         var id: String { key }
     }
 
+    /// One tab per market (Local, Regional, Portland) with its open listing
+    /// count. Nil from servers older than markets.
+    struct Market: Codable, Sendable, Identifiable {
+        var key: String
+        var label: String
+        var count: Int
+
+        var id: String { key }
+    }
+
     var counts: Counts
     var sections: [Section]
+    var markets: [Market]?
 }
 
 // MARK: - GET /follow-up
@@ -654,9 +665,17 @@ struct MessagesResponse: Codable, Sendable {
             var interested: Int
         }
 
+        /// The same two rows for one market (server's lib/markets.ts).
+        struct MarketSplit: Codable, Sendable {
+            var cold: Cold
+            var followUp: FollowUpResponse.FeedStats
+        }
+
         var days: Int
         var cold: Cold
         var followUp: FollowUpResponse.FeedStats
+        /// Keyed "local", "regional", "portland". Nil from older servers.
+        var byMarket: [String: MarketSplit]?
     }
     var stats: Stats
     var sends: [Send]

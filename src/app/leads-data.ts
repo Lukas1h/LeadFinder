@@ -11,6 +11,7 @@ import { estimateDriveMinutes } from "@/lib/driveTime";
 import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
 import { getRecentShoots, nearestShoot, type NearShoot } from "@/lib/nearShoots";
 import { shotAddresses } from "@/app/follow-up/feeds/shared";
+import { marketFor, portlandBand, type Market } from "@/lib/markets";
 
 /**
  * Everything the Leads page shows, as data.
@@ -39,6 +40,8 @@ export interface LeadGroup {
   entries: { lead: Listing; section: LeadSection }[];
   textedAt: Date | undefined;
   best: Listing;
+  /** The market of the best listing — the tab this card lives under. */
+  market: Market;
   section: LeadSection;
   known: KnownAgentGroup | undefined;
   /** A client of Lukas's at the same brokerage as this lead — the warm intro for a stranger. */
@@ -67,6 +70,13 @@ export interface LeadsBoard {
   addressById: Map<string, string | null>;
   /** Open leads from the last few days whose photos never got scored — a lot of them means scoring is down. */
   unscoredCount: number;
+  /** The market the board was filtered to, or null for all of them (the iPhone app's default). */
+  market: Market | null;
+  /**
+   * Open (non-queued) listings per market, always over all three markets — the
+   * Leads page's tabs, and a way to see what waits in the other tabs.
+   */
+  marketCounts: Record<Market, number>;
 }
 
 /**
@@ -89,8 +99,13 @@ end`;
  * (the iPhone app's list): each listing comes back with just the photos its
  * card uses. The web page opens the full gallery from the card, so it leaves
  * this off.
+ *
+ * `market` narrows the board to one tab (the Leads page passes the tab it is
+ * on); leaving it out keeps every market, as the iPhone app's API does for
+ * builds that predate the tabs. The counts and the "scoring is down" check
+ * still see everything.
  */
-export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Promise<LeadsBoard> {
+export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market?: Market | null }): Promise<LeadsBoard> {
   // foundAt is transaction-time, so a batch insert gives every row in it
   // the exact same value — listings.id as a tiebreaker keeps order stable
   // across renders instead of reshuffling ties arbitrarily.
@@ -129,9 +144,23 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
   const queuedCount = leads.filter((l) => queuedIds.has(l.id)).length;
   const openLeads = leads.filter((l) => !queuedIds.has(l.id));
 
+  // Each open listing's market, computed once. The tab counts always cover all
+  // three markets, even when the board below is narrowed to one, so the tabs
+  // still show what waits in the others.
+  const marketByLead = new Map(openLeads.map((l) => [l.id, marketFor(l)] as const));
+  const marketCounts: Record<Market, number> = { local: 0, regional: 0, portland: 0 };
+  for (const leadMarket of marketByLead.values()) marketCounts[leadMarket]++;
+
+  // From here on the board is one market's worth of leads. Everything the tab
+  // shows — groups, sections, "near your shoots", the header counts — uses this
+  // filtered list; only queuedCount and unscoredCount above/below look at every
+  // market.
+  const market = options?.market ?? null;
+  const marketLeads = market ? openLeads.filter((l) => marketByLead.get(l.id) === market) : openLeads;
+
   const lookups = buildAgentLookups(applyLastContact(agentKeys, lastContact));
   const attachedIdByLead = new Map(
-    openLeads.map((l) => [l.id, findAttachedAgent(l, lookups.byPhone, lookups.byName, lookups.byId)?.id ?? null] as const)
+    marketLeads.map((l) => [l.id, findAttachedAgent(l, lookups.byPhone, lookups.byName, lookups.byId)?.id ?? null] as const)
   );
   const attachedIds = [...new Set([...attachedIdByLead.values()].filter((id): id is string => id != null))];
 
@@ -172,7 +201,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
   // display only; each listing keeps its stored section, so if the best one
   // goes away the next one takes its place.
   const byKey = new Map<string, { agent: Agent | null; entries: LeadGroup["entries"]; textedAt: Date | undefined }>();
-  for (const lead of openLeads) {
+  for (const lead of marketLeads) {
     const attachedId = attachedIdByLead.get(lead.id);
     const attached = attachedId ? agentById.get(attachedId) ?? null : null;
     const textedAt = attached ? lastTexted.get(attached.id) : undefined;
@@ -208,6 +237,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
       key,
       ...g,
       best: g.entries[0].lead,
+      market: marketFor(g.entries[0].lead),
       section: g.entries[0].section,
       // Someone he already knows comes first — unless he texted them this
       // week, in which case they wait in Unlikely like everyone else.
@@ -254,14 +284,20 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
   // priciest listing; backup the priciest; photo the pipeline's priority score.
   // Texted goes by who has waited longest since his last text; unlikely by the
   // priority score.
+  //
+  // The Portland tab ranks by distance from Oregon City instead (see
+  // outreachRank): the photographer is out there, so 503/971 numbers are the
+  // local numbers and the drive from Winston says nothing.
   for (const key of LEAD_SECTION_ORDER) {
     sections[key].sort((a, b) =>
       key === "backup"
-        ? outreachRank(a, b) || (b.best.price ?? 0) - (a.best.price ?? 0)
+        ? outreachRank(a, b, market) || (b.best.price ?? 0) - (a.best.price ?? 0)
         : key === "video"
-        ? (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) || outreachRank(a, b) || (b.best.price ?? 0) - (a.best.price ?? 0)
+        ? (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) ||
+          outreachRank(a, b, market) ||
+          (b.best.price ?? 0) - (a.best.price ?? 0)
         : key === "photo"
-          ? outreachRank(a, b) || byLeadPriority(a.best, b.best)
+          ? outreachRank(a, b, market) || byLeadPriority(a.best, b.best)
           : key === "texted"
             ? (a.textedAt?.getTime() ?? 0) - (b.textedAt?.getTime() ?? 0) || byLeadPriority(a.best, b.best)
             : byLeadPriority(a.best, b.best)
@@ -277,13 +313,32 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean }): Pro
   const recent = Date.now() - 3 * 24 * 60 * 60 * 1000;
   const unscoredCount = openLeads.filter((l) => isUnscored(l) && l.foundAt.getTime() > recent).length;
 
-  return { known, sections, near, openLeadCount: openLeads.length, queuedCount, agentCount, addressById, unscoredCount };
+  return {
+    known,
+    sections,
+    near,
+    openLeadCount: marketLeads.length,
+    queuedCount,
+    agentCount,
+    addressById,
+    unscoredCount,
+    market,
+    marketCounts,
+  };
 }
 
-/** Who to text first: listed before coming soon, then nearer, then a local number (see the sort above). */
-function outreachRank(a: LeadGroup, b: LeadGroup): number {
+/**
+ * Who to text first: listed before coming soon, then nearer, then a local
+ * number (see the sort above). On the Portland tab the drive from Winston says
+ * nothing (the photographer shoots those), so distance from Oregon City stands
+ * in for it and the area code is left out — 503/971 is the local number up
+ * there.
+ */
+function outreachRank(a: LeadGroup, b: LeadGroup, market: Market | null): number {
+  const listed = Number(a.best.isComingSoon) - Number(b.best.isComingSoon);
+  if (listed) return listed;
+  if (market === "portland") return portlandBand(a.best) - portlandBand(b.best);
   return (
-    Number(a.best.isComingSoon) - Number(b.best.isComingSoon) ||
     driveBand(a.best.city) - driveBand(b.best.city) ||
     areaBand(a.agent?.phone ?? a.best.agentPhone) - areaBand(b.agent?.phone ?? b.best.agentPhone)
   );
