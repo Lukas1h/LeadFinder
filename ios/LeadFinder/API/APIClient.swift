@@ -162,6 +162,14 @@ actor APIClient {
     /// "Not now" on a Follow up card: takes the agent off Follow up for 7, 14
     /// or 28 days, the web's snooze. Something new from them (a listing, a
     /// sale) still brings them back sooner. Contacts nobody.
+    /// Pass on a Follow up card: off that feed only (with a listing, just
+    /// that listing in it). Nobody is contacted.
+    func passFollowUp(agentId: String, feed: String, listingId: String?) async throws {
+        struct Body: Encodable, Sendable { let agentId: String; let feed: String; let listingId: String? }
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("POST", "api/app/v1/follow-up/pass", body: Body(agentId: agentId, feed: feed, listingId: listingId), as: OK.self)
+    }
+
     func snoozeFollowUp(agentId: String, days: Int) async throws {
         struct Body: Encodable, Sendable { let days: Int }
         struct OK: Decodable, Sendable { let ok: Bool }

@@ -7,6 +7,7 @@ import {
   messageSends,
   messagePresets,
   agentInteractions,
+  followUpPasses,
   type Agent,
   type Listing,
   type AgentRelationshipStatus,
@@ -406,6 +407,20 @@ export async function getOrCreateAgentByPhone(
 export async function getFollowUpCount(): Promise<number> {
   const { today, later } = await getFollowUpBoard();
   return today.length + later.length;
+}
+
+/**
+ * "Pass" on a Follow up card: this agent isn't a fit for this feed's text.
+ * Hides them from that feed only (follow-up/feeds/history.ts), not from the
+ * others, and doesn't touch lastContactedAt. With a listing it covers that
+ * listing in the feed, so their next listing can still come up; without one
+ * it covers the agent in the feed. Nobody is contacted.
+ */
+export async function passFollowUpAgent(agentId: string, feed: string, listingId?: string | null) {
+  const key = feed.trim().slice(0, 40);
+  if (!key) throw new Error("A feed is required");
+  await db.insert(followUpPasses).values({ agentId, feed: key, listingId: listingId || null });
+  revalidatePath("/follow-up");
 }
 
 /**

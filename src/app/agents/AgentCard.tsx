@@ -1,8 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { DropdownMenu } from "radix-ui";
-import { Phone, MessageCircle, Mail, StickyNote, BellOff } from "lucide-react";
+import { Phone, MessageCircle, Mail, StickyNote, X } from "lucide-react";
 import type { Agent } from "@/db/schema";
 import { resolveAvgDaysBetweenListings } from "./stats";
 import { AgentDetailDialog } from "./AgentDetailDialog";
@@ -13,7 +12,6 @@ import { scoreAgent } from "@/lib/agentBadge";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { copyInTap } from "@/lib/clipboard";
-import { FOLLOW_UP_SNOOZE_DAYS, snoozeLabel } from "@/app/follow-up/snooze";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -21,7 +19,7 @@ export function AgentCard({
   agent,
   listingCount,
   listingDates,
-  followUpDismiss,
+  followUpPass,
   lastReplyAt,
   lead,
   textBody,
@@ -34,9 +32,9 @@ export function AgentCard({
   // Just the dates the "~Nd between listings" stat needs. The dialog fetches
   // the agent's full listings itself when it opens.
   listingDates: { listedAt: Date | null; foundAt: Date }[];
-  // When set, shows a "Not now" snooze button (the Follow up page's dismiss:
-  // hides this agent from that list for the one, two or four weeks picked).
-  followUpDismiss?: (agentId: string, days: number) => void;
+  // When set, shows a Pass button: on the Follow up page, takes this card off
+  // its feed only (passFollowUpAgent), leaving the agent in the others.
+  followUpPass?: () => void;
   /** Their latest reply, shown on the Follow up page. */
   lastReplyAt?: Date | null;
   /** A line above the name, e.g. why they're on the Follow up page. */
@@ -120,39 +118,16 @@ export function AgentCard({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
-        {followUpDismiss && (
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                title="Not now: hide from Follow up for a while"
-                aria-label={`Snooze ${agent.name ?? agent.phone} on Follow up`}
-              >
-                <BellOff />
-              </Button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content
-                align="end"
-                sideOffset={4}
-                className="z-50 min-w-40 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-              >
-                <DropdownMenu.Label className="px-2 py-1.5 text-xs text-muted-foreground">
-                  Hide for (a new listing still brings them back)
-                </DropdownMenu.Label>
-                {FOLLOW_UP_SNOOZE_DAYS.map((days) => (
-                  <DropdownMenu.Item
-                    key={days}
-                    onSelect={() => followUpDismiss(agent.id, days)}
-                    className="cursor-default rounded-sm px-2 py-1.5 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-                  >
-                    {snoozeLabel(days)}
-                  </DropdownMenu.Item>
-                ))}
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
+        {followUpPass && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={followUpPass}
+            title="Pass: not a fit for this feed (they stay in the others)"
+            aria-label={`Pass on ${agent.name ?? agent.phone} for this feed`}
+          >
+            <X />
+          </Button>
         )}
         {callHref && (
           <Button variant="outline" size="icon" asChild>

@@ -13,6 +13,7 @@ import { getOpenedNoReplyGroup } from "./opened";
 import { getDroneBookingGroup } from "./droneBooking";
 import { getPhotoOfferRepliesGroup } from "./photoOfferReplies";
 import { getNearShootGroup } from "./nearShoot";
+import { feedAllows, loadFeedHistory, type FeedHistory } from "./history";
 import type { FeedGroup, FeedItem, FollowUpFeed } from "./types";
 
 export type { FeedGroup, FeedItem, FollowUpFeed, FollowUpFeedKey } from "./types";
@@ -31,6 +32,8 @@ export interface OfferFeeds {
   graphics: FeedGroup[];
   drone: FeedGroup[];
   stats: Map<string, FeedStats>;
+  /** Passes and who's already had each feed's text (history.ts), applied to every feed in buildFeeds. */
+  history: FeedHistory;
 }
 
 export async function getOfferFeeds(): Promise<OfferFeeds> {
@@ -38,7 +41,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
   // established before any of these parallel branches touch the clock, or
   // whichever gets there first (not necessarily this one) fails the build.
   await connection();
-  const [touchUps, backOnMarket, staging, unopened, openedNoReply, photoOfferReplies, nearShoot, droneBooking, graphics, drone, stats] = await Promise.all([
+  const [touchUps, backOnMarket, staging, unopened, openedNoReply, photoOfferReplies, nearShoot, droneBooking, graphics, drone, stats, history] = await Promise.all([
     getPhotoTouchUpGroups(),
     getBackOnMarketGroup(),
     getStagingGroup(),
@@ -50,6 +53,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
     getGraphicsGroups(),
     getDroneOffers(),
     getFeedStats(),
+    loadFeedHistory(),
   ]);
   // A twilight gift is for an agent with nothing better on offer: not someone already in Relaunch.
   const relaunching = new Set([...touchUps, backOnMarket].flatMap((g) => g.items.map((e) => e.agent.id)));
@@ -75,6 +79,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
       ],
     })),
     stats,
+    history,
   };
 }
 
@@ -219,7 +224,10 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
       const s = offers.stats.get(f.key);
       return {
         ...f,
-        groups: f.groups.filter((g) => g.items.length > 0 || g.heldBack > 0),
+        groups: f.groups
+          // Passed on this feed, already sent its text, or never texted (history.ts).
+          .map((g) => ({ ...g, items: g.items.filter((e) => feedAllows(offers.history, f.key, e)) }))
+          .filter((g) => g.items.length > 0 || g.heldBack > 0),
         ...(s ? { stats: { ...s, days: FEED_STATS_DAYS } } : {}),
       };
     })

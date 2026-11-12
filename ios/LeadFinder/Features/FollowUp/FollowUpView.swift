@@ -16,6 +16,9 @@ struct FollowUpView: View {
     /// Hidden the moment they're snoozed, rather than waiting on the reload.
     @State private var snoozed: Set<String> = []
     @State private var snoozeError: String?
+    /// Cards passed on, hidden the moment it's tapped: "feed|agent|listing",
+    /// since a pass only takes the card off its own feed.
+    @State private var passed: Set<String> = []
     /// The snooze lengths the server takes, in days.
     fileprivate static let snoozeChoices: [(days: Int, label: String)] = [
         (7, "1 week"), (14, "2 weeks"), (28, "4 weeks"),
@@ -98,7 +101,7 @@ struct FollowUpView: View {
             logAgent = callAgent
         }
         .alert(
-            "Couldn't snooze",
+            "Couldn't update Follow up",
             isPresented: Binding(get: { snoozeError != nil }, set: { if !$0 { snoozeError = nil } })
         ) {
             Button("OK", role: .cancel) {}
@@ -148,7 +151,7 @@ struct FollowUpView: View {
             var feed = feed
             feed.groups = feed.groups.compactMap { group in
                 var group = group
-                group.items = group.items.filter { matches($0.agent) }
+                group.items = group.items.filter { matches($0.agent) && !passed.contains(Self.passKey(feed.key, $0)) }
                 return group.items.isEmpty && (trimmedQuery.isEmpty ? (group.heldBack ?? 0) == 0 : true) ? nil : group
             }
             return feed.itemCount > 0 || (trimmedQuery.isEmpty && (feed.stats?.reached ?? 0) > 0) ? feed : nil
@@ -557,18 +560,25 @@ struct FollowUpView: View {
 
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
-                // A menu, so the length is picked rather than assumed.
-                Menu {
-                    Section("Hide for (a new listing still brings them back)") {
-                        ForEach(Self.snoozeChoices, id: \.days) { choice in
-                            Button(choice.label) { Task { await snooze(agent, days: choice.days) } }
-                        }
+                if let feedKey {
+                    // Pass: not a fit for this feed's text. They stay in the others.
+                    iconButton("xmark", label: "Pass on \(agent.displayName) for this feed") {
+                        Task { await pass(item, feedKey: feedKey) }
                     }
-                } label: {
-                    iconLabel("moon.zzz")
+                } else {
+                    // A menu, so the length is picked rather than assumed.
+                    Menu {
+                        Section("Hide for (a new listing still brings them back)") {
+                            ForEach(Self.snoozeChoices, id: \.days) { choice in
+                                Button(choice.label) { Task { await snooze(agent, days: choice.days) } }
+                            }
+                        }
+                    } label: {
+                        iconLabel("moon.zzz")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Snooze \(agent.displayName)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Snooze \(agent.displayName)")
                 if let digits {
                     iconButton("phone", label: "Call \(agent.displayName)") {
                         if let url = URL(string: "tel://\(digits)") {
@@ -607,11 +617,19 @@ struct FollowUpView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .card(padding: 14)
         .contextMenu {
-            ForEach(Self.snoozeChoices, id: \.days) { choice in
+            if let feedKey {
                 Button {
-                    Task { await snooze(agent, days: choice.days) }
+                    Task { await pass(item, feedKey: feedKey) }
                 } label: {
-                    Label("Snooze \(choice.label)", systemImage: "moon.zzz")
+                    Label("Pass on this feed", systemImage: "xmark")
+                }
+            } else {
+                ForEach(Self.snoozeChoices, id: \.days) { choice in
+                    Button {
+                        Task { await snooze(agent, days: choice.days) }
+                    } label: {
+                        Label("Snooze \(choice.label)", systemImage: "moon.zzz")
+                    }
                 }
             }
         }
@@ -822,6 +840,24 @@ struct FollowUpView: View {
         } catch {
             snoozed.remove(agent.id)
             snoozeError = "\(agent.displayName) is still on the list. Check your connection and try again."
+        }
+    }
+
+    fileprivate static func passKey(_ feedKey: String, _ item: FollowUpResponse.JustListed) -> String {
+        "\(feedKey)|\(item.agent.id)|\(item.listing?.id ?? "")"
+    }
+
+    /// Pass: off this one feed (and with a listing, just that listing in it),
+    /// still in the others. Nobody is contacted. Put back if the server didn't take it.
+    private func pass(_ item: FollowUpResponse.JustListed, feedKey: String) async {
+        let key = Self.passKey(feedKey, item)
+        withAnimation(.snappy(duration: 0.22)) { _ = passed.insert(key) }
+        do {
+            try await APIClient.shared.passFollowUp(agentId: item.agent.id, feed: feedKey, listingId: item.listing?.id)
+            await appState.followUp.load(force: true)
+        } catch {
+            passed.remove(key)
+            snoozeError = "\(item.agent.displayName) is still on the list. Check your connection and try again."
         }
     }
 

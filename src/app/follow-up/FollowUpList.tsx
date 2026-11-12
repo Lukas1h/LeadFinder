@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Copy, HeartHandshake, Wand2 } from "lucide-react";
 import { toast } from "sonner";
-import { dismissFollowUpAgent } from "@/app/agents/actions";
+import { passFollowUpAgent } from "@/app/agents/actions";
 import { AgentCard } from "@/app/agents/AgentCard";
 import { AgentDetailDialog } from "@/app/agents/AgentDetailDialog";
 import { RelationshipBadge } from "@/app/badges";
@@ -36,15 +36,28 @@ export function FollowUpList({
   dates: Record<string, { listedAt: Date | null; foundAt: Date }[]>;
 }) {
   const [, startTransition] = useTransition();
-  // Hidden right away on snooze, rather than waiting for the refresh.
-  const [snoozed, setSnoozed] = useState<Set<string>>(new Set());
+  // Hidden right away on pass, rather than waiting for the refresh. Keyed by
+  // feed, agent and listing: a pass only takes the card off its own feed.
+  const [passed, setPassed] = useState<Set<string>>(new Set());
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
 
-  const dismiss = (id: string, days: number) => {
-    setSnoozed((prev) => new Set(prev).add(id));
-    startTransition(() => dismissFollowUpAgent(id, days));
+  const passKey = (feedKey: string, e: FeedItem) => `${feedKey}|${e.agent.id}|${e.listing?.id ?? ""}`;
+  const pass = (feedKey: string, e: FeedItem) => {
+    setPassed((prev) => new Set(prev).add(passKey(feedKey, e)));
+    startTransition(async () => {
+      try {
+        await passFollowUpAgent(e.agent.id, feedKey, e.listing?.id ?? null);
+      } catch {
+        setPassed((prev) => {
+          const next = new Set(prev);
+          next.delete(passKey(feedKey, e));
+          return next;
+        });
+        toast.error("Couldn\u2019t pass. Try again.");
+      }
+    });
   };
 
   const copy = (text: string) => {
@@ -60,7 +73,7 @@ export function FollowUpList({
       agent={e.agent}
       listingCount={counts[e.agent.id] ?? 0}
       listingDates={dates[e.agent.id] ?? []}
-      followUpDismiss={dismiss}
+      followUpPass={() => pass(feedKey, e)}
       lastReplyAt={e.lastReplyAt}
       textBody={e.suggestion}
       textSecond={e.secondText}
@@ -115,7 +128,7 @@ export function FollowUpList({
 
   const shownFeeds = feeds.map((f) => {
     const groups = f.groups
-      .map((g) => ({ ...g, items: g.items.filter((e) => !snoozed.has(e.agent.id)) }))
+      .map((g) => ({ ...g, items: g.items.filter((e) => !passed.has(passKey(f.key, e))) }))
       .filter((g) => g.items.length > 0 || g.heldBack > 0);
     return { ...f, groups, count: groups.reduce((n, g) => n + g.items.length, 0) };
   });

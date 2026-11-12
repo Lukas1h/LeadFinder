@@ -1207,6 +1207,25 @@ export const agentStatusChanges = pgTable("agent_status_changes", {
 
 export type AgentStatusChange = typeof agentStatusChanges.$inferSelect;
 
+// "Pass" on a Follow up card: this agent isn't a fit for this one feed's text,
+// without hiding them anywhere else (the old snooze hid them from every feed
+// for weeks). With a listing, the pass covers that listing in that feed, so
+// their next listing can still come up there; without one (a check-in, a link
+// nudge) it covers the agent in that feed for good. Read by
+// follow-up/feeds/history.ts. Started 2026-11-12.
+export const followUpPasses = pgTable("follow_up_passes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  // FollowUpFeedKey: "congrats", "near_shoot", …
+  feed: text("feed").notNull(),
+  listingId: uuid("listing_id").references((): AnyPgColumn => listings.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type FollowUpPass = typeof followUpPasses.$inferSelect;
+
 // Messages written ahead of time and sent later — a batch of listing texts
 // to work through, or an email that shouldn't go out the instant someone
 // replies. Channel-agnostic: each row is a text or an email. Nothing here

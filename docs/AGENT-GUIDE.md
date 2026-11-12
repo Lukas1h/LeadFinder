@@ -293,7 +293,20 @@ from the "Free drone with booking" SMS template, whose second message rides
 along as the card's `secondText`: copied on the web Text tap, a second Messages
 sheet on iOS), Congrats, Twilight gift, Virtual
 staging, Graphics, Drone shots (`src/app/follow-up/droneOffers.ts`: free drone
-shots near upcoming jobs), and Check-ins. `feeds/stats.ts` measures each tab
+shots near upcoming jobs), and Check-ins. Every tab follows three rules, applied once in `buildFeeds` from
+`feeds/history.ts`: (1) **Pass**: the X on a card (web and iPhone, `POST
+follow-up/pass` with `agentId`, `feed`, optional `listingId`) writes
+`follow_up_passes` and takes the card off that feed only. With a listing it
+covers that listing in that feed; without one it covers the agent in that
+feed. It replaced the per-agent snooze on feed cards (`follow_up_snoozed_until`
+is still honoured until old snoozes run out). (2) **No repeat**: once a text or
+call went out from a feed (`agent_interactions.follow_up_feed`), that agent
+doesn't come back to it; Congrats, New listings, Check-ins and Graphics can
+come back, but only if the agent has replied since the last one. (3) **Texted
+before only**: every card is a text, so an agent shows only with text
+history (a text interaction either way, or a send from an SMS template).
+Drone shots is exempt, since it has an email template.
+`feeds/stats.ts` measures each tab
 over 30 days: agents reached from it (texts/calls started on its cards,
 `agent_interactions.follow_up_feed`), how many replied within a week, how many
 were warm when reached, and how many of those turned interested or better
