@@ -258,16 +258,26 @@ Deleting the invoice cancels its Square copy. `paid_at` is set by
 their own Square customer (`reference_id` `agent:<id>`); with no email on file
 Lukas's own stands in, so the receipt comes to him.
 
-Lifecycle and the Booked page buckets (`groupBookings` in
-`src/app/booked/data.ts`):
+Lifecycle: `bookings.stage`, one state at a time (`src/lib/bookingStages.ts`),
+and the Booked page sections (`groupBookings` in `src/app/booked/data.ts`):
 
-| Bucket | Condition |
-|---|---|
-| Tentative | upcoming and `date_tentative` (the date is only a placeholder) |
-| Upcoming | no `shot_at`, `invoice_sent_at` or `completed_at` |
-| Editing | `shot_at` set, not invoiced or completed |
-| Invoice sent | `invoice_sent_at` set, not completed |
-| Completed | `completed_at` set |
+| Stage | Meaning | Moves on by |
+|---|---|---|
+| `tentative` | said yes, day not settled | "Confirm date" (or unticking date-tentative) |
+| `scheduled` | day set, not shot | "Mark shot" |
+| `editing` | shot, photos not delivered | creating the client gallery link (web or Flambient), or "Mark invoice sent" |
+| `invoice_sent` | gallery + invoice out, waiting for payment | Square payment (webhook/sync), or "Mark paid" (cash/check/$0; asks the job's hours) |
+| `completed` | **paid** — never completed while unpaid | — |
+
+"Reopen" steps back one stage. Only `src/lib/bookingStage.ts` writes `stage`
+(`setBookingStage`, `advanceBookingTo`, `reopenBookingStage`,
+`applyDateTentative`); it stamps/clears `shot_at`, `invoice_sent_at`,
+`completed_at`, `paid_at` and `date_tentative` to match, so those still read
+correctly but must not be written directly. MCP: `update_booking` takes
+`stage`; `complete_booking` = mark paid. Phone API: `PATCH bookings/[id]`
+takes `stage`; GET buckets add `scheduled`. The Booked page shows revenue
+(line-item totals), not profit; profit lives in the booking's Time & money
+and on Finances.
 
 Client gallery: `gallery.lukashahn.media/<gallery_token>` (old links on gallery.lukashahn.art still work), photos served live
 from Dropbox. `gallery_views` logs `view`, `download_all`, `download_video`,
@@ -471,6 +481,17 @@ The app is the books (since 2026-10-16).
   (vendor `Square`, `booking_id` set), logged by `recordSquareFee()` in `src/lib/squareInvoice.ts`
   when the payment comes in, or by the nightly market-status cron once Square settles it.
   The logic is in `src/lib/finance/` (`ledger.ts`, `reports.ts`, `tax.ts`).
+- Profit First (`/finances/profit-first`, `src/lib/finance/profitFirst.ts`): cash
+  collected (a booking's line items on its paid date, completed stage only) minus
+  `contract_labor` (Subcontractors) expenses is real revenue, split by
+  `app_settings.pf_profit_pct / pf_owner_pay_pct / pf_tax_pct / pf_opex_pct`
+  (sum 100, edited on that page). OpEx spent is business costs like "Real
+  profit" counts them. Allocation days are the 10th and 25th: the page shows
+  what to move on the next one, this quarter, year to date, and month by month.
+  Each allocation window runs from one allocation day through the day before
+  the next. `/api/cron/profit-first` (daily, 16:00 UTC) on the 10th/25th adds a
+  "Profit First: move $X" reminder to the Schedule (notes: dollars per account)
+  and pushes it to Lukas's devices; once per day.
 
 ## Example queries
 

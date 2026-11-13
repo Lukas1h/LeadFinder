@@ -115,6 +115,11 @@ export async function notifyPaymentReceived(amountDollars: number, where: string
   await broadcast({ title: `Paid online: $${amountDollars.toLocaleString("en-US")}`, body: where, url: "/booked" });
 }
 
+/** It's a Profit First allocation day (the 10th or 25th) — move the money. */
+export async function notifyProfitFirstAllocation(title: string, body: string): Promise<void> {
+  await broadcast({ title, body, url: "/finances/profit-first" });
+}
+
 /** Someone opened a personalized agent page (lib/portfolioLink.ts) — only Lukas's own notice; opens the link's activity. */
 export async function notifyPortfolioView(linkId: string, agentName: string | null, viewCount: number): Promise<void> {
   const nth = viewCount === 1 ? "" : viewCount === 2 ? " (2nd visit)" : ` (${viewCount}th visit)`;

@@ -10,7 +10,8 @@ import { refreshBookingAirspace } from "@/lib/airspace";
 import { geocodeBooking } from "@/lib/geocode";
 import { after } from "next/server";
 import { text, errorText } from "./shared";
-import { reopenStep } from "@/app/booked/bookingMath";
+import { applyDateTentative, initialStage, reopenBookingStage, setBookingStage } from "@/lib/bookingStage";
+import { BOOKING_STAGES } from "@/lib/bookingStages";
 
 async function joinedBooking(bookingId: string) {
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
@@ -64,7 +65,7 @@ export function registerBookingTools(server: McpServer): void {
       title: "Search/filter bookings",
       description: "Filters bookings by completion status (completed = paid; an invoice-sent booking still counts as not completed), city, and job-date range. Sorted by job date.",
       inputSchema: {
-        completed: z.boolean().optional().describe("true = only completed (paid), false = only not yet completed (upcoming or waiting for payment)"),
+        completed: z.boolean().optional().describe("true = only completed (paid, the last stage), false = only not yet completed (tentative, scheduled, editing or waiting for payment)"),
         city: z.string().optional(),
         fromDate: z.string().datetime({ offset: true }).optional().describe("Only bookings with jobDate on/after this. ISO 8601, read as UTC when no offset is given"),
         toDate: z.string().datetime({ offset: true }).optional().describe("Only bookings with jobDate on/before this. ISO 8601, read as UTC when no offset is given"),
@@ -75,8 +76,8 @@ export function registerBookingTools(server: McpServer): void {
     async ({ completed, city, fromDate, toDate, sortBy, limit }) => {
       let rows = await db.select().from(bookings);
 
-      if (completed === true) rows = rows.filter((b) => b.completedAt != null);
-      if (completed === false) rows = rows.filter((b) => b.completedAt == null);
+      if (completed === true) rows = rows.filter((b) => b.stage === "completed");
+      if (completed === false) rows = rows.filter((b) => b.stage !== "completed");
       if (city) rows = rows.filter((b) => b.city === city);
       if (fromDate) {
         const from = new Date(fromDate).getTime();
@@ -158,6 +159,7 @@ export function registerBookingTools(server: McpServer): void {
           contactAgentId,
           jobDate: jobDate ? new Date(jobDate) : null,
           dateTentative: dateTentative ?? false,
+          stage: initialStage(dateTentative ?? false),
           lockboxCode: lockboxCode?.trim() || null,
           notes: notes?.trim() || null,
           invoiceNote: invoiceNote?.trim() || null,
@@ -196,7 +198,7 @@ export function registerBookingTools(server: McpServer): void {
     {
       title: "Update a booking",
       description:
-        "Edits an existing booking's contact, job date, lockbox code, internal notes, invoice note, or line items. Passing lineItems replaces the full set (not a merge/diff) — omit it to leave line items untouched. " +
+        "Edits an existing booking's contact, job date, lockbox code, internal notes, invoice note, line items, or lifecycle stage. Passing lineItems replaces the full set (not a merge/diff) — omit it to leave line items untouched. " +
         "Changing the address re-checks the drone airspace (`airspace` in the result): warn Lukas if it's \"controlled\".",
       inputSchema: {
         id: z.string().uuid(),
@@ -206,15 +208,25 @@ export function registerBookingTools(server: McpServer): void {
         city: z.string().optional(),
         state: z.string().optional(),
         jobDate: z.string().datetime({ offset: true }).nullable().optional().describe("When the shoot is, or null to clear. ISO 8601. Read as UTC when no offset is given — if you are copying a time off a screenshot, an email header, or a chat log, include the local offset (e.g. 2026-09-24T10:50:00-07:00 for Pacific) instead of appending Z, or the record lands hours off."),
-        dateTentative: z.boolean().optional().describe("True when the agent has agreed to the job but the day isn't settled (\"I'll let you know when\", \"probably mid-November\"): jobDate is then only a placeholder, or omitted. Set this instead of writing TENTATIVE in the notes; it puts the booking under \"Tentative\" on the Booked page. Set it to false once the day is confirmed."),
-        shot: z.boolean().optional().describe("True once the shoot is done but the photos are still being edited and haven't been invoiced: moves the booking to \"Editing\" on the Booked page. False undoes it."),
+        dateTentative: z.boolean().optional().describe("True when the agent has agreed to the job but the day isn't settled (\"I'll let you know when\", \"probably mid-November\"): jobDate is then only a placeholder, or omitted. Set this instead of writing TENTATIVE in the notes; it puts the booking under \"Tentative\" on the Booked page. Set it to false once the day is confirmed. Only affects a booking that hasn't been shot yet."),
+        stage: z
+          .enum(BOOKING_STAGES)
+          .optional()
+          .describe(
+            "Where the booking is in its lifecycle, one state at a time: " +
+              "tentative (agent said yes, day not settled) → scheduled (day set, not shot yet) → " +
+              "editing (shot, photos not delivered yet) → invoice_sent (gallery/invoice went out, waiting for payment) → " +
+              "completed (PAID — never mark completed while unpaid; Square does it automatically and cash/check/$0 jobs use complete_booking). " +
+              "Moving forward stamps the step timestamps; moving back clears the ones it hasn't reached."
+          ),
+        shot: z.boolean().optional().describe("Shorthand for stage: true moves the booking to \"editing\" (shot, photos still being edited); false steps it back one stage. Prefer `stage`."),
         lockboxCode: z.string().optional(),
         notes: z.string().optional().describe("Internal notes — never shown to the client."),
         invoiceNote: z.string().optional().describe("Client-facing note printed on the invoice."),
         lineItems: z.array(lineItemSchema).optional(),
       },
     },
-    async ({ id, contactName, contactPhone, address, city, state, jobDate, dateTentative, shot, lockboxCode, notes, invoiceNote, lineItems }) => {
+    async ({ id, contactName, contactPhone, address, city, state, jobDate, dateTentative, stage, shot, lockboxCode, notes, invoiceNote, lineItems }) => {
       const [existing] = await db.select().from(bookings).where(eq(bookings.id, id));
       if (!existing) return errorText("No booking with that id");
 
@@ -223,8 +235,6 @@ export function registerBookingTools(server: McpServer): void {
       if (city !== undefined) patch.city = city.trim() || null;
       if (state !== undefined) patch.state = state.trim() || null;
       if (jobDate !== undefined) patch.jobDate = jobDate ? new Date(jobDate) : null;
-      if (dateTentative !== undefined) patch.dateTentative = dateTentative;
-      if (shot !== undefined) patch.shotAt = shot ? (existing.shotAt ?? new Date()) : null;
       if (lockboxCode !== undefined) patch.lockboxCode = lockboxCode.trim() || null;
       if (notes !== undefined) patch.notes = notes.trim() || null;
       if (invoiceNote !== undefined) patch.invoiceNote = invoiceNote.trim() || null;
@@ -246,6 +256,16 @@ export function registerBookingTools(server: McpServer): void {
         if (validLineItems.length > 0) await db.insert(bookingLineItems).values(validLineItems);
       }
 
+      // Stage moves go through lib/bookingStage, the only writer of stage and
+      // the step timestamps: the tentative flag flips tentative ⇄ scheduled
+      // while the job is still to shoot, and `stage` sets the state outright.
+      if (dateTentative !== undefined) await applyDateTentative(id, dateTentative);
+      if (shot !== undefined) {
+        if (shot) await setBookingStage(id, "editing");
+        else await reopenBookingStage(id);
+      }
+      if (stage !== undefined) await setBookingStage(id, stage);
+
       // A no-op unless the address changed.
       if (address !== undefined || city !== undefined || state !== undefined) await refreshBookingAirspace(id);
 
@@ -257,9 +277,9 @@ export function registerBookingTools(server: McpServer): void {
   server.registerTool(
     "complete_booking",
     {
-      title: "Mark a booking completed",
+      title: "Mark a booking paid (completed)",
       description:
-        "Sets completedAt to now — the final state, meaning the job is done and paid. Optionally records the job's editing/shooting/logistics hours. Drive time, miles and costs aren't recorded here: they come from the job's trips and expenses on the Finances page.",
+        "Marks the job paid: moves the booking to \"completed\", the final stage, stamping completedAt and paidAt to now. Use it for cash, check, Venmo or $0 jobs — a Square payment marks it automatically. Never do this while the money is still owed. Optionally records the job's editing/shooting/logistics hours. Drive time, miles and costs aren't recorded here: they come from the job's trips and expenses on the Finances page.",
       inputSchema: {
         id: z.string().uuid(),
         editingHours: z.number().min(0).optional(),
@@ -268,7 +288,7 @@ export function registerBookingTools(server: McpServer): void {
       },
     },
     async ({ id, ...completion }) => {
-      const [updated] = await db.update(bookings).set({ completedAt: new Date(), ...completion }).where(eq(bookings.id, id)).returning();
+      const updated = await setBookingStage(id, "completed", completion);
       if (!updated) return errorText("No booking with that id");
       return text(updated);
     }
@@ -277,18 +297,14 @@ export function registerBookingTools(server: McpServer): void {
   server.registerTool(
     "reopen_booking",
     {
-      title: "Reopen a completed booking",
-      description: "Steps a booking back one state: completed → invoice sent (waiting for payment) → editing (shot) → upcoming, skipping any it never went through.",
+      title: "Reopen a booking (back one stage)",
+      description:
+        "Steps a booking back one stage: completed (paid) → invoice_sent (waiting for payment) → editing (shot) → scheduled/tentative (upcoming), clearing the timestamps of the step it left.",
       inputSchema: { id: z.string().uuid() },
     },
     async ({ id }) => {
-      const [existing] = await db.select().from(bookings).where(eq(bookings.id, id));
-      if (!existing) return errorText("No booking with that id");
-      const [updated] = await db
-        .update(bookings)
-        .set(reopenStep(existing))
-        .where(eq(bookings.id, id))
-        .returning();
+      const updated = await reopenBookingStage(id);
+      if (!updated) return errorText("No booking with that id");
       return text(updated);
     }
   );

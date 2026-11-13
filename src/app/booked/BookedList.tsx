@@ -3,12 +3,13 @@
 import { useMemo } from "react";
 import { ChevronRight, Plus, CalendarCheck } from "lucide-react";
 import type { AirspaceCheck, Listing } from "@/db/schema";
+import type { BookingStage } from "@/lib/bookingStages";
 import { BookingCard } from "./BookingCard";
 import { BookingForm } from "./BookingForm";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatPrice } from "@/lib/format";
-import { averageProfitPerHour, sumProfit } from "./bookingMath";
+import { sumRevenue } from "./bookingMath";
 import { groupBookings } from "./data";
 import { Stat, Sub } from "../Stat";
 
@@ -31,6 +32,8 @@ export interface BookingWithDetails {
   lockboxCode: string | null;
   notes: string | null;
   invoiceNote: string | null;
+  /** Where the job is: tentative → scheduled → editing → invoice_sent → completed (paid). See src/lib/bookingStages.ts. */
+  stage: BookingStage;
   completedAt: Date | null;
   // Shot, still editing: the photos haven't gone out yet.
   shotAt: Date | null;
@@ -93,8 +96,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
   // The split lives in ./data so the iPhone app's GET /bookings returns the
   // same buckets rather than a second opinion on what "waiting" means.
-  const { upcoming, tentative, editing, waiting, completed } = useMemo(() => groupBookings(bookings), [bookings]);
-  const scheduled = useMemo(() => upcoming.filter((b) => !b.dateTentative), [upcoming]);
+  const { tentative, scheduled, editing, waiting, completed } = useMemo(() => groupBookings(bookings), [bookings]);
 
   if (bookings.length === 0) {
     return (
@@ -126,7 +128,7 @@ export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
         />
       </div>
 
-      <BookingStats completed={completed} />
+      <BookingStats completed={completed} waiting={waiting} />
 
       <BookingSection
         title="Tentative"
@@ -134,28 +136,37 @@ export function BookedList({ bookings }: { bookings: BookingWithDetails[] }) {
         bookings={tentative}
         defaultOpen
       />
-      <BookingSection title="Upcoming" bookings={scheduled} defaultOpen />
+      <BookingSection title="Scheduled" hint="Date confirmed, not shot yet. Soonest first." bookings={scheduled} defaultOpen />
       <BookingSection
         title="Editing"
-        hint="Shot, but the photos haven&rsquo;t gone out yet. Longest waiting first."
+        hint="Shot, but the gallery and invoice haven&rsquo;t gone out yet. Longest waiting first."
         bookings={editing}
         defaultOpen
       />
-      <BookingSection title="Invoice sent" bookings={waiting} />
-      <BookingSection title="Completed" bookings={completed} />
+      <BookingSection
+        title="Invoice sent"
+        hint="Waiting for payment. Longest waiting first."
+        bookings={waiting}
+        totalSuffix="outstanding"
+        defaultOpen
+      />
+      <BookingSection title="Completed" hint="Paid." bookings={completed} />
     </div>
   );
 }
 
+/** A collapsible stage bucket; the header total is the bucket's revenue (line items). */
 function BookingSection({
   title,
   hint,
   bookings,
+  totalSuffix,
   defaultOpen = false,
 }: {
   title: string;
   hint?: string;
   bookings: BookingWithDetails[];
+  totalSuffix?: string;
   defaultOpen?: boolean;
 }) {
   if (bookings.length === 0) return null;
@@ -164,7 +175,10 @@ function BookingSection({
       <summary className="flex items-center gap-1 text-xs font-medium text-muted-foreground cursor-pointer select-none list-none">
         <ChevronRight className="size-3.5 transition-transform group-open/details:rotate-90" />
         {title} ({bookings.length})
-        <span className="ml-auto text-foreground">{formatPrice(sumProfit(bookings))}</span>
+        <span className="ml-auto text-foreground">
+          {formatPrice(sumRevenue(bookings))}
+          {totalSuffix && <span className="font-normal text-muted-foreground"> {totalSuffix}</span>}
+        </span>
       </summary>
       {hint && <p className="text-xs text-muted-foreground mt-1.5 ml-4.5">{hint}</p>}
       <div className="flex flex-col gap-4 mt-3">
@@ -176,45 +190,48 @@ function BookingSection({
   );
 }
 
+const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`;
+
 /**
- * Counts only completed (paid) bookings — money that's actually in hand.
- * "Last 30 days" goes by the job date, not when it was marked completed —
- * older jobs entered after the fact were all completed on the day they
- * were backfilled. Falls back to completedAt for a booking with no job date.
+ * Revenue only (line-item totals); profit lives on Finances. Earned counts
+ * completed (paid) jobs. "Last 30 days" goes by the job date, not when it was
+ * paid — older jobs entered after the fact were all completed the day they
+ * were backfilled. Outstanding is what's invoiced but not paid yet.
  */
-function BookingStats({ completed }: { completed: BookingWithDetails[] }) {
+function BookingStats({ completed, waiting }: { completed: BookingWithDetails[]; waiting: BookingWithDetails[] }) {
   const stats = useMemo(() => {
     // eslint-disable-next-line react-hooks/purity -- a render-time "now" is fine for a rolling window
     const cutoff = Date.now() - 30 * DAY_MS;
-    const recent = completed.filter((b) => (b.jobDate ?? b.completedAt!).getTime() >= cutoff);
-    const allTimeProfit = sumProfit(completed);
+    const recent = completed.filter((b) => (b.jobDate ?? b.paidAt ?? b.completedAt ?? b.createdAt).getTime() >= cutoff);
+    const allTime = sumRevenue(completed);
     return {
       recentCount: recent.length,
-      recentProfit: sumProfit(recent),
+      recent: sumRevenue(recent),
       allTimeCount: completed.length,
-      allTimeProfit,
-      average: completed.length > 0 ? allTimeProfit / completed.length : null,
-      perHour: averageProfitPerHour(completed),
+      allTime,
+      average: completed.length > 0 ? allTime / completed.length : null,
+      outstanding: sumRevenue(waiting),
+      outstandingCount: waiting.length,
     };
-  }, [completed]);
+  }, [completed, waiting]);
 
   return (
     <Card className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4">
       <Stat label="Last 30 days">
-        {formatPrice(stats.recentProfit)}
-        <Sub>{stats.recentCount} {stats.recentCount === 1 ? "booking" : "bookings"}</Sub>
+        {formatPrice(stats.recent)}
+        <Sub>revenue · {plural(stats.recentCount, "job")}</Sub>
       </Stat>
       <Stat label="All time">
-        {formatPrice(stats.allTimeProfit)}
-        <Sub>{stats.allTimeCount} {stats.allTimeCount === 1 ? "booking" : "bookings"}</Sub>
+        {formatPrice(stats.allTime)}
+        <Sub>revenue · {plural(stats.allTimeCount, "job")}</Sub>
       </Stat>
-      <Stat label="Avg per booking">
+      <Stat label="Avg per job">
         {formatPrice(stats.average)}
-        <Sub>profit</Sub>
+        <Sub>revenue</Sub>
       </Stat>
-      <Stat label="Avg per hour">
-        {stats.perHour != null ? `${formatPrice(stats.perHour)}/hr` : "—"}
-        <Sub>{stats.perHour != null ? "profit" : "no hours recorded"}</Sub>
+      <Stat label="Outstanding">
+        {formatPrice(stats.outstanding)}
+        <Sub>{stats.outstandingCount > 0 ? `${plural(stats.outstandingCount, "invoice")} unpaid` : "nothing unpaid"}</Sub>
       </Stat>
     </Card>
   );

@@ -6,6 +6,7 @@ import { getBookingWithDetails } from "./actions";
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import { formatDay, formatPrice } from "@/lib/format";
 import { BookingStatusBadge } from "./BookingStatusBadge";
+import { bookingRevenue } from "./bookingMath";
 import type { BookingWithDetails } from "./BookedList";
 
 /**
@@ -35,7 +36,7 @@ export function BookingRow({ bookingId, booking: preloaded }: { bookingId: strin
     setOpen(true);
   };
 
-  const total = booking?.lineItems.reduce((sum, li) => sum + li.amount, 0) ?? 0;
+  const total = booking ? bookingRevenue(booking) : 0;
   const subtitle = !loaded
     ? loading
       ? "Loading…"
@@ -59,7 +60,7 @@ export function BookingRow({ bookingId, booking: preloaded }: { bookingId: strin
           </p>
           <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
-        {booking && <BookingStatusBadge booking={booking} />}
+        {booking && <BookingStatusBadge stage={booking.stage} />}
       </button>
       {booking && <BookingDetailDialog booking={booking} open={open} onOpenChange={setOpen} />}
     </>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2 } from "lucide-react";
+import { BadgeDollarSign } from "lucide-react";
 import { markBookingCompleted } from "./actions";
 import { CompletionFields } from "./CompletionFields";
 import { fromCompletionDraft, toCompletionDraft } from "./bookingMath";
@@ -19,8 +19,9 @@ import {
 import type { BookingWithDetails } from "./BookedList";
 
 /**
- * Asks for the job's hours before marking it completed, so every finished
- * booking has them on file. Any field can be left blank. The drive and the
+ * "Mark paid": the money came in another way (cash, check, $0 job), so the
+ * job is completed. Asks for the job's hours in the same step so every
+ * finished booking has them on file. Square payments complete it on their own. Any field can be left blank. The drive and the
  * job's expenses are logged from the booking's "Time & money" section.
  */
 export function CompleteBookingDialog({
@@ -41,7 +42,7 @@ export function CompleteBookingDialog({
     setIsSaving(true);
     await markBookingCompleted(booking.id, fromCompletionDraft(draft));
     setIsSaving(false);
-    toast.success("Marked completed");
+    toast.success("Marked paid");
     onOpenChange(false);
     router.refresh();
   };
@@ -57,16 +58,16 @@ export function CompleteBookingDialog({
       <DialogContent className="sm:max-w-sm">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Complete booking</DialogTitle>
-            <DialogDescription>How long did the work take? Leave anything you don&rsquo;t know blank. The drive and any expenses go under Time &amp; money.</DialogDescription>
+            <DialogTitle>Mark paid</DialogTitle>
+            <DialogDescription>The client paid, so this job is done. How long did the work take? Leave anything you don&rsquo;t know blank. The drive and any expenses go under Time &amp; money.</DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <CompletionFields value={draft} onChange={setDraft} />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={isSaving}>
-              <CheckCircle2 />
-              {isSaving ? "Saving…" : "Mark completed"}
+              <BadgeDollarSign />
+              {isSaving ? "Saving…" : "Mark paid"}
             </Button>
           </DialogFooter>
         </form>

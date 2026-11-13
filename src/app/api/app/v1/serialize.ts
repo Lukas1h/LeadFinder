@@ -149,6 +149,10 @@ export function bookingJson(b: BookingWithDetails) {
     jobDate: b.jobDate,
     // Booked, but the day isn't settled: jobDate is a placeholder or null.
     dateTentative: b.dateTentative,
+    // Where the booking is: tentative | scheduled | editing | invoice_sent | completed
+    // (completed = paid). The stage the app should branch on — the timestamps
+    // below are kept in step with it for older clients.
+    stage: b.stage,
     contactLastContactedAt: b.contactLastContactedAt,
     lockboxCode: b.lockboxCode,
     notes: b.notes,

@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { connection } from "next/server";
 import { Card } from "@/components/ui/card";
 import { Stat, Sub } from "../Stat";
@@ -7,6 +9,8 @@ import { loadLedger } from "@/lib/finance/ledger";
 import { pacificDate } from "@/lib/finance/math";
 import { overviewReport } from "@/lib/finance/reports";
 import { formatDollars, monthLabel } from "@/lib/finance/format";
+import { loadProfitFirstReport } from "@/lib/finance/profitFirstReport";
+import { Allocations, OpexBar } from "./profit-first/parts";
 
 export default function FinancesOverviewPage() {
   return (
@@ -18,7 +22,7 @@ export default function FinancesOverviewPage() {
 
 async function Overview() {
   await connection();
-  const ledger = await loadLedger();
+  const [ledger, pf] = await Promise.all([loadLedger(), loadProfitFirstReport()]);
   const r = overviewReport(ledger, pacificDate(new Date()));
   const { year, months, spend } = r;
   const thisMonth = r.month;
@@ -64,6 +68,20 @@ async function Overview() {
           </div>
         </Card>
       </div>
+
+      <Link href="/finances/profit-first" className="block">
+        <Card className="p-4 gap-3 hover:border-foreground/20 transition-colors">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-foreground">Profit First · {pf.thisQuarter.label}</p>
+            <span className="flex items-center text-xs text-muted-foreground">
+              {formatDollars(pf.thisQuarter.realRevenue)} to split
+              <ChevronRight className="size-3.5" />
+            </span>
+          </div>
+          <Allocations period={pf.thisQuarter} percents={pf.percents} />
+          <OpexBar period={pf.thisQuarter} />
+        </Card>
+      </Link>
 
       <Card className="p-0 gap-0 overflow-x-auto">
         <table className="w-full text-sm">

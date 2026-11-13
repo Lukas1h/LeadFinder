@@ -15,6 +15,7 @@ import { estimateRoute, type RouteEstimate } from "./route";
 import { getHomeLocation } from "@/lib/settings";
 import { loadLedger } from "./ledger";
 import { pacificDate } from "./math";
+import { PF_ACCOUNTS, percentsTotal, type ProfitFirstPercents } from "./profitFirst";
 
 const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
@@ -237,6 +238,24 @@ Return JSON with:
 export async function writeFinanceSettings(input: { mpg: number; otherWagesMonthly: number }) {
   if (!(input.mpg > 0)) return { error: "MPG has to be above 0" };
   const values = { vehicleMpg: input.mpg, otherWagesMonthly: Math.max(0, Math.round(input.otherWagesMonthly || 0)) };
+  await db.insert(appSettings).values({ id: "singleton", ...values }).onConflictDoUpdate({ target: appSettings.id, set: values });
+  return {};
+}
+
+/** Saves the Profit First split. The four accounts have to add up to 100%. */
+export async function writeProfitFirstPercents(p: ProfitFirstPercents): Promise<{ error?: string }> {
+  for (const { key, label } of PF_ACCOUNTS) {
+    const value = p[key];
+    if (!Number.isFinite(value) || value < 0 || value > 100) return { error: `${label} has to be between 0% and 100%` };
+  }
+
+  const total = percentsTotal(p);
+  if (Math.abs(total - 100) > 0.01) {
+    const shown = Math.round(total * 100) / 100;
+    return { error: `The four percentages add up to ${shown}%, not 100%` };
+  }
+
+  const values = { pfProfitPct: p.profit, pfOwnerPayPct: p.ownerPay, pfTaxPct: p.tax, pfOpexPct: p.opex };
   await db.insert(appSettings).values({ id: "singleton", ...values }).onConflictDoUpdate({ target: appSettings.id, set: values });
   return {};
 }

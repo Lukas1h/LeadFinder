@@ -76,6 +76,8 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       listing: linkedListing ?? null,
       jobDate: b.jobDate,
       dateTentative: b.dateTentative,
+      // The one source of truth for where the booking is (see lib/bookingStages).
+      stage: b.stage,
       lockboxCode: b.lockboxCode,
       notes: b.notes,
       invoiceNote: b.invoiceNote,
@@ -109,10 +111,12 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
 }
 
 export interface GroupedBookings {
-  /** Not shot yet. Includes the tentative ones: the iPhone app reads this list as "everything still to shoot". */
+  /** Still to shoot: tentative + scheduled. The iPhone app reads this list as "everything still to shoot". */
   upcoming: BookingWithDetails[];
   /** The part of `upcoming` whose date isn't settled, longest since he was last in touch first: the one to chase is on top. */
   tentative: BookingWithDetails[];
+  /** The day is settled, not shot yet. Soonest job first. */
+  scheduled: BookingWithDetails[];
   /** Shot, no invoice out yet: the photos are still being edited. Longest-waiting first. */
   editing: BookingWithDetails[];
   /** Invoice sent, not yet paid — longest-waiting first, so the one to chase is on top. */
@@ -123,27 +127,36 @@ export interface GroupedBookings {
 /**
  * The split BookedList renders, as a plain function so the API can
  * return the same buckets instead of re-deciding what "waiting" means.
+ * Every booking lands in exactly one stage bucket (see lib/bookingStages);
+ * `upcoming` is just the first two put together.
  */
 export function groupBookings(bookings: BookingWithDetails[]): GroupedBookings {
+  const at = (d: Date | null | undefined) => d?.getTime() ?? 0;
+  const lastTouch = (b: BookingWithDetails) => at(b.contactLastContactedAt ?? b.createdAt);
+
+  // Soonest job first; a booking with no job date yet sinks to the bottom.
+  const byJobDate = (a: BookingWithDetails, b: BookingWithDetails) => {
+    if (!a.jobDate && !b.jobDate) return at(b.createdAt) - at(a.createdAt);
+    if (!a.jobDate) return 1;
+    if (!b.jobDate) return -1;
+    return a.jobDate.getTime() - b.jobDate.getTime();
+  };
+
+  const tentative = bookings
+    .filter((b) => b.stage === "tentative")
+    .sort((a, b) => lastTouch(a) - lastTouch(b));
+  const scheduled = bookings.filter((b) => b.stage === "scheduled").sort(byJobDate);
   const upcoming = bookings
-    .filter((b) => !b.completedAt && !b.invoiceSentAt && !b.shotAt)
-    .sort((a, b) => {
-      // No job date yet sinks to the bottom rather than sorting first.
-      if (!a.jobDate && !b.jobDate) return b.createdAt.getTime() - a.createdAt.getTime();
-      if (!a.jobDate) return 1;
-      if (!b.jobDate) return -1;
-      return a.jobDate.getTime() - b.jobDate.getTime();
-    });
+    .filter((b) => b.stage === "tentative" || b.stage === "scheduled")
+    .sort(byJobDate);
   const editing = bookings
-    .filter((b) => !b.completedAt && !b.invoiceSentAt && b.shotAt)
-    .sort((a, b) => a.shotAt!.getTime() - b.shotAt!.getTime());
+    .filter((b) => b.stage === "editing")
+    .sort((a, b) => at(a.shotAt ?? a.createdAt) - at(b.shotAt ?? b.createdAt));
   const waiting = bookings
-    .filter((b) => !b.completedAt && b.invoiceSentAt)
-    .sort((a, b) => a.invoiceSentAt!.getTime() - b.invoiceSentAt!.getTime());
+    .filter((b) => b.stage === "invoice_sent")
+    .sort((a, b) => at(a.invoiceSentAt ?? a.createdAt) - at(b.invoiceSentAt ?? b.createdAt));
   const completed = bookings
-    .filter((b) => b.completedAt)
-    .sort((a, b) => b.completedAt!.getTime() - a.completedAt!.getTime());
-  const lastTouch = (b: BookingWithDetails) => (b.contactLastContactedAt ?? b.createdAt).getTime();
-  const tentative = upcoming.filter((b) => b.dateTentative).sort((a, b) => lastTouch(a) - lastTouch(b));
-  return { upcoming, tentative, editing, waiting, completed };
+    .filter((b) => b.stage === "completed")
+    .sort((a, b) => at(b.paidAt ?? b.completedAt ?? b.createdAt) - at(a.paidAt ?? a.completedAt ?? a.createdAt));
+  return { upcoming, tentative, scheduled, editing, waiting, completed };
 }

@@ -21,10 +21,12 @@ pushes and deploys.
 
 ## How to launch
 
-**Model:** always `opencode/space-bunny-free`. Lukas, 2026-10-16: "don't use big pickle anymore… it has to be spacebunny" (Big Pickle's output on a Swift task was poor). If Space Bunny is gone from `opencode models`, ask him before picking another. Benchmarked 2026-09-27 (3 runs each: a
-spec'd multi-file edit with a planted bug + rules to follow, and a 12-item batch job):
-every free model scored 100% on well-specified work, so pick on speed, reliability and
-how long it stays free, not "smarts" — you do the reasoning, the worker executes.
+**Model (Lukas, 2026-11-13):** `opencode/deepseek-v4.1-flash-free` via Paseo
+(`provider: "opencode/opencode/deepseek-v4.1-flash-free"`, thinking `high`); if it's out of
+usage, the Freebuff provider in Paseo. Not Big Pickle, not Space Bunny. **UI layout and
+styling never goes to a free model** — give it to an Opus 5.5 subagent on low effort (Agent
+tool, `model: "opus"`, `effort: "low"`); free models may only do UI wiring (props, data,
+actions). The table below is the older 2026-09 benchmark, kept for reference.
 
 | Model | Avg time | Notes |
 |---|---|---|
@@ -47,7 +49,7 @@ the table rather than waiting.
 
 **A. Paseo available** (tools named `mcp__paseo__*` exist — Lukas's machine / Paseo app):
 `mcp__paseo__create_agent` with
-`provider: "opencode/opencode/space-bunny-free"`,
+`provider: "opencode/opencode/deepseek-v4.1-flash-free"`,
 `settings: { modeId: "build", thinkingOptionId: "medium", features: { auto_accept: true } }`.
 You get a notification when it finishes — don't poll.
 

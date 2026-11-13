@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Camera, CalendarDays, KeyRound, StickyNote, CheckCircle2, RotateCcw, Pencil, Car, Receipt, Send, CalendarPlus, MapPin } from "lucide-react";
-import { markBookingShot, markInvoiceSent, reopenBooking } from "./actions";
+import { Camera, CalendarDays, CalendarCheck, KeyRound, StickyNote, BadgeDollarSign, Check, RotateCcw, Pencil, Car, Receipt, Send, CalendarPlus, MapPin } from "lucide-react";
+import { confirmBookingDate, markBookingShot, markInvoiceSent, reopenBooking } from "./actions";
 import { CompleteBookingDialog } from "./CompleteBookingDialog";
 import { BookingMoney } from "./BookingMoney";
 import { BookingForm } from "./BookingForm";
@@ -15,6 +15,8 @@ import { AirspaceSection } from "./AirspaceSection";
 import { ListingRow } from "@/app/ListingRow";
 import { AgentRow } from "@/app/AgentRow";
 import { formatPrice, formatDateTime } from "@/lib/format";
+import { BOOKING_STAGES, STAGE_LABELS, previousStage, stageIndex, type BookingStage } from "@/lib/bookingStages";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import type { BookingWithDetails } from "./BookedList";
@@ -40,31 +42,16 @@ export function BookingDetailDialog({
   const [editOpen, setEditOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
 
-  const handleComplete = () => setCompleteOpen(true);
-
-  const handleInvoiceSent = () => {
+  const run = (action: (id: string) => Promise<unknown>, done: string) => {
     startTransition(async () => {
-      await markInvoiceSent(booking.id);
-      toast.success("Marked invoice sent");
+      await action(booking.id);
+      toast.success(done);
       router.refresh();
     });
   };
 
-  const handleShot = () => {
-    startTransition(async () => {
-      await markBookingShot(booking.id);
-      toast.success("Moved to Editing");
-      router.refresh();
-    });
-  };
-
-  const handleReopen = () => {
-    startTransition(async () => {
-      await reopenBooking(booking.id);
-      toast.success("Reopened");
-      router.refresh();
-    });
-  };
+  const back = previousStage(booking.stage);
+  const next = NEXT_ACTION[booking.stage];
 
   const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
@@ -95,36 +82,28 @@ export function BookingDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap gap-2">
-          {!booking.completedAt && !booking.invoiceSentAt && !booking.shotAt && (
-            <Button size="sm" onClick={handleShot} disabled={isPending}>
-              <Camera />
-              Mark shot
-            </Button>
-          )}
-          {!booking.completedAt && !booking.invoiceSentAt && (
-            <Button size="sm" variant={booking.shotAt ? "default" : "outline"} onClick={handleInvoiceSent} disabled={isPending}>
-              <Send />
-              Mark invoice sent
-            </Button>
-          )}
-          {!booking.completedAt && (
+        <StageSteps stage={booking.stage} />
+
+        {next && (
+          <div className="flex flex-col gap-1">
             <Button
-              size="sm"
-              variant={booking.invoiceSentAt ? "default" : "outline"}
-              onClick={handleComplete}
+              className="w-full"
               disabled={isPending}
+              onClick={() => {
+                if (booking.stage === "invoice_sent") setCompleteOpen(true);
+                else if (booking.stage === "tentative") run(confirmBookingDate, "Date confirmed");
+                else if (booking.stage === "scheduled") run(markBookingShot, "Moved to Editing");
+                else run(markInvoiceSent, "Marked invoice sent");
+              }}
             >
-              <CheckCircle2 />
-              Mark completed
+              <next.icon />
+              {next.label}
             </Button>
-          )}
-          {(booking.completedAt || booking.invoiceSentAt || booking.shotAt) && (
-            <Button variant="outline" size="sm" onClick={handleReopen} disabled={isPending}>
-              <RotateCcw />
-              Reopen
-            </Button>
-          )}
+            {next.hint && <p className="text-xs text-muted-foreground text-center">{next.hint}</p>}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -160,6 +139,18 @@ export function BookingDetailDialog({
             <Pencil />
             Edit
           </Button>
+          {back && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => run(reopenBooking, `Back to ${STAGE_LABELS[back]}`)}
+              disabled={isPending}
+            >
+              <RotateCcw />
+              Back to {STAGE_LABELS[back]}
+            </Button>
+          )}
           {appleMapsHref && (
             <Button variant="outline" size="sm" asChild>
               <a href={appleMapsHref} target="_blank" rel="noopener noreferrer">
@@ -190,7 +181,7 @@ export function BookingDetailDialog({
           </div>
         )}
 
-        {(booking.shotAt || booking.invoiceSentAt || booking.completedAt || booking.costs.trips.length > 0 || booking.costs.expenseItems.length > 0) && (
+        {(stageIndex(booking.stage) >= stageIndex("editing") || booking.costs.trips.length > 0 || booking.costs.expenseItems.length > 0) && (
           <BookingMoney booking={booking} open={open} />
         )}
 
@@ -236,5 +227,62 @@ export function BookingDetailDialog({
       <BookingForm booking={booking} open={editOpen} onOpenChange={setEditOpen} />
       <CompleteBookingDialog booking={booking} open={completeOpen} onOpenChange={setCompleteOpen} />
     </Dialog>
+  );
+}
+
+/** The one thing to do next at each stage; completed has none. */
+const NEXT_ACTION: Record<BookingStage, { label: string; icon: typeof Camera; hint?: string } | null> = {
+  tentative: { label: "Confirm date", icon: CalendarCheck },
+  scheduled: { label: "Mark shot", icon: Camera },
+  editing: {
+    label: "Mark invoice sent",
+    icon: Send,
+    hint: "Copying the client gallery link does this automatically.",
+  },
+  invoice_sent: { label: "Mark paid", icon: BadgeDollarSign },
+  completed: null,
+};
+
+/** Where the job is: five dots on a line, done ones filled, the current one labeled. */
+function StageSteps({ stage }: { stage: BookingStage }) {
+  const current = stageIndex(stage);
+  return (
+    <ol className="grid grid-cols-5 gap-1" aria-label={`Stage: ${STAGE_LABELS[stage]}`}>
+      {BOOKING_STAGES.map((s, i) => {
+        const done = i < current || stage === "completed";
+        const here = i === current;
+        return (
+          <li key={s} className="flex flex-col items-center gap-1 text-center">
+            <div className="relative flex w-full items-center justify-center">
+              {i > 0 && (
+                <span
+                  className={cn("absolute right-1/2 h-px w-full", i <= current ? "bg-foreground/60" : "bg-border")}
+                />
+              )}
+              <span
+                className={cn(
+                  "relative z-10 flex size-4 items-center justify-center rounded-full border",
+                  done
+                    ? "border-foreground bg-foreground text-background"
+                    : here
+                      ? "border-foreground bg-background ring-2 ring-foreground/15"
+                      : "border-border bg-background",
+                )}
+              >
+                {done && <Check className="size-2.5" strokeWidth={3} />}
+              </span>
+            </div>
+            <span
+              className={cn(
+                "text-[11px] leading-tight",
+                here ? "font-medium text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {STAGE_LABELS[s]}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

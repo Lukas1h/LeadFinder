@@ -3,6 +3,7 @@ import { and, eq, gte, isNotNull, isNull, notExists, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings, expenses } from "@/db/schema";
 import { loadInvoiceDetails, type InvoiceDetails } from "@/lib/invoice";
+import { advanceBookingTo } from "@/lib/bookingStage";
 import { notifyPaymentReceived } from "@/lib/push";
 import { idempotencyKey, SquareError, squareConfigured, squareFetch, squareLocationId } from "@/lib/square";
 
@@ -80,7 +81,12 @@ async function markPaid(bookingId: string, amountCents: number | undefined, wher
     .set({ paidAt: new Date() })
     .where(and(eq(bookings.id, bookingId), isNull(bookings.paidAt)))
     .returning({ id: bookings.id });
-  if (updated) await notifyPaymentReceived((amountCents ?? 0) / 100, where || "A booking").catch(() => {});
+  if (!updated) return;
+  // Paid = completed (see lib/bookingStages): moving the stage stamps
+  // completedAt alongside the paidAt just written, for everything that reads
+  // the old flag. Never moves a booking backwards.
+  await advanceBookingTo(bookingId, "completed");
+  await notifyPaymentReceived((amountCents ?? 0) / 100, where || "A booking").catch(() => {});
 }
 
 /** Called by the Square webhook: an invoice of ours got paid. */

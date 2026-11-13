@@ -16,6 +16,7 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { BookingStage } from "@/lib/bookingStages";
 
 // "passed" and "declined" are both dead ends, but they mean opposite things and
 // conflating them cost real signal: until 2026-09-22 a single "declined" status
@@ -392,15 +393,19 @@ export const bookings = pgTable("bookings", {
   // they don't read as scheduled and don't get forgotten. Used to live only as
   // "TENTATIVE" typed into the notes.
   dateTentative: boolean("date_tentative").notNull().default(false),
+  // Where the job is, one state at a time: tentative → scheduled → editing →
+  // invoice_sent → completed (paid). The source of truth for the Booked page;
+  // the timestamps below are history, stamped by src/lib/bookingStage.ts,
+  // which is the only thing that should write this.
+  stage: text("stage").$type<BookingStage>().notNull().default("scheduled"),
   lockboxCode: text("lockbox_code"),
   // Internal notes — shown in the app and calendar, never on the invoice.
   notes: text("notes"),
   // Client-facing note printed on the invoice (e.g. "Thanks Kristi!",
   // "25% first-time discount"). Kept separate so internal context can't leak.
   invoiceNote: text("invoice_note"),
-  // The final state — the job is done AND paid. Null = still open (either
-  // upcoming or waiting for payment, see invoiceSentAt). Set via a "Mark
-  // completed" action.
+  // When it reached the completed (paid) stage. History only: `stage` is the
+  // state, and src/lib/bookingStage.ts stamps this and the two below.
   completedAt: timestamp("completed_at", { withTimezone: true }),
   // Shot, but the photos aren't edited and delivered yet. Set via "Mark shot";
   // the booking sits in "Editing" until the invoice goes out.
@@ -472,9 +477,9 @@ export const bookings = pgTable("bookings", {
   squareInvoiceId: text("square_invoice_id"),
   squareInvoiceUrl: text("square_invoice_url"),
   squareInvoiceSync: text("square_invoice_sync"),
-  // When the client paid it, from Square (webhook, or the invoice's status
-  // when its page is opened). Doesn't complete the booking: that still
-  // records the job's hours by hand.
+  // When the client paid it: from Square (webhook, or the invoice's status
+  // when its page is opened), or "Mark paid" for cash/check. Paid = the
+  // completed stage (src/lib/bookingStage.ts keeps the two together).
   paidAt: timestamp("paid_at", { withTimezone: true }),
 
   // Where the home he shot stands on the market — the same nightly check and
@@ -808,6 +813,13 @@ export const appSettings = pgTable("app_settings", {
   // bracket the business's profit lands in.
   vehicleMpg: real("vehicle_mpg").notNull().default(20),
   otherWagesMonthly: integer("other_wages_monthly").notNull().default(0),
+
+  // Profit First (src/lib/finance/profitFirst.ts): the share of every dollar
+  // collected that goes to each account. Whole percents, summing to 100.
+  pfProfitPct: real("pf_profit_pct").notNull().default(5),
+  pfOwnerPayPct: real("pf_owner_pay_pct").notNull().default(50),
+  pfTaxPct: real("pf_tax_pct").notNull().default(15),
+  pfOpexPct: real("pf_opex_pct").notNull().default(30),
 
   // The jobs shown as "Recent listings" on the main website (lukashahn.media),
   // picked on /portfolio-links/settings and served by /api/site-listings. Only

@@ -3,7 +3,13 @@
 import { randomBytes } from "crypto";
 import { db } from "@/db";
 import { bookings, bookingLineItems, listings, agents, galleryViews, type GalleryEvent, type NewBookingLineItem } from "@/db/schema";
-import { reopenStep } from "./bookingMath";
+import {
+  advanceBookingTo,
+  applyDateTentative,
+  initialStage,
+  reopenBookingStage,
+  setBookingStage,
+} from "@/lib/bookingStage";
 import { eq, inArray, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
@@ -136,6 +142,7 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
       contactAgentId,
       jobDate: input.jobDate,
       dateTentative: input.dateTentative ?? false,
+      stage: initialStage(input.dateTentative ?? false),
       lockboxCode: input.lockboxCode?.trim() || null,
       notes: input.notes?.trim() || null,
       invoiceNote: input.invoiceNote?.trim() || null,
@@ -207,7 +214,6 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
       state: input.state?.trim() || null,
       contactAgentId,
       jobDate: input.jobDate,
-      ...(input.dateTentative != null ? { dateTentative: input.dateTentative } : {}),
       lockboxCode: input.lockboxCode?.trim() || null,
       notes: input.notes?.trim() || null,
       invoiceNote: input.invoiceNote?.trim() || null,
@@ -215,6 +221,11 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
       ...input.completion,
     })
     .where(eq(bookings.id, bookingId));
+
+  // The date-tentative checkbox moves the booking between tentative and
+  // scheduled — only through the stage writer, so its timestamps stay in step
+  // (it's a no-op once the job has been shot).
+  if (input.dateTentative != null) await applyDateTentative(bookingId, input.dateTentative);
 
   // Re-checks the airspace only if the address changed (see refreshBookingAirspace).
   after(() => refreshBookingAirspace(bookingId));
@@ -287,6 +298,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     listing: linkedListing,
     jobDate: booking.jobDate,
     dateTentative: booking.dateTentative,
+    stage: booking.stage,
     lockboxCode: booking.lockboxCode,
     notes: booking.notes,
     invoiceNote: booking.invoiceNote,
@@ -377,6 +389,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       listing: linkedListing ?? null,
       jobDate: b.jobDate,
       dateTentative: b.dateTentative,
+      stage: b.stage,
       lockboxCode: b.lockboxCode,
       notes: b.notes,
       invoiceNote: b.invoiceNote,
@@ -478,6 +491,9 @@ export async function getOrAssignGalleryToken(bookingId: string): Promise<string
   // the rest of the booking (line items, lockbox code, notes).
   const token = randomBytes(24).toString("base64url");
   await db.update(bookings).set({ galleryToken: token }).where(eq(bookings.id, bookingId));
+  // Making the gallery is what puts the invoice in front of the client, so the
+  // booking moves to "invoice sent" (never backwards, and never on a re-open).
+  await advanceBookingTo(bookingId, "invoice_sent");
   revalidatePath("/booked");
   return token;
 }
@@ -532,31 +548,37 @@ export async function deleteBookingInvoice(bookingId: string) {
   revalidatePath("/booked");
 }
 
+/** "Mark paid": the job is done and the money is in (completed means paid). Records the job's hours in the same write. */
 export async function markBookingCompleted(bookingId: string, completion: CompletionInfo) {
-  await db.update(bookings).set({ completedAt: new Date(), ...completion }).where(eq(bookings.id, bookingId));
+  await setBookingStage(bookingId, "completed", completion);
   revalidatePath("/booked");
   revalidatePath("/agents");
 }
 
 /** Shot, photos still being edited: moves the booking into "Editing" until the invoice goes out. */
 export async function markBookingShot(bookingId: string) {
-  await db.update(bookings).set({ shotAt: new Date() }).where(eq(bookings.id, bookingId));
+  await setBookingStage(bookingId, "editing");
   revalidatePath("/booked");
   revalidatePath("/agents");
 }
 
 /** Moves a booking into "Waiting for payment" — it isn't completed until it's paid. */
 export async function markInvoiceSent(bookingId: string) {
-  await db.update(bookings).set({ invoiceSentAt: new Date() }).where(eq(bookings.id, bookingId));
+  await setBookingStage(bookingId, "invoice_sent");
   revalidatePath("/booked");
   revalidatePath("/agents");
 }
 
-/** Steps a booking back one state: Completed → Invoice sent → Editing → Upcoming, skipping any it never went through. */
+/** The agent settled the day: tentative → scheduled. A no-op once the job is past that. */
+export async function confirmBookingDate(bookingId: string) {
+  await setBookingStage(bookingId, "scheduled");
+  revalidatePath("/booked");
+  revalidatePath("/agents");
+}
+
+/** Steps a booking back one state: Completed → Invoice sent → Editing → Scheduled → Tentative. */
 export async function reopenBooking(bookingId: string) {
-  const [existing] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
-  if (!existing) return;
-  await db.update(bookings).set(reopenStep(existing)).where(eq(bookings.id, bookingId));
+  await reopenBookingStage(bookingId);
   revalidatePath("/booked");
   revalidatePath("/agents");
 }

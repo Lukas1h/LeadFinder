@@ -1,5 +1,14 @@
 import type { BookingWithDetails } from "./BookedList";
 
+/** What the client is billed: the line items' total. This is the number the Booked page shows. */
+export function bookingRevenue(booking: Pick<BookingWithDetails, "lineItems">): number {
+  return booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
+}
+
+export function sumRevenue(bookings: Pick<BookingWithDetails, "lineItems">[]): number {
+  return bookings.reduce((sum, b) => sum + bookingRevenue(b), 0);
+}
+
 type ProfitInputs = Pick<BookingWithDetails, "lineItems" | "costs">;
 
 /** Line-item total minus the job's gas and linked expenses (see src/lib/finance/math.ts). */
@@ -64,13 +73,4 @@ export function fromCompletionDraft(draft: CompletionDraft): Record<CompletionKe
     shootingHours: parse(draft.shootingHours),
     logisticsHours: parse(draft.logisticsHours),
   };
-}
-
-type StepFields = { completedAt: Date | null; invoiceSentAt: Date | null; shotAt: Date | null };
-
-/** What "Reopen" clears: the latest step the booking has reached (Completed, then Invoice sent, then Shot). */
-export function reopenStep(booking: StepFields): Partial<StepFields> {
-  if (booking.completedAt) return { completedAt: null };
-  if (booking.invoiceSentAt) return { invoiceSentAt: null };
-  return { shotAt: null };
 }

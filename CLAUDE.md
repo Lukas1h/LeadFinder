@@ -7,14 +7,26 @@ follow-ups, funnel, finances) and how to query or change it without MCP. Any
 commit that adds or changes a feature, table, status or rule updates that
 guide in the same commit.
 
-# Delegate to free OpenCode subagents by default
+# Act as the orchestrator: delegate to subagents by default
 
-Claude usage costs Lukas money; OpenCode's free models (always `opencode/space-bunny-free`; Lukas said 2026-10-16: no more Big Pickle)
-don't. Act as the orchestrator: plan, split the work, write precise task specs, and hand
-bounded, checkable pieces (multi-file edits to a spec, new scripts, per-item research or
-scraping, test runs) to OpenCode workers — in parallel when the pieces are independent.
-Keep architecture, DB schema changes, anything that sends messages or writes production
-data, final review, and commits/deploys for yourself.
+Claude usage costs Lukas money; OpenCode's free models don't. You plan, split the work,
+write precise task specs, and hand bounded, checkable pieces (multi-file edits to a spec,
+new scripts, per-item research or scraping, test runs) to subagents — several in parallel
+when the pieces are independent. Keep architecture, DB schema changes, anything that sends
+messages or writes production data, final review, and commits/deploys for yourself.
+
+Which worker (Lukas, 2026-11-13):
+
+- **Logic, wiring, scripts, research:** `opencode/deepseek-v4.1-flash-free` (DeepSeek
+  V4.1 Flash Free) via Paseo's OpenCode provider
+  (`provider: "opencode/opencode/deepseek-v4.1-flash-free"`). Run a couple in parallel on
+  disjoint files. If it's out of usage, fall back to the **Freebuff** provider in Paseo.
+  Don't use Big Pickle or Space Bunny.
+- **UI layout and styling:** the free models are bad at it. Any real UI — page/component
+  layout, Tailwind styling, visual design — goes to an **Opus 5.5 subagent on low effort**
+  (Agent tool, `model: "opus"`, `effort: "low"`). The free models may still do UI
+  *wiring* (props, data plumbing, server actions, hooking a button to an action), not
+  layout or styles.
 
 How: the `delegate-opencode` skill (`.claude/skills/delegate-opencode/SKILL.md`) — Paseo's
 `create_agent` when Paseo tools are available, otherwise `scripts/delegate.sh "<task>"`,

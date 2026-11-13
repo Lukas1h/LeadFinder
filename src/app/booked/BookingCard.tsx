@@ -4,7 +4,8 @@ import { useState } from "react";
 import { CalendarDays, KeyRound, StickyNote, Phone, Car, TriangleAlert } from "lucide-react";
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import { airspaceBadgeLabel } from "./AirspaceSection";
-import { bookingProfit } from "./bookingMath";
+import { bookingRevenue } from "./bookingMath";
+import { isUpcomingStage } from "@/lib/bookingStages";
 import { formatPrice, formatDate, formatDateTime, formatPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import type { BookingWithDetails } from "./BookedList";
@@ -18,12 +19,11 @@ import type { BookingWithDetails } from "./BookedList";
 export function BookingCard({ booking }: { booking: BookingWithDetails }) {
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const profit = bookingProfit(booking);
-  // Only while it's still to shoot: once the job is done the day is no longer in question.
-  const tentative = booking.dateTentative && !booking.completedAt && !booking.invoiceSentAt && !booking.shotAt;
+  const revenue = bookingRevenue(booking);
+  const tentative = booking.stage === "tentative";
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
   // Needs ATC authorization to fly the drone there. Only while it's still to shoot.
-  const airspace = !booking.shotAt && !booking.completedAt && !booking.invoiceSentAt ? airspaceBadgeLabel(booking) : null;
+  const airspace = isUpcomingStage(booking.stage) ? airspaceBadgeLabel(booking) : null;
 
   return (
     <>
@@ -65,7 +65,7 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
               </div>
             )}
           </div>
-          {profit !== 0 && <div className="text-lg font-semibold text-foreground">{formatPrice(profit)}</div>}
+          {revenue !== 0 && <div className="text-lg font-semibold text-foreground">{formatPrice(revenue)}</div>}
         </div>
 
         {(booking.contactName || booking.contactPhone) && (

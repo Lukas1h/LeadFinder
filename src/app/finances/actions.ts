@@ -11,6 +11,7 @@ import {
   routeForStops,
   writeExpense,
   writeFinanceSettings,
+  writeProfitFirstPercents,
   writeTrip,
   type ExpenseInput,
   type LinkOptions,
@@ -18,6 +19,7 @@ import {
   type TripInput,
 } from "@/lib/finance/writes";
 import type { RouteEstimate } from "@/lib/finance/route";
+import type { ProfitFirstPercents } from "@/lib/finance/profitFirst";
 
 // The Finances pages' server actions: src/lib/finance/writes.ts does the
 // work, these refresh the pages that show it.
@@ -81,6 +83,15 @@ export async function readReceipt(form: FormData): Promise<ReadReceipt | { error
 export async function saveFinanceSettings(input: { mpg: number; otherWagesMonthly: number }) {
   const result = await writeFinanceSettings(input);
   revalidateFinances();
+  return result;
+}
+
+export async function saveProfitFirstPercents(p: ProfitFirstPercents): Promise<{ error?: string }> {
+  const result = await writeProfitFirstPercents(p);
+  if (!result.error) {
+    revalidatePath("/finances");
+    revalidatePath("/finances/profit-first");
+  }
   return result;
 }
 

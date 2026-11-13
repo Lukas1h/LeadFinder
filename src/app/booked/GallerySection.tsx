@@ -27,6 +27,7 @@ import type { BookingWithDetails } from "./BookedList";
  * the clipboard.
  */
 export function GalleryLinkButton({ booking, onAddGallery }: { booking: BookingWithDetails; onAddGallery: () => void }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [galleryToken, setGalleryToken] = useState(booking.galleryToken);
   const [copied, setCopied] = useState(false);
@@ -43,7 +44,11 @@ export function GalleryLinkButton({ booking, onAddGallery }: { booking: BookingW
   const handleClick = () => {
     startTransition(async () => {
       const token = galleryToken ?? (await getOrAssignGalleryToken(booking.id));
-      if (!galleryToken) setGalleryToken(token);
+      if (!galleryToken) {
+        setGalleryToken(token);
+        // The first link moves the booking to Invoice sent server-side; pick that up.
+        router.refresh();
+      }
       await navigator.clipboard.writeText(`${GALLERY_ORIGIN}/${token}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);

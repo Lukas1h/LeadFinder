@@ -27,6 +27,7 @@ export const EXPENSE_CATEGORIES = [
   { value: "travel", label: "Travel & lodging", deductible: 100, hint: "Bus, flights, hotels." },
   { value: "education", label: "Licenses & training", deductible: 100, hint: "FAA exams, courses." },
   { value: "clothing", label: "Uniform", deductible: 100, hint: "Only branded or work-only clothing." },
+  { value: "contract_labor", label: "Subcontractors", deductible: 100, hint: "Other photographers or editors paid for a job. Comes off revenue before the Profit First split." },
   { value: "other", label: "Other business", deductible: 100, hint: null },
   { value: "personal", label: "Personal", deductible: 0, hint: "Paid from the business account but not a business cost." },
 ] as const;

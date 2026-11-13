@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { appSettings, bookingLineItems, bookings, expenses, listings, tripBookings, trips } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { pacificDate, type LedgerBooking, type LedgerExpense, type LedgerInput, type LedgerTrip } from "./math";
+import { DEFAULT_PF_PERCENTS, type ProfitFirstPercents } from "./profitFirst";
 
 /**
  * Loads the whole ledger: every expense, trip and booking. It's a one-person
@@ -23,6 +24,21 @@ export async function getFinanceSettings(): Promise<FinanceSettings> {
   return { mpg: row?.mpg ?? 20, otherWagesMonthly: row?.wages ?? 0 };
 }
 
+/** The Profit First split: whole percents per account, or the defaults before settings exist. */
+export async function getProfitFirstPercents(): Promise<ProfitFirstPercents> {
+  const [row] = await db
+    .select({
+      profit: appSettings.pfProfitPct,
+      ownerPay: appSettings.pfOwnerPayPct,
+      tax: appSettings.pfTaxPct,
+      opex: appSettings.pfOpexPct,
+    })
+    .from(appSettings)
+    .limit(1);
+  if (!row) return { ...DEFAULT_PF_PERCENTS };
+  return { profit: row.profit, ownerPay: row.ownerPay, tax: row.tax, opex: row.opex };
+}
+
 /** The work happened once it's been shot (or invoiced, or finished). */
 function earnedDate(b: { jobDate: Date | null; shotAt: Date | null; invoiceSentAt: Date | null; completedAt: Date | null }) {
   if (!b.shotAt && !b.invoiceSentAt && !b.completedAt) return null;
@@ -31,10 +47,18 @@ function earnedDate(b: { jobDate: Date | null; shotAt: Date | null; invoiceSentA
   return pacificDate(at);
 }
 
+/** The day the money landed: paidAt, or completedAt for jobs marked complete before paidAt existed. */
+function paidDate(b: { paidAt: Date | null; completedAt: Date | null }): string | null {
+  const at = b.paidAt ?? b.completedAt;
+  return at ? pacificDate(at) : null;
+}
+
 export interface LedgerBookingRow extends LedgerBooking {
   label: string;
   city: string | null;
   jobDate: Date | null;
+  /** The day the job was paid (stage "completed"), or null while it's still open. */
+  paidDate: string | null;
 }
 
 export interface LedgerTripRow extends LedgerTrip {
@@ -62,6 +86,8 @@ export async function loadLedger(): Promise<Ledger> {
         address: sql<string | null>`coalesce(${listings.address}, ${bookings.address})`,
         city: sql<string | null>`coalesce(${listings.city}, ${bookings.city})`,
         jobDate: bookings.jobDate,
+        stage: bookings.stage,
+        paidAt: bookings.paidAt,
         shotAt: bookings.shotAt,
         invoiceSentAt: bookings.invoiceSentAt,
         completedAt: bookings.completedAt,
@@ -116,6 +142,7 @@ export async function loadLedger(): Promise<Ledger> {
         city: b.city,
         jobDate: b.jobDate,
         earnedDate: earnedDate(b),
+        paidDate: b.stage === "completed" ? paidDate(b) : null,
         revenue: Number(b.revenue),
         workHours: (b.shootingHours ?? 0) + (b.editingHours ?? 0) + (b.logisticsHours ?? 0),
       })
