@@ -425,22 +425,26 @@ next listing comes up (usually 1–4 weeks after first contact).
   Blob (`AGENT_PAGE_VIDEOS[*].mp4`, a bare `<video>`, no YouTube UI) → recent
   listings (a Sold badge is a bold dark block) → four tiles (scheduled for
   tomorrow; in and out in as little as 45 minutes, next morning turnaround;
-  real edits; licensed and insured) → testimonial → pricing → the Save
-  contact / Book a shoot cards. A "Hi, I'm Lukas"
-  block replaces the cards once `LUKAS_PHOTO` in `src/lib/agentPage.ts` is set
-  (off until Lukas adds a headshot and bio). On both styles the footer and the
+  real edits; licensed and insured) → testimonial → pricing → the
+  save-contact section. On both styles the footer and the
   vCard (`lukasVcard`) say Portland when `isPortlandArea(content.area)`.
-- Agent page pricing (both styles, above the Save contact / Book a shoot
-  cards): a highlighted "Most booked" Interior & Exterior Photography $300
-  box with "Edited by hand" and "Next morning turnaround" called out, and
+- Agent page pricing (both styles, above the last section): a highlighted
+  "Most booked" Interior & Exterior Photography $300 box with "Edited by
+  hand, not AI" and "Next morning turnaround" in bold orange text, and
   add-ons drone +$100, floor plans +$50, virtual staging +$50, virtual
   twilight +$50; then Walkthrough Video $400 and Photo + Video + Drone $650
   (no agent on-camera video, no "save" callout). Listing cards on both
   styles: a Pending badge is the biggest (orange block), Just listed a small
   white tag; the listing agent's name and brokerage are large under the
   address.
+- The last section on both styles (`SaveContact`) only asks for the save:
+  "Keep me in your back pocket", a preview of the contact card (headshot
+  from `LUKAS_PHOTO` once set, else "LH" initials), a Save my contact button
+  (vCard, tracked as `save_contact` / `bottom`), the $50-off line when
+  `showOffer`, and the personal sign-off. No "Let's work on your next
+  listing" heading or Book a shoot card.
 - Portfolio photos on every agent page: `public/agent-page/pf-01…pf-20.jpg`
-  (new style shows all 20 in the website's layout, `FullGallery`; the original shows 6),
+  (new style, `FullGallery`: video → 8-photo grid → pf-01 full width → 8-photo grid → the 10th photo full width (`AGENT_PAGE_PHOTOS` order), the last two unused; the original shows 6),
   Lukas's 2026-11-12 set in the main website's order. Card carousels preload
   every photo after the first loads, so the arrows flip instantly.
 

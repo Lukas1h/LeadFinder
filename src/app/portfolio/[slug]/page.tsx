@@ -164,7 +164,7 @@ export default async function PortfolioPage({
 
   );
   const pricingSection = (
-        <section id="pricing" data-section="pricing" className="px-4 pt-[clamp(64px,9vw,104px)] pb-[clamp(80px,11vw,128px)]">
+        <section id="pricing" data-section="pricing" className="px-4 pt-[clamp(64px,9vw,104px)]">
           <div className="mx-auto max-w-[672px]">
             <h2 className={`${serif} text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>Pricing</h2>
             <PhotoPackage />
@@ -348,111 +348,7 @@ export default async function PortfolioPage({
 
         {pricingSection}
 
-        {/* The "Hi, I'm Lukas" block replaces the two cards once there's a headshot (LUKAS_PHOTO). */}
-        {newStyle && LUKAS_PHOTO ? (
-          <>
-        {/* About */}
-        <section id="about" data-section="about" className="px-4 pt-[clamp(64px,9vw,104px)] pb-[clamp(80px,11vw,128px)]">
-          <div className="mx-auto flex max-w-[880px] flex-col items-center gap-8 sm:flex-row sm:gap-10">
-            {LUKAS_PHOTO && (
-              // eslint-disable-next-line @next/next/no-img-element -- static headshot
-              <img
-                src={LUKAS_PHOTO}
-                alt="Lukas Hahn"
-                loading="lazy"
-                className="size-32 shrink-0 rounded-full object-cover sm:size-40"
-              />
-            )}
-            <div className={`text-center ${LUKAS_PHOTO ? "sm:text-left" : ""}`}>
-              <h2 className={`${serif} text-[clamp(28px,4vw,38px)] font-bold tracking-[-0.02em]`}>Hi, I’m Lukas.</h2>
-              <p className="mt-4 text-base leading-[1.55] text-pretty text-[#181A1C]/78">
-                I run Hahn Media: photo, video and drone for listings around {area}. Most agents keep me as their backup: when your usual
-                photographer is booked or you need a listing live fast, I’m one text away.
-              </p>
-              <p className="mt-3 text-sm text-[#181A1C]/62">FAA Part 107 certified drone pilot, fully insured.</p>
-              <div className={`mt-6 flex flex-wrap justify-center gap-3 ${LUKAS_PHOTO ? "sm:justify-start" : ""}`}>
-                <a
-                  href={`/api/portfolio/${slug}/vcard`}
-                  data-track="save_contact"
-                  data-track-detail="about"
-                  className="inline-flex min-h-14 items-center border border-[#181A1C] bg-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-white hover:bg-white hover:text-[#181A1C]"
-                >
-                  Save my contact
-                </a>
-                <a
-                  href={bookHref}
-                  data-track="book_shoot"
-                  data-track-detail="Book a shoot (about)"
-                  className="inline-flex min-h-14 items-center border border-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-[#181A1C] hover:bg-[#181A1C] hover:text-white"
-                >
-                  Book a shoot
-                </a>
-              </div>
-              {showOffer && <p className="mt-3 text-sm text-[#995000]">Your first shoot is $50 off.</p>}
-              {firstName && (
-                <p className={`${serif} mt-10 text-xl italic leading-normal`}>
-                  Thanks for taking a look, {firstName}. Talk soon!
-                  <br />
-                  <span className="font-[family-name:var(--font-portfolio-sans)] text-[15px] not-italic text-[#181A1C]/70">— Lukas</span>
-                </p>
-              )}
-            </div>
-          </div>
-        </section>
-
-          </>
-        ) : (
-          <>
-        {/* Book */}
-        <section id="book" data-section="book" className={`px-4 ${newStyle ? "pt-[clamp(64px,9vw,104px)]" : "pt-[clamp(72px,10vw,120px)]"} pb-[clamp(80px,11vw,128px)]`}>
-          <div className="mx-auto max-w-[880px]">
-            <h2
-              className={`${serif} mb-[clamp(32px,5vw,48px)] text-center text-[clamp(30px,4.4vw,44px)] font-bold leading-[1.15] tracking-[-0.02em] text-balance text-[#D67F1F]`}
-            >
-              Let’s work on your next listing.
-            </h2>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-4">
-              <div className="flex flex-col items-start bg-[#F9F4F1] p-[clamp(28px,4vw,40px)]">
-                <h3 className={`${serif} text-[26px] font-bold`}>No listing right now?</h3>
-                <p className="mt-2.5 mb-6 text-base leading-[1.55] text-pretty text-[#181A1C]/78">
-                  Save my contact so I’m one tap away when your next one comes up.
-                </p>
-                <a
-                  href={`/api/portfolio/${slug}/vcard`}
-                  data-track="save_contact"
-                  data-track-detail="bottom"
-                  className="mt-auto inline-flex min-h-14 items-center border border-[#181A1C] bg-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-white hover:bg-white hover:text-[#181A1C]"
-                >
-                  Save my contact
-                </a>
-              </div>
-              <div className="flex flex-col items-start border border-[#181A1C]/15 p-[clamp(28px,4vw,40px)]">
-                <h3 className={`${serif} text-[26px] font-bold`}>Have a listing?</h3>
-                <p className="mt-2.5 mb-6 text-base leading-[1.55] text-pretty text-[#181A1C]/78">
-                  {newStyle && !showOffer ? "Text me the address and a day that works." : "Your first shoot is $50 off."}
-                </p>
-                <a
-                  href={bookHref}
-                  data-track="book_shoot"
-                  data-track-detail="Book a shoot (bottom)"
-                  className="mt-auto inline-flex min-h-14 items-center border border-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-[#181A1C] hover:bg-[#181A1C] hover:text-white"
-                >
-                  Book a shoot
-                </a>
-              </div>
-            </div>
-            {firstName && (
-              <p className={`${serif} mt-12 text-center text-xl italic leading-normal`}>
-                Thanks for taking a look, {firstName}. Talk soon!
-                <br />
-                <span className="font-[family-name:var(--font-portfolio-sans)] text-[15px] not-italic text-[#181A1C]/70">— Lukas</span>
-              </p>
-            )}
-          </div>
-        </section>
-          </>
-        )}
-
+        <SaveContact slug={slug} firstName={firstName} showOffer={showOffer} />
       </main>
       {!preview && <PageTracker slug={slug} />}
 
@@ -590,13 +486,10 @@ const NEW_TILES = [
 /**
  * Pricing lead: the photo package as the headline offer. Pricing is the most
  * read part of the page, so the two biggest selling points (hand editing and
- * next-morning delivery) sit right under the price; add-ons are price + name.
+ * next-morning delivery) sit right under the name; add-ons are price + name.
  */
 function PhotoPackage() {
-  const perks = [
-    { title: "Edited by hand", body: "By a real person. Never AI." },
-    { title: "Next morning turnaround", body: "Shot today, in your inbox tomorrow." },
-  ];
+  const perks = ["Edited by hand, not AI", "Next morning turnaround"];
   const addOns = [
     { price: "+$100", name: "Aerial drone photography" },
     { price: "+$50", name: "Floor plans" },
@@ -612,19 +505,11 @@ function PhotoPackage() {
         <p className="text-[clamp(20px,2.4vw,24px)] font-semibold leading-tight">Interior &amp; Exterior Photography</p>
         <p className="font-[family-name:var(--font-portfolio-serif)] whitespace-nowrap text-[clamp(34px,4.4vw,42px)] font-bold leading-none text-[#D67F1F]">$300</p>
       </div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[clamp(17px,2vw,19px)] font-semibold text-[#995000]">
         {perks.map((p) => (
-          <div key={p.title} className="flex items-start gap-3 bg-[#181A1C] px-4 py-3.5 text-white">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#D67F1F" strokeWidth="3" className="mt-0.5 shrink-0" aria-hidden>
-              <path d="M4 12.5l5 5L20 6.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <div>
-              <p className="text-[17px] font-semibold leading-tight">{p.title}</p>
-              <p className="mt-1 text-sm leading-snug text-white/75">{p.body}</p>
-            </div>
-          </div>
+          <span key={p}>{p}</span>
         ))}
-      </div>
+      </p>
       <p className="mt-6 text-xs font-semibold uppercase tracking-[0.16em] text-[#181A1C]/62">Add-ons</p>
       <div className="mt-2.5 grid grid-cols-2 gap-2.5">
         {addOns.map((a) => (
@@ -639,9 +524,11 @@ function PhotoPackage() {
 }
 
 /**
- * New-style pages: every portfolio photo, laid out like the main website —
- * full-width photos opening, splitting and closing two grids of eight (two
- * columns on a phone, four on desktop, so rows are always full). Uses
+ * New-style pages: the portfolio photos under the full-width video — a grid
+ * of eight (two columns on a phone, four on desktop, so rows are always full),
+ * the lead photo (pf-01) full width, a second grid of eight, and one
+ * full-width photo to close. Never a big photo straight under the video and
+ * never two big ones stacked, so the list's last two photos are left out. Uses
  * AGENT_PAGE_PHOTOS in its own order; the per-link lead photo doesn't apply.
  */
 function FullGallery() {
@@ -660,11 +547,70 @@ function FullGallery() {
   );
   return (
     <div data-section="photos">
-      {wide(p[0])}
       {grid(p.slice(1, 9))}
-      {wide(p[9])}
+      {wide(p[0])}
       {grid(p.slice(10, 18))}
-      {p.slice(18).map(wide)}
+      {wide(p[9])}
     </div>
   );
+}
+
+/**
+ * The page's last section: one job, getting the agent to save Lukas's
+ * contact. Built on a few nudges: a concrete future moment to tie the save to
+ * ("next time your photographer is booked"), a preview of the contact card so
+ * the outcome is tangible, one low-effort action with the friction named
+ * ("one tap"), the norm that other local agents already do it, and a personal
+ * sign-off.
+ */
+function SaveContact({ slug, firstName, showOffer }: { slug: string; firstName: string | null; showOffer: boolean }) {
+  return (
+    <section id="save" data-section="book" className="px-4 pt-[clamp(64px,9vw,104px)] pb-[clamp(80px,11vw,128px)]">
+      <div className="mx-auto flex max-w-[560px] flex-col items-center text-center">
+        <h2 className="font-[family-name:var(--font-portfolio-serif)] text-[clamp(28px,4vw,38px)] font-bold leading-[1.15] tracking-[-0.02em] text-balance">
+          Keep me in your back pocket.
+        </h2>
+        <p className="mt-4 text-[17px] leading-[1.55] text-pretty text-[#181A1C]/78">
+          The next time your photographer is booked up or a listing needs to go live fast, I’m one text away. Lots of agents keep me saved as
+          their backup for exactly that.
+        </p>
+        <div className="mt-8 flex w-full max-w-[380px] items-center gap-4 border border-[#181A1C]/12 bg-white px-5 py-4 text-left shadow-[0_6px_24px_rgba(0,0,0,0.08)]">
+          {LUKAS_PHOTO ? (
+            // eslint-disable-next-line @next/next/no-img-element -- static headshot
+            <img src={LUKAS_PHOTO} alt="Lukas Hahn" className="size-14 shrink-0 rounded-full object-cover" />
+          ) : (
+            <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[#D67F1F] text-xl font-semibold text-white">LH</span>
+          )}
+          <div className="min-w-0">
+            <p className="text-lg font-semibold leading-tight">Lukas Hahn</p>
+            <p className="mt-0.5 text-sm text-[#181A1C]/70">Hahn Media · Real estate photo &amp; video</p>
+            <p className="mt-0.5 text-sm text-[#181A1C]/70">{formatPhone(PHONE)}</p>
+          </div>
+        </div>
+        <a
+          href={`/api/portfolio/${slug}/vcard`}
+          data-track="save_contact"
+          data-track-detail="bottom"
+          className="mt-6 inline-flex min-h-14 w-full max-w-[380px] items-center justify-center border border-[#181A1C] bg-[#181A1C] px-8 text-[14px] font-medium uppercase tracking-[0.3em] text-white hover:bg-white hover:text-[#181A1C]"
+        >
+          Save my contact
+        </a>
+        <p className="mt-3 text-sm text-[#181A1C]/62">One tap. Adds me to your phone’s contacts.</p>
+        {showOffer && <p className="mt-2 text-sm font-semibold text-[#995000]">Your first shoot is $50 off.</p>}
+        {firstName && (
+          <p className="font-[family-name:var(--font-portfolio-serif)] mt-12 text-xl italic leading-normal">
+            Thanks for taking a look, {firstName}. Talk soon!
+            <br />
+            <span className="font-[family-name:var(--font-portfolio-sans)] text-[15px] not-italic text-[#181A1C]/70">— Lukas</span>
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** "+15414303372" → "(541) 430-3372". */
+function formatPhone(e164: string): string {
+  const d = e164.replace(/\D/g, "").slice(-10);
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
 }
