@@ -167,7 +167,7 @@ export default async function PortfolioPage({
 
   );
   const pricingSection = (
-        <section id="pricing" data-section="pricing" className="px-4 pt-[clamp(64px,9vw,104px)]">
+        <section id="pricing" data-section="pricing" className="px-4 pt-[clamp(44px,6vw,64px)]">
           <div className="mx-auto max-w-[672px]">
             <h2 className={`${serif} text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>Pricing</h2>
             <PhotoPackage />
@@ -315,20 +315,20 @@ export default async function PortfolioPage({
         {newStyle && whySection}
 
         {/* Testimonial */}
-        <section data-section="testimonial" className="mt-[clamp(64px,9vw,104px)] bg-[#F9F4F1] px-4 py-[clamp(56px,8vw,88px)]">
+        <section data-section="testimonial" className="mt-[clamp(40px,6vw,64px)] bg-[#F9F4F1] px-4 py-[clamp(32px,5vw,52px)]">
           <figure className="mx-auto max-w-[720px] text-center">
             <div className="text-[26px] leading-none tracking-[0.12em] text-[#D67F1F]" role="img" aria-label="5 out of 5 stars">
               ★★★★★
             </div>
-            <blockquote className={`${serif} mt-5 text-[clamp(20px,2.5vw,26px)] leading-[1.5] font-normal text-pretty`}>
+            <blockquote className={`${serif} mt-4 text-[clamp(20px,2.5vw,26px)] leading-[1.5] font-normal text-pretty`}>
               <p>
                 “I can’t recommend Lukas enough! <strong className="font-bold">The photos for my listing were amazing</strong>, and he went
                 above and beyond. <strong className="font-bold">A talented and dependable photographer.</strong>”
               </p>
             </blockquote>
-            <figcaption className="mt-7 flex flex-col items-center gap-1">
-              <span className="text-base font-semibold">Serenity Thompson</span>
-              <span className="text-xs uppercase tracking-[0.2em] text-[#995000]">Oregon Live Homes</span>
+            <figcaption className="mt-5 flex flex-col items-center gap-1">
+              <span className="text-[clamp(20px,2.4vw,22px)] font-bold">Serenity Thompson</span>
+              <span className="text-sm font-semibold uppercase tracking-[0.18em] text-[#995000]">Oregon Live Homes</span>
               <a
                 href="https://maps.app.goo.gl/WMhhHxSnYozHLfBP8"
                 target="_blank"
