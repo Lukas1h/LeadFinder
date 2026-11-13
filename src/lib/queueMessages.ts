@@ -8,6 +8,7 @@
 // 50 Gemini calls is too slow to hold a request open for, and a pending row
 // can't be sent until its draft lands.
 
+import { marketFor, variantsForMarket } from "@/lib/markets";
 import { and, eq, inArray, isNotNull, lt, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -102,10 +103,15 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
     preset = row;
   }
   const ai = input.ai === true || preset?.aiGenerated === true;
-  let variants: { id: string; subject: string | null; body: string }[] = [];
+  let variants: { id: string; subject: string | null; body: string; market: string | null }[] = [];
   if (!ai && preset) {
     variants = await db
-      .select({ id: messagePresetVariants.id, subject: messagePresetVariants.subject, body: messagePresetVariants.body })
+      .select({
+        id: messagePresetVariants.id,
+        subject: messagePresetVariants.subject,
+        body: messagePresetVariants.body,
+        market: messagePresetVariants.market,
+      })
       .from(messagePresetVariants)
       .where(
         input.variantId
@@ -122,7 +128,16 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
   const listingIds = input.targets.map((t) => t.listingId).filter((id): id is string => !!id);
   const listingRows = listingIds.length
     ? await db
-        .select({ id: listings.id, address: listings.address, city: listings.city, agentId: listings.agentId })
+        .select({
+          id: listings.id,
+          address: listings.address,
+          city: listings.city,
+          state: listings.state,
+          lat: listings.lat,
+          lng: listings.lng,
+          geocodeSource: listings.geocodeSource,
+          agentId: listings.agentId,
+        })
         .from(listings)
         .where(inArray(listings.id, listingIds))
     : [];
@@ -184,7 +199,10 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
       continue;
     }
 
-    const variant = variants.length ? variants[index % variants.length] : null;
+    // A pinned variant goes out as picked; otherwise the rotation uses this
+    // listing's market variants when the template has them (lib/markets.ts).
+    const pool = input.variantId ? variants : variantsForMarket(variants, listing ? marketFor(listing) : null);
+    const variant = pool.length ? pool[index % pool.length] : null;
     const rawBody = variant?.body ?? input.body ?? "";
     const rawSubject = variant?.subject ?? input.subject ?? null;
     const sendAfter = new Date(start.getTime() + index * spacingMs);

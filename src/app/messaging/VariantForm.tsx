@@ -9,6 +9,7 @@ import { renderMessageBody, renderSubject } from "@/lib/messageTemplate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MARKET_LABELS, MARKET_ORDER } from "@/lib/markets";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -37,6 +38,7 @@ export function VariantForm({
   const [label, setLabel] = useState(variant?.label ?? "");
   const [subject, setSubject] = useState(variant?.subject ?? "");
   const [body, setBody] = useState(variant?.body ?? "");
+  const [market, setMarket] = useState<string>(variant?.market ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!variant;
@@ -48,8 +50,8 @@ export function VariantForm({
     setIsSubmitting(true);
 
     const result = isEditing
-      ? await updateVariant(variant.id, { label, body, subject: isEmail ? subject : undefined })
-      : await createVariant(presetId, { label, body, subject: isEmail ? subject : undefined });
+      ? await updateVariant(variant.id, { label, body, subject: isEmail ? subject : undefined, market: market || null })
+      : await createVariant(presetId, { label, body, subject: isEmail ? subject : undefined, market: market || null });
 
     setIsSubmitting(false);
 
@@ -94,6 +96,28 @@ export function VariantForm({
                 required
               />
             </div>
+
+            {!isEmail && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="variant-market">Market</Label>
+                <select
+                  id="variant-market"
+                  value={market}
+                  onChange={(e) => setMarket(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm"
+                >
+                  <option value="">All markets (regular wording)</option>
+                  {MARKET_ORDER.map((m) => (
+                    <option key={m} value={m}>
+                      {MARKET_LABELS[m]} only
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  A listing in a market with its own variants gets only those; everywhere else gets the regular ones.
+                </p>
+              </div>
+            )}
 
             {isEmail && (
               <div className="flex flex-col gap-1.5">

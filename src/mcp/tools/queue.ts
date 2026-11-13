@@ -30,7 +30,7 @@ export function registerQueueTools(server: McpServer): void {
     {
       title: "List message templates",
       description:
-        "Lists every enabled text (sms) or email template with its variants, for picking a presetId to pass to queue_messages. AI-draft presets (aiGenerated: true) have no variants — queueing with one drafts each message individually with AI. Placeholders {{firstName}}, {{street}}, {{city}}, {{area}} are filled in per recipient. leadSection/comingSoon say which listings a template is written for (leadSection may list several sections, comma-separated; comingSoon: true = coming soon listings only; sitting: true = a price cut in the last 30 days or 30+ days on market, false = fresh listings only).",
+        "Lists every enabled text (sms) or email template with its variants, for picking a presetId to pass to queue_messages. AI-draft presets (aiGenerated: true) have no variants — queueing with one drafts each message individually with AI. Placeholders {{firstName}}, {{street}}, {{city}}, {{area}} are filled in per recipient. leadSection/comingSoon say which listings a template is written for (leadSection may list several sections, comma-separated; comingSoon: true = coming soon listings only; a variant's market (e.g. \"portland\") means it is used only for listings in that market, which then skip the regular variants; sitting: true = a price cut in the last 30 days or 30+ days on market, false = fresh listings only).",
       inputSchema: { channel: z.enum(MESSAGE_CHANNELS).optional() },
     },
     async ({ channel }) => {
@@ -62,6 +62,8 @@ export function registerQueueTools(server: McpServer): void {
               label: messagePresetVariants.label,
               subject: messagePresetVariants.subject,
               body: messagePresetVariants.body,
+              // null = regular wording; "portland" etc. = used only for that market's listings (lib/markets.ts).
+              market: messagePresetVariants.market,
             })
             .from(messagePresetVariants)
             .where(

@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { MARKET_LABELS, type Market } from "@/lib/markets";
 import { presetSections } from "@/lib/presetSections";
 import {
   AlertDialog,
@@ -171,6 +172,11 @@ function VariantRow({
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-foreground">{variant.label}</span>
+            {variant.market && (
+              <Badge variant="outline" title="Only sent to listings in this market">
+                {MARKET_LABELS[variant.market as Market] ?? variant.market} only
+              </Badge>
+            )}
             {!variant.enabled && (
               <span className="text-xs text-muted-foreground">(archived)</span>
             )}

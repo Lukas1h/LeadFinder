@@ -209,3 +209,13 @@ export function listingDriveTime(place: MarketPlace): string | null {
   }
   return place.city ? estimateDriveTime(place.city) : null;
 }
+
+/**
+ * A template's variants for a listing in `market`: its own enabled variants
+ * for that market when it has any, else the regular ones (market null).
+ * Market-specific wording never reaches another market's agents.
+ */
+export function variantsForMarket<T extends { market: string | null }>(variants: T[], market: Market | null): T[] {
+  const own = market ? variants.filter((v) => v.market === market) : [];
+  return own.length > 0 ? own : variants.filter((v) => v.market == null);
+}

@@ -21,7 +21,7 @@ import {
   type MessageResult,
   type PresetType,
 } from "@/db/schema";
-import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { attachmentMetaSql, withContentTypes, type AttachmentMeta } from "@/lib/attachments";
 import { resolvePendingInteraction, startPendingInteraction } from "@/app/agents/interactionActions";
 import { revalidatePath } from "next/cache";
@@ -86,7 +86,15 @@ async function nextVariants(presetIds: string[]) {
       inlinePhotos: messagePresetVariants.inlinePhotos,
     })
     .from(messagePresetVariants)
-    .where(and(inArray(messagePresetVariants.presetId, presetIds), eq(messagePresetVariants.enabled, true)));
+    // Reply quick actions have no listing to place in a market, so they use
+    // the regular wording only (market variants: lib/markets.ts).
+    .where(
+      and(
+        inArray(messagePresetVariants.presetId, presetIds),
+        eq(messagePresetVariants.enabled, true),
+        isNull(messagePresetVariants.market)
+      )
+    );
   if (variants.length === 0) return new Map();
   const counts = await db
     .select({ variantId: messageSends.variantId, n: count() })

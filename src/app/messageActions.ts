@@ -1,5 +1,6 @@
 "use server";
 
+import { marketFor, variantsForMarket } from "@/lib/markets";
 import { clientOffices, officeClientFor, officeKey, sameArea } from "@/lib/clientOffices";
 import { db } from "@/db";
 import {
@@ -175,6 +176,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       variantId: messagePresetVariants.id,
       label: messagePresetVariants.label,
       body: messagePresetVariants.body,
+      market: messagePresetVariants.market,
     })
     .from(messagePresetVariants)
     .innerJoin(messagePresets, eq(messagePresetVariants.presetId, messagePresets.id))
@@ -217,7 +219,13 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
 
   // An office template is a false statement for anyone else, so it's only
   // offered when it fits. One written for this very office replaces the general one.
-  const groups = Array.from(rowsByPreset.values());
+  // Each template rotates through the variants written for this listing's
+  // market (Portland's "I do real estate photography…"), else its regular
+  // ones; a template with neither isn't offered (lib/markets.ts).
+  const listingMarket = marketFor(listing);
+  const groups = Array.from(rowsByPreset.values())
+    .map((group) => variantsForMarket(group, listingMarket))
+    .filter((group) => group.length > 0);
   const forThisOffice = (p: (typeof rows)[number]) =>
     officeClient != null &&
     officeKey(p.officeBrokerage) === officeKey(listing.brokerName) &&

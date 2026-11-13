@@ -187,7 +187,15 @@ Lisas), and one person can have a phone-only and an email-only record.
 ### Messages and contact history
 
 - `message_presets` / `message_preset_variants`: text and email templates,
-  A/B variants with `enabled`. Placeholders include `{{firstName}}`,
+  A/B variants with `enabled`. A variant's `market` (`local` / `regional` /
+  `portland`, null = regular wording) limits it to that market's listings: a
+  listing in a market whose template has enabled variants of its own rotates
+  through only those (`variantsForMarket`, `src/lib/markets.ts`), everyone else
+  gets the regular ones; reply quick actions and email use only regular ones.
+  Portland variants (2026-11-12): Backup Option "Portland A–D" and Bad Photos
+  "Portland A" ("I do real estate photography", no "some"; Bad Photos ends
+  "I'd love to get it shot as soon as possible for you!"). Set on the variant
+  form's Market field. Placeholders include `{{firstName}}`,
   `{{area}}`, `{{city}}`, `{{recentWork}}`, `{{portfolioLink}}` (`src/lib/messageTemplate.ts`;
   only in the "Portfolio link" template's second text). `{{area}}` uses the
   listing's city, else the agent's `home_city` in reply quick actions; with

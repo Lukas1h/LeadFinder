@@ -1032,6 +1032,12 @@ export const messagePresetVariants = pgTable("message_preset_variants", {
   subject: text("subject"),
   body: text("body").notNull(),
   enabled: boolean("enabled").notNull().default(true),
+  // The market this variant is written for (lib/markets.ts: local, regional,
+  // portland); null = the template's regular wording. A listing in a market
+  // that has enabled variants of its own rotates through only those; every
+  // other listing rotates through the regular ones. Lets Portland say "I do
+  // real estate photography in the Portland area" while stats stay per template.
+  market: text("market"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   // Email only, and the one case where an email isn't plain text: see
   // VariantInlinePhotos and lib/emailPhotos.ts. Null for every other variant.

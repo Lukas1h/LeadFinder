@@ -12,7 +12,7 @@ import {
   type Listing,
   type Agent,
 } from "@/db/schema";
-import { and, count, eq, sum } from "drizzle-orm";
+import { and, count, eq, isNull, sum } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
   DEFAULT_COLD_EMAIL_SUBJECT,
@@ -141,6 +141,8 @@ export async function getComposeEmailOptions(listingContext?: {
     eq(messagePresets.enabled, true),
     eq(messagePresets.aiGenerated, false),
     eq(messagePresetVariants.enabled, true),
+    // Market variants (lib/markets.ts) are written for texts; email keeps the regular wording.
+    isNull(messagePresetVariants.market),
   ];
   if (listingContext) conditions.push(eq(messagePresets.type, listingContext.type));
 

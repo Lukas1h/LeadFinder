@@ -1,5 +1,6 @@
 "use server";
 
+import { parseMarket } from "@/lib/markets";
 import { db } from "@/db";
 import {
   messagePresets,
@@ -129,7 +130,7 @@ export async function deletePreset(id: string) {
 
 export async function createVariant(
   presetId: string,
-  input: { label: string; body: string; subject?: string }
+  input: { label: string; body: string; subject?: string; market?: string | null }
 ) {
   const label = input.label.trim();
   const body = input.body.trim();
@@ -143,12 +144,15 @@ export async function createVariant(
     .where(eq(messagePresets.id, presetId));
   if (preset?.channel === "email" && !subject) return { error: "Subject is required for email" };
 
-  await db.insert(messagePresetVariants).values({ presetId, label, body, subject });
+  await db.insert(messagePresetVariants).values({ presetId, label, body, subject, market: parseMarket(input.market) });
   revalidatePath("/messaging");
   return { error: null };
 }
 
-export async function updateVariant(id: string, input: { label: string; body: string; subject?: string }) {
+export async function updateVariant(
+  id: string,
+  input: { label: string; body: string; subject?: string; market?: string | null }
+) {
   const label = input.label.trim();
   const body = input.body.trim();
   const subject = input.subject?.trim() || null;
@@ -169,7 +173,8 @@ export async function updateVariant(id: string, input: { label: string; body: st
 
   await db
     .update(messagePresetVariants)
-    .set({ label, body, subject })
+    // Left out (the phone's editor) keeps the variant's market as it is.
+    .set({ label, body, subject, ...(input.market !== undefined ? { market: parseMarket(input.market) } : {}) })
     .where(eq(messagePresetVariants.id, id));
   revalidatePath("/messaging");
   return { error: null };
@@ -249,7 +254,7 @@ export interface PresetSummary {
   quickActionPresetIds: string[];
   quickActionOnly: boolean;
   attachments: AttachmentMeta[];
-  variants: { id: string; label: string; subject: string | null; body: string; enabled: boolean }[];
+  variants: { id: string; label: string; subject: string | null; body: string; enabled: boolean; market: string | null }[];
 }
 
 /** Every template that isn't archived, oldest first, with its variants. */
@@ -280,6 +285,7 @@ export async function listPresets(): Promise<PresetSummary[]> {
         subject: messagePresetVariants.subject,
         body: messagePresetVariants.body,
         enabled: messagePresetVariants.enabled,
+        market: messagePresetVariants.market,
       })
       .from(messagePresetVariants)
       .orderBy(messagePresetVariants.createdAt),
