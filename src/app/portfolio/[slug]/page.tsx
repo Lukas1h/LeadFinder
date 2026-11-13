@@ -288,15 +288,19 @@ export default async function PortfolioPage({
                     Quick edit of what your listing could look like
                   </div>
                 </div>
-                <PhotoGrid photos={gridTop} desktopRows={1} className="mt-2 sm:mt-3" />
+                {!newStyle && <PhotoGrid photos={gridTop} desktopRows={1} className="mt-2 sm:mt-3" />}
                 <div className="h-2 sm:h-3" />
               </>
             )}
             <div data-section="video">
               {newStyle ? <LoopVideo src={video.mp4} poster={video.poster} title={video.title} /> : <MutableVideo id={video.id} title={video.title} />}
             </div>
-            <PhotoGrid photos={gridBottom} desktopRows={2} className="mt-2 sm:mt-3" />
-            {featureLast && (
+            {newStyle ? (
+              <FullGallery />
+            ) : (
+              <PhotoGrid photos={gridBottom} desktopRows={2} className="mt-2 sm:mt-3" />
+            )}
+            {!newStyle && featureLast && (
               // eslint-disable-next-line @next/next/no-img-element -- static sample photo
               <img
                 src={featureLast.src}
@@ -638,6 +642,37 @@ function PhotoPackage() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * New-style pages: every portfolio photo, laid out like the main website —
+ * full-width photos opening, splitting and closing two grids of eight (two
+ * columns on a phone, four on desktop, so rows are always full). Uses
+ * AGENT_PAGE_PHOTOS in its own order; the per-link lead photo doesn't apply.
+ */
+function FullGallery() {
+  const p = AGENT_PAGE_PHOTOS;
+  const wide = (photo: AgentPagePhoto) => (
+    // eslint-disable-next-line @next/next/no-img-element -- static portfolio photo
+    <img key={photo.key} src={photo.src} alt={photo.alt} loading="lazy" className="mt-2 aspect-[3/2] w-full bg-[#F9F4F1] object-cover sm:mt-3" />
+  );
+  const grid = (photos: AgentPagePhoto[]) => (
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:gap-3 lg:grid-cols-4">
+      {photos.map((photo) => (
+        // eslint-disable-next-line @next/next/no-img-element -- static portfolio photo
+        <img key={photo.key} src={photo.src} alt={photo.alt} loading="lazy" className="aspect-[3/2] w-full bg-[#F9F4F1] object-cover" />
+      ))}
+    </div>
+  );
+  return (
+    <div data-section="photos">
+      {wide(p[0])}
+      {grid(p.slice(1, 9))}
+      {wide(p[9])}
+      {grid(p.slice(10, 18))}
+      {p.slice(18).map(wide)}
     </div>
   );
 }

@@ -431,7 +431,8 @@ next listing comes up (usually 1–4 weeks after first contact).
   block replaces the cards once `LUKAS_PHOTO` in `src/lib/agentPage.ts` is set
   (off until Lukas adds a headshot and bio). On both styles the footer and the
   vCard (`lukasVcard`) say Portland when `isPortlandArea(content.area)`.
-- Portfolio photos on every agent page: `public/agent-page/pf-01…pf-20.jpg`,
+- Portfolio photos on every agent page: `public/agent-page/pf-01…pf-20.jpg`
+  (new style shows all 20 in the website's layout, `FullGallery`; the original shows 6),
   Lukas's 2026-11-12 set in the main website's order. Card carousels preload
   every photo after the first loads, so the arrows flip instantly.
 
