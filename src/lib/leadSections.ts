@@ -13,6 +13,7 @@
 
 import { and, eq, inArray, max } from "drizzle-orm";
 import { db } from "@/db";
+import { marketFor } from "@/lib/markets";
 import { agentInteractions, agents, listings, messageSends, type Listing } from "@/db/schema";
 
 export type LeadSection = "photo" | "video" | "backup" | "texted" | "unlikely";
@@ -67,6 +68,9 @@ export interface LeadSectionInput {
   agentName?: string | null;
   agentPhone?: string | null;
   brokerName?: string | null;
+  /** Where the listing is, for rules that apply in one market only (lib/markets.ts). */
+  city?: string | null;
+  state?: string | null;
   /** The attached agent's relationship status, when one is resolved. */
   relationshipStatus?: string | null;
   listedAt?: Date | null;
@@ -130,6 +134,24 @@ export function hasInHouseMedia(brokerName: string | null | undefined): boolean 
   return !!brokerName && IN_HOUSE_MEDIA_BROKER.test(brokerName);
 }
 
+/**
+ * Berkshire Hathaway HomeServices NW Real Estate in Portland assigns its
+ * agents a photographer from the main office (Lukas, 2026-11-12, after
+ * texting Tim Sellers), so its Portland-market listings are Unlikely. Only
+ * the Portland market: the same company's coast office (Netarts) and other
+ * Berkshire Hathaway franchises aren't known to work that way. Unlike
+ * hasInHouseMedia, these still sync in; they just aren't pitched.
+ */
+const PORTLAND_ASSIGNED_MEDIA_BROKER = /\bberkshire hathaway home\s?services (nw|northwest)\b/i;
+
+export function hasAssignedMediaInMarket(listing: Pick<LeadSectionInput, "brokerName" | "city" | "state">): boolean {
+  return (
+    !!listing.brokerName &&
+    PORTLAND_ASSIGNED_MEDIA_BROKER.test(listing.brokerName) &&
+    marketFor({ city: listing.city ?? null, state: listing.state }) === "portland"
+  );
+}
+
 /** Texted or called inside the last LEAD_RECENT_CONTACT_DAYS. */
 export function isRecentlyTexted(lastTextedAt: Date | null | undefined): boolean {
   const age = daysSince(lastTextedAt);
@@ -142,6 +164,7 @@ export function isLeadUnlikely(listing: LeadSectionInput): boolean {
   if (hasNoAgent(listing)) return true;
   if (isBuilderListing(listing.brokerName)) return true;
   if (hasInHouseMedia(listing.brokerName)) return true;
+  if (hasAssignedMediaInMarket(listing)) return true;
   return listing.relationshipStatus === "declined";
 }
 
@@ -224,6 +247,8 @@ export async function refreshLeadSections(ids: string[]): Promise<Map<string, Le
       agentName: listings.agentName,
       agentPhone: listings.agentPhone,
       brokerName: listings.brokerName,
+      city: listings.city,
+      state: listings.state,
       listedAt: listings.listedAt,
       priceCutAt: listings.priceCutAt,
       resurfacedAt: listings.resurfacedAt,

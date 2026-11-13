@@ -133,6 +133,13 @@ contacted onward.
 Priorities: weak photos first, no video second. Don't chase luxury with price
 floors.
 
+Unlikely (`isLeadUnlikely` in `src/lib/leadSections.ts`): under the price
+floor, no agent, a builder, Redfin (books its own media; not even synced), a
+declined agent, and Berkshire Hathaway HomeServices NW Real Estate listings in
+the Portland market (`hasAssignedMediaInMarket`: that office assigns its agents
+a photographer, learned from Tim Sellers 2026-11-12; its Eugene/Florence
+listings and the Netarts office are unaffected).
+
 Map positions: `listings` and `bookings` both have `lat`, `lng`,
 `geocoded_at`, `geocode_source` (`census`, `osm`, or `osm_street` = matched
 only the street, not the house, so not used for distance; `geocoded_at` set
