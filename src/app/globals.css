@@ -146,3 +146,13 @@ body {
     @apply font-sans;
   }
 }
+/* Agent page video (LoopVideo): never show the browser's own player UI —
+   iOS Safari draws a big play button when it blocks autoplay (Low Power Mode). */
+video.bare-video::-webkit-media-controls,
+video.bare-video::-webkit-media-controls-panel,
+video.bare-video::-webkit-media-controls-overlay-play-button,
+video.bare-video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
+  opacity: 0 !important;
+}

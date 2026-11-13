@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PortfolioListing } from "@/db/schema";
 
 /**
@@ -68,12 +68,33 @@ const arrowButton =
 /**
  * The new-style page's video: a plain muted, looping, inline <video> of the
  * self-hosted file, so there's no YouTube title bar, logo or play button at
- * any point. The poster shows until the first frame is ready.
+ * any point. The poster shows until the first frame is ready. If the
+ * browser blocks autoplay (iOS Low Power Mode), its play button is hidden
+ * (globals.css, .bare-video) and playback is retried on the first touch or
+ * scroll, so the poster just sits there as a photo until then.
  */
 export function LoopVideo({ src, poster, title }: { src: string; poster: string; title: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    const tryPlay = () => {
+      v.muted = true;
+      v.play().catch(() => {});
+    };
+    tryPlay();
+    const events = ["touchstart", "scroll", "click"] as const;
+    const onFirst = () => {
+      tryPlay();
+      if (!v.paused) events.forEach((e) => window.removeEventListener(e, onFirst));
+    };
+    events.forEach((e) => window.addEventListener(e, onFirst, { passive: true }));
+    return () => events.forEach((e) => window.removeEventListener(e, onFirst));
+  }, []);
   return (
     <div className="relative aspect-video w-full overflow-hidden bg-[#F9F4F1]">
       <video
+        ref={ref}
         src={src}
         poster={poster}
         title={title}
@@ -84,7 +105,8 @@ export function LoopVideo({ src, poster, title }: { src: string; poster: string;
         preload="auto"
         disablePictureInPicture
         disableRemotePlayback
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+        className="bare-video pointer-events-none absolute inset-0 h-full w-full object-cover"
+        controls={false}
       />
     </div>
   );
