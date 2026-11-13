@@ -58,6 +58,7 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
   const [leadPhoto, setLeadPhoto] = useState(c.leadPhoto ?? AGENT_PAGE_PHOTOS[0].key);
   const [showTourOfHomes, setShowTourOfHomes] = useState(c.showTourOfHomes ?? true);
   const [showOffer, setShowOffer] = useState(c.showOffer ?? true);
+  const [newStyle, setNewStyle] = useState(c.newStyle ?? false);
   const [beforeSrc, setBeforeSrc] = useState<string | null>(c.beforeAfter ? (c.beforeSrc ?? null) : null);
   const [afterSrc, setAfterSrc] = useState<string | null>(c.beforeAfter ? (c.afterSrc ?? null) : null);
   const [ogImage, setOgImage] = useState<string | null>(c.ogImage ?? null);
@@ -125,6 +126,7 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
         leadPhoto,
         showTourOfHomes,
         showOffer,
+        newStyle,
         // Only the after is needed: on its own it's shown against a dulled copy of itself.
         beforeAfter: Boolean(afterSrc),
         beforeSrc: afterSrc ? beforeSrc : null,
@@ -305,6 +307,10 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={showOffer} onChange={(e) => setShowOffer(e.target.checked)} />
           Show the $50-off first shoot offer
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={newStyle} onChange={(e) => setNewStyle(e.target.checked)} />
+          New style (listings first, outcome tiles, no hero discount or sound button, pricing last)
         </label>
       </section>
 

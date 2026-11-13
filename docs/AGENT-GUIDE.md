@@ -417,13 +417,16 @@ next listing comes up (usually 1–4 weeks after first contact).
   from admin-only `/api/bookings/[id]/photo`). Null = 10 photos spread evenly
   across the gallery (`src/lib/listingCardPhotos.ts`); picks no longer in the
   folder are skipped.
-- Agent page layout (2026-11-12): hero (no discount) → portfolio video and
-  photos (video muted, no sound button) → recent listings → three tiles
-  (available same/next day, in and out in 45 minutes with photos in 24 hours,
-  real edits with no AI) → testimonial → "Hi, I'm Lukas" block (headshot from
-  `LUKAS_PHOTO` in `src/lib/agentPage.ts`, Save my contact, Book a shoot, the
-  $50 line when `showOffer`) → pricing last. Footer and the vCard
-  (`lukasVcard`) say Portland when `isPortlandArea(content.area)`.
+- Agent page styles: `content.newStyle` (the **New style** checkbox in the
+  link builder; off by default, and every link sent before 2026-11-12 stays
+  on the original page). New style: hero with no discount → portfolio video
+  (no sound button) and photos → recent listings → outcome tiles (available
+  same/next day, in and out in 45 minutes with photos in 24 hours, real
+  edits with no AI) → testimonial → the Save contact / Book a shoot cards →
+  pricing last. A "Hi, I'm Lukas" block replaces those cards once
+  `LUKAS_PHOTO` in `src/lib/agentPage.ts` is set (off until Lukas adds a
+  headshot and bio). On both styles the footer and the vCard (`lukasVcard`)
+  say Portland when `isPortlandArea(content.area)`.
 
 ### Finances
 

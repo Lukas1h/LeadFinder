@@ -579,6 +579,8 @@ export interface PortfolioContent {
   leadPhoto?: string | null;
   showTourOfHomes?: boolean;
   showOffer?: boolean;
+  /** The 2026-11-12 layout: listings first, outcome tiles, no hero discount or sound button, pricing last. Off = the original page, unchanged. */
+  newStyle?: boolean;
   /** Before/after split at the top (video becomes the second hero). With no beforeSrc, the after photo is shown dulled as a fake "before". */
   beforeAfter?: boolean;
   /** /api/portfolio-image/<id> (an upload) or any image URL. */
