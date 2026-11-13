@@ -12,7 +12,7 @@ import { notifyPortfolioView } from "@/lib/push";
 import { PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
 import { LUKAS_PHONE as PHONE } from "@/lib/agentVcard";
 import { parseUserAgent } from "@/lib/galleryViews";
-import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
+import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, isPortlandArea, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { BeforeAfterSlider, ListingCard, MutableVideo } from "./client";
 import { PageTracker } from "./tracker";
 
@@ -178,17 +178,6 @@ export default async function PortfolioPage({
               Real estate photo &amp; video in <span className="text-[#D67F1F]">{area}</span>
             </h1>
             <p className="mt-4 text-[clamp(17px,2vw,20px)] text-[#181A1C]/75">Cinematic media that sells listings quicker.</p>
-            {showOffer && (
-              <a
-                href={bookHref}
-                data-track="book_shoot"
-                data-track-detail="$50 off (top)"
-                className="mt-5 inline-flex items-baseline gap-2.5 bg-[#F9F4F1] px-5 py-2.5 text-[#181A1C] hover:bg-[#F3EAE3]"
-              >
-                <span className={`${serif} text-base font-bold text-[#D67F1F]`}>$50 off</span>
-                <span className="text-base font-medium">your first shoot</span>
-              </a>
-            )}
             <p className="mt-4 max-w-[420px] text-[15px] leading-[1.5] text-pretty text-[#181A1C]/72">
               <span className="font-semibold text-[#181A1C]">Every shoot guaranteed.</span> Not happy with the images? I reshoot at no cost.
             </p>
@@ -235,31 +224,48 @@ export default async function PortfolioPage({
           </div>
         </section>
 
+        {/* Recent listings */}
+        {listings.length > 0 && (
+          <section data-section="listings" className="px-4 pt-[clamp(56px,8vw,88px)]">
+            <div className="mx-auto max-w-[1040px]">
+              <h2 className={`${serif} mb-[clamp(32px,5vw,48px)] text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>
+                Recent listings near {area}
+              </h2>
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-4">
+                {/* The cards' photos come from Dropbox, so they stream in after the rest of the page. */}
+                <Suspense fallback={listings.map((l) => <ListingCard key={l.bookingId} listing={{ ...l, photos: [] }} />)}>
+                  <ListingCards slug={slug} listings={listings} />
+                </Suspense>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Why Hahn Media */}
         <section data-section="why" className="px-4 pt-[clamp(56px,8vw,88px)]">
           <div className="mx-auto grid max-w-[1040px] grid-cols-1 bg-[#F9F4F1] md:grid-cols-3 text-center">
             {[
               {
-                title: "Quick turnaround",
+                title: "Available when yours isn’t",
                 body: (
                   <>
-                    Shot within a day or two of booking. Photos delivered in <b>24 hours</b>.
+                    Usually free <b>same or next day</b>, so a booked-up photographer never holds your listing back.
                   </>
                 ),
               },
               {
-                title: "Edited by hand, not AI",
+                title: "In and out in 45 minutes",
                 body: (
                   <>
-                    Every photo is edited in house by a <b>real person</b>.
+                    Barely an interruption for your sellers. Photos back in <b>24 hours</b>.
                   </>
                 ),
               },
               {
-                title: "Licensed and insured",
+                title: "Real edits, no AI",
                 body: (
                   <>
-                    <b>FAA Part 107</b> certified drone pilot, fully <b>insured</b>. Your listing and your brokerage are covered.
+                    Every photo edited by hand by a <b>real person</b>. No warped lines, fake skies or AI artefacts.
                   </>
                 ),
               },
@@ -274,23 +280,6 @@ export default async function PortfolioPage({
             ))}
           </div>
         </section>
-
-        {/* Recent listings */}
-        {listings.length > 0 && (
-          <section data-section="listings" className="px-4 pt-[clamp(64px,9vw,104px)]">
-            <div className="mx-auto max-w-[1040px]">
-              <h2 className={`${serif} mb-[clamp(32px,5vw,48px)] text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>
-                Recent listings near {area}
-              </h2>
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-4">
-                {/* The cards' photos come from Dropbox, so they stream in after the rest of the page. */}
-                <Suspense fallback={listings.map((l) => <ListingCard key={l.bookingId} listing={{ ...l, photos: [] }} />)}>
-                  <ListingCards slug={slug} listings={listings} />
-                </Suspense>
-              </div>
-            </div>
-          </section>
-        )}
 
         {/* Testimonial */}
         <section data-section="testimonial" className="mt-[clamp(64px,9vw,104px)] bg-[#F9F4F1] px-4 py-[clamp(56px,8vw,88px)]">
@@ -320,8 +309,57 @@ export default async function PortfolioPage({
           </figure>
         </section>
 
+        {/* About */}
+        <section id="about" data-section="about" className="px-4 pt-[clamp(64px,9vw,104px)]">
+          <div className="mx-auto flex max-w-[880px] flex-col items-center gap-8 sm:flex-row sm:gap-10">
+            {LUKAS_PHOTO && (
+              // eslint-disable-next-line @next/next/no-img-element -- static headshot
+              <img
+                src={LUKAS_PHOTO}
+                alt="Lukas Hahn"
+                loading="lazy"
+                className="size-32 shrink-0 rounded-full object-cover sm:size-40"
+              />
+            )}
+            <div className={`text-center ${LUKAS_PHOTO ? "sm:text-left" : ""}`}>
+              <h2 className={`${serif} text-[clamp(28px,4vw,38px)] font-bold tracking-[-0.02em]`}>Hi, I’m Lukas.</h2>
+              <p className="mt-4 text-base leading-[1.55] text-pretty text-[#181A1C]/78">
+                I run Hahn Media: photo, video and drone for listings around {area}. Most agents keep me as their backup: when your usual
+                photographer is booked or you need a listing live fast, I’m one text away.
+              </p>
+              <p className="mt-3 text-sm text-[#181A1C]/62">FAA Part 107 certified drone pilot, fully insured.</p>
+              <div className={`mt-6 flex flex-wrap justify-center gap-3 ${LUKAS_PHOTO ? "sm:justify-start" : ""}`}>
+                <a
+                  href={`/api/portfolio/${slug}/vcard`}
+                  data-track="save_contact"
+                  data-track-detail="about"
+                  className="inline-flex min-h-14 items-center border border-[#181A1C] bg-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-white hover:bg-white hover:text-[#181A1C]"
+                >
+                  Save my contact
+                </a>
+                <a
+                  href={bookHref}
+                  data-track="book_shoot"
+                  data-track-detail="Book a shoot (about)"
+                  className="inline-flex min-h-14 items-center border border-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-[#181A1C] hover:bg-[#181A1C] hover:text-white"
+                >
+                  Book a shoot
+                </a>
+              </div>
+              {showOffer && <p className="mt-3 text-sm text-[#995000]">Your first shoot is $50 off.</p>}
+              {firstName && (
+                <p className={`${serif} mt-10 text-xl italic leading-normal`}>
+                  Thanks for taking a look, {firstName}. Talk soon!
+                  <br />
+                  <span className="font-[family-name:var(--font-portfolio-sans)] text-[15px] not-italic text-[#181A1C]/70">— Lukas</span>
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
         {/* Pricing */}
-        <section id="pricing" data-section="pricing" className="px-4 pt-[clamp(64px,9vw,104px)]">
+        <section id="pricing" data-section="pricing" className="px-4 pt-[clamp(64px,9vw,104px)] pb-[clamp(80px,11vw,128px)]">
           <div className="mx-auto max-w-[672px]">
             <h2 className={`${serif} text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>Pricing</h2>
             <div className="mt-[clamp(28px,4vw,40px)] border-t border-[#181A1C]/15">
@@ -346,59 +384,13 @@ export default async function PortfolioPage({
             </div>
           </div>
         </section>
-
-        {/* Book */}
-        <section id="book" data-section="book" className="px-4 pt-[clamp(72px,10vw,120px)] pb-[clamp(80px,11vw,128px)]">
-          <div className="mx-auto max-w-[880px]">
-            <h2
-              className={`${serif} mb-[clamp(32px,5vw,48px)] text-center text-[clamp(30px,4.4vw,44px)] font-bold leading-[1.15] tracking-[-0.02em] text-balance text-[#D67F1F]`}
-            >
-              Let’s work on your next listing.
-            </h2>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-4">
-              <div className="flex flex-col items-start bg-[#F9F4F1] p-[clamp(28px,4vw,40px)]">
-                <h3 className={`${serif} text-[26px] font-bold`}>No listing right now?</h3>
-                <p className="mt-2.5 mb-6 text-base leading-[1.55] text-pretty text-[#181A1C]/78">
-                  Save my contact so I’m one tap away when your next one comes up.
-                </p>
-                <a
-                  href={`/api/portfolio/${slug}/vcard`}
-                  data-track="save_contact"
-                  data-track-detail="bottom"
-                  className="mt-auto inline-flex min-h-14 items-center border border-[#181A1C] bg-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-white hover:bg-white hover:text-[#181A1C]"
-                >
-                  Save my contact
-                </a>
-              </div>
-              <div className="flex flex-col items-start border border-[#181A1C]/15 p-[clamp(28px,4vw,40px)]">
-                <h3 className={`${serif} text-[26px] font-bold`}>Have a listing?</h3>
-                <p className="mt-2.5 mb-6 text-base leading-[1.55] text-pretty text-[#181A1C]/78">Your first shoot is $50 off.</p>
-                <a
-                  href={bookHref}
-                  data-track="book_shoot"
-                  data-track-detail="Book a shoot (bottom)"
-                  className="mt-auto inline-flex min-h-14 items-center border border-[#181A1C] px-8 text-[13px] font-medium uppercase tracking-[0.3em] text-[#181A1C] hover:bg-[#181A1C] hover:text-white"
-                >
-                  Book a shoot
-                </a>
-              </div>
-            </div>
-            {firstName && (
-              <p className={`${serif} mt-12 text-center text-xl italic leading-normal`}>
-                Thanks for taking a look, {firstName}. Talk soon!
-                <br />
-                <span className="font-[family-name:var(--font-portfolio-sans)] text-[15px] not-italic text-[#181A1C]/70">— Lukas</span>
-              </p>
-            )}
-          </div>
-        </section>
       </main>
       {!preview && <PageTracker slug={slug} />}
 
       <footer className="border-t border-[#181A1C]/10 px-4 py-7">
         <div className="mx-auto flex max-w-[1152px] flex-wrap justify-between gap-x-6 gap-y-2 text-[13px] text-[#181A1C]/62">
           <span>Hahn Media · Lukas Hahn</span>
-          <span>Eugene &amp; Roseburg, Oregon</span>
+          <span>{isPortlandArea(c.area) ? "Portland, Oregon" : "Eugene & Roseburg, Oregon"}</span>
         </div>
       </footer>
     </div>
@@ -408,14 +400,14 @@ export default async function PortfolioPage({
 /** Each card with its photos (lib/listingCardPhotos.ts), served through the slug-scoped photo route. */
 async function ListingCards({ slug, listings }: { slug: string; listings: PortfolioListing[] }) {
   const rows = await db
-    .select({ id: bookings.id, link: bookings.dropboxFolderLink })
+    .select({ id: bookings.id, link: bookings.dropboxFolderLink, highlights: bookings.highlightPhotos })
     .from(bookings)
     .where(inArray(bookings.id, listings.map((l) => l.bookingId)));
-  const links = new Map(rows.map((r) => [r.id, r.link]));
+  const byId = new Map(rows.map((r) => [r.id, r]));
   const cards = await Promise.all(
     listings.map(async (l) => {
-      const link = links.get(l.bookingId);
-      const names = link ? await listingCardPhotoNames(link).catch(() => []) : [];
+      const row = byId.get(l.bookingId);
+      const names = row?.link ? await listingCardPhotoNames(row.link, row.highlights).catch(() => []) : [];
       return {
         ...l,
         photos: names.map((name) => `/api/portfolio/${slug}/listing-photo?bookingId=${l.bookingId}&name=${encodeURIComponent(name)}`),

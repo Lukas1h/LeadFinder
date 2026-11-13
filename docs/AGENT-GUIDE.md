@@ -411,6 +411,19 @@ next listing comes up (usually 1–4 weeks after first contact).
   `/api/site-listings/photo` (only jobs currently shown). The `lukashahnart`
   project's home page fetches it from `r.lukashahn.media` every 5 minutes
   (`app/(real-estate)/RecentListings.tsx`) and hides the section when empty.
+- Card photos (agent pages and the website alike): `bookings.highlight_photos`
+  (Dropbox file names, in order, max 10), picked with **Highlight photos** in
+  the booking dialog (`src/app/booked/HighlightPhotosButton.tsx`, thumbnails
+  from admin-only `/api/bookings/[id]/photo`). Null = 10 photos spread evenly
+  across the gallery (`src/lib/listingCardPhotos.ts`); picks no longer in the
+  folder are skipped.
+- Agent page layout (2026-11-12): hero (no discount) → portfolio video and
+  photos (video muted, no sound button) → recent listings → three tiles
+  (available same/next day, in and out in 45 minutes with photos in 24 hours,
+  real edits with no AI) → testimonial → "Hi, I'm Lukas" block (headshot from
+  `LUKAS_PHOTO` in `src/lib/agentPage.ts`, Save my contact, Book a shoot, the
+  $50 line when `showOffer`) → pricing last. Footer and the vCard
+  (`lukasVcard`) say Portland when `isPortlandArea(content.area)`.
 
 ### Finances
 

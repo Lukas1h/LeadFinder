@@ -21,11 +21,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const referenced = link?.content.listings?.some((l) => l.bookingId === bookingId);
   if (!referenced) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const [booking] = await db.select({ dropboxFolderLink: bookings.dropboxFolderLink }).from(bookings).where(eq(bookings.id, bookingId));
+  const [booking] = await db.select({ dropboxFolderLink: bookings.dropboxFolderLink, highlightPhotos: bookings.highlightPhotos }).from(bookings).where(eq(bookings.id, bookingId));
   if (!booking?.dropboxFolderLink) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Only the photos that card actually shows, never an arbitrary file from the folder.
-  const [{ photos }, shown] = await Promise.all([listGalleryMedia(booking.dropboxFolderLink), listingCardPhotoNames(booking.dropboxFolderLink)]);
+  const [{ photos }, shown] = await Promise.all([listGalleryMedia(booking.dropboxFolderLink), listingCardPhotoNames(booking.dropboxFolderLink, booking.highlightPhotos)]);
   const photo = shown.includes(name) ? photos.find((p) => p.name === name) : undefined;
   if (!photo) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

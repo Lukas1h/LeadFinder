@@ -17,6 +17,8 @@ import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { getOrAssignInvoiceNumber } from "@/lib/invoice";
 import { cancelSquareInvoice, syncSquareInvoice } from "@/lib/squareInvoice";
+import { listGalleryMedia } from "@/lib/dropbox";
+import { CARD_PHOTOS, listingCardPhotoNames } from "@/lib/listingCardPhotos";
 import type { BookingWithDetails } from "./BookedList";
 
 export interface BookingLineItemInput {
@@ -416,6 +418,34 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
 /** Hides or shows "Pay online" on the booking's gallery and invoice. */
 export async function setHidePayOnline(bookingId: string, hidden: boolean): Promise<void> {
   await db.update(bookings).set({ hidePayOnline: hidden }).where(eq(bookings.id, bookingId));
+  revalidatePath("/booked");
+}
+
+/**
+ * For the "Highlight photos" picker: every delivered photo in the booking's
+ * Dropbox folder, the ones it has picked, and what its card shows now.
+ */
+export async function getBookingHighlightPhotos(
+  bookingId: string
+): Promise<{ photos: string[]; picked: string[]; shown: string[] } | { error: string }> {
+  const [booking] = await db
+    .select({ link: bookings.dropboxFolderLink, highlights: bookings.highlightPhotos })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId));
+  if (!booking?.link) return { error: "This booking has no gallery folder yet." };
+  try {
+    const [{ photos }, shown] = await Promise.all([listGalleryMedia(booking.link), listingCardPhotoNames(booking.link, booking.highlights)]);
+    return { photos: photos.map((p) => p.name), picked: booking.highlights ?? [], shown };
+  } catch (err) {
+    console.error("highlight photos: listing the folder failed", err);
+    return { error: "Couldn't read the Dropbox folder." };
+  }
+}
+
+/** Saves the photos (in order) this booking's "Recent listings" card shows; empty = back to the automatic spread. */
+export async function setBookingHighlightPhotos(bookingId: string, names: string[]): Promise<void> {
+  const clean = [...new Set(names.filter((n) => typeof n === "string" && n.length > 0))].slice(0, CARD_PHOTOS);
+  await db.update(bookings).set({ highlightPhotos: clean.length ? clean : null }).where(eq(bookings.id, bookingId));
   revalidatePath("/booked");
 }
 

@@ -452,6 +452,11 @@ export const bookings = pgTable("bookings", {
   // photo as a hero. Its own token so its visits log separately (share_view)
   // and it can't be used to reach the invoice. Assigned on first use.
   shareToken: text("share_token").unique(),
+  // The delivered photos (file names in the Dropbox folder, in order) its
+  // "Recent listings" card shows on agent pages and the main website, picked
+  // under "Highlight photos" on the booking. Null/empty = spread evenly
+  // across the gallery (lib/listingCardPhotos.ts).
+  highlightPhotos: text("highlight_photos").array(),
   // Shows "Request virtual staging" on the client gallery — off unless
   // Lukas turns it on for this booking (BookingDetailDialog).
   stagingRequestsEnabled: boolean("staging_requests_enabled").notNull().default(false),

@@ -9,6 +9,7 @@ import { CompleteBookingDialog } from "./CompleteBookingDialog";
 import { BookingMoney } from "./BookingMoney";
 import { BookingForm } from "./BookingForm";
 import { ShareGalleryButton, GalleryLinkButton, HidePayOnlineButton, PaymentLinkButton, StagingToggleButton } from "./GallerySection";
+import { HighlightPhotosButton } from "./HighlightPhotosButton";
 import { GalleryActivity } from "./GalleryActivity";
 import { AirspaceSection } from "./AirspaceSection";
 import { ListingRow } from "@/app/ListingRow";
@@ -154,6 +155,7 @@ export function BookingDetailDialog({
           <PaymentLinkButton booking={booking} />
           <HidePayOnlineButton booking={booking} />
           <StagingToggleButton booking={booking} />
+          <HighlightPhotosButton booking={booking} />
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
             <Pencil />
             Edit

@@ -5,55 +5,20 @@ import type { PortfolioListing } from "@/db/schema";
 
 /**
  * Autoplaying, looping, muted YouTube embed with no controls (pointer events
- * off, so it reads as footage rather than a player) and one "Sound on" button,
- * driven over the IFrame API's postMessage commands (needs enablejsapi=1).
+ * off, so it reads as footage rather than a player). It never makes a sound,
+ * so there's nothing to unmute.
  */
 export function MutableVideo({ id, title }: { id: string; title: string }) {
-  const frame = useRef<HTMLIFrameElement>(null);
-  const [muted, setMuted] = useState(true);
-
-  const cmd = (func: string, args: unknown[] = []) =>
-    frame.current?.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "*");
-
-  const toggle = () => {
-    if (muted) {
-      cmd("unMute");
-      cmd("setVolume", [100]);
-    } else {
-      cmd("mute");
-    }
-    setMuted(!muted);
-  };
-
-  const src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&playsinline=1&enablejsapi=1`;
+  const src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&loop=1&playlist=${id}&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&playsinline=1`;
 
   return (
     <div className="relative aspect-video w-full overflow-hidden bg-[#F9F4F1]">
       <iframe
-        ref={frame}
         src={src}
         title={title}
         allow="autoplay; encrypted-media; picture-in-picture"
         className="pointer-events-none absolute inset-0 h-full w-full border-0"
       />
-      <button
-        type="button"
-        onClick={toggle}
-        data-track={muted ? "sound_on" : "sound_off"}
-        data-track-detail={title}
-        aria-label={muted ? "Unmute video" : "Mute video"}
-        className="absolute right-4 bottom-4 flex h-11 cursor-pointer items-center gap-2 rounded-[22px] border border-[#F9F4F1]/70 bg-black/35 px-4 text-xs font-medium uppercase tracking-[0.16em] text-[#F9F4F1] backdrop-blur-[4px] hover:border-[#F9F4F1] hover:bg-black/55"
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#F9F4F1" strokeWidth="1.5">
-          <path d="M4 9v6h4l5 5V4L8 9H4z" strokeLinejoin="round" />
-          {muted ? (
-            <path d="M16 9l5 6M21 9l-5 6" strokeLinecap="round" />
-          ) : (
-            <path d="M16 8a5 5 0 010 8M19 5a9 9 0 010 14" strokeLinecap="round" />
-          )}
-        </svg>
-        {muted ? "Sound on" : "Sound off"}
-      </button>
     </div>
   );
 }

@@ -5,6 +5,10 @@
 
 const PF = "/agent-page/";
 
+// Lukas's headshot for the agent page's About block and the contact card;
+// null until he adds /public/agent-page/lukas.jpg
+export const LUKAS_PHOTO: string | null = null;
+
 export const AGENT_PAGE_VIDEOS = {
   summit: { id: "NVY-MTRMcPA", title: "Summit Sky" },
   timberline: { id: "pYjeklEaM8U", title: "Timberline Hills" },
@@ -44,4 +48,12 @@ const ROSEBURG_AREA = ["roseburg", "sutherlin", "winston", "myrtle creek", "oakl
 
 export function agentPageRegion(place: string): "eugene" | "roseburg" {
   return ROSEBURG_AREA.some((c) => place.toLowerCase().includes(c)) ? "roseburg" : "eugene";
+}
+
+// Whether an area reads as the Portland metro rather than the Eugene side:
+// picks the footer line and the contact card's note and address.
+export function isPortlandArea(area: string | null | undefined): boolean {
+  return /portland|vancouver|beaverton|hillsboro|gresham|oregon city|lake oswego|tigard|clackamas|happy valley|west linn|tualatin|wilsonville|milwaukie/i.test(
+    area ?? ""
+  );
 }

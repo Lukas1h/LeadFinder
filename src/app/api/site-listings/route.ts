@@ -18,15 +18,15 @@ export async function GET() {
   const listings = await getSiteListings();
   const rows = listings.length
     ? await db
-        .select({ id: bookings.id, link: bookings.dropboxFolderLink })
+        .select({ id: bookings.id, link: bookings.dropboxFolderLink, highlights: bookings.highlightPhotos })
         .from(bookings)
         .where(inArray(bookings.id, listings.map((l) => l.bookingId)))
     : [];
-  const links = new Map(rows.map((r) => [r.id, r.link]));
+  const byId = new Map(rows.map((r) => [r.id, r]));
   const cards = await Promise.all(
     listings.map(async (l) => {
-      const link = links.get(l.bookingId);
-      const names = link ? await listingCardPhotoNames(link).catch(() => []) : [];
+      const row = byId.get(l.bookingId);
+      const names = row?.link ? await listingCardPhotoNames(row.link, row.highlights).catch(() => []) : [];
       return {
         ...l,
         photos: names.map(

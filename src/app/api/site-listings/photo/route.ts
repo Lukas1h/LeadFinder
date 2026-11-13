@@ -19,10 +19,10 @@ export async function GET(req: NextRequest) {
   const shownJobs = await getSiteListings();
   if (!shownJobs.some((l) => l.bookingId === bookingId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const [booking] = await db.select({ dropboxFolderLink: bookings.dropboxFolderLink }).from(bookings).where(eq(bookings.id, bookingId));
+  const [booking] = await db.select({ dropboxFolderLink: bookings.dropboxFolderLink, highlightPhotos: bookings.highlightPhotos }).from(bookings).where(eq(bookings.id, bookingId));
   if (!booking?.dropboxFolderLink) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const [{ photos }, shown] = await Promise.all([listGalleryMedia(booking.dropboxFolderLink), listingCardPhotoNames(booking.dropboxFolderLink)]);
+  const [{ photos }, shown] = await Promise.all([listGalleryMedia(booking.dropboxFolderLink), listingCardPhotoNames(booking.dropboxFolderLink, booking.highlightPhotos)]);
   const photo = shown.includes(name) ? photos.find((p) => p.name === name) : undefined;
   if (!photo) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
