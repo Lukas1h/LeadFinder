@@ -204,14 +204,11 @@ export default async function PortfolioPage({
         {newStyle ? (
           <section data-section="hero" className="px-4 pt-[clamp(20px,3vw,32px)] pb-[clamp(20px,3vw,28px)] text-center">
             <div className="mx-auto flex max-w-[760px] flex-col items-center">
-              {firstName && (
-                <p className={`${serif} mb-3 text-[clamp(18px,2.2vw,22px)] italic text-[#181A1C]`}>Thanks for taking a look, {firstName}!</p>
-              )}
               <h1 className={`${serif} text-[clamp(34px,5.6vw,58px)] font-bold leading-[1.1] tracking-[-0.02em] text-balance`}>
                 Real estate photo &amp; video in <span className="text-[#D67F1F]">{area}</span>
               </h1>
               {showTour && (
-                <p className="mt-2.5 text-[12px] font-medium uppercase tracking-[0.2em] text-[#995000]">Featured in the Eugene Tour of Homes</p>
+                <p className="mt-3 text-[clamp(14px,1.8vw,16px)] font-semibold uppercase tracking-[0.18em] text-[#995000]">Featured in the Eugene Tour of Homes</p>
               )}
             </div>
           </section>
@@ -219,9 +216,6 @@ export default async function PortfolioPage({
           <>
         <section data-section="hero" className="px-4 pt-[clamp(32px,5vw,56px)] pb-[clamp(28px,4vw,40px)] text-center">
           <div className="mx-auto flex max-w-[760px] flex-col items-center">
-            {firstName && (
-              <p className={`${serif} mb-4 text-[clamp(18px,2.2vw,22px)] italic text-[#181A1C]`}>Thanks for taking a look, {firstName}!</p>
-            )}
             {showTour && (
               <p className="mb-3.5 text-[13px] font-medium uppercase tracking-[0.2em] text-[#995000]">
                 Featured in the Eugene Tour of Homes
@@ -502,14 +496,16 @@ function PhotoPackage() {
         Most booked
       </span>
       <div className="flex items-start justify-between gap-6">
-        <p className="text-[clamp(20px,2.4vw,24px)] font-semibold leading-tight">Interior &amp; Exterior Photography</p>
+        <div>
+          <p className="text-[clamp(20px,2.4vw,24px)] font-semibold leading-tight">Interior &amp; Exterior Photography</p>
+          <ul className="mt-2.5 list-disc space-y-1 pl-5 text-[clamp(16px,1.9vw,18px)] font-semibold leading-snug text-[#995000] marker:text-[#D67F1F]">
+            {perks.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </div>
         <p className="font-[family-name:var(--font-portfolio-serif)] whitespace-nowrap text-[clamp(34px,4.4vw,42px)] font-bold leading-none text-[#D67F1F]">$300</p>
       </div>
-      <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[clamp(17px,2vw,19px)] font-semibold text-[#995000]">
-        {perks.map((p) => (
-          <span key={p}>{p}</span>
-        ))}
-      </p>
       <p className="mt-6 text-xs font-semibold uppercase tracking-[0.16em] text-[#181A1C]/62">Add-ons</p>
       <div className="mt-2.5 grid grid-cols-2 gap-2.5">
         {addOns.map((a) => (
@@ -557,24 +553,27 @@ function FullGallery() {
 
 /**
  * The page's last section: one job, getting the agent to save Lukas's
- * contact. Built on a few nudges: a concrete future moment to tie the save to
- * ("next time your photographer is booked"), a preview of the contact card so
- * the outcome is tangible, one low-effort action with the friction named
- * ("one tap"), the norm that other local agents already do it, and a personal
- * sign-off.
+ * contact. The personal thank-you, the reason to save tied to a moment
+ * they'll have ("for when your next listing comes up"), the button, and a
+ * preview of the contact card so the outcome is tangible.
  */
 function SaveContact({ slug, firstName, showOffer }: { slug: string; firstName: string | null; showOffer: boolean }) {
   return (
     <section id="save" data-section="book" className="px-4 pt-[clamp(64px,9vw,104px)] pb-[clamp(80px,11vw,128px)]">
       <div className="mx-auto flex max-w-[560px] flex-col items-center text-center">
         <h2 className="font-[family-name:var(--font-portfolio-serif)] text-[clamp(28px,4vw,38px)] font-bold leading-[1.15] tracking-[-0.02em] text-balance">
-          Keep me in your back pocket.
+          {firstName ? `Thanks for taking a look, ${firstName}!` : "Thanks for taking a look!"}
         </h2>
-        <p className="mt-4 text-[17px] leading-[1.55] text-pretty text-[#181A1C]/78">
-          The next time your photographer is booked up or a listing needs to go live fast, I’m one text away. Lots of agents keep me saved as
-          their backup for exactly that.
-        </p>
-        <div className="mt-8 flex w-full max-w-[380px] items-center gap-4 border border-[#181A1C]/12 bg-white px-5 py-4 text-left shadow-[0_6px_24px_rgba(0,0,0,0.08)]">
+        <p className="mt-3 text-[17px] leading-[1.55] text-pretty text-[#181A1C]/78">Save my contact for when your next listing comes up.</p>
+        <a
+          href={`/api/portfolio/${slug}/vcard`}
+          data-track="save_contact"
+          data-track-detail="bottom"
+          className="mt-7 inline-flex min-h-14 w-full max-w-[380px] items-center justify-center border border-[#181A1C] bg-[#181A1C] px-8 text-[14px] font-medium uppercase tracking-[0.3em] text-white hover:bg-white hover:text-[#181A1C]"
+        >
+          Save my contact
+        </a>
+        <div className="mt-4 flex w-full max-w-[380px] items-center gap-4 border border-[#181A1C]/12 bg-white px-5 py-4 text-left shadow-[0_6px_24px_rgba(0,0,0,0.08)]">
           {LUKAS_PHOTO ? (
             // eslint-disable-next-line @next/next/no-img-element -- static headshot
             <img src={LUKAS_PHOTO} alt="Lukas Hahn" className="size-14 shrink-0 rounded-full object-cover" />
@@ -587,23 +586,7 @@ function SaveContact({ slug, firstName, showOffer }: { slug: string; firstName: 
             <p className="mt-0.5 text-sm text-[#181A1C]/70">{formatPhone(PHONE)}</p>
           </div>
         </div>
-        <a
-          href={`/api/portfolio/${slug}/vcard`}
-          data-track="save_contact"
-          data-track-detail="bottom"
-          className="mt-6 inline-flex min-h-14 w-full max-w-[380px] items-center justify-center border border-[#181A1C] bg-[#181A1C] px-8 text-[14px] font-medium uppercase tracking-[0.3em] text-white hover:bg-white hover:text-[#181A1C]"
-        >
-          Save my contact
-        </a>
-        <p className="mt-3 text-sm text-[#181A1C]/62">One tap. Adds me to your phone’s contacts.</p>
-        {showOffer && <p className="mt-2 text-sm font-semibold text-[#995000]">Your first shoot is $50 off.</p>}
-        {firstName && (
-          <p className="font-[family-name:var(--font-portfolio-serif)] mt-12 text-xl italic leading-normal">
-            Thanks for taking a look, {firstName}. Talk soon!
-            <br />
-            <span className="font-[family-name:var(--font-portfolio-sans)] text-[15px] not-italic text-[#181A1C]/70">— Lukas</span>
-          </p>
-        )}
+        {showOffer && <p className="mt-4 text-sm font-semibold text-[#995000]">Your first shoot is $50 off.</p>}
       </div>
     </section>
   );

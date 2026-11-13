@@ -430,7 +430,7 @@ next listing comes up (usually 1–4 weeks after first contact).
   vCard (`lukasVcard`) say Portland when `isPortlandArea(content.area)`.
 - Agent page pricing (both styles, above the last section): a highlighted
   "Most booked" Interior & Exterior Photography $300 box with "Edited by
-  hand, not AI" and "Next morning turnaround" in bold orange text, and
+  hand, not AI" and "Next morning turnaround" as bullets under the name, and
   add-ons drone +$100, floor plans +$50, virtual staging +$50, virtual
   twilight +$50; then Walkthrough Video $400 and Photo + Video + Drone $650
   (no agent on-camera video, no "save" callout). Listing cards on both
@@ -438,11 +438,13 @@ next listing comes up (usually 1–4 weeks after first contact).
   white tag; the listing agent's name and brokerage are large under the
   address.
 - The last section on both styles (`SaveContact`) only asks for the save:
-  "Keep me in your back pocket", a preview of the contact card (headshot
-  from `LUKAS_PHOTO` once set, else "LH" initials), a Save my contact button
-  (vCard, tracked as `save_contact` / `bottom`), the $50-off line when
-  `showOffer`, and the personal sign-off. No "Let's work on your next
-  listing" heading or Book a shoot card.
+  "Thanks for taking a look, {first name}!" (the only place the greeting
+  appears; the hero no longer has it), "Save my contact for when your next
+  listing comes up.", the Save my contact button (vCard, tracked as
+  `save_contact` / `bottom`), then a preview of the contact card (headshot
+  from `LUKAS_PHOTO` once set, else "LH" initials), and the $50-off line
+  when `showOffer`. No "Let's work on your next listing" heading or Book a
+  shoot card.
 - Portfolio photos on every agent page: `public/agent-page/pf-01…pf-20.jpg`
   (new style, `FullGallery`: video → 8-photo grid → pf-01 full width → 8-photo grid → the 10th photo full width (`AGENT_PAGE_PHOTOS` order), the last two unused; the original shows 6),
   Lukas's 2026-11-12 set in the main website's order. Card carousels preload
