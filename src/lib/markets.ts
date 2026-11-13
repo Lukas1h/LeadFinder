@@ -219,3 +219,11 @@ export function variantsForMarket<T extends { market: string | null }>(variants:
   const own = market ? variants.filter((v) => v.market === market) : [];
   return own.length > 0 ? own : variants.filter((v) => v.market == null);
 }
+
+/** What a Portland-market agent's portfolio page names as their area: "Real estate photo & video in the Portland area". */
+export const PORTLAND_AREA = "the Portland area";
+
+/** Every Portland-market city name the app knows (lowercase), for the Portland portfolio template's towns. */
+export function portlandTowns(): string[] {
+  return Object.keys(PORTLAND_MILES_FROM_OREGON_CITY);
+}

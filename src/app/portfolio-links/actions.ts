@@ -1,5 +1,6 @@
 "use server";
 
+import { marketFor, PORTLAND_AREA } from "@/lib/markets";
 import { and, asc, count, desc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -96,11 +97,15 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
     .where(eq(agents.id, agentId));
   if (!agent) return null;
 
-  const area = (await agentArea(agent.id)) ?? agent.homeCity?.trim() ?? "";
-  const template = await templateForArea(area);
+  const city0 = (await agentArea(agent.id)) ?? agent.homeCity?.trim() ?? "";
+  // Portland-market agents get "the Portland area", not their suburb
+  // ("Wilsonville"): the photographer covers the whole metro. The template is
+  // still matched on the city itself.
+  const area = marketFor({ city: city0 }) === "portland" ? PORTLAND_AREA : city0;
+  const template = await templateForArea(city0);
   const jobs = await finishedJobs();
-  const city = area.toLowerCase();
-  const region = agentPageRegion(area);
+  const city = city0.toLowerCase();
+  const region = agentPageRegion(city0);
   const rank = (jobCity: string) => (jobCity.toLowerCase() === city ? 0 : agentPageRegion(jobCity) === region ? 1 : 2);
   const nearest = jobs
     .map((j, i) => ({ ...j, i }))
