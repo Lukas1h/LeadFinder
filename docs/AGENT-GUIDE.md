@@ -391,7 +391,11 @@ next listing comes up (usually 1–4 weeks after first contact).
   lowercased, `content` = listings, showOffer, showTourOfHomes, video,
   leadPhoto, ogImage). Edited on `/portfolio-links/settings`. When a picked
   agent's area matches a town, `getPortfolioPrefill` returns it as `template`
-  and its listings replace the nearest jobs. `content.ogImage` on a link
+  and its listings replace the nearest jobs. A Portland-market agent's area
+  prefills as "the Portland area" (not their suburb), and the "Portland
+  metro" template (2026-11-12; towns = every Portland-market city from
+  `portlandTowns()`, Vancouver-area WA cities and "the portland area") starts
+  from the Mid-Valley one with Tour of Homes off. `content.ogImage` on a link
   overrides the link preview image (default: the lead photo).
 - Main website "Recent listings": `app_settings.site_listing_ids` (booking ids,
   in order; null = the three newest finished jobs), picked under **Website
