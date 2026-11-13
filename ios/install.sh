@@ -25,6 +25,9 @@ if [ -z "$DEVICE" ]; then
 fi
 echo "Building for device $DEVICE"
 
+# A failed build must not install whatever app an earlier run left behind.
+rm -rf /tmp/lf-dd-device/Build/Products/Debug-iphoneos/LeadFinder.app
+
 xcodebuild -project LeadFinder.xcodeproj -scheme LeadFinder \
   -sdk iphoneos -destination "id=$DEVICE" \
   -derivedDataPath /tmp/lf-dd-device \
