@@ -116,7 +116,7 @@ export function LoopVideo({ src, poster, title }: { src: string; poster: string;
  * One "Recent listings" card with a photo carousel. Every photo is stacked in
  * place and only the current one shows; the rest start loading once the first
  * has, so the arrows flip instantly instead of fetching on each tap.
- * prominentStatus (new-style pages) makes the status badge a bold color block.
+ * prominentStatus (new-style pages) also makes a Sold badge a bold block.
  */
 export function ListingCard({ listing: l, prominentStatus = false }: { listing: PortfolioListing & { photos: string[] }; prominentStatus?: boolean }) {
   const [idx, setIdx] = useState(0);
@@ -145,20 +145,7 @@ export function ListingCard({ listing: l, prominentStatus = false }: { listing: 
             />
           ) : null
         )}
-        {l.status &&
-          (prominentStatus ? (
-            <span
-              className={`absolute top-3 left-3 px-3.5 py-2 text-sm font-bold uppercase tracking-[0.16em] text-white shadow-[0_2px_10px_rgba(0,0,0,0.25)] ${
-                /sold/i.test(l.status) ? "bg-[#181A1C]" : "bg-[#D67F1F]"
-              }`}
-            >
-              {l.status}
-            </span>
-          ) : (
-            <span className="absolute top-3 left-3 bg-white px-2.5 py-[5px] text-[11px] font-semibold uppercase tracking-[0.14em] text-[#181A1C]">
-              {l.status}
-            </span>
-          ))}
+        {l.status && <StatusBadge status={l.status} prominent={prominentStatus} />}
         {n > 1 && (
           <>
             <span className="absolute top-3 right-3 bg-[#181A1C]/70 px-[9px] py-[5px] text-xs font-medium text-white">
@@ -210,13 +197,33 @@ export function ListingCard({ listing: l, prominentStatus = false }: { listing: 
         )}
         <div className="text-[15px] leading-[1.4] text-[#181A1C]">{[l.address, l.city].filter(Boolean).join(", ")}</div>
         {(l.agent || l.brokerage) && (
-          <div className="mt-2 border-t border-[#181A1C]/10 pt-3 text-xs uppercase tracking-[0.08em] text-[#181A1C]/68">
-            {[l.agent, l.brokerage].filter(Boolean).join(" · ")}
+          <div className="mt-2 border-t border-[#181A1C]/10 pt-3">
+            {l.agent && <div className="text-[17px] font-semibold leading-tight text-[#181A1C]">{l.agent}</div>}
+            {l.brokerage && (
+              <div className={`${l.agent ? "mt-1" : ""} text-[13px] font-semibold uppercase tracking-[0.1em] text-[#995000]`}>{l.brokerage}</div>
+            )}
           </div>
         )}
       </div>
     </article>
   );
+}
+
+/**
+ * The card's status badge. Pending is the loudest (a big orange block: proof
+ * the listing moved), Sold a dark block, and anything else (Just listed…) a
+ * small white tag so it doesn't compete. Classic pages keep every status small
+ * except Pending.
+ */
+function StatusBadge({ status, prominent }: { status: string; prominent: boolean }) {
+  const pending = /pending|under contract|contingent/i.test(status);
+  const sold = /sold/i.test(status);
+  const cls = pending
+    ? "px-4 py-2.5 text-base font-bold tracking-[0.16em] text-white bg-[#D67F1F] shadow-[0_2px_12px_rgba(0,0,0,0.3)]"
+    : prominent && sold
+      ? "px-3.5 py-2 text-sm font-bold tracking-[0.16em] text-white bg-[#181A1C] shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
+      : "px-2.5 py-[5px] text-[11px] font-semibold tracking-[0.14em] text-[#181A1C] bg-white";
+  return <span className={`absolute top-3 left-3 uppercase ${cls}`}>{status}</span>;
 }
 
 /**

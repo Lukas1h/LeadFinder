@@ -164,31 +164,13 @@ export default async function PortfolioPage({
 
   );
   const pricingSection = (
-        <section id="pricing" data-section="pricing" className={`px-4 pt-[clamp(64px,9vw,104px)] ${newStyle ? "pb-[clamp(80px,11vw,128px)]" : ""}`}>
+        <section id="pricing" data-section="pricing" className="px-4 pt-[clamp(64px,9vw,104px)] pb-[clamp(80px,11vw,128px)]">
           <div className="mx-auto max-w-[672px]">
             <h2 className={`${serif} text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>Pricing</h2>
-            {newStyle && <PhotoPackage />}
-            <div className={`${newStyle ? "mt-6" : "mt-[clamp(28px,4vw,40px)]"} border-t border-[#181A1C]/15`}>
-              {!newStyle && (
-                <PriceRow
-                  name="Interior & Exterior Photography"
-                  addOns={["+$100 Aerial Drone Photography", "+$50 Floor Plans"]}
-                  price="$300"
-                />
-              )}
-              <PriceRow name="Walkthrough Video" addOns={["+$100 Agent On-Camera Video"]} price="$400" />
-              <div className="flex items-start justify-between gap-6 bg-[#F9F4F1] px-5 py-7">
-                <div>
-                  <p className="text-lg font-semibold">The Full Package</p>
-                  <p className="mt-2 text-[15px] leading-normal text-[#181A1C]/75">
-                    Photography &amp; walkthrough video, including drone and agent on-camera video.
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className={`${serif} whitespace-nowrap text-[30px] font-bold text-[#D67F1F]`}>$700</p>
-                  <p className="mt-1 whitespace-nowrap text-xs font-semibold uppercase tracking-[0.14em] text-[#995000]">Save $200</p>
-                </div>
-              </div>
+            <PhotoPackage />
+            <div className="mt-6 border-t border-[#181A1C]/15">
+              <PriceRow name="Walkthrough Video" price="$400" />
+              <PriceRow name="Photo + Video + Drone" price="$650" />
             </div>
           </div>
         </section>
@@ -364,13 +346,13 @@ export default async function PortfolioPage({
         </section>
 
 
-        {!newStyle && pricingSection}
+        {pricingSection}
 
         {/* The "Hi, I'm Lukas" block replaces the two cards once there's a headshot (LUKAS_PHOTO). */}
         {newStyle && LUKAS_PHOTO ? (
           <>
         {/* About */}
-        <section id="about" data-section="about" className="px-4 pt-[clamp(64px,9vw,104px)]">
+        <section id="about" data-section="about" className="px-4 pt-[clamp(64px,9vw,104px)] pb-[clamp(80px,11vw,128px)]">
           <div className="mx-auto flex max-w-[880px] flex-col items-center gap-8 sm:flex-row sm:gap-10">
             {LUKAS_PHOTO && (
               // eslint-disable-next-line @next/next/no-img-element -- static headshot
@@ -422,7 +404,7 @@ export default async function PortfolioPage({
         ) : (
           <>
         {/* Book */}
-        <section id="book" data-section="book" className={`px-4 ${newStyle ? "pt-[clamp(64px,9vw,104px)]" : "pt-[clamp(72px,10vw,120px)] pb-[clamp(80px,11vw,128px)]"}`}>
+        <section id="book" data-section="book" className={`px-4 ${newStyle ? "pt-[clamp(64px,9vw,104px)]" : "pt-[clamp(72px,10vw,120px)]"} pb-[clamp(80px,11vw,128px)]`}>
           <div className="mx-auto max-w-[880px]">
             <h2
               className={`${serif} mb-[clamp(32px,5vw,48px)] text-center text-[clamp(30px,4.4vw,44px)] font-bold leading-[1.15] tracking-[-0.02em] text-balance text-[#D67F1F]`}
@@ -471,7 +453,6 @@ export default async function PortfolioPage({
           </>
         )}
 
-        {newStyle && pricingSection}
       </main>
       {!preview && <PageTracker slug={slug} />}
 
@@ -533,17 +514,10 @@ function PhotoGrid({ photos, desktopRows, className }: { photos: AgentPagePhoto[
   );
 }
 
-function PriceRow({ name, addOns, price }: { name: string; addOns: string[]; price: string }) {
+function PriceRow({ name, price }: { name: string; price: string }) {
   return (
-    <div className="flex items-start justify-between gap-6 border-b border-[#181A1C]/15 px-1 py-7">
-      <div>
-        <p className="text-lg">{name}</p>
-        {addOns.map((a, i) => (
-          <p key={a} className={`${i === 0 ? "mt-2" : "mt-1.5"} text-xs uppercase tracking-[0.15em] text-[#181A1C]/62`}>
-            {a}
-          </p>
-        ))}
-      </div>
+    <div className="flex items-baseline justify-between gap-6 border-b border-[#181A1C]/15 px-1 py-6">
+      <p className="text-lg">{name}</p>
       <p className="font-[family-name:var(--font-portfolio-serif)] whitespace-nowrap text-[26px] font-bold">{price}</p>
     </div>
   );
@@ -613,11 +587,21 @@ const NEW_TILES = [
   },
 ];
 
-/** New-style pricing lead: the photo package as the headline offer, with drone and floor plans as add-ons worth noticing. */
+/**
+ * Pricing lead: the photo package as the headline offer. Pricing is the most
+ * read part of the page, so the two biggest selling points (hand editing and
+ * next-morning delivery) sit right under the price; add-ons are price + name.
+ */
 function PhotoPackage() {
+  const perks = [
+    { title: "Edited by hand", body: "By a real person. Never AI." },
+    { title: "Next morning turnaround", body: "Shot today, in your inbox tomorrow." },
+  ];
   const addOns = [
-    { price: "+$100", name: "Aerial drone photography", body: "Show off the lot, the land and what’s around it." },
-    { price: "+$50", name: "Floor plans", body: "A clear layout buyers can study before they ever visit." },
+    { price: "+$100", name: "Aerial drone photography" },
+    { price: "+$50", name: "Floor plans" },
+    { price: "+$50", name: "Virtual staging" },
+    { price: "+$50", name: "Virtual twilight" },
   ];
   return (
     <div className="relative mt-[clamp(32px,4vw,44px)] border-2 border-[#D67F1F] px-[clamp(20px,3vw,32px)] pt-8 pb-[clamp(20px,3vw,28px)]">
@@ -625,20 +609,28 @@ function PhotoPackage() {
         Most booked
       </span>
       <div className="flex items-start justify-between gap-6">
-        <div>
-          <p className="text-[clamp(20px,2.4vw,24px)] font-semibold leading-tight">Interior &amp; Exterior Photography</p>
-          <p className="mt-2 text-[15px] leading-normal text-[#181A1C]/75">Every room, inside and out, edited by hand. Next morning turnaround.</p>
-        </div>
+        <p className="text-[clamp(20px,2.4vw,24px)] font-semibold leading-tight">Interior &amp; Exterior Photography</p>
         <p className="font-[family-name:var(--font-portfolio-serif)] whitespace-nowrap text-[clamp(34px,4.4vw,42px)] font-bold leading-none text-[#D67F1F]">$300</p>
       </div>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        {perks.map((p) => (
+          <div key={p.title} className="flex items-start gap-3 bg-[#181A1C] px-4 py-3.5 text-white">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#D67F1F" strokeWidth="3" className="mt-0.5 shrink-0" aria-hidden>
+              <path d="M4 12.5l5 5L20 6.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <div>
+              <p className="text-[17px] font-semibold leading-tight">{p.title}</p>
+              <p className="mt-1 text-sm leading-snug text-white/75">{p.body}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.16em] text-[#181A1C]/62">Add-ons</p>
+      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
         {addOns.map((a) => (
-          <div key={a.name} className="bg-[#F9F4F1] px-4 py-4">
-            <p className="flex items-baseline gap-2">
-              <span className="font-[family-name:var(--font-portfolio-serif)] text-[22px] font-bold text-[#D67F1F]">{a.price}</span>
-              <span className="text-base font-semibold">{a.name}</span>
-            </p>
-            <p className="mt-1.5 text-sm leading-normal text-[#181A1C]/72">{a.body}</p>
+          <div key={a.name} className="bg-[#F9F4F1] px-3.5 py-3">
+            <p className="font-[family-name:var(--font-portfolio-serif)] text-[20px] font-bold leading-none text-[#D67F1F]">{a.price}</p>
+            <p className="mt-1.5 text-[15px] font-semibold leading-snug">{a.name}</p>
           </div>
         ))}
       </div>

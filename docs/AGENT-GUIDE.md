@@ -423,14 +423,22 @@ next listing comes up (usually 1–4 weeks after first contact).
   "Featured in the Eugene Tour of Homes" under it; no tagline, guarantee or
   discount) → portfolio, where the video is the self-hosted MP4 on Vercel
   Blob (`AGENT_PAGE_VIDEOS[*].mp4`, a bare `<video>`, no YouTube UI) → recent
-  listings with a bold status badge → four tiles (scheduled for tomorrow; in
-  and out in as little as 45 minutes, next morning turnaround; real edits;
-  licensed and insured) → testimonial → the Save contact / Book a shoot cards
-  → pricing last, led by a highlighted "Most booked" $300 photo package with
-  drone (+$100) and floor plans (+$50) as add-on boxes. A "Hi, I'm Lukas"
+  listings (a Sold badge is a bold dark block) → four tiles (scheduled for
+  tomorrow; in and out in as little as 45 minutes, next morning turnaround;
+  real edits; licensed and insured) → testimonial → pricing → the Save
+  contact / Book a shoot cards. A "Hi, I'm Lukas"
   block replaces the cards once `LUKAS_PHOTO` in `src/lib/agentPage.ts` is set
   (off until Lukas adds a headshot and bio). On both styles the footer and the
   vCard (`lukasVcard`) say Portland when `isPortlandArea(content.area)`.
+- Agent page pricing (both styles, above the Save contact / Book a shoot
+  cards): a highlighted "Most booked" Interior & Exterior Photography $300
+  box with "Edited by hand" and "Next morning turnaround" called out, and
+  add-ons drone +$100, floor plans +$50, virtual staging +$50, virtual
+  twilight +$50; then Walkthrough Video $400 and Photo + Video + Drone $650
+  (no agent on-camera video, no "save" callout). Listing cards on both
+  styles: a Pending badge is the biggest (orange block), Just listed a small
+  white tag; the listing agent's name and brokerage are large under the
+  address.
 - Portfolio photos on every agent page: `public/agent-page/pf-01…pf-20.jpg`
   (new style shows all 20 in the website's layout, `FullGallery`; the original shows 6),
   Lukas's 2026-11-12 set in the main website's order. Card carousels preload
