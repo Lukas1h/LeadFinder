@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { headers } from "next/headers";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
 import { db } from "@/db";
 import { agents, bookings, portfolioLinks, type PortfolioContent, type PortfolioListing } from "@/db/schema";
@@ -35,6 +35,9 @@ const outfit = Outfit({
 });
 
 const SITE = PORTFOLIO_ORIGIN;
+
+/** White browser chrome (Safari's top bar) instead of the admin app's dark theme color. */
+export const viewport: Viewport = { themeColor: "#ffffff" };
 
 /**
  * The link preview (iMessage, Facebook…): the page's lead portfolio photo,
