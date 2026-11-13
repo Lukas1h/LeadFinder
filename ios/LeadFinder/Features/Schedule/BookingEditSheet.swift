@@ -60,7 +60,7 @@ struct BookingEditSheet: View {
     }
 
     private var hasListing: Bool { booking?.listingId != nil }
-    private var isCompleted: Bool { booking?.completedAt != nil }
+    private var isCompleted: Bool { booking?.currentStage == .completed }
 
     var body: some View {
         NavigationStack {

@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Finishing a job: the web's completion dialog, hours only (drive time and
+/// Marking a job paid (for cash or check; Square payments do it on their
+/// own), which moves it to Completed. Asks the hours too (drive time and
 /// costs come from the job's trips and expenses since 2026-10-16). Every figure is optional —
 /// blank means "not recorded", which keeps the per-hour stats honest about a
 /// missing number rather than counting it as zero.
@@ -26,7 +27,7 @@ struct CompleteBookingSheet: View {
                 } header: {
                     Text("Hours")
                 } footer: {
-                    Text("All optional. Leave one blank if you didn't track it. Driving and costs come from the trip and expenses logged for the job.")
+                    Text("Marks the invoice paid and the job completed. Hours are all optional. Leave one blank if you didn't track it. Driving and costs come from the trip and expenses logged for the job.")
                 }
                 .listRowBackground(Theme.card)
 
@@ -38,14 +39,14 @@ struct CompleteBookingSheet: View {
             .scrollContentBackground(.hidden)
             .background(Theme.background)
             .tint(Theme.accent)
-            .navigationTitle("Complete job")
+            .navigationTitle("Mark paid")
             .titleDisplay(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Complete") { Task { await save() } }
+                    Button("Mark paid") { Task { await save() } }
                         .fontWeight(.semibold)
                         .disabled(isSaving)
                 }

@@ -340,11 +340,14 @@ struct HomeView: View {
     // MARK: - 4. Bookings
 
     private func bookingsSection(_ bookings: BookingsResponse) -> some View {
+        let scheduled = bookings.scheduled ?? bookings.upcoming.filter { $0.currentStage == .scheduled }
+        let unpaid = bookings.waitingForPayment.filter { $0.currentStage == .invoiceSent }
+        let outstanding = unpaid.reduce(0) { $0 + $1.revenue }
         let stages: [(String, Int, String)] = [
             ("Tentative", bookings.tentative?.count ?? 0, "date to settle"),
-            ("Upcoming", bookings.upcoming.filter { $0.dateTentative != true }.count, "to shoot"),
+            ("Upcoming", scheduled.count, "to shoot"),
             ("Editing", bookings.editing?.count ?? 0, "to deliver"),
-            ("Unpaid", bookings.waitingForPayment.count, "invoice out"),
+            ("Unpaid", unpaid.count, outstanding > 0 ? "\(outstanding.currencyString) out" : "invoice out"),
         ]
         return navSection("Bookings", see: "Bookings", value: BookingsRoute()) {
             VStack(alignment: .leading, spacing: 12) {
@@ -580,7 +583,7 @@ struct HomeView: View {
     private static func nextShoot(_ bookings: BookingsResponse) -> Booking? {
         let startOfToday = Calendar.current.startOfDay(for: Date())
         return bookings.upcoming
-            .filter { $0.dateTentative != true && $0.shotAt == nil }
+            .filter { $0.currentStage == .scheduled }
             .compactMap { booking -> (Booking, Date)? in
                 guard let date = DateFormatting.parse(booking.jobDate), date >= startOfToday else { return nil }
                 return (booking, date)

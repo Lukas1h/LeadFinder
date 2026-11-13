@@ -5,15 +5,16 @@ struct FinancesRoute: Hashable {
     var tab: FinanceTab = .overview
 }
 
-/// The web's five Finances tabs, in its order.
+/// The web's Finances tabs, in its order.
 enum FinanceTab: String, CaseIterable, Identifiable, Hashable {
-    case overview, jobs, expenses, mileage, taxes
+    case overview, profitFirst, jobs, expenses, mileage, taxes
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .overview: "Overview"
+        case .profitFirst: "Profit First"
         case .jobs: "Jobs"
         case .expenses: "Expenses"
         case .mileage: "Mileage"
@@ -39,10 +40,14 @@ struct FinancesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Picker("Tab", selection: $tab) {
-                    ForEach(FinanceTab.allCases) { Text($0.title).tag($0) }
+                // Six tabs don't fit a phone's width at full size: scroll sideways.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Picker("Tab", selection: $tab) {
+                        ForEach(FinanceTab.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .fixedSize()
                 }
-                .pickerStyle(.segmented)
 
                 ErrorBanner(message: error, onRetry: { Task { await reload() } })
 
@@ -111,6 +116,12 @@ struct FinancesView: View {
             } else {
                 placeholder
             }
+        case .profitFirst:
+            if let report = appState.profitFirst.value {
+                ProfitFirstTab(report: report)
+            } else {
+                placeholder
+            }
         case .jobs:
             if let report = appState.financeJobs.value {
                 FinanceJobsTab(report: report, onOpenBooking: open)
@@ -162,6 +173,7 @@ struct FinancesView: View {
     private var error: String? {
         switch tab {
         case .overview: appState.finances.error
+        case .profitFirst: appState.profitFirst.error
         case .jobs: appState.financeJobs.error
         case .expenses: appState.financeExpenses.error
         case .mileage: appState.financeTrips.error
@@ -172,6 +184,7 @@ struct FinancesView: View {
     private func load(_ tab: FinanceTab) async {
         switch tab {
         case .overview: await appState.finances.load()
+        case .profitFirst: await appState.profitFirst.load()
         case .jobs: await appState.financeJobs.load()
         case .expenses:
             await appState.financeExpenses.load()

@@ -106,7 +106,7 @@ before calling it. The main ones:
 | Schedule | `GET schedule`, `reminders`, `reminders/[id]`, `reminders/[id]/done`, `schedule/follow-ups/[listingId]/dismiss` and `/restore` |
 | Activity | `GET activity` (read-only; `?days=` default 14, `?agent=` name filter): one timeline across interactions, message sends/responds, gallery views, portfolio sessions/events and booking milestones, plus attention items — invoices waiting for payment with each job's last gallery view, jobs shot but not invoiced, and open reminders. No pipeline, follow-up feeds or reply triage. For the assistant's periodic check-ins. |
 | Follow Up | `GET follow-up` (feeds, stats, day/week counter) |
-| Finances | `GET finances`, `finances/trips`, `finances/expenses`, `finances/jobs`, `finances/taxes`, `finances/settings`, `finances/receipts/read` |
+| Finances | `GET finances`, `finances/trips`, `finances/expenses`, `finances/jobs`, `finances/taxes`, `finances/settings`, `finances/profit-first` (GET report, PATCH `{ profit, ownerPay, tax, opex }`), `finances/receipts/read` |
 | Portfolio pages | `portfolio-links`, `portfolio-links/[id]`, `/prefill`, `/catalog`, `/listing-photos`, `/before-after`, `/images`, `/overview` |
 | Photo editor | `photo-editor/listings`, `photo-editor/edit` |
 

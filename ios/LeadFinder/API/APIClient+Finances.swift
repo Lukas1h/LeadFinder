@@ -175,4 +175,12 @@ extension APIClient {
     func financeLinkOptions() async throws -> FinanceLinkOptions {
         try await read("api/app/v1/finances/link-options")
     }
+
+    // MARK: - Profit First
+
+    /// Saves the Profit First split. The four have to add up to 100%, which the
+    /// server checks and answers with a readable 400 if they don't.
+    func updateProfitFirstPercents(_ p: ProfitFirstPercents) async throws {
+        _ = try await send("PATCH", "api/app/v1/finances/profit-first", body: p, as: OK.self)
+    }
 }

@@ -50,8 +50,9 @@ enum AppNotifications {
         }
         if let bookings {
             stale += await pending(withPrefix: bookingPrefix)
-            // Not the tentative ones: their date is a placeholder, and they're off the schedule too.
-            wanted += bookingRequests(bookings.upcoming.filter { $0.dateTentative != true }, now: now)
+            // Only the ones whose day is settled: a tentative job's date is a
+            // placeholder, and it's off the schedule too.
+            wanted += bookingRequests(bookings.upcoming.filter { $0.currentStage == .scheduled }, now: now)
         }
 
         // Replaced by identifier below; this clears the ones that no longer exist.
@@ -143,7 +144,7 @@ enum AppNotifications {
     private static func bookingRequests(_ bookings: [Booking], now: Date) -> [UNNotificationRequest] {
         var requests: [UNNotificationRequest] = []
 
-        for booking in bookings where booking.completedAt == nil {
+        for booking in bookings where booking.currentStage != .completed {
             guard let job = DateFormatting.parse(booking.jobDate) else { continue }
             let time = DateFormatting.time.string(from: job)
             let place = booking.addressLine.nilIfBlank ?? "the shoot"

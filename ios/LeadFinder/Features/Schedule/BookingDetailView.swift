@@ -96,35 +96,48 @@ struct BookingDetailView: View {
 
     // MARK: - Status actions
 
-    /// Where the job is and the step that comes next, as on the web: upcoming,
-    /// then editing (shot), then invoice sent (waiting for payment), then
-    /// completed. Reopen steps back one.
+    /// Where the job is (one stage of five) and the one step that comes next:
+    /// confirm the date, mark it shot, mark the invoice sent, mark it paid.
+    /// "Back to …" steps back one stage.
     private var statusActions: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let stage = booking.currentStage
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 sectionTitle("Status")
                 Spacer(minLength: 0)
                 BookingStatusBadge(booking: booking)
             }
 
-            HStack(spacing: 8) {
-                if booking.completedAt == nil {
-                    if booking.invoiceSentAt == nil && booking.shotAt == nil {
-                        actionButton("Shot", "camera.fill") {
-                            await run { try await APIClient.shared.markBookingShot(bookingId: booking.id) }
-                        }
+            StageIndicator(current: stage)
+
+            VStack(spacing: 8) {
+                switch stage {
+                case .tentative:
+                    actionButton("Confirm date", "calendar.badge.checkmark", prominent: true) {
+                        await run { try await APIClient.shared.confirmBookingDate(id: booking.id) }
                     }
-                    if booking.invoiceSentAt == nil {
-                        actionButton("Invoice sent", "paperplane.fill") {
-                            await run { try await APIClient.shared.markInvoiceSent(bookingId: booking.id) }
-                        }
+                case .scheduled:
+                    actionButton("Mark shot", "camera.fill", prominent: true) {
+                        await run { try await APIClient.shared.markBookingShot(bookingId: booking.id) }
                     }
-                    actionButton("Complete", "checkmark.circle.fill", prominent: true) {
+                case .editing:
+                    actionButton("Mark invoice sent", "paperplane.fill", prominent: true) {
+                        await run { try await APIClient.shared.markInvoiceSent(bookingId: booking.id) }
+                    }
+                    Text("Copying the gallery link does this automatically.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                case .invoiceSent:
+                    actionButton("Mark paid", "dollarsign.circle.fill", prominent: true) {
                         showComplete = true
                     }
+                case .completed:
+                    EmptyView()
                 }
-                if booking.completedAt != nil || booking.invoiceSentAt != nil || booking.shotAt != nil {
-                    actionButton("Reopen", "arrow.uturn.backward") {
+
+                if let previous = stage.previous {
+                    actionButton("Back to \(previous.label)", "arrow.uturn.backward") {
                         await run { try await APIClient.shared.reopenBooking(id: booking.id) }
                     }
                 }
@@ -415,14 +428,14 @@ struct BookingDetailView: View {
 
     /// As the web: once the job is shot, or whenever it has a trip or an expense.
     private var showsMoney: Bool {
-        booking.shotAt != nil || booking.invoiceSentAt != nil || booking.completedAt != nil
+        booking.currentStage.index >= BookingStage.editing.index
             || !(booking.costs?.trips.isEmpty ?? true) || !(booking.costs?.expenseItems.isEmpty ?? true)
     }
 
     private var statusRows: [DetailRow] {
         var rows: [DetailRow] = []
-        if let value = stamp(booking.completedAt) {
-            rows.append(DetailRow(label: "Completed", value: value))
+        if let value = stamp(booking.paidAt ?? booking.completedAt) {
+            rows.append(DetailRow(label: "Paid", value: value))
         }
         if let value = stamp(booking.invoiceSentAt) {
             rows.append(DetailRow(label: "Invoice sent", value: value))
@@ -474,6 +487,43 @@ struct BookingDetailView: View {
 }
 
 // MARK: -
+
+/// Five dots on a line, one per stage, filled up to the current one, with the
+/// current stage's name under its dot.
+private struct StageIndicator: View {
+    let current: BookingStage
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(BookingStage.allCases, id: \.self) { stage in
+                let reached = stage.index <= current.index
+                VStack(spacing: 5) {
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(stage.index == 0 ? Color.clear : (reached ? Theme.accent : Theme.cardRaised))
+                            .frame(height: 2)
+                        Circle()
+                            .fill(reached ? Theme.accent : Theme.cardRaised)
+                            .frame(width: stage == current ? 12 : 8, height: stage == current ? 12 : 8)
+                        Rectangle()
+                            .fill(stage == BookingStage.allCases.last ? Color.clear
+                                  : (stage.index < current.index ? Theme.accent : Theme.cardRaised))
+                            .frame(height: 2)
+                    }
+                    .frame(height: 12)
+                    Text(stage.label)
+                        .font(.caption2.weight(stage == current ? .semibold : .regular))
+                        .foregroundStyle(stage == current ? Theme.primaryText : Theme.tertiaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Stage: \(current.label)")
+    }
+}
 
 private struct DetailRow: Identifiable {
     let label: String

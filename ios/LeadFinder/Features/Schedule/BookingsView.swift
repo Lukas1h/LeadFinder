@@ -66,7 +66,7 @@ struct BookingsView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 20) {
-                        BookingStatsView(completed: response.completed)
+                        BookingStatsView(completed: response.completed, outstanding: response.waitingForPayment)
 
                         ForEach(sections) { section in
                             VStack(alignment: .leading, spacing: 10) {
@@ -76,7 +76,7 @@ struct BookingsView: View {
                                         .foregroundStyle(Theme.primaryText)
                                     BadgeChip(text: "\(section.bookings.count)", tint: Theme.secondaryText)
                                     Spacer(minLength: 0)
-                                    Text(section.total.currencyString)
+                                    Text(section.totalLabel)
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(Theme.primaryText)
                                 }
@@ -97,16 +97,16 @@ struct BookingsView: View {
         }
     }
 
-    /// The web's buckets, in its order, with empty ones dropped. Jobs the
-    /// agent has agreed to but not dated lead, so they don't read as scheduled
-    /// and don't get forgotten.
+    /// One section per booking stage, in the order a job moves through
+    /// them, with empty ones dropped. Every booking is in exactly one.
     static func sections(from response: BookingsResponse) -> [BookingSection] {
-        [
-            BookingSection(title: "Tentative", bookings: response.tentative ?? []),
-            BookingSection(title: "Upcoming", bookings: response.upcoming.filter { $0.dateTentative != true && $0.shotAt == nil }),
-            BookingSection(title: "Editing", bookings: response.editing ?? []),
-            BookingSection(title: "Waiting for payment", bookings: response.waitingForPayment),
-            BookingSection(title: "Completed", bookings: response.completed),
+        let scheduled = response.scheduled ?? response.upcoming.filter { $0.currentStage == .scheduled }
+        return [
+            BookingSection(stage: .tentative, bookings: response.tentative ?? response.upcoming.filter { $0.currentStage == .tentative }),
+            BookingSection(stage: .scheduled, bookings: scheduled),
+            BookingSection(stage: .editing, bookings: response.editing ?? []),
+            BookingSection(stage: .invoiceSent, bookings: response.waitingForPayment),
+            BookingSection(stage: .completed, bookings: response.completed),
         ]
         .filter { !$0.bookings.isEmpty }
     }
@@ -186,7 +186,7 @@ struct BookingCard: View {
         if let name = booking.contactName?.nilIfBlank {
             parts.append(name)
         }
-        parts.append(BookingFormat.price(booking.total))
+        parts.append(BookingFormat.price(booking.revenue))
         return parts.joined(separator: " · ")
     }
 
@@ -194,7 +194,7 @@ struct BookingCard: View {
     /// otherwise. Shot, invoiced or completed jobs drop it: the web's card only
     /// warns while the shoot is still ahead.
     private var airspaceBadge: String? {
-        guard booking.shotAt == nil, booking.completedAt == nil, booking.invoiceSentAt == nil else { return nil }
+        guard booking.currentStage.isUpcoming else { return nil }
         return booking.airspace?.badgeLabel
     }
 }
@@ -205,107 +205,60 @@ struct BookingsRoute: Hashable {
 }
 
 struct BookingSection: Identifiable {
-    let title: String
+    let stage: BookingStage
     let bookings: [Booking]
 
-    var id: String { title }
+    var id: String { stage.rawValue }
+    var title: String { stage.label }
 
-    /// What the section is worth, as on the web: each job's line items minus
-    /// any additional costs recorded on completion.
+    /// What the section is worth in revenue (line items, before costs).
     var total: Int {
-        bookings.reduce(0) { $0 + BookingStatsView.profit($1) }
+        bookings.reduce(0) { $0 + $1.revenue }
+    }
+
+    /// Invoice sent reads as money still owed: "$1,250 outstanding".
+    var totalLabel: String {
+        stage == .invoiceSent ? "\(total.currencyString) outstanding" : total.currencyString
     }
 }
-/// The four numbers the web's Booked page leads with (BookingStats in
-/// BookedList.tsx), ported from src/app/booked/bookingMath.ts so the two agree.
+
+/// The numbers the Bookings page leads with: revenue, not profit (profit is
+/// on each booking's Time & money and on Finances).
 ///
-/// Counts only completed bookings — money actually in hand. "Last 30 days"
-/// goes by the job date rather than when it was marked complete, because older
-/// jobs entered after the fact were all completed on the day they were
-/// backfilled; a booking with no job date falls back to its completed date.
+/// "Last 30 days" goes by the job date rather than when it was paid, because
+/// older jobs entered after the fact were all completed on the day they were
+/// backfilled; a booking with no job date falls back to its paid date.
 struct BookingStatsView: View {
     let completed: [Booking]
+    var outstanding: [Booking] = []
 
     var body: some View {
-        let stats = Self.stats(completed)
+        let cutoff = Date().addingTimeInterval(-30 * 24 * 60 * 60)
+        let recent = completed.filter { booking in
+            let when = DateFormatting.parse(booking.jobDate)
+                ?? DateFormatting.parse(booking.paidAt ?? booking.completedAt)
+            return (when ?? .distantPast) >= cutoff
+        }
+        let recentRevenue = recent.reduce(0) { $0 + $1.revenue }
+        let allTime = completed.reduce(0) { $0 + $1.revenue }
+        let owed = outstanding.reduce(0) { $0 + $1.revenue }
         return LazyVGrid(
             columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
             spacing: 14
         ) {
-            stat("Last 30 days", stats.recentProfit.currencyString, "\(stats.recentCount) booking\(stats.recentCount == 1 ? "" : "s")")
-            stat("All time", stats.allTimeProfit.currencyString, "\(stats.allTimeCount) booking\(stats.allTimeCount == 1 ? "" : "s")")
-            stat("Avg per booking", stats.average.map { $0.currencyString } ?? "—", "profit")
-            stat(
-                "Avg per hour",
-                stats.perHour.map { "\($0.currencyString)/hr" } ?? "—",
-                stats.perHour != nil ? "profit" : "no hours recorded"
+            StatTile("Last 30 days", recentRevenue.currencyString, Self.jobs(recent.count))
+            StatTile("All time", allTime.currencyString, Self.jobs(completed.count))
+            StatTile(
+                "Avg per job",
+                completed.isEmpty ? "\u{2014}" : (allTime / completed.count).currencyString,
+                "revenue"
             )
+            StatTile("Outstanding", owed.currencyString, "\(outstanding.count) invoice\(outstanding.count == 1 ? "" : "s") out")
         }
         .card(padding: 14)
     }
 
-    private func stat(_ label: String, _ value: String, _ sub: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(Theme.secondaryText)
-            Text(value)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Theme.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(sub)
-                .font(.caption2)
-                .foregroundStyle(Theme.tertiaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private static func stats(_ completed: [Booking]) -> Stats {
-        let cutoff = Date().addingTimeInterval(-30 * 24 * 60 * 60)
-        let recent = completed.filter { booking in
-            let when = DateFormatting.parse(booking.jobDate) ?? DateFormatting.parse(booking.completedAt)
-            return (when ?? .distantPast) >= cutoff
-        }
-        let allTimeProfit = completed.reduce(0) { $0 + Self.profit($1) }
-        return Stats(
-            recentCount: recent.count,
-            recentProfit: recent.reduce(0) { $0 + Self.profit($1) },
-            allTimeCount: completed.count,
-            allTimeProfit: allTimeProfit,
-            average: completed.isEmpty ? nil : Double(allTimeProfit) / Double(completed.count),
-            perHour: Self.averageProfitPerHour(completed)
-        )
-    }
-
-    private struct Stats {
-        var recentCount: Int
-        var recentProfit: Int
-        var allTimeCount: Int
-        var allTimeProfit: Int
-        var average: Double?
-        var perHour: Double?
-    }
-
-    /// bookingProfit: the line-item total minus any additional costs recorded
-    /// when the job was completed.
-    nonisolated static func profit(_ booking: Booking) -> Int {
-        booking.total - (booking.additionalCosts ?? 0)
-    }
-
-    private static func hours(_ booking: Booking) -> Double {
-        [booking.driveHours, booking.shootingHours, booking.editingHours, booking.logisticsHours]
-            .reduce(0) { $0 + ($1 ?? 0) }
-    }
-
-    /// Only bookings with hours recorded count: one with profit but no hours
-    /// would otherwise inflate the rate.
-    private static func averageProfitPerHour(_ bookings: [Booking]) -> Double? {
-        let timed = bookings.filter { hours($0) > 0 }
-        let total = timed.reduce(0.0) { $0 + hours($1) }
-        guard total > 0 else { return nil }
-        return Double(timed.reduce(0) { $0 + profit($1) }) / total
+    private static func jobs(_ n: Int) -> String {
+        "\(n) paid job\(n == 1 ? "" : "s")"
     }
 }

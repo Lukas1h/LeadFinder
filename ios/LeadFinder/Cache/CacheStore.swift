@@ -19,6 +19,7 @@ enum CacheKey: String, CaseIterable {
     case financeExpenses = "finance-expenses"
     case financeTaxes = "finance-taxes"
     case financeLinkOptions = "finance-link-options"
+    case profitFirst = "profit-first"
 }
 
 /// Offline-first store: every screen renders the last cached JSON immediately,

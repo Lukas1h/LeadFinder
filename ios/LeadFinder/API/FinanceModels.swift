@@ -203,6 +203,108 @@ struct FinanceSettings: Codable, Sendable, Hashable {
     var otherWagesMonthly: Double
 }
 
+// MARK: - GET /finances/profit-first
+//
+// Profit First (Mike Michalowicz): every dollar collected is split by fixed
+// percentages into Profit, Owner's pay, Tax and Operating expenses, and the
+// business lives on its OpEx share. All of it is computed server-side by
+// src/lib/finance/profitFirst.ts, the same math the web's page renders.
+
+/// The saved split, in whole percents, adding up to 100.
+struct ProfitFirstPercents: Codable, Sendable, Hashable {
+    var profit: Double
+    var ownerPay: Double
+    var tax: Double
+    var opex: Double
+}
+
+/// What a period's real revenue split into, in dollars.
+struct PfAllocations: Codable, Sendable, Hashable {
+    var profit: Double
+    var ownerPay: Double
+    var tax: Double
+    var opex: Double
+}
+
+/// One window of the report: a month, a quarter, the year, or since the last
+/// allocation day. Dates are "YYYY-MM-DD", inclusive.
+struct PfPeriod: Codable, Sendable, Hashable {
+    var label: String
+    var start: String
+    var end: String
+    /// Bookings paid in the period.
+    var jobs: Int
+    var collected: Double
+    var subcontractors: Double
+    /// Collected less subcontractors: what the percentages split.
+    var realRevenue: Double
+    var allocations: PfAllocations
+    var opexSpent: Double
+    /// allocations.opex − opexSpent; negative = spent more than the OpEx share.
+    var opexLeft: Double
+}
+
+struct ProfitFirstReport: Codable, Sendable, Hashable {
+    var percents: ProfitFirstPercents
+    /// What came in since the last allocation day: what to move on the next.
+    var sinceLastAllocation: PfPeriod
+    var lastAllocationDate: String
+    var nextAllocationDate: String
+    var thisQuarter: PfPeriod
+    var yearToDate: PfPeriod
+    /// This year's months, January through the current one, newest first.
+    var months: [PfPeriod]
+    /// Estimated income + self-employment tax on the year's profit so far.
+    var taxOwedYtd: Double
+}
+
+/// The four accounts, in the web's order.
+enum PfAccount: String, CaseIterable, Sendable, Identifiable {
+    case profit
+    case ownerPay
+    case tax
+    case opex
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .profit: "Profit"
+        case .ownerPay: "Owner's pay"
+        case .tax: "Tax"
+        case .opex: "Operating expenses"
+        }
+    }
+
+    /// The same names where a column is narrow.
+    var shortLabel: String {
+        switch self {
+        case .profit: "Profit"
+        case .ownerPay: "Owner's pay"
+        case .tax: "Tax"
+        case .opex: "OpEx"
+        }
+    }
+
+    func amount(in a: PfAllocations) -> Double {
+        switch self {
+        case .profit: a.profit
+        case .ownerPay: a.ownerPay
+        case .tax: a.tax
+        case .opex: a.opex
+        }
+    }
+
+    func percent(in p: ProfitFirstPercents) -> Double {
+        switch self {
+        case .profit: p.profit
+        case .ownerPay: p.ownerPay
+        case .tax: p.tax
+        case .opex: p.opex
+        }
+    }
+}
+
 // MARK: - GET /finances/link-options
 
 struct FinanceLinkOptions: Codable, Sendable {

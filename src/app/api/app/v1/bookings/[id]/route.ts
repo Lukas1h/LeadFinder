@@ -58,6 +58,12 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
   if (body.stage !== undefined && !isBookingStage(body.stage)) {
     return badRequest(`stage must be one of: ${BOOKING_STAGES.join(", ")}`);
   }
+  // A bare stage move (the app's "Confirm date") skips the full rewrite.
+  if (isBookingStage(body.stage) && Object.keys(body).length === 1) {
+    await setBookingStage(id, body.stage);
+    const moved = await getBookingWithDetails(id);
+    return NextResponse.json({ ok: true, booking: moved ? bookingJson(moved) : null });
+  }
   const text = (field: string, existing: string | null | undefined) =>
     body[field] === undefined ? (existing ?? "") : (optionalString(body[field], field) ?? "");
   const hours = (field: string, existing: number | null) =>

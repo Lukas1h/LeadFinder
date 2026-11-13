@@ -472,6 +472,18 @@ actor APIClient {
         _ = try await send("DELETE", "api/app/v1/bookings/\(id)", body: Empty?.none, as: OK.self)
     }
 
+    /// Moves a booking to a lifecycle stage in one step (the PATCH's `stage`).
+    func setBookingStage(id: String, _ stage: BookingStage) async throws {
+        struct Body: Encodable, Sendable { let stage: String }
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("PATCH", "api/app/v1/bookings/\(id)", body: Body(stage: stage.rawValue), as: OK.self)
+    }
+
+    /// The day is settled: tentative → scheduled.
+    func confirmBookingDate(id: String) async throws {
+        try await setBookingStage(id: id, .scheduled)
+    }
+
     /// Finishes a job. Nil figures are "not recorded". Drive time and costs
     /// aren't sent: they come from the job's trips and expenses.
     func completeBooking(

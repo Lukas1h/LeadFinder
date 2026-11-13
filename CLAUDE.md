@@ -27,6 +27,8 @@ Which worker (Lukas, 2026-11-13):
   (Agent tool, `model: "opus"`, `effort: "low"`). The free models may still do UI
   *wiring* (props, data plumbing, server actions, hooking a button to an action), not
   layout or styles.
+- **iOS (`ios/`)** follows the same split: workers may write Swift models, state,
+  stores and networking; the SwiftUI views' layout and styling are Opus 5.5 at minimum.
 
 How: the `delegate-opencode` skill (`.claude/skills/delegate-opencode/SKILL.md`) — Paseo's
 `create_agent` when Paseo tools are available, otherwise `scripts/delegate.sh "<task>"`,

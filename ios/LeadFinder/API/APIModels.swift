@@ -340,12 +340,52 @@ struct ScheduleResponse: Codable, Sendable {
 
 // MARK: - GET /bookings
 
+/// A booking's lifecycle, one state at a time (server's lib/bookingStages.ts):
+///
+///   tentative → scheduled → editing → invoice_sent → completed
+///
+/// `completed` means paid; Square sets it, cash and check jobs by hand.
+enum BookingStage: String, Codable, CaseIterable, Sendable, Hashable {
+    case tentative
+    case scheduled
+    case editing
+    case invoiceSent = "invoice_sent"
+    case completed
+
+    var label: String {
+        switch self {
+        case .tentative: "Tentative"
+        case .scheduled: "Scheduled"
+        case .editing: "Editing"
+        case .invoiceSent: "Invoice sent"
+        case .completed: "Completed"
+        }
+    }
+
+    /// Where it sits in the chain, 0 first.
+    var index: Int {
+        BookingStage.allCases.firstIndex(of: self) ?? 0
+    }
+
+    /// The stage before this one — what "Reopen" goes back to — or nil at the start.
+    var previous: BookingStage? {
+        let i = index
+        return i > 0 ? BookingStage.allCases[i - 1] : nil
+    }
+
+    /// Still to shoot.
+    var isUpcoming: Bool { self == .tentative || self == .scheduled }
+}
+
 struct BookingsResponse: Codable, Sendable {
     /// Everything still to shoot, including the ones with no settled date.
     var upcoming: [Booking]
     /// The part of `upcoming` whose date isn't settled, the one to chase
     /// first on top. Optional: a cached response from before the server sent it.
     var tentative: [Booking]?
+    /// The part of `upcoming` whose day is settled, soonest job first. Optional:
+    /// a cached response from before the server sent it.
+    var scheduled: [Booking]?
     /// Shot, no invoice out yet: the photos are still being edited. Optional:
     /// a cached response from before the server sent it.
     var editing: [Booking]?
@@ -369,12 +409,18 @@ struct Booking: Codable, Sendable, Identifiable, Hashable {
     var jobDate: String?
     /// Booked, but the day isn't settled: `jobDate` is a placeholder or nil.
     var dateTentative: Bool?
+    /// Where the booking is: tentative | scheduled | editing | invoice_sent |
+    /// completed. Optional so a cache written before the server sent it still
+    /// decodes — `currentStage` fills the gap from the timestamps.
+    var stage: BookingStage?
     /// When he last reached out to the contact, for chasing a date.
     var contactLastContactedAt: String?
     var lockboxCode: String?
     var notes: String?
     var invoiceNote: String?
     var completedAt: String?
+    /// Paid, from the gateway or "Mark paid". Kept in step with `stage`.
+    var paidAt: String?
     /// Shot, photos still being edited (the "Editing" section).
     var shotAt: String?
     var invoiceSentAt: String?
@@ -412,6 +458,23 @@ struct Booking: Codable, Sendable, Identifiable, Hashable {
     var addressLine: String {
         [address, city, state].compactMap { $0?.nilIfBlank }.joined(separator: ", ")
     }
+}
+
+extension Booking {
+    /// The stage to branch on: the server's `stage` when it sent one, else
+    /// read off the timestamps, exactly as the app used to before stages
+    /// existed (so an old cache still lands in the right section).
+    var currentStage: BookingStage {
+        if let stage { return stage }
+        if completedAt != nil { return .completed }
+        if invoiceSentAt != nil { return .invoiceSent }
+        if shotAt != nil { return .editing }
+        if dateTentative == true { return .tentative }
+        return .scheduled
+    }
+
+    /// What the job brought in, before costs: its line items.
+    var revenue: Int { total }
 }
 
 /// A shoot's drone airspace, as checked on the server against the FAA's class

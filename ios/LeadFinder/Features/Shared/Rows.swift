@@ -191,22 +191,18 @@ struct ListingStatusBadge: View {
     }
 }
 
-/// The booking's state, from BookingStatusBadge on the web: completed once
-/// done, awaiting payment once the invoice is out but unpaid, editing once shot.
+/// The booking's stage: tentative (date not confirmed), scheduled, editing,
+/// invoice sent (awaiting payment), completed (paid).
 struct BookingStatusBadge: View {
     let booking: Booking
 
     var body: some View {
-        if booking.completedAt != nil {
-            BadgeChip(text: "Completed", tint: Theme.emerald)
-        } else if booking.invoiceSentAt != nil {
-            BadgeChip(text: "Awaiting payment", tint: Theme.amber)
-        } else if booking.shotAt != nil {
-            BadgeChip(text: "Editing", tint: Theme.accent)
-        } else if booking.dateTentative == true {
-            BadgeChip(text: "Date not confirmed", tint: Theme.amber)
-        } else {
-            BadgeChip(text: "Upcoming", tint: Theme.sky)
+        switch booking.currentStage {
+        case .tentative: BadgeChip(text: "Tentative", tint: Theme.amber)
+        case .scheduled: BadgeChip(text: "Scheduled", tint: Theme.sky)
+        case .editing: BadgeChip(text: "Editing", tint: Theme.violet)
+        case .invoiceSent: BadgeChip(text: "Invoice sent", tint: Theme.orange)
+        case .completed: BadgeChip(text: "Paid", tint: Theme.emerald)
         }
     }
 }
