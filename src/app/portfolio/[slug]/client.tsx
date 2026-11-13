@@ -65,8 +65,40 @@ const arrowButton =
   "absolute top-1/2 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[22px] border-0 bg-white/90 shadow-[0_1px_4px_rgba(0,0,0,0.2)] hover:bg-white";
 
 /** A listing card; `photos` are ready-to-load URLs, empty while they stream in. */
-export function ListingCard({ listing: l }: { listing: PortfolioListing & { photos: string[] } }) {
+/**
+ * The new-style page's video: a plain muted, looping, inline <video> of the
+ * self-hosted file, so there's no YouTube title bar, logo or play button at
+ * any point. The poster shows until the first frame is ready.
+ */
+export function LoopVideo({ src, poster, title }: { src: string; poster: string; title: string }) {
+  return (
+    <div className="relative aspect-video w-full overflow-hidden bg-[#F9F4F1]">
+      <video
+        src={src}
+        poster={poster}
+        title={title}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        disablePictureInPicture
+        disableRemotePlayback
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+      />
+    </div>
+  );
+}
+
+/**
+ * One "Recent listings" card with a photo carousel. Every photo is stacked in
+ * place and only the current one shows; the rest start loading once the first
+ * has, so the arrows flip instantly instead of fetching on each tap.
+ * prominentStatus (new-style pages) makes the status badge a bold color block.
+ */
+export function ListingCard({ listing: l, prominentStatus = false }: { listing: PortfolioListing & { photos: string[] }; prominentStatus?: boolean }) {
   const [idx, setIdx] = useState(0);
+  const [warm, setWarm] = useState(false);
   const n = l.photos.length;
   const step = (dir: number) => setIdx((i) => (i + dir + n) % n);
   const facts = [
@@ -78,15 +110,33 @@ export function ListingCard({ listing: l }: { listing: PortfolioListing & { phot
   return (
     <article className="flex flex-col overflow-hidden border border-[#181A1C]/12 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.05)]">
       <div className="relative aspect-[3/2] bg-[#F9F4F1]">
-        {n > 0 && (
-          // eslint-disable-next-line @next/next/no-img-element -- proxied gallery photo
-          <img src={l.photos[idx]} alt={l.address} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+        {l.photos.map((src, i) =>
+          i === 0 || warm ? (
+            // eslint-disable-next-line @next/next/no-img-element -- proxied gallery photo
+            <img
+              key={src}
+              src={src}
+              alt={i === idx ? l.address : ""}
+              loading={i === 0 ? "lazy" : "eager"}
+              onLoad={i === 0 ? () => setWarm(true) : undefined}
+              className={`absolute inset-0 h-full w-full object-cover ${i === idx ? "" : "invisible"}`}
+            />
+          ) : null
         )}
-        {l.status && (
-          <span className="absolute top-3 left-3 bg-white px-2.5 py-[5px] text-[11px] font-semibold uppercase tracking-[0.14em] text-[#181A1C]">
-            {l.status}
-          </span>
-        )}
+        {l.status &&
+          (prominentStatus ? (
+            <span
+              className={`absolute top-3 left-3 px-3.5 py-2 text-sm font-bold uppercase tracking-[0.16em] text-white shadow-[0_2px_10px_rgba(0,0,0,0.25)] ${
+                /sold/i.test(l.status) ? "bg-[#181A1C]" : "bg-[#D67F1F]"
+              }`}
+            >
+              {l.status}
+            </span>
+          ) : (
+            <span className="absolute top-3 left-3 bg-white px-2.5 py-[5px] text-[11px] font-semibold uppercase tracking-[0.14em] text-[#181A1C]">
+              {l.status}
+            </span>
+          ))}
         {n > 1 && (
           <>
             <span className="absolute top-3 right-3 bg-[#181A1C]/70 px-[9px] py-[5px] text-xs font-medium text-white">

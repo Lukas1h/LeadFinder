@@ -419,14 +419,21 @@ next listing comes up (usually 1–4 weeks after first contact).
   folder are skipped.
 - Agent page styles: `content.newStyle` (the **New style** checkbox in the
   link builder; off by default, and every link sent before 2026-11-12 stays
-  on the original page). New style: hero with no discount → portfolio video
-  (no sound button) and photos → recent listings → outcome tiles (available
-  same/next day, in and out in 45 minutes with photos in 24 hours, real
-  edits with no AI) → testimonial → the Save contact / Book a shoot cards →
-  pricing last. A "Hi, I'm Lukas" block replaces those cards once
-  `LUKAS_PHOTO` in `src/lib/agentPage.ts` is set (off until Lukas adds a
-  headshot and bio). On both styles the footer and the vCard (`lukasVcard`)
-  say Portland when `isPortlandArea(content.area)`.
+  on the original layout). New style: a compact hero (headline, then
+  "Featured in the Eugene Tour of Homes" under it; no tagline, guarantee or
+  discount) → portfolio, where the video is the self-hosted MP4 on Vercel
+  Blob (`AGENT_PAGE_VIDEOS[*].mp4`, a bare `<video>`, no YouTube UI) → recent
+  listings with a bold status badge → four tiles (scheduled for tomorrow; in
+  and out in as little as 45 minutes, next morning turnaround; real edits;
+  licensed and insured) → testimonial → the Save contact / Book a shoot cards
+  → pricing last, led by a highlighted "Most booked" $300 photo package with
+  drone (+$100) and floor plans (+$50) as add-on boxes. A "Hi, I'm Lukas"
+  block replaces the cards once `LUKAS_PHOTO` in `src/lib/agentPage.ts` is set
+  (off until Lukas adds a headshot and bio). On both styles the footer and the
+  vCard (`lukasVcard`) say Portland when `isPortlandArea(content.area)`.
+- Portfolio photos on every agent page: `public/agent-page/pf-01…pf-20.jpg`,
+  Lukas's 2026-11-12 set in the main website's order. Card carousels preload
+  every photo after the first loads, so the arrows flip instantly.
 
 ### Finances
 

@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   try {
     const bytes = await getGalleryThumbnail(photo.pathLower, "w960h640");
     return new NextResponse(new Uint8Array(bytes), {
-      headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" },
+      headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400", "CDN-Cache-Control": "public, max-age=604800, stale-while-revalidate=86400" },
     });
   } catch (err) {
     console.error("site listing photo: thumbnail failed", err);

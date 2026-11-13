@@ -43,10 +43,12 @@ export function parseContent(raw: unknown): PortfolioContent {
 
   const video = text(c.video, "video");
   if (video && !(video in AGENT_PAGE_VIDEOS)) throw new BadBody(`video must be one of: ${Object.keys(AGENT_PAGE_VIDEOS).join(", ")}`);
-  const leadPhoto = text(c.leadPhoto, "leadPhoto");
   // The last photo always closes the section, so it can't lead (the web's picker leaves it out).
+  // A key that isn't in the set (a retired port-N from before the 2026-11-12 photos) is dropped,
+  // so re-saving an older link still works; the page then leads with the first photo.
   const leadable = AGENT_PAGE_PHOTOS.slice(0, -1).map((p) => p.key);
-  if (leadPhoto && !leadable.includes(leadPhoto)) throw new BadBody(`leadPhoto must be one of: ${leadable.join(", ")}`);
+  const requestedLead = text(c.leadPhoto, "leadPhoto");
+  const leadPhoto = requestedLead && leadable.includes(requestedLead) ? requestedLead : null;
 
   const listings = c.listings == null ? [] : c.listings;
   if (!Array.isArray(listings)) throw new BadBody("listings must be an array");

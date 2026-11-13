@@ -13,7 +13,7 @@ import { PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
 import { LUKAS_PHONE as PHONE } from "@/lib/agentVcard";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, isPortlandArea, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
-import { BeforeAfterSlider, ListingCard, MutableVideo } from "./client";
+import { BeforeAfterSlider, ListingCard, LoopVideo, MutableVideo } from "./client";
 import { PageTracker } from "./tracker";
 
 // Same reasoning as the gallery route: a fresh navigation from outside the
@@ -143,11 +143,17 @@ export default async function PortfolioPage({
 
   const whySection = (
         <section data-section="why" className="px-4 pt-[clamp(56px,8vw,88px)]">
-          <div className="mx-auto grid max-w-[1040px] grid-cols-1 bg-[#F9F4F1] md:grid-cols-3 text-center">
+          <div
+            className={`mx-auto grid max-w-[1040px] grid-cols-1 text-center ${
+              newStyle ? "gap-px bg-[#181A1C]/10 md:grid-cols-2 lg:grid-cols-4" : "bg-[#F9F4F1] md:grid-cols-3"
+            }`}
+          >
             {(newStyle ? NEW_TILES : CLASSIC_TILES).map((f, i) => (
               <div
                 key={f.title}
-                className={`px-[clamp(24px,3vw,36px)] py-[30px] ${i > 0 ? "border-t border-[#181A1C]/10 md:border-t-0 md:border-l" : ""}`}
+                className={`px-[clamp(24px,3vw,36px)] py-[30px] ${
+                  newStyle ? "bg-[#F9F4F1]" : i > 0 ? "border-t border-[#181A1C]/10 md:border-t-0 md:border-l" : ""
+                }`}
               >
                 <h3 className={`${serif} text-[21px] font-bold`}>{f.title}</h3>
                 <p className="mt-2 text-base leading-[1.55] text-pretty text-[#181A1C]/78">{f.body}</p>
@@ -161,12 +167,15 @@ export default async function PortfolioPage({
         <section id="pricing" data-section="pricing" className={`px-4 pt-[clamp(64px,9vw,104px)] ${newStyle ? "pb-[clamp(80px,11vw,128px)]" : ""}`}>
           <div className="mx-auto max-w-[672px]">
             <h2 className={`${serif} text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>Pricing</h2>
-            <div className="mt-[clamp(28px,4vw,40px)] border-t border-[#181A1C]/15">
-              <PriceRow
-                name="Interior & Exterior Photography"
-                addOns={["+$100 Aerial Drone Photography", "+$50 Floor Plans"]}
-                price="$300"
-              />
+            {newStyle && <PhotoPackage />}
+            <div className={`${newStyle ? "mt-6" : "mt-[clamp(28px,4vw,40px)]"} border-t border-[#181A1C]/15`}>
+              {!newStyle && (
+                <PriceRow
+                  name="Interior & Exterior Photography"
+                  addOns={["+$100 Aerial Drone Photography", "+$50 Floor Plans"]}
+                  price="$300"
+                />
+              )}
               <PriceRow name="Walkthrough Video" addOns={["+$100 Agent On-Camera Video"]} price="$400" />
               <div className="flex items-start justify-between gap-6 bg-[#F9F4F1] px-5 py-7">
                 <div>
@@ -210,6 +219,22 @@ export default async function PortfolioPage({
 
       <main id="top">
         {/* Hero */}
+        {newStyle ? (
+          <section data-section="hero" className="px-4 pt-[clamp(20px,3vw,32px)] pb-[clamp(20px,3vw,28px)] text-center">
+            <div className="mx-auto flex max-w-[760px] flex-col items-center">
+              {firstName && (
+                <p className={`${serif} mb-3 text-[clamp(18px,2.2vw,22px)] italic text-[#181A1C]`}>Thanks for taking a look, {firstName}!</p>
+              )}
+              <h1 className={`${serif} text-[clamp(34px,5.6vw,58px)] font-bold leading-[1.1] tracking-[-0.02em] text-balance`}>
+                Real estate photo &amp; video in <span className="text-[#D67F1F]">{area}</span>
+              </h1>
+              {showTour && (
+                <p className="mt-2.5 text-[12px] font-medium uppercase tracking-[0.2em] text-[#995000]">Featured in the Eugene Tour of Homes</p>
+              )}
+            </div>
+          </section>
+        ) : (
+          <>
         <section data-section="hero" className="px-4 pt-[clamp(32px,5vw,56px)] pb-[clamp(28px,4vw,40px)] text-center">
           <div className="mx-auto flex max-w-[760px] flex-col items-center">
             {firstName && (
@@ -241,6 +266,9 @@ export default async function PortfolioPage({
           </div>
         </section>
 
+          </>
+        )}
+
         {/* Portfolio */}
         <section id="portfolio" className="px-4">
           <div className="mx-auto max-w-[1040px]">
@@ -265,7 +293,7 @@ export default async function PortfolioPage({
               </>
             )}
             <div data-section="video">
-              <MutableVideo id={video.id} title={video.title} soundButton={!newStyle} />
+              {newStyle ? <LoopVideo src={video.mp4} poster={video.poster} title={video.title} /> : <MutableVideo id={video.id} title={video.title} />}
             </div>
             <PhotoGrid photos={gridBottom} desktopRows={2} className="mt-2 sm:mt-3" />
             {featureLast && (
@@ -292,8 +320,8 @@ export default async function PortfolioPage({
               </h2>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-4">
                 {/* The cards' photos come from Dropbox, so they stream in after the rest of the page. */}
-                <Suspense fallback={listings.map((l) => <ListingCard key={l.bookingId} listing={{ ...l, photos: [] }} />)}>
-                  <ListingCards slug={slug} listings={listings} />
+                <Suspense fallback={listings.map((l) => <ListingCard key={l.bookingId} listing={{ ...l, photos: [] }} prominentStatus={newStyle} />)}>
+                  <ListingCards slug={slug} listings={listings} prominentStatus={newStyle} />
                 </Suspense>
               </div>
             </div>
@@ -454,7 +482,7 @@ export default async function PortfolioPage({
 }
 
 /** Each card with its photos (lib/listingCardPhotos.ts), served through the slug-scoped photo route. */
-async function ListingCards({ slug, listings }: { slug: string; listings: PortfolioListing[] }) {
+async function ListingCards({ slug, listings, prominentStatus }: { slug: string; listings: PortfolioListing[]; prominentStatus: boolean }) {
   const rows = await db
     .select({ id: bookings.id, link: bookings.dropboxFolderLink, highlights: bookings.highlightPhotos })
     .from(bookings)
@@ -470,7 +498,7 @@ async function ListingCards({ slug, listings }: { slug: string; listings: Portfo
       };
     })
   );
-  return cards.map((l) => <ListingCard key={l.bookingId} listing={l} />);
+  return cards.map((l) => <ListingCard key={l.bookingId} listing={l} prominentStatus={prominentStatus} />);
 }
 
 /**
@@ -547,28 +575,69 @@ const CLASSIC_TILES = [
 
 /** The new style's tiles: what an agent gets, not what Lukas does. */
 const NEW_TILES = [
-              {
-                title: "Available when yours isn’t",
-                body: (
-                  <>
-                    Usually free <b>same or next day</b>, so a booked-up photographer never holds your listing back.
-                  </>
-                ),
-              },
-              {
-                title: "In and out in 45 minutes",
-                body: (
-                  <>
-                    Barely an interruption for your sellers. Photos back in <b>24 hours</b>.
-                  </>
-                ),
-              },
-              {
-                title: "Real edits, no AI",
-                body: (
-                  <>
-                    Every photo edited by hand by a <b>real person</b>. No warped lines, fake skies or AI artefacts.
-                  </>
-                ),
-              },
-            ];
+  {
+    title: "Get your photos scheduled for tomorrow",
+    body: (
+      <>
+        Usually free <b>same or next day</b>, so a booked-up photographer never holds your listing back.
+      </>
+    ),
+  },
+  {
+    title: "In and out in as little as 45 minutes",
+    body: (
+      <>
+        Barely an interruption for your sellers. <b>Next morning turnaround.</b>
+      </>
+    ),
+  },
+  {
+    title: "Real edits, no AI",
+    body: (
+      <>
+        Every photo edited by hand by a <b>real person</b>.
+      </>
+    ),
+  },
+  {
+    title: "Licensed and insured",
+    body: (
+      <>
+        <b>FAA Part 107</b> certified drone pilot, fully <b>insured</b>. Your listing and your brokerage are covered.
+      </>
+    ),
+  },
+];
+
+/** New-style pricing lead: the photo package as the headline offer, with drone and floor plans as add-ons worth noticing. */
+function PhotoPackage() {
+  const addOns = [
+    { price: "+$100", name: "Aerial drone photography", body: "Show off the lot, the land and what’s around it." },
+    { price: "+$50", name: "Floor plans", body: "A clear layout buyers can study before they ever visit." },
+  ];
+  return (
+    <div className="relative mt-[clamp(32px,4vw,44px)] border-2 border-[#D67F1F] px-[clamp(20px,3vw,32px)] pt-8 pb-[clamp(20px,3vw,28px)]">
+      <span className="absolute -top-3.5 left-[clamp(20px,3vw,32px)] bg-[#D67F1F] px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-white">
+        Most booked
+      </span>
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <p className="text-[clamp(20px,2.4vw,24px)] font-semibold leading-tight">Interior &amp; Exterior Photography</p>
+          <p className="mt-2 text-[15px] leading-normal text-[#181A1C]/75">Every room, inside and out, edited by hand. Next morning turnaround.</p>
+        </div>
+        <p className="font-[family-name:var(--font-portfolio-serif)] whitespace-nowrap text-[clamp(34px,4.4vw,42px)] font-bold leading-none text-[#D67F1F]">$300</p>
+      </div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        {addOns.map((a) => (
+          <div key={a.name} className="bg-[#F9F4F1] px-4 py-4">
+            <p className="flex items-baseline gap-2">
+              <span className="font-[family-name:var(--font-portfolio-serif)] text-[22px] font-bold text-[#D67F1F]">{a.price}</span>
+              <span className="text-base font-semibold">{a.name}</span>
+            </p>
+            <p className="mt-1.5 text-sm leading-normal text-[#181A1C]/72">{a.body}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
