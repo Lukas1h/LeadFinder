@@ -1,3 +1,4 @@
+import { attachmentsForMarket } from "@/lib/attachments";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { agents, messagePresets, messagePresetVariants, messageSends } from "@/db/schema";
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
   const text = renderMessageBody(variant.body, name, null);
 
   try {
-    await sendEmail({ to: email, toName: name, subject, text, attachments: preset.attachments });
+    await sendEmail({ to: email, toName: name, subject, text, attachments: attachmentsForMarket(preset.attachments, null) });
   } catch (err) {
     console.error("cold-outreach API: send failed", err);
     return NextResponse.json({ status: "failed", error: String(err) }, { status: 502 });

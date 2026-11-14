@@ -8,6 +8,25 @@ export interface AttachmentMeta {
   contentType: string;
   /** Bytes, worked out from the base64 length. */
   size: number;
+  /** See PresetAttachment.market. */
+  market?: string | null;
+}
+
+/**
+ * The files a variant written for `market` sends (null = the regular
+ * wording): untagged files, except where a file tagged for that market has
+ * the same name and takes its place, plus that market's own files. Files
+ * tagged for any other market never go out. Every send path filters through
+ * this, so the Portland pricing sheet only reaches Portland agents and nobody
+ * gets two pricing sheets.
+ */
+export function attachmentsForMarket<T extends { filename: string; market?: string | null }>(
+  attachments: T[],
+  market: string | null | undefined
+): T[] {
+  const own = market ? attachments.filter((a) => a.market === market) : [];
+  const replaced = new Set(own.map((a) => a.filename));
+  return attachments.filter((a) => (a.market ? a.market === market : !replaced.has(a.filename)));
 }
 
 const TYPES: Record<string, string> = {
@@ -38,7 +57,8 @@ export const attachmentMetaSql = sql<AttachmentMeta[]>`(
     'id', a->>'id',
     'filename', a->>'filename',
     'contentType', a->>'contentType',
-    'size', (length(a->>'content') * 3 / 4)
+    'size', (length(a->>'content') * 3 / 4),
+    'market', a->>'market'
   ) order by ord), '[]'::jsonb)
   from jsonb_array_elements(${messagePresets.attachments}) with ordinality as t(a, ord)
 )`;

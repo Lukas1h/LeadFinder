@@ -212,7 +212,17 @@ Lisas), and one person can have a phone-only and an email-only record.
   `portland`, null = regular wording) limits it to that market's listings: a
   listing in a market whose template has enabled variants of its own rotates
   through only those (`variantsForMarket`, `src/lib/markets.ts`), everyone else
-  gets the regular ones; reply quick actions and email use only regular ones.
+  gets the regular ones. Email (with a listing) and reply quick actions do the
+  same since 2026-11-14: a quick action's market is its send's listing's, else
+  the agent's (`agentMarkets`). A template attachment can carry `market`
+  (`PresetAttachment.market`): it goes out only with that market's variants,
+  replacing the untagged file of the same name (`attachmentsForMarket` in
+  `src/lib/attachments.ts`, applied on every send path). Portland pricing
+  (photos $324, video $424, rest unchanged): "Send pricing sheet" text and
+  "Response to Text Message" email have "Portland A" variants quoting $324,
+  and both carry a Portland "Hahn Media Pricing Sheet.pdf" ($324 / $424;
+  drone, social edit and the $700 Full Package unchanged). Everyone else keeps
+  $300 / $400.
   Portland variants (2026-11-12): Backup Option "Portland A–D" and Bad Photos
   "Portland A" ("I do real estate photography", no "some"; Bad Photos ends
   "I'd love to get it shot as soon as possible for you!"). Set on the variant

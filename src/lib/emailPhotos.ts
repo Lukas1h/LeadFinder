@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { messagePresetVariants, type PresetAttachment, type VariantInlinePhotos } from "@/db/schema";
-import { contentTypeFor } from "@/lib/attachments";
+import { attachmentsForMarket, contentTypeFor } from "@/lib/attachments";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** What mail apps show in a message body. HEIC isn't one of them. */
@@ -42,11 +42,12 @@ export async function emailFilesFor(
   variantId: string | null | undefined,
   attachments: PresetAttachment[] | null | undefined
 ): Promise<{ attachments: PresetAttachment[]; inlinePhotos: PresetAttachment[] }> {
-  const files = attachments ?? [];
-  if (!variantId || !UUID.test(variantId)) return { attachments: files, inlinePhotos: [] };
+  const all = attachments ?? [];
+  if (!variantId || !UUID.test(variantId)) return { attachments: attachmentsForMarket(all, null), inlinePhotos: [] };
   const [variant] = await db
-    .select({ inlinePhotos: messagePresetVariants.inlinePhotos })
+    .select({ inlinePhotos: messagePresetVariants.inlinePhotos, market: messagePresetVariants.market })
     .from(messagePresetVariants)
     .where(eq(messagePresetVariants.id, variantId));
-  return splitEmailFiles(files, variant?.inlinePhotos);
+  // A market variant (the Portland wording) sends that market's files, e.g. its pricing sheet.
+  return splitEmailFiles(attachmentsForMarket(all, variant?.market), variant?.inlinePhotos);
 }

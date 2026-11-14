@@ -1,5 +1,7 @@
 "use server";
 
+import { attachmentsForMarket } from "@/lib/attachments";
+import { marketFor, variantsForMarket } from "@/lib/markets";
 import { db } from "@/db";
 import {
   agents,
@@ -12,7 +14,7 @@ import {
   type Listing,
   type Agent,
 } from "@/db/schema";
-import { and, count, eq, isNull, sum } from "drizzle-orm";
+import { and, count, eq, sum } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
   DEFAULT_COLD_EMAIL_SUBJECT,
@@ -141,8 +143,6 @@ export async function getComposeEmailOptions(listingContext?: {
     eq(messagePresets.enabled, true),
     eq(messagePresets.aiGenerated, false),
     eq(messagePresetVariants.enabled, true),
-    // Market variants (lib/markets.ts) are written for texts; email keeps the regular wording.
-    isNull(messagePresetVariants.market),
   ];
   if (listingContext) conditions.push(eq(messagePresets.type, listingContext.type));
 
@@ -157,6 +157,7 @@ export async function getComposeEmailOptions(listingContext?: {
       label: messagePresetVariants.label,
       subject: messagePresetVariants.subject,
       body: messagePresetVariants.body,
+      market: messagePresetVariants.market,
     })
     .from(messagePresetVariants)
     .innerJoin(messagePresets, eq(messagePresetVariants.presetId, messagePresets.id))
@@ -193,7 +194,12 @@ export async function getComposeEmailOptions(listingContext?: {
       )
     : (Array.from(rowsByPreset.values()).find((group) => !group[0].protected)?.[0].presetId ?? null);
 
-  const presets: PresetOption[] = Array.from(rowsByPreset.values()).map((group) => {
+  // A listing in a market whose template has variants of its own gets those
+  // (the Portland prices and pricing sheet); Compose, with no listing, the regular ones.
+  const listingMarket = listing ? marketFor(listing) : null;
+  const presets: PresetOption[] = Array.from(rowsByPreset.values()).flatMap((all) => {
+    const group = variantsForMarket(all, listingMarket);
+    if (group.length === 0) return [];
 
     const minCount = Math.min(...group.map((r) => countByVariant.get(r.variantId) ?? 0));
     const leastUsed = group
@@ -216,7 +222,7 @@ export async function getComposeEmailOptions(listingContext?: {
         ? renderMessageBody(picked.body, listingContext.agentName, listingContext.address, listingContext.city)
         : picked.body,
       subject: listingContext ? renderSubject(picked.subject ?? "", listingContext.agentName) : picked.subject ?? "",
-      attachments: picked.attachments,
+      attachments: attachmentsForMarket(picked.attachments, picked.market),
       type: picked.presetType,
       recommended: picked.presetId === recommendedPresetId,
       blank: picked.protected,

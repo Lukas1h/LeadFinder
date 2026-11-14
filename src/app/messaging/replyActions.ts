@@ -21,8 +21,10 @@ import {
   type MessageResult,
   type PresetType,
 } from "@/db/schema";
-import { and, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
-import { attachmentMetaSql, withContentTypes, type AttachmentMeta } from "@/lib/attachments";
+import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { attachmentMetaSql, attachmentsForMarket, withContentTypes, type AttachmentMeta } from "@/lib/attachments";
+import { marketFor, variantsForMarket, type Market } from "@/lib/markets";
+import { agentMarkets } from "@/lib/agentMarket";
 import { resolvePendingInteraction, startPendingInteraction } from "@/app/agents/interactionActions";
 import { revalidatePath } from "next/cache";
 import { sendEmail } from "@/lib/mailer";
@@ -73,10 +75,15 @@ export interface QuickAction {
   builderHref: string | null;
 }
 
-/** The enabled variant that has gone out least, ties by label: the same rotation as the send dialogs. */
-async function nextVariants(presetIds: string[]) {
-  if (presetIds.length === 0) return new Map<string, { id: string; subject: string | null; body: string }>();
-  const variants = await db
+/**
+ * The enabled variant that has gone out least, ties by label: the same
+ * rotation as the send dialogs. With a market, a template's variants written
+ * for that market are used when it has any (variantsForMarket), so a Portland
+ * agent gets the Portland prices and pricing sheet.
+ */
+async function nextVariants(presetIds: string[], market: Market | null = null) {
+  if (presetIds.length === 0) return new Map<string, { id: string; subject: string | null; body: string; market: string | null }>();
+  const rows = await db
     .select({
       id: messagePresetVariants.id,
       presetId: messagePresetVariants.presetId,
@@ -84,17 +91,11 @@ async function nextVariants(presetIds: string[]) {
       subject: messagePresetVariants.subject,
       body: messagePresetVariants.body,
       inlinePhotos: messagePresetVariants.inlinePhotos,
+      market: messagePresetVariants.market,
     })
     .from(messagePresetVariants)
-    // Reply quick actions have no listing to place in a market, so they use
-    // the regular wording only (market variants: lib/markets.ts).
-    .where(
-      and(
-        inArray(messagePresetVariants.presetId, presetIds),
-        eq(messagePresetVariants.enabled, true),
-        isNull(messagePresetVariants.market)
-      )
-    );
+    .where(and(inArray(messagePresetVariants.presetId, presetIds), eq(messagePresetVariants.enabled, true)));
+  const variants = presetIds.flatMap((id) => variantsForMarket(rows.filter((v) => v.presetId === id), market));
   if (variants.length === 0) return new Map();
   const counts = await db
     .select({ variantId: messageSends.variantId, n: count() })
@@ -118,7 +119,8 @@ async function nextVariants(presetIds: string[]) {
  */
 async function loadQuickActions(
   presetIds: string[],
-  who: { agentId: string | null; agentName: string | null; address: string | null; city: string | null }
+  who: { agentId: string | null; agentName: string | null; address: string | null; city: string | null },
+  market: Market | null = null
 ): Promise<QuickAction[]> {
   if (presetIds.length === 0) return [];
   const [presets, variants] = await Promise.all([
@@ -131,7 +133,7 @@ async function loadQuickActions(
       })
       .from(messagePresets)
       .where(and(inArray(messagePresets.id, presetIds), eq(messagePresets.enabled, true))),
-    nextVariants(presetIds),
+    nextVariants(presetIds, market),
   ]);
   const byId = new Map(presets.map((p) => [p.id, p]));
   // {{recentWork}} needs a DB lookup, shared by every quick action since it
@@ -146,7 +148,7 @@ async function loadQuickActions(
         // "Portfolio link" opens the builder: no agent, nothing to build for.
         const opensBuilder = preset.name === PORTFOLIO_PRESET_NAME;
         if (opensBuilder && !who.agentId) return [];
-        const files = splitEmailFiles(withContentTypes(preset.attachments), variant.inlinePhotos);
+        const files = splitEmailFiles(attachmentsForMarket(withContentTypes(preset.attachments), variant.market), variant.inlinePhotos);
         return [
           {
             presetId: preset.id,
@@ -191,7 +193,8 @@ export async function getSendDetail(sendId: string): Promise<SendDetail | null> 
     address: row.listing?.address ?? null,
     city: row.listing?.city ?? row.agent?.homeCity ?? null,
   };
-  const quickActions = await loadQuickActions(row.quickActionPresetIds, who);
+  const market = row.listing ? marketFor(row.listing) : row.agent ? await agentMarket(row.agent.id) : null;
+  const quickActions = await loadQuickActions(row.quickActionPresetIds, who, market);
 
   return {
     id: row.send.id,
@@ -288,6 +291,17 @@ function revalidateAll() {
   revalidatePath("/pipeline");
 }
 
+/** The market an agent works in (lib/agentMarket.ts), for a conversation with no listing. */
+async function agentMarket(agentId: string): Promise<Market | null> {
+  return (await agentMarkets([agentId])).get(agentId) ?? null;
+}
+
+/** The market a conversation is in: its listing's, else the agent's. Matches getSendDetail's quick actions. */
+async function sendMarket(row: NonNullable<Awaited<ReturnType<typeof loadSend>>>): Promise<Market | null> {
+  if (row.listingCity != null || row.listingState != null) return marketFor({ city: row.listingCity, state: row.listingState });
+  return row.agent ? agentMarket(row.agent.id) : null;
+}
+
 async function loadSend(sendId: string) {
   const [row] = await db
     .select({
@@ -296,6 +310,8 @@ async function loadSend(sendId: string) {
       quickActionPresetIds: messagePresets.quickActionPresetIds,
       listingAgentName: listings.agentName,
       address: listings.address,
+      listingCity: listings.city,
+      listingState: listings.state,
       // No listing on the send (a cold text): where the agent mostly lists.
       city: sql<string | null>`coalesce(${listings.city}, ${agents.homeCity})`,
     })
@@ -386,7 +402,7 @@ export async function sendQuickActionEmail(
   if (!preset || !preset.enabled) return { error: "That template is gone or switched off" };
   if (preset.channel !== "email") return { error: `"${preset.name}" is a text, not an email` };
 
-  const variant = (await nextVariants([preset.id])).get(preset.id);
+  const variant = (await nextVariants([preset.id], await sendMarket(row))).get(preset.id);
   if (!variant) return { error: `"${preset.name}" has no enabled variant` };
 
   const name = greetingName(row.send, agent.name, row.listingAgentName);

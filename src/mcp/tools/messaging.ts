@@ -1,3 +1,4 @@
+import { attachmentsForMarket } from "@/lib/attachments";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { and, desc, eq, isNotNull, lte, ne } from "drizzle-orm";
@@ -54,7 +55,7 @@ async function sendBulkTemplateEmail(
   const body = renderMessageBody(variant.body, name, null);
 
   try {
-    await sendEmail({ to: email, toName: name, subject, text: body, attachments: variant.attachments });
+    await sendEmail({ to: email, toName: name, subject, text: body, attachments: attachmentsForMarket(variant.attachments, null) });
   } catch (err) {
     return { name, email, status: "failed", reason: `SMTP send failed: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -235,7 +236,7 @@ export function registerMessagingTools(server: McpServer): void {
       if (!body.trim()) return errorText("Body is empty");
 
       try {
-        await sendEmail({ to: email, toName: name, subject, text: body, attachments: variant.attachments });
+        await sendEmail({ to: email, toName: name, subject, text: body, attachments: attachmentsForMarket(variant.attachments, null) });
       } catch (err) {
         return errorText(`SMTP send failed: ${err instanceof Error ? err.message : String(err)}`);
       }

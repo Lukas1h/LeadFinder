@@ -1040,6 +1040,13 @@ export interface PresetAttachment {
   content: string; // base64-encoded file bytes
   /** Set on upload since 2026-10-10; older ones are worked out from the filename. */
   contentType?: string;
+  /**
+   * Only for this market (lib/markets.ts), sent with the template's variant
+   * for that market in place of the untagged file of the same name, and
+   * never with any other variant (attachmentsForMarket). The Portland pricing
+   * sheet, 2026-11-14. Unset = every market.
+   */
+  market?: string | null;
 }
 
 /**
