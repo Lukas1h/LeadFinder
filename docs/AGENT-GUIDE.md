@@ -494,7 +494,7 @@ next listing comes up (usually 1–4 weeks after first contact).
   A link's own `content.prices` (a full set) wins over the template: it locks
   what an agent has already seen, and `updatePortfolioLinkAction` keeps it
   across builder saves. Portland metro template since 2026-11-14: photo $324,
-  drone +$124, video $424 (rest default); the 8 Portland links already opened
+  video $424 (drone and the rest default); the 8 Portland links already opened
   then were locked at the old prices. Listing cards on both
   styles: a Pending badge is the biggest (orange block), Just listed a small
   white tag; the listing agent's name and brokerage are large under the
