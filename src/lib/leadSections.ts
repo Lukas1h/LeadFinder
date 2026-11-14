@@ -160,6 +160,8 @@ export function isRecentlyTexted(lastTextedAt: Date | null | undefined): boolean
 
 /** Under the floor, unreachable, a builder, a brokerage that handles its own media, or the agent already turned us down. */
 export function isLeadUnlikely(listing: LeadSectionInput): boolean {
+  // All land ("LOT") is Unlikely for now (Lukas, 2026-11-13), whatever the price.
+  if (listing.homeType === "LOT") return true;
   if (isUnderPriceFloor(listing.price, listing.homeType)) return true;
   if (hasNoAgent(listing)) return true;
   if (isBuilderListing(listing.brokerName)) return true;

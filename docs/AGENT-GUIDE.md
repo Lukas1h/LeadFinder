@@ -133,7 +133,8 @@ contacted onward.
 Priorities: weak photos first, no video second. Don't chase luxury with price
 floors.
 
-Unlikely (`isLeadUnlikely` in `src/lib/leadSections.ts`): under the price
+Unlikely (`isLeadUnlikely` in `src/lib/leadSections.ts`): every lot/land
+listing (`home_type` `LOT`, for now, Lukas 2026-11-13), under the price
 floor, no agent, a builder, Redfin (books its own media; not even synced), a
 declined agent, and Berkshire Hathaway HomeServices NW Real Estate listings in
 the Portland market (`hasAssignedMediaInMarket`: that office assigns its agents
