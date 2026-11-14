@@ -490,7 +490,12 @@ next listing comes up (usually 1–4 weeks after first contact).
   template's `content.prices` (`photo`, `drone`, `floorPlans`, `staging`,
   `twilight`, `video`, `bundle`, dollars, missing key = default) overrides
   them, resolved at render time from the link's `content.area` (exact town
-  match like `templateForArea`; a Portland area falls back to "portland"). Listing cards on both
+  match like `templateForArea`; a Portland area falls back to "portland").
+  A link's own `content.prices` (a full set) wins over the template: it locks
+  what an agent has already seen, and `updatePortfolioLinkAction` keeps it
+  across builder saves. Portland metro template since 2026-11-14: photo $324,
+  drone +$124, video $424 (rest default); the 8 Portland links already opened
+  then were locked at the old prices. Listing cards on both
   styles: a Pending badge is the biggest (orange block), Just listed a small
   white tag; the listing agent's name and brokerage are large under the
   address.

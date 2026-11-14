@@ -123,7 +123,8 @@ export default async function PortfolioPage({
   const showTour = c.showTourOfHomes ?? true;
   // Off for every link made before 2026-11-12: those pages stay exactly as they were sent.
   const newStyle = c.newStyle ?? false;
-  const prices = resolvePortfolioPrices((await templateForLinkArea(area))?.content.prices);
+  // A page's own locked prices win over its area template's (see PortfolioContent.prices).
+  const prices = resolvePortfolioPrices(c.prices ?? (await templateForLinkArea(area))?.content.prices);
 
   // The closing full-width photo stays put; the lead photo jumps to the front of the rest.
   const closing = AGENT_PAGE_PHOTOS[AGENT_PAGE_PHOTOS.length - 1];

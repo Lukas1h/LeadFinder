@@ -604,6 +604,12 @@ export interface PortfolioContent {
   listings?: PortfolioListing[];
   /** The link preview image (og:image), from an area template; none = the lead portfolio photo. */
   ogImage?: string | null;
+  /**
+   * Prices locked on this one page (dollars), over its area template's. Set on
+   * already-opened Portland links when Portland prices went up (2026-11-14), so
+   * an agent who has seen a price keeps seeing it. Kept across builder saves.
+   */
+  prices?: Partial<PortfolioPrices>;
 }
 
 /** What an area template presets in the builder; every field optional = leave the builder's default. */

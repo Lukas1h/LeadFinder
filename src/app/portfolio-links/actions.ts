@@ -364,6 +364,11 @@ export async function getPortfolioLinkForEdit(linkId: string): Promise<{
 
 /** Saves changes to a link in place — same URL, same activity. */
 export async function updatePortfolioLinkAction(linkId: string, agentId: string | null, content: PortfolioContent): Promise<{ id: string; slug: string; url: string }> {
+  // The builder doesn't edit prices, so a page's locked prices (content.prices) survive a save.
+  if (!content.prices) {
+    const [existing] = await db.select({ content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.id, linkId));
+    if (existing?.content.prices) content = { ...content, prices: existing.content.prices };
+  }
   const [row] = await db.update(portfolioLinks).set({ agentId, content }).where(eq(portfolioLinks.id, linkId)).returning({ slug: portfolioLinks.slug });
   if (!row) throw new Error("That link no longer exists");
   return { id: linkId, slug: row.slug, url: portfolioUrl(row.slug) };
