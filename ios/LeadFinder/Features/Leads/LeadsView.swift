@@ -17,23 +17,22 @@ struct LeadsView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Outside the list, so a market switch only swaps the cards
-                // below: the tabs never disappear or jump.
-                marketTabs
-                    .padding(.top, 8)
-                    .padding(.bottom, 4)
-                Group {
-                    if let leads = appState.leads.value {
-                        leadsList(leads)
-                            .id(appState.leadsMarket)
-                    } else if appState.leads.error != nil {
-                        loadFailure
-                    } else {
-                        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
+            Group {
+                if let leads = appState.leads.value {
+                    leadsList(leads)
+                        .id(appState.leadsMarket)
+                } else if appState.leads.error != nil {
+                    loadFailure
+                } else {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            // The tabs ride in a top safe-area bar instead of sitting in a
+            // VStack above the list: the scroll view is then the screen's
+            // primary scroll view, so the nav bar collapses with it and the
+            // cards scroll under the bar rather than over or through it.
+            // Outside the list, so a market switch only swaps the cards.
+            .modifier(TopBar { marketTabs.padding(.top, 4).padding(.bottom, 8) })
             .background(Theme.background)
             .navigationTitle("Leads")
             .toolbar {
@@ -208,7 +207,19 @@ struct LeadsView: View {
                                 .font(.caption.weight(.semibold).monospacedDigit())
                                 .foregroundStyle(selected ? Theme.secondaryText : Theme.tertiaryText)
                         }
+                        if let fresh = market.newAgents, fresh > 0 {
+                            // Brand-new agents (first seen today) in this market.
+                            Text("+\(fresh)")
+                                .font(.caption2.weight(.bold).monospacedDigit())
+                                .foregroundStyle(Theme.accent)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Theme.accent.opacity(0.16), in: Capsule())
+                                .accessibilityLabel("\(fresh) new agents")
+                        }
                     }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                     .font(.subheadline.weight(selected ? .semibold : .medium))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 7)
@@ -308,4 +319,21 @@ struct LeadsView: View {
 /// the card rather than leaving a row that no longer exists.
 extension Notification.Name {
     static let leadsDidChange = Notification.Name("leadsDidChange")
+}
+
+/// Pins content below the navigation bar. On iOS 26+ a `safeAreaBar`, which
+/// joins the nav bar's Liquid Glass scroll-edge effect; earlier, a safe-area
+/// inset on the system bar material.
+private struct TopBar<Bar: View>: ViewModifier {
+    @ViewBuilder var bar: () -> Bar
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.safeAreaBar(edge: .top, spacing: 0) { bar() }
+        } else {
+            content.safeAreaInset(edge: .top, spacing: 0) {
+                bar().frame(maxWidth: .infinity).background(.bar)
+            }
+        }
+    }
 }

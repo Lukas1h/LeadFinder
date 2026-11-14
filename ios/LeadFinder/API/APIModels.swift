@@ -161,6 +161,8 @@ struct LeadsResponse: Codable, Sendable {
         var key: String
         var label: String
         var count: Int
+        /// Brand-new agents (first seen today) in this market. Nil from older servers.
+        var newAgents: Int? = nil
 
         var id: String { key }
     }

@@ -10,6 +10,7 @@ import { getStagingGroup } from "./staging";
 import { getTwilightGiftGroup } from "./twilightGifts";
 import { getUnopenedLinkGroup } from "./unopened";
 import { getOpenedNoReplyGroup } from "./opened";
+import { getSavedContactGroup } from "./savedContact";
 import { getDroneBookingGroup } from "./droneBooking";
 import { getPhotoOfferRepliesGroup } from "./photoOfferReplies";
 import { getNearShootGroup } from "./nearShoot";
@@ -26,6 +27,7 @@ export interface OfferFeeds {
   staging: FeedGroup;
   unopened: FeedGroup;
   openedNoReply: FeedGroup;
+  savedContact: FeedGroup;
   photoOfferReplies: FeedGroup;
   nearShoot: FeedGroup;
   droneBooking: FeedGroup;
@@ -41,12 +43,13 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
   // established before any of these parallel branches touch the clock, or
   // whichever gets there first (not necessarily this one) fails the build.
   await connection();
-  const [touchUps, backOnMarket, staging, unopened, openedNoReply, photoOfferReplies, nearShoot, droneBooking, graphics, drone, stats, history] = await Promise.all([
+  const [touchUps, backOnMarket, staging, unopened, openedNoReply, savedContact, photoOfferReplies, nearShoot, droneBooking, graphics, drone, stats, history] = await Promise.all([
     getPhotoTouchUpGroups(),
     getBackOnMarketGroup(),
     getStagingGroup(),
     getUnopenedLinkGroup(),
     getOpenedNoReplyGroup(),
+    getSavedContactGroup(),
     getPhotoOfferRepliesGroup(),
     getNearShootGroup(),
     getDroneBookingGroup(),
@@ -65,6 +68,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
     staging,
     unopened,
     openedNoReply,
+    savedContact,
     photoOfferReplies,
     nearShoot,
     droneBooking,
@@ -165,6 +169,13 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
       blurb:
         "They got your portfolio link 3+ days ago and opened it, but haven’t said anything since. Thank them for looking and offer a first-time discount on their next listing.",
       groups: [offers.openedNoReply],
+    },
+    {
+      key: "saved_contact",
+      title: "Saved your contact, quiet 3 weeks",
+      blurb:
+        "Agents who saved your contact from their portfolio page, with no texts either way in 3 weeks. A friendly check-in so you’re the one they think of for the next listing.",
+      groups: [offers.savedContact],
     },
     {
       key: "congrats",

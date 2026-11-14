@@ -75,7 +75,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
 
   // Cards show a handful of each listing's photos; the listing dialog fetches
   // the whole gallery when it opens (see ListingModal).
-  const { known, sections, near, far, openLeadCount, queuedCount, agentCount, addressById, unscoredCount, marketCounts } =
+  const { known, sections, near, far, openLeadCount, queuedCount, agentCount, addressById, unscoredCount, marketCounts, newAgentCounts } =
     await getLeadsBoard({
       cardPhotosOnly: true,
       market,
@@ -198,6 +198,14 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
             }`}
           >
             {MARKET_LABELS[m]} ({marketCounts[m]})
+            {newAgentCounts[m] > 0 && (
+              <span
+                title={`${newAgentCounts[m]} brand-new agent${newAgentCounts[m] === 1 ? "" : "s"} today`}
+                className="ml-1.5 inline-flex items-center rounded-full bg-primary px-1.5 py-px align-middle text-[10px] font-semibold leading-4 text-primary-foreground"
+              >
+                +{newAgentCounts[m]}
+              </span>
+            )}
           </Link>
         ))}
       </nav>

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PortfolioListing } from "@/db/schema";
 import { AGENT_PAGE_VIDEOS } from "@/lib/agentPage";
+import { DEFAULT_PORTFOLIO_PRICES, PORTFOLIO_PRICE_ITEMS, type PortfolioPrices } from "@/lib/portfolioPrices";
 import { deletePortfolioTemplate, savePortfolioTemplate, type PortfolioTemplateSummary } from "../actions";
 import { ImageUpload, JobSearch } from "../new/PortfolioLinkBuilder";
 
@@ -41,6 +42,7 @@ export function TemplatesEditor({ templates }: { templates: PortfolioTemplateSum
               {t.content.showOffer === false ? " · no $50 offer" : ""}
               {t.content.showTourOfHomes === false ? " · no Tour of Homes" : ""}
               {t.content.ogImage ? " · own preview image" : ""}
+              {Object.keys(t.content.prices ?? {}).length ? " · own prices" : ""}
             </p>
           </div>
           <div className="flex shrink-0 gap-1">
@@ -80,7 +82,19 @@ function TemplateForm({ template, onDone }: { template: PortfolioTemplateSummary
   const [showOffer, setShowOffer] = useState(c?.showOffer ?? true);
   const [video, setVideo] = useState(c?.video ?? "summit");
   const [ogImage, setOgImage] = useState<string | null>(c?.ogImage ?? null);
+  const [prices, setPrices] = useState<Partial<Record<keyof PortfolioPrices, string>>>(() =>
+    Object.fromEntries(Object.entries(c?.prices ?? {}).map(([k, v]) => [k, String(v)]))
+  );
   const [saving, setSaving] = useState(false);
+
+  // Empty = the default price.
+  const parsedPrices = (): Partial<PortfolioPrices> =>
+    Object.fromEntries(
+      Object.entries(prices)
+        .filter(([, v]) => v?.trim())
+        .map(([k, v]) => [k, Number(v)])
+        .filter(([, n]) => Number.isFinite(n as number) && (n as number) >= 0)
+    );
 
   const save = async () => {
     setSaving(true);
@@ -89,7 +103,7 @@ function TemplateForm({ template, onDone }: { template: PortfolioTemplateSummary
         id: template?.id ?? null,
         name,
         towns: towns.split(","),
-        content: { listings, showTourOfHomes, showOffer, video, leadPhoto: c?.leadPhoto ?? null, ogImage },
+        content: { listings, showTourOfHomes, showOffer, video, leadPhoto: c?.leadPhoto ?? null, ogImage, prices: parsedPrices() },
       });
       toast.success("Template saved");
       onDone();
@@ -161,6 +175,34 @@ function TemplateForm({ template, onDone }: { template: PortfolioTemplateSummary
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label>Prices</Label>
+        <p className="text-xs text-muted-foreground">Shown on agent pages in these cities. Empty = the default.</p>
+        <div className="grid max-w-xl grid-cols-2 gap-2 sm:grid-cols-4">
+          {PORTFOLIO_PRICE_ITEMS.map(({ key, label, addOn }) => (
+            <div key={key} className="flex flex-col gap-1">
+              <Label htmlFor={`tpl-price-${key}`} className="text-xs font-normal text-muted-foreground">
+                {addOn ? `+ ${label}` : label}
+              </Label>
+              <div className="relative">
+                <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                <Input
+                  id={`tpl-price-${key}`}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  className="h-8 pl-5"
+                  placeholder={String(DEFAULT_PORTFOLIO_PRICES[key])}
+                  value={prices[key] ?? ""}
+                  onChange={(e) => setPrices((prev) => ({ ...prev, [key]: e.target.value }))}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">

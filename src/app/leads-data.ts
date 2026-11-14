@@ -84,6 +84,11 @@ export interface LeadsBoard {
    * Leads page's tabs, and a way to see what waits in the other tabs.
    */
   marketCounts: Record<Market, number>;
+  /**
+   * Brand-new agents per market: agents first added today (Pacific), placed
+   * by the market of their first listing. The little "+N new" on each tab.
+   */
+  newAgentCounts: Record<Market, number>;
 }
 
 /**
@@ -127,7 +132,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   // that's loaded for the ~9,000 of them; the full rows are fetched below for
   // just the few hundred on the board. Loading every full row was 4 MB of the
   // page's 8, on every load.
-  const [leads, agentKeys, queuedIds, lastContact, offices, recentShoots, shotKeys] = await Promise.all([
+  const [leads, agentKeys, queuedIds, lastContact, offices, recentShoots, shotKeys, newAgentCounts] = await Promise.all([
     db
       .select(options?.cardPhotosOnly ? { ...getTableColumns(listings), photos: cardPhotos } : getTableColumns(listings))
       .from(listings)
@@ -148,6 +153,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     // your listing"; one at the latter is his own work, not a lead.
     getRecentShoots(),
     shotAddresses(),
+    countNewAgentsToday(),
   ]);
   // A listing with a message waiting in the Queue has been handled — it lives
   // in the Pipeline's Queued section until that message is sent (see
@@ -360,7 +366,22 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     unscoredCount,
     market,
     marketCounts,
+    newAgentCounts,
   };
+}
+
+/** Agents first added today (Pacific), by the market of their first listing; agents with no listing aren't counted. */
+async function countNewAgentsToday(): Promise<Record<Market, number>> {
+  const result = await db.execute<{ city: string | null; state: string | null }>(sql`
+    select l.city, l.state
+    from agents a
+    join lateral (
+      select city, state from listings where listings.agent_id = a.id order by found_at asc limit 1
+    ) l on true
+    where a.created_at >= (date_trunc('day', now() at time zone 'America/Los_Angeles') at time zone 'America/Los_Angeles')`);
+  const counts: Record<Market, number> = { local: 0, regional: 0, portland: 0 };
+  for (const r of result.rows) counts[marketFor({ city: r.city, state: r.state })]++;
+  return counts;
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { PortfolioPrices } from "@/lib/portfolioPrices";
 import {
   pgTable,
   pgEnum,
@@ -606,7 +607,10 @@ export interface PortfolioContent {
 }
 
 /** What an area template presets in the builder; every field optional = leave the builder's default. */
-export type PortfolioTemplateContent = Pick<PortfolioContent, "listings" | "showTourOfHomes" | "showOffer" | "video" | "leadPhoto" | "ogImage">;
+export type PortfolioTemplateContent = Pick<PortfolioContent, "listings" | "showTourOfHomes" | "showOffer" | "video" | "leadPhoto" | "ogImage"> & {
+  /** Agent-page prices for this area (dollars); a missing key = the default in src/lib/portfolioPrices.ts. */
+  prices?: Partial<PortfolioPrices>;
+};
 
 // A personalized agent page (/portfolio/[slug], served bare on
 // r.lukashahn.media — see proxy.ts) sent in place of the samples email's

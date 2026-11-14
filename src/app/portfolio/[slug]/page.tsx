@@ -15,6 +15,8 @@ import { parseUserAgent } from "@/lib/galleryViews";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, isPortlandArea, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { BeforeAfterSlider, ListingCard, LoopVideo, MutableVideo } from "./client";
 import { PageTracker } from "./tracker";
+import { formatPrice, resolvePortfolioPrices, type PortfolioPrices } from "@/lib/portfolioPrices";
+import { templateForArea } from "@/app/portfolio-links/actions";
 
 // Same reasoning as the gallery route: a fresh navigation from outside the
 // app, not an in-app tab switch, so there's no "instant" shell to preserve.
@@ -121,6 +123,7 @@ export default async function PortfolioPage({
   const showTour = c.showTourOfHomes ?? true;
   // Off for every link made before 2026-11-12: those pages stay exactly as they were sent.
   const newStyle = c.newStyle ?? false;
+  const prices = resolvePortfolioPrices((await templateForLinkArea(area))?.content.prices);
 
   // The closing full-width photo stays put; the lead photo jumps to the front of the rest.
   const closing = AGENT_PAGE_PHOTOS[AGENT_PAGE_PHOTOS.length - 1];
@@ -170,10 +173,10 @@ export default async function PortfolioPage({
         <section id="pricing" data-section="pricing" className="px-4 pt-[clamp(44px,6vw,64px)]">
           <div className="mx-auto max-w-[672px]">
             <h2 className={`${serif} text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>Pricing</h2>
-            <PhotoPackage />
+            <PhotoPackage prices={prices} />
             <div className="mt-6 border-t border-[#181A1C]/15">
-              <PriceRow name="Walkthrough Video" price="$400" />
-              <PriceRow name="Photo + Video + Drone" price="$650" />
+              <PriceRow name="Walkthrough Video" price={formatPrice(prices.video)} />
+              <PriceRow name="Photo + Video + Drone" price={formatPrice(prices.bundle)} />
             </div>
           </div>
         </section>
@@ -481,17 +484,26 @@ const NEW_TILES = [
 ];
 
 /**
+ * The area template for a link's area, the same exact-town match the builder
+ * uses (templateForArea). A Portland link's area is "the Portland area", not a
+ * town, so it falls back to the template covering "portland".
+ */
+async function templateForLinkArea(area: string) {
+  return (await templateForArea(area)) ?? (isPortlandArea(area) ? await templateForArea("portland") : null);
+}
+
+/**
  * Pricing lead: the photo package as the headline offer. Pricing is the most
  * read part of the page, so the two biggest selling points (hand editing and
  * next-morning delivery) sit right under the name; add-ons are price + name.
  */
-function PhotoPackage() {
+function PhotoPackage({ prices }: { prices: PortfolioPrices }) {
   const perks = ["Edited by hand, not AI", "Next morning turnaround"];
   const addOns = [
-    { price: "+$100", name: "Aerial drone photography" },
-    { price: "+$50", name: "Floor plans" },
-    { price: "+$50", name: "Virtual staging" },
-    { price: "+$50", name: "Virtual twilight" },
+    { price: formatPrice(prices.drone, true), name: "Aerial drone photography" },
+    { price: formatPrice(prices.floorPlans, true), name: "Floor plans" },
+    { price: formatPrice(prices.staging, true), name: "Virtual staging" },
+    { price: formatPrice(prices.twilight, true), name: "Virtual twilight" },
   ];
   return (
     <div className="relative mt-[clamp(32px,4vw,44px)] border-2 border-[#D67F1F] px-[clamp(20px,3vw,32px)] pt-8 pb-[clamp(20px,3vw,28px)]">
@@ -507,7 +519,7 @@ function PhotoPackage() {
             ))}
           </ul>
         </div>
-        <p className="font-[family-name:var(--font-portfolio-serif)] whitespace-nowrap text-[clamp(34px,4.4vw,42px)] font-bold leading-none text-[#D67F1F]">$300</p>
+        <p className="font-[family-name:var(--font-portfolio-serif)] whitespace-nowrap text-[clamp(34px,4.4vw,42px)] font-bold leading-none text-[#D67F1F]">{formatPrice(prices.photo)}</p>
       </div>
       <p className="mt-6 text-xs font-semibold uppercase tracking-[0.16em] text-[#181A1C]/62">Add-ons</p>
       <div className="mt-2.5 grid grid-cols-2 gap-2.5">

@@ -190,7 +190,7 @@ from Winston. Cards' drive time comes from `listingDriveTime()`: from Winston
 for local/regional, "~25 min from Oregon City" for Portland.
 Sections, templates and hard rule 5 are the same in every market. The iPhone
 API takes `?market=` too (left out = all markets, for older builds) and
-returns `markets` (key, label, count). Portland jobs pay Lukas less, so
+returns `markets` (key, label, count, `newAgents`). Each tab shows a small "+N" when brand-new agents came in today (`newAgentCounts`: agents whose `created_at` is today, Pacific, placed by the market of their first listing). Portland jobs pay Lukas less, so
 Portland outreach is on top of the home markets, never instead of them.
 
 ### Agents
@@ -355,7 +355,9 @@ marked booked/declined),
 Samples, Link not opened (`feeds/unopened.ts`:
 Portfolio link sent 3–21 days ago, never opened, no contact since), Opened, no
 reply (`feeds/opened.ts`: same window, opened, nothing from them since; offers free
-drone shots on a first shoot), Shot one near you (`feeds/nearShoot.ts`: warm and interested
+drone shots on a first shoot), Saved your contact, quiet 3 weeks (`feeds/savedContact.ts`: tapped Save my
+contact on their portfolio page, a `save_contact` event, 21+ days ago and no
+text, call or reply either way in 21 days; not declined or snoozed), Shot one near you (`feeds/nearShoot.ts`: warm and interested
 agents with a for-sale listing near a home he shot in the last 30 days, no
 contact in 10 days, not offered in 45; he texts a photo from that shoot),
 Free drone with booking
@@ -442,7 +444,10 @@ next listing comes up (usually 1–4 weeks after first contact).
   per-town hero images.
 - `portfolio_templates`: area defaults for the builder (`name`, `towns` text[]
   lowercased, `content` = listings, showOffer, showTourOfHomes, video,
-  leadPhoto, ogImage). Edited on `/portfolio-links/settings`. When a picked
+  leadPhoto, ogImage, prices). `content.prices` sets the agent-page prices
+  for its towns (defaults: photo $300, drone +$100, floor plans +$50,
+  staging +$50, twilight +$50, video $400, photo+video+drone $650; empty in
+  the editor = default). Edited on `/portfolio-links/settings`. When a picked
   agent's area matches a town, `getPortfolioPrefill` returns it as `template`
   and its listings replace the nearest jobs. A Portland-market agent's area
   prefills as "the Portland area" (not their suburb), and the "Portland
@@ -480,7 +485,12 @@ next listing comes up (usually 1–4 weeks after first contact).
   hand, not AI" and "Next morning turnaround" as bullets under the name, and
   add-ons drone +$100, floor plans +$50, virtual staging +$50, virtual
   twilight +$50; then Walkthrough Video $400 and Photo + Video + Drone $650
-  (no agent on-camera video, no "save" callout). Listing cards on both
+  (no agent on-camera video, no "save" callout). Those are the defaults
+  (`DEFAULT_PORTFOLIO_PRICES` in `src/lib/portfolioPrices.ts`); the area
+  template's `content.prices` (`photo`, `drone`, `floorPlans`, `staging`,
+  `twilight`, `video`, `bundle`, dollars, missing key = default) overrides
+  them, resolved at render time from the link's `content.area` (exact town
+  match like `templateForArea`; a Portland area falls back to "portland"). Listing cards on both
   styles: a Pending badge is the biggest (orange block), Just listed a small
   white tag; the listing agent's name and brokerage are large under the
   address.

@@ -69,7 +69,13 @@ export async function GET(req: Request) {
     // Always all three markets, so the app's tab bar can show what waits in
     // the others while the board itself is one market's.
     marketCounts: board.marketCounts,
-    markets: MARKET_ORDER.map((key) => ({ key, label: MARKET_LABELS[key], count: board.marketCounts[key] })),
+    // newAgents: brand-new agents today in that market (the tab's "+N new").
+    markets: MARKET_ORDER.map((key) => ({
+      key,
+      label: MARKET_LABELS[key],
+      count: board.marketCounts[key],
+      newAgents: board.newAgentCounts[key],
+    })),
     counts: {
       agents: board.agentCount,
       listings: board.openLeadCount,

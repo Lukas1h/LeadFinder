@@ -1,5 +1,6 @@
 "use server";
 
+import { cleanPortfolioPrices } from "@/lib/portfolioPrices";
 import { marketFor, PORTLAND_AREA } from "@/lib/markets";
 import { and, asc, count, desc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -451,6 +452,7 @@ export async function savePortfolioTemplate(input: { id: string | null; name: st
     video: c.video ?? null,
     leadPhoto: c.leadPhoto ?? null,
     ogImage: c.ogImage || null,
+    prices: cleanPortfolioPrices(c.prices),
   };
   if (input.id) {
     const [row] = await db
