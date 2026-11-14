@@ -61,6 +61,13 @@ export interface LeadsBoard {
    * the iPhone app's API reads that and must keep seeing the same cards.
    */
   near: Map<string, { near: NearShoot; leadId: string }>;
+  /**
+   * "Farther than 2 hours": Photo, Video and Backup cards whose nearest
+   * listing is over FAR_DRIVE_MINUTES from Winston, nearest first. Like
+   * `near`, they stay in `sections` too; the page and the iPhone API pull
+   * them out into their own section just above Texted before.
+   */
+  far: LeadGroup[];
   /** Lead cards that are actually new (queued ones are excluded — see getQueuedListingIds). */
   openLeadCount: number;
   queuedCount: number;
@@ -105,6 +112,10 @@ end`;
  * builds that predate the tabs. The counts and the "scoring is down" check
  * still see everything.
  */
+/** Cold leads more than this many minutes' drive from Winston go under "Farther than 2 hours". */
+export const FAR_DRIVE_MINUTES = 120;
+export const FAR_SECTION_LABEL = "Farther than 2 hours";
+
 export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market?: Market | null }): Promise<LeadsBoard> {
   // foundAt is transaction-time, so a batch insert gives every row in it
   // the exact same value — listings.id as a tiebreaker keeps order stable
@@ -268,6 +279,24 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     if (match) near.set(g.key, match);
   }
 
+  // "Farther than 2 hours" (Lukas, 2026-11-14): driving past two hours from
+  // Winston is a hassle, so cold Photo/Video/Backup cards out there wait in
+  // their own section above Texted before. Measured to the group's nearest
+  // listing; Portland (the subcontractor's) and cities missing from the drive
+  // table never count as far. Known agents and Near your shoots are left
+  // alone, and Texted before / Unlikely never move (hard rule 5).
+  const farMinutes = new Map<string, number>();
+  for (const g of groups) {
+    if (g.known || near.has(g.key)) continue;
+    if (g.section !== "photo" && g.section !== "video" && g.section !== "backup") continue;
+    let nearest = Infinity;
+    for (const { lead } of g.entries) {
+      const minutes = marketFor(lead) === "portland" ? 0 : lead.city ? estimateDriveMinutes(lead.city) : null;
+      if (minutes != null) nearest = Math.min(nearest, minutes);
+    }
+    if (nearest !== Infinity && nearest > FAR_DRIVE_MINUTES) farMinutes.set(g.key, nearest);
+  }
+
   const known = groups.filter((g) => g.known);
   const sections: Record<LeadSection, LeadGroup[]> = { photo: [], video: [], backup: [], texted: [], unlikely: [] };
   for (const g of groups) if (!g.known) sections[g.section].push(g);
@@ -308,6 +337,8 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
       KNOWN_AGENT_GROUP_ORDER.indexOf(a.known!) - KNOWN_AGENT_GROUP_ORDER.indexOf(b.known!) ||
       byLeadPriority(a.best, b.best)
   );
+  const far = LEAD_SECTION_ORDER.flatMap((key) => sections[key].filter((g) => farMinutes.has(g.key)));
+  far.sort((a, b) => farMinutes.get(a.key)! - farMinutes.get(b.key)!);
   const agentCount = groups.filter((g) => !g.key.startsWith("listing:")).length;
 
   const recent = Date.now() - 3 * 24 * 60 * 60 * 1000;
@@ -317,6 +348,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     known,
     sections,
     near,
+    far,
     openLeadCount: marketLeads.length,
     queuedCount,
     agentCount,

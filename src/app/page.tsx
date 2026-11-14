@@ -10,13 +10,13 @@ import { NearShootBadge } from "./NearShootBadge";
 import { milesLabel } from "@/lib/nearShoots";
 import { shortDate } from "@/app/follow-up/feeds/shared";
 import { FEW_PHOTOS_THRESHOLD, isUnscored } from "@/lib/pipeline";
-import { isBuilderListing, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER } from "@/lib/leadSections";
+import { isBuilderListing, LEAD_SECTION_LABELS, LEAD_SECTION_ORDER, type LeadSection } from "@/lib/leadSections";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { LeadsSkeleton } from "./loading";
 import Link from "next/link";
 import { KnownAgentLeads } from "./KnownAgentLeads";
-import { getLeadsBoard, type LeadGroup } from "./leads-data";
+import { FAR_SECTION_LABEL, getLeadsBoard, type LeadGroup } from "./leads-data";
 import { MARKET_LABELS, MARKET_ORDER, parseMarket } from "@/lib/markets";
 
 // Server Action timeouts are controlled by the maxDuration of the page
@@ -47,6 +47,8 @@ const SCORING_DOWN_COUNT = 10;
  * anyway, renders nothing until asked.
  */
 const SECTION_LIMIT = 60;
+/** The board's sections top to bottom: "far" is the Farther than 2 hours group (leads-data.ts). */
+const DISPLAY_ORDER: (LeadSection | "far")[] = ["photo", "video", "backup", "far", "texted", "unlikely"];
 
 type LeadsSearchParams = Promise<{ show?: string | string[]; market?: string | string[] }>;
 
@@ -73,7 +75,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
 
   // Cards show a handful of each listing's photos; the listing dialog fetches
   // the whole gallery when it opens (see ListingModal).
-  const { known, sections, near, openLeadCount, queuedCount, agentCount, addressById, unscoredCount, marketCounts } =
+  const { known, sections, near, far, openLeadCount, queuedCount, agentCount, addressById, unscoredCount, marketCounts } =
     await getLeadsBoard({
       cardPhotosOnly: true,
       market,
@@ -82,6 +84,9 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
   // "Near your shoots" pulls cards out of their normal sections (they stay in
   // `sections` for the iPhone API) and puts the most recently shot first.
   const nearKeys = new Set(near.keys());
+  // "Farther than 2 hours" pulls its cards out of Photo/Video/Backup the same
+  // way, and sits just above Texted before.
+  const farKeys = new Set(far.map((g) => g.key));
   const groupByKey = new Map<string, LeadGroup>();
   for (const key of LEAD_SECTION_ORDER) for (const g of sections[key]) groupByKey.set(g.key, g);
   const nearGroups = [...near.entries()]
@@ -245,8 +250,9 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
               </details>
             </section>
           )}
-          {LEAD_SECTION_ORDER.map((key, index) => {
-            const items = sections[key].filter((g) => !nearKeys.has(g.key));
+          {DISPLAY_ORDER.map((key, index) => {
+            const items =
+              key === "far" ? far : sections[key].filter((g) => !nearKeys.has(g.key) && !farKeys.has(g.key));
             if (items.length === 0) return null;
             const isUnlikely = key === "unlikely";
             const all = shown.has(key);
@@ -259,7 +265,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
                   <summary className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 cursor-pointer select-none list-none">
                     <span className="flex items-center gap-1">
                       <ChevronRight className="size-4 transition-transform group-open/details:rotate-90" />
-                      {LEAD_SECTION_LABELS[key]} ({items.length})
+                      {key === "far" ? FAR_SECTION_LABEL : LEAD_SECTION_LABELS[key]} ({items.length})
                     </span>
                     {isUnlikely && (
                       <PassAllListingsButton listingIds={items.flatMap((g) => g.entries.map((e) => e.lead.id))} />

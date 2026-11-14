@@ -160,6 +160,16 @@ near a recent shoot that template is recommended over any other
 (`pickRecommendedPreset`). The "Near your shoots" template started as a copy
 of Backup Option without its score/price limits, for Lukas to rewrite.
 
+**Farther than 2 hours** (since 2026-11-14): cold Photo / Video / Backup cards
+whose nearest listing is more than `FAR_DRIVE_MINUTES` (120) from Winston
+(`estimateDriveMinutes`) get pulled into their own section, just above Texted
+before, nearest first (`LeadsBoard.far` in `src/app/leads-data.ts`; the
+iPhone API sends it as section `far`). It's a display grouping only: the
+stored `lead_section` and template targeting are unchanged. Portland, cities
+missing from the drive table, Agents you know and Near your shoots never
+move there, and Texted before / Unlikely stay put (hard rule 5). Eugene and
+Medford are 90 min, Ashland and Corvallis 120, so those stay in place.
+
 **Markets** (`src/lib/markets.ts`, since 2026-11-12). Every listing is in one
 of three markets, computed from its city/state (never stored):
 `local` (within 45 min of Winston: Roseburg, Sutherlin, Glide, Myrtle Creek…),

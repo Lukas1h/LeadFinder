@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAppAuth } from "@/lib/appApiAuth";
-import { getLeadsBoard } from "@/app/leads-data";
+import { FAR_SECTION_LABEL, getLeadsBoard } from "@/app/leads-data";
 import { LEAD_SECTION_LABELS, LEAD_SECTION_ORDER } from "@/lib/leadSections";
 import { leadGroupJson } from "../serialize";
 import { milesLabel } from "@/lib/nearShoots";
@@ -39,14 +39,30 @@ export async function GET(req: Request) {
       const label = `Shot ${near.shoot.address} nearby · ${milesLabel(near.miles)} · ${shortDate(near.shoot.shotAt)}`;
       return { ...json, badges: [...json.badges, { kind: "nearShoot", label }] };
     });
-  const sections = LEAD_SECTION_ORDER.map((key) => ({
-    key,
-    label: LEAD_SECTION_LABELS[key],
-    // Unlikely is the one the web page renders collapsed — it's the do-nothing
-    // pile, and opening the app shouldn't dump hundreds of cards into it.
-    collapsed: key === "unlikely",
-    groups: board.sections[key].filter((g) => !board.near.has(g.key)).map((g) => leadGroupJson(g, board.addressById)),
-  }));
+  // "Farther than 2 hours" (leads-data.ts LeadsBoard.far): cold cards over
+  // two hours from Winston, pulled out of Photo/Video/Backup into their own
+  // section just above Texted before. Older app builds render any section the
+  // server sends, so they get it too.
+  const farKeys = new Set(board.far.map((g) => g.key));
+  const farSection = {
+    key: "far" as const,
+    label: FAR_SECTION_LABEL,
+    collapsed: false,
+    groups: board.far.map((g) => leadGroupJson(g, board.addressById)),
+  };
+  const sections = LEAD_SECTION_ORDER.flatMap((key) => [
+    ...(key === "texted" ? [farSection] : []),
+    {
+      key,
+      label: LEAD_SECTION_LABELS[key],
+      // Unlikely is the one the web page renders collapsed — it's the do-nothing
+      // pile, and opening the app shouldn't dump hundreds of cards into it.
+      collapsed: key === "unlikely",
+      groups: board.sections[key]
+        .filter((g) => !board.near.has(g.key) && !farKeys.has(g.key))
+        .map((g) => leadGroupJson(g, board.addressById)),
+    },
+  ]);
 
   return NextResponse.json({
     market,
