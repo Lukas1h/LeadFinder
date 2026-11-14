@@ -70,6 +70,7 @@ struct BookingDetailView: View {
             VStack(alignment: .leading, spacing: 14) {
                 header
                 statusActions
+                BookingShooterSection(booking: booking) { await refresh() }
                 if hasContact { contact }
                 if hasLineItems { lineItems }
                 if showsMoney {
@@ -193,6 +194,7 @@ struct BookingDetailView: View {
         if let updated = try? await APIClient.shared.bookingDetail(booking.id) { fresh = updated }
         await appState.bookings.load(force: true)
         await appState.schedule.load(force: true)
+        if booking.shooter != nil { await appState.shooterSummary.load(force: true) }
     }
 
     // MARK: - Header

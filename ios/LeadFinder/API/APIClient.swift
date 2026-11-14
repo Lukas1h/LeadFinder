@@ -531,6 +531,43 @@ actor APIClient {
         _ = try await send("POST", "api/app/v1/bookings/\(id)/reopen", body: Empty(), as: OK.self)
     }
 
+    /// Puts a shooter on the job, or changes their pay. An empty `name` takes
+    /// the shooter off it. `pay` is sent as null when nil, so a PATCH can clear
+    /// it (a field the body leaves out is left alone).
+    func setBookingShooter(id: String, name: String, pay: Int?) async throws {
+        struct Body: Encodable, Sendable {
+            var shooterName: String
+            var shooterPay: Int?
+
+            private enum CodingKeys: String, CodingKey {
+                case shooterName, shooterPay
+            }
+
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: CodingKeys.self)
+                try c.encode(shooterName, forKey: .shooterName)
+                try c.encode(shooterPay, forKey: .shooterPay)
+            }
+        }
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("PATCH", "api/app/v1/bookings/\(id)", body: Body(shooterName: name, shooterPay: pay), as: OK.self)
+    }
+
+    /// Marks the shooter paid (or unpaid) on a job.
+    func setShooterPaid(bookingId: String, paid: Bool) async throws {
+        struct Body: Encodable, Sendable { let paid: Bool }
+        struct Response: Decodable, Sendable {
+            let ok: Bool
+            let booking: Booking
+        }
+        _ = try await send("POST", "api/app/v1/bookings/\(bookingId)/shooter-paid", body: Body(paid: paid), as: Response.self)
+    }
+
+    /// The shooters to pick from on the booking form.
+    func shooters() async throws -> [ShooterOption] {
+        try await read("api/app/v1/shooters")
+    }
+
     /// One booking, fresh — what the detail screen shows after an edit.
     func bookingDetail(_ id: String) async throws -> Booking {
         struct Response: Decodable, Sendable { let booking: Booking }

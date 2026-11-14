@@ -38,6 +38,7 @@ private func mpgText(_ value: Double) -> String {
 /// This month and this year, month by month, and where the money went.
 struct FinanceOverviewTab: View {
     let report: FinanceOverview
+    var shooters: ShooterSummary?
 
     var body: some View {
         let month = report.thisMonth
@@ -56,6 +57,10 @@ struct FinanceOverviewTab: View {
                 StatTile("Costs", FinanceFormat.dollars(year.costs), "\(FinanceFormat.dollars(year.gas)) of it gas")
                 StatTile("Real profit", FinanceFormat.dollars(year.profit), year.perHour.map { FinanceFormat.perHour($0) } ?? "")
                 StatTile("Tax on it (est.)", FinanceFormat.dollars(report.yearTaxOwed), "set aside, see Taxes")
+            }
+
+            if let shooters, !shooters.owed.isEmpty || !shooters.byShooter.isEmpty {
+                ShootersCard(summary: shooters)
             }
 
             months
@@ -135,6 +140,83 @@ struct FinanceOverviewTab: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .card(padding: 14)
+    }
+}
+
+// MARK: - Shooters
+
+/// What's owed to subcontracted photographers right now, and what each has been
+/// paid this year (flagged once they cross the 1099 threshold).
+private struct ShootersCard: View {
+    let summary: ShooterSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Shooters")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Theme.primaryText)
+                Spacer()
+                if summary.owedTotal > 0 {
+                    BadgeChip(text: "Owed \(FinanceFormat.dollars(summary.owedTotal))", tint: Theme.amber, filled: true)
+                }
+            }
+
+            if !summary.owed.isEmpty {
+                label("Owed now")
+                ForEach(summary.owed) { o in
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text([o.address, o.city].compactMap { $0?.nilIfBlank }.joined(separator: ", ").nilIfBlank ?? "No address")
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.primaryText)
+                                .lineLimit(1)
+                            Text([o.shooterName, ShooterFormat.day(o.jobDate.map { String($0.prefix(10)) })]
+                                .filter { !$0.isEmpty }.joined(separator: " · "))
+                                .font(.caption)
+                                .foregroundStyle(Theme.secondaryText)
+                        }
+                        Spacer()
+                        Text(FinanceFormat.dollars(Double(o.pay)))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.amber)
+                    }
+                }
+            }
+
+            if !summary.byShooter.isEmpty {
+                if !summary.owed.isEmpty { Divider().overlay(Theme.hairline) }
+                label("Paid in \(String(summary.year))")
+                ForEach(summary.byShooter) { s in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(s.name)
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.primaryText)
+                        Text("\(s.jobs) job\(s.jobs == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiaryText)
+                        if s.needs1099 {
+                            BadgeChip(text: "1099 needed", tint: Theme.danger, filled: true)
+                        }
+                        Spacer()
+                        Text(FinanceFormat.dollars(s.paidTotal))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.primaryText)
+                    }
+                }
+            }
+
+            footnote("A 1099-NEC is due for anyone paid \(FinanceFormat.dollars(summary.form1099Threshold))+ in a year; get a W-9 before paying.")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card(padding: 14)
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(Theme.tertiaryText)
+            .kerning(0.6)
     }
 }
 

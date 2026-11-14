@@ -3,6 +3,7 @@ import { bookings, listings, agents, bookingLineItems } from "@/db/schema";
 import { inArray } from "drizzle-orm";
 import { estimateDriveTime } from "@/lib/driveTime";
 import { loadBookingCosts } from "@/lib/finance/bookingCosts";
+import { shootersByBookingId } from "@/lib/shooterReads";
 import type { BookingWithDetails } from "./BookedList";
 
 /**
@@ -22,7 +23,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
   const agentIds = [...new Set(rows.map((b) => b.contactAgentId).filter((id): id is string => id != null))];
   const bookingIds = rows.map((b) => b.id);
 
-  const [linkedListings, contacts, lineItems, costsFor] = await Promise.all([
+  const [linkedListings, contacts, lineItems, costsFor, shooterByBookingId] = await Promise.all([
     // Full rows, not a curated projection — the "view linked listing"
     // reference card (ListingRow) needs the whole thing: photo, price,
     // status, everything ListingModal shows when it's opened from there.
@@ -46,6 +47,8 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
           .where(inArray(bookingLineItems.bookingId, bookingIds))
       : Promise.resolve([]),
     loadBookingCosts(),
+    // One query for every shooter and pay expense on the page, not one per row.
+    shootersByBookingId(rows),
   ]);
 
   const listingById = new Map(linkedListings.map((l) => [l.id, l]));
@@ -106,6 +109,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       paidAt: b.paidAt,
       airspace: b.airspace,
       airspaceCheckedAt: b.airspaceCheckedAt,
+      shooter: shooterByBookingId.get(b.id) ?? null,
     };
   });
 }

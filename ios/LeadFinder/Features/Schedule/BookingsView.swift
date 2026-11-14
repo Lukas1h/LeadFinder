@@ -169,6 +169,7 @@ struct BookingCard: View {
                     // Needs ATC authorization before the drone flies there. Only
                     // while it's still to shoot, as on the web: once the job is
                     // done the airspace is no longer in question.
+                    ShooterChip(booking: booking)
                     if let airspace = airspaceBadge {
                         BadgeChip(text: airspace, tint: Theme.warning, filled: true, icon: "exclamationmark.triangle.fill")
                     }

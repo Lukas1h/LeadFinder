@@ -193,6 +193,11 @@ export function bookingJson(b: BookingWithDetails) {
     // address, not checked yet, or the check failed (airspaceCheckedAt set).
     airspace: b.airspace,
     airspaceCheckedAt: b.airspaceCheckedAt,
+    // The subcontracted photographer on the job (Portland shoots), what he
+    // agreed to pay them, and whether that's been paid — see lib/shooters.
+    shooter: b.shooter
+      ? { id: b.shooter.id, name: b.shooter.name, pay: b.shooter.pay, paid: b.shooter.expenseId != null, paidAt: b.shooter.paidAt }
+      : null,
   };
 }
 

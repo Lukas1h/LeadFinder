@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { bookings, bookingLineItems, listings, agents, type NewBookingLineItem } from "@/db/schema";
+import { bookings, bookingLineItems, listings, agents, shooters, type NewBookingLineItem } from "@/db/schema";
 import { estimateDriveTime } from "@/lib/driveTime";
 import { normalizePhone, normalizeName } from "@/lib/normalize";
 import { attributeBookingToSend } from "@/lib/agentIdentity";
@@ -12,6 +12,7 @@ import { after } from "next/server";
 import { text, errorText } from "./shared";
 import { applyDateTentative, initialStage, reopenBookingStage, setBookingStage } from "@/lib/bookingStage";
 import { BOOKING_STAGES } from "@/lib/bookingStages";
+import { setBookingShooter, setShooterPaid } from "@/lib/shooters";
 
 async function joinedBooking(bookingId: string) {
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
@@ -141,9 +142,14 @@ export function registerBookingTools(server: McpServer): void {
         notes: z.string().optional().describe("Internal notes — never shown to the client."),
         invoiceNote: z.string().optional().describe("Client-facing note printed on the invoice."),
         lineItems: z.array(lineItemSchema).default([]),
+        shooterName: z
+          .string()
+          .optional()
+          .describe("The subcontracted photographer shooting this job instead of Lukas (e.g. a Portland job), by name. One is found or created on the shooters list."),
+        shooterPay: z.number().optional().describe("What Lukas agreed to pay that shooter, in whole dollars."),
       },
     },
-    async ({ listingId, address, city, state, contactName, contactPhone, jobDate, dateTentative, lockboxCode, notes, invoiceNote, lineItems }) => {
+    async ({ listingId, address, city, state, contactName, contactPhone, jobDate, dateTentative, lockboxCode, notes, invoiceNote, lineItems, shooterName, shooterPay }) => {
       if (!listingId && !city?.trim()) return errorText("Enter at least a city for a booking with no linked listing");
 
       const contactAgentId =
@@ -174,6 +180,12 @@ export function registerBookingTools(server: McpServer): void {
         .filter((li) => li.description.trim())
         .map((li) => ({ bookingId: booking.id, description: li.description.trim(), amount: li.amount }));
       if (validLineItems.length > 0) await db.insert(bookingLineItems).values(validLineItems);
+
+      // The subcontracted photographer (Portland jobs), if one was named.
+      if (shooterName?.trim()) {
+        const shooterResult = await setBookingShooter(booking.id, { name: shooterName, pay: shooterPay ?? null });
+        if (shooterResult.error) return errorText(shooterResult.error);
+      }
 
       if (listingId) {
         await db
@@ -224,9 +236,14 @@ export function registerBookingTools(server: McpServer): void {
         notes: z.string().optional().describe("Internal notes — never shown to the client."),
         invoiceNote: z.string().optional().describe("Client-facing note printed on the invoice."),
         lineItems: z.array(lineItemSchema).optional(),
+        shooterName: z
+          .string()
+          .optional()
+          .describe("The subcontracted photographer (Portland jobs), by name — one is found or created. Send \"\" to clear the shooter and their pay."),
+        shooterPay: z.number().optional().describe("What Lukas agreed to pay that shooter, in whole dollars."),
       },
     },
-    async ({ id, contactName, contactPhone, address, city, state, jobDate, dateTentative, stage, shot, lockboxCode, notes, invoiceNote, lineItems }) => {
+    async ({ id, contactName, contactPhone, address, city, state, jobDate, dateTentative, stage, shot, lockboxCode, notes, invoiceNote, lineItems, shooterName, shooterPay }) => {
       const [existing] = await db.select().from(bookings).where(eq(bookings.id, id));
       if (!existing) return errorText("No booking with that id");
 
@@ -266,6 +283,27 @@ export function registerBookingTools(server: McpServer): void {
       }
       if (stage !== undefined) await setBookingStage(id, stage);
 
+      // The shooter (Portland jobs): a name attaches or changes them, "" clears
+      // them and their pay. A bare shooterPay keeps the shooter already on file.
+      if (shooterName !== undefined || shooterPay !== undefined) {
+        let name = shooterName;
+        if (name === undefined) {
+          const [currentShooter] = existing.shooterId
+            ? await db.select({ name: shooters.name }).from(shooters).where(eq(shooters.id, existing.shooterId))
+            : [];
+          name = currentShooter?.name ?? "";
+        }
+        if (!name.trim()) {
+          if (shooterPay !== undefined) return errorText("Set a shooter name too");
+          const cleared = await setBookingShooter(id, null);
+          if (cleared.error) return errorText(cleared.error);
+        } else {
+          const pay = shooterPay === undefined ? (existing.shooterPay ?? null) : shooterPay;
+          const saved = await setBookingShooter(id, { name, pay });
+          if (saved.error) return errorText(saved.error);
+        }
+      }
+
       // A no-op unless the address changed.
       if (address !== undefined || city !== undefined || state !== undefined) await refreshBookingAirspace(id);
 
@@ -291,6 +329,25 @@ export function registerBookingTools(server: McpServer): void {
       const updated = await setBookingStage(id, "completed", completion);
       if (!updated) return errorText("No booking with that id");
       return text(updated);
+    }
+  );
+
+  server.registerTool(
+    "mark_shooter_paid",
+    {
+      title: "Mark a shooter paid (or unpaid)",
+      description:
+        "Logs what Lukas agreed to pay the subcontracted photographer on a booking as a Subcontractors expense on that job, or removes the expense again with paid: false. Paying needs a shooter and their pay set first. The expense takes the pay off the job's profit and onto that shooter's year total for the 1099-NEC.",
+      inputSchema: {
+        id: z.string().uuid(),
+        paid: z.boolean().describe("true = pay them now (logs the expense), false = remove the payment and mark them unpaid again"),
+      },
+    },
+    async ({ id, paid }) => {
+      const result = await setShooterPaid(id, paid);
+      if (result.error) return errorText(result.error);
+      const joined = await joinedBooking(id);
+      return text(joined);
     }
   );
 

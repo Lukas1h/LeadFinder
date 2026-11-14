@@ -112,7 +112,7 @@ struct FinancesView: View {
         switch tab {
         case .overview:
             if let report = appState.finances.value {
-                FinanceOverviewTab(report: report)
+                FinanceOverviewTab(report: report, shooters: appState.shooterSummary.value)
             } else {
                 placeholder
             }
@@ -183,7 +183,9 @@ struct FinancesView: View {
 
     private func load(_ tab: FinanceTab) async {
         switch tab {
-        case .overview: await appState.finances.load()
+        case .overview:
+            await appState.finances.load()
+            await appState.shooterSummary.load()
         case .profitFirst: await appState.profitFirst.load()
         case .jobs: await appState.financeJobs.load()
         case .expenses:

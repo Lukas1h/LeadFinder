@@ -454,10 +454,30 @@ struct Booking: Codable, Sendable, Identifiable, Hashable {
     /// Optional so a response cached before this existed still decodes.
     var airspace: AirspaceCheck?
     var airspaceCheckedAt: String?
+    /// The subcontracted photographer on the job, if one shot it. Optional so a
+    /// cache written before the server sent it still decodes.
+    var shooter: BookingShooter?
 
     var addressLine: String {
         [address, city, state].compactMap { $0?.nilIfBlank }.joined(separator: ", ")
     }
+}
+
+/// The shooter (subcontracted photographer) on a booking, as the server sends
+/// it with every booking: who, what he pays them, and whether they've been paid.
+/// `pay` is whole dollars; `paidAt` is "YYYY-MM-DD" Pacific, nil until paid.
+struct BookingShooter: Codable, Sendable, Hashable {
+    var id: String
+    var name: String
+    var pay: Int?
+    var paid: Bool
+    var paidAt: String?
+}
+
+/// One shooter to pick from the booking form (GET /shooters).
+struct ShooterOption: Codable, Sendable, Hashable, Identifiable {
+    var id: String
+    var name: String
 }
 
 extension Booking {

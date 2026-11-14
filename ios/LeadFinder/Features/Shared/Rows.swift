@@ -139,6 +139,7 @@ struct BookingRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            ShooterChip(booking: booking)
             BookingStatusBadge(booking: booking)
             if showsChevron { RowChevron() }
         }

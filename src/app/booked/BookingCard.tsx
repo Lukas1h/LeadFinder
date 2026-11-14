@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, KeyRound, StickyNote, Phone, Car, TriangleAlert } from "lucide-react";
+import { CalendarDays, KeyRound, StickyNote, Phone, Car, TriangleAlert, Users } from "lucide-react";
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import { airspaceBadgeLabel } from "./AirspaceSection";
 import { bookingRevenue } from "./bookingMath";
-import { isUpcomingStage } from "@/lib/bookingStages";
+import { isUpcomingStage, stageIndex } from "@/lib/bookingStages";
 import { formatPrice, formatDate, formatDateTime, formatPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import type { BookingWithDetails } from "./BookedList";
@@ -23,6 +23,11 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
   const tentative = booking.stage === "tentative";
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
   // Needs ATC authorization to fly the drone there. Only while it's still to shoot.
+  const shooter = booking.shooter;
+  const shooterOwed =
+    shooter && shooter.expenseId == null && shooter.pay != null && stageIndex(booking.stage) >= stageIndex("editing")
+      ? shooter.pay
+      : null;
   const airspace = isUpcomingStage(booking.stage) ? airspaceBadgeLabel(booking) : null;
 
   return (
@@ -75,6 +80,18 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
               <span className="text-muted-foreground flex items-center gap-1.5">
                 <Phone className="size-3.5" />
                 {formatPhone(booking.contactPhone)}
+              </span>
+            )}
+          </div>
+        )}
+
+        {shooter && (
+          <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+            <Users className="size-3.5" />
+            {shooter.name} shoots
+            {shooterOwed != null && (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                owes {formatPrice(shooterOwed)}
               </span>
             )}
           </div>

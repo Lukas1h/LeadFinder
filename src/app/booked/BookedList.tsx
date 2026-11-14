@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { ChevronRight, Plus, CalendarCheck } from "lucide-react";
 import type { AirspaceCheck, Listing } from "@/db/schema";
 import type { BookingStage } from "@/lib/bookingStages";
+import type { BookingShooter } from "@/lib/shooterReads";
 import { BookingCard } from "./BookingCard";
 import { BookingForm } from "./BookingForm";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,9 @@ export interface BookingWithDetails {
   // hasn't run yet, or it failed (then airspaceCheckedAt is set).
   airspace: AirspaceCheck | null;
   airspaceCheckedAt: Date | null;
+  // The subcontracted photographer on this job, if any (Portland jobs), with
+  // their agreed pay and whether it's been paid — see src/lib/shooters.ts.
+  shooter: BookingShooter | null;
 }
 
 export interface BookingCosts {

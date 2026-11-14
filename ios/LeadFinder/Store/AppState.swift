@@ -108,6 +108,7 @@ final class AppState {
     let financeTaxes = Resource<TaxReport>(path: "api/app/v1/finances/taxes", key: .financeTaxes)
     let financeLinkOptions = Resource<FinanceLinkOptions>(path: "api/app/v1/finances/link-options", key: .financeLinkOptions)
     let profitFirst = Resource<ProfitFirstReport>(path: "api/app/v1/finances/profit-first", key: .profitFirst)
+    let shooterSummary = Resource<ShooterSummary>(path: "api/app/v1/finances/shooters", key: .shooterSummary)
 
     init() {}
 
@@ -139,6 +140,7 @@ final class AppState {
             group.addTask { await self.financeTaxes.load(force: true) }
             group.addTask { await self.financeLinkOptions.load(force: true) }
             group.addTask { await self.profitFirst.load(force: true) }
+            group.addTask { await self.shooterSummary.load(force: true) }
             group.addTask { await self.bookings.load(force: true) }
         }
     }

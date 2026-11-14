@@ -3,6 +3,7 @@ import { requireAppAuth } from "@/lib/appApiAuth";
 import { deleteBooking, getBookingWithDetails, getGalleryActivity, updateBooking } from "@/app/booked/actions";
 import { applyDateTentative, setBookingStage } from "@/lib/bookingStage";
 import { BOOKING_STAGES, isBookingStage } from "@/lib/bookingStages";
+import { setBookingShooter } from "@/lib/shooters";
 import { bookingJson } from "../../serialize";
 import {
   badRequest,
@@ -97,6 +98,16 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
   // shoot; an explicit stage then sets the state outright.
   if (typeof body.dateTentative === "boolean") await applyDateTentative(id, body.dateTentative);
   if (isBookingStage(body.stage)) await setBookingStage(id, body.stage);
+
+  // The subcontracted photographer: shooterName attaches or changes them, and
+  // "" clears. Leaving shooterPay out keeps the amount already on file.
+  if (body.shooterName !== undefined) {
+    const name = optionalString(body.shooterName, "shooterName") ?? "";
+    const pay =
+      body.shooterPay === undefined ? (current.shooter?.pay ?? null) : optionalNumber(body.shooterPay, "shooterPay");
+    const shooterResult = await setBookingShooter(id, name ? { name, pay } : null);
+    if (shooterResult.error) return badRequest(shooterResult.error);
+  }
 
   const fresh = await getBookingWithDetails(id);
   return NextResponse.json({ ok: true, booking: fresh ? bookingJson(fresh) : null });

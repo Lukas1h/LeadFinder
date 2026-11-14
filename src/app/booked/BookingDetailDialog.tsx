@@ -12,6 +12,7 @@ import { ShareGalleryButton, GalleryLinkButton, HidePayOnlineButton, PaymentLink
 import { HighlightPhotosButton } from "./HighlightPhotosButton";
 import { GalleryActivity } from "./GalleryActivity";
 import { AirspaceSection } from "./AirspaceSection";
+import { ShooterSection } from "./ShooterSection";
 import { ListingRow } from "@/app/ListingRow";
 import { AgentRow } from "@/app/AgentRow";
 import { formatPrice, formatDateTime } from "@/lib/format";
@@ -184,6 +185,8 @@ export function BookingDetailDialog({
         {(stageIndex(booking.stage) >= stageIndex("editing") || booking.costs.trips.length > 0 || booking.costs.expenseItems.length > 0) && (
           <BookingMoney booking={booking} open={open} />
         )}
+
+        <ShooterSection key={`${booking.shooter?.name}-${booking.shooter?.pay}`} booking={booking} />
 
         {booking.lockboxCode && (
           <div className="text-sm text-muted-foreground flex items-center gap-1.5 border-t pt-3">

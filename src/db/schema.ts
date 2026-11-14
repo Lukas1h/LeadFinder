@@ -399,6 +399,15 @@ export const bookings = pgTable("bookings", {
   // which is the only thing that should write this.
   stage: text("stage").$type<BookingStage>().notNull().default("scheduled"),
   lockboxCode: text("lockbox_code"),
+  // Who shoots it when it isn't Lukas (Portland jobs go to a subcontracted
+  // photographer; Lukas still edits), and what he agreed to pay them, in whole
+  // dollars like line items. Paid = shooterExpenseId is set: "Paid <name>"
+  // logs the pay as a Subcontractors expense on the job (src/lib/shooters.ts),
+  // which takes it off the job's profit, off Profit First's real revenue and
+  // onto the shooter's year total for the 1099.
+  shooterId: uuid("shooter_id").references((): AnyPgColumn => shooters.id, { onDelete: "set null" }),
+  shooterPay: integer("shooter_pay"),
+  shooterExpenseId: uuid("shooter_expense_id").references((): AnyPgColumn => expenses.id, { onDelete: "set null" }),
   // Internal notes — shown in the app and calendar, never on the invoice.
   notes: text("notes"),
   // Client-facing note printed on the invoice (e.g. "Thanks Kristi!",
@@ -1382,6 +1391,20 @@ export const expenses = pgTable("expenses", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Photographers Lukas subcontracts shoots to (bookings.shooterId). Kept as
+// their own rows so a year's pay adds up per person for the 1099-NEC, and so
+// a W-9 on file can be noted against them.
+export const shooters = pgTable("shooters", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  phone: text("phone"),
+  email: text("email"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Shooter = typeof shooters.$inferSelect;
 
 export type Expense = typeof expenses.$inferSelect;
 export type NewExpense = typeof expenses.$inferInsert;

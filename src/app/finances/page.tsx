@@ -11,6 +11,7 @@ import { overviewReport } from "@/lib/finance/reports";
 import { formatDollars, monthLabel } from "@/lib/finance/format";
 import { loadProfitFirstReport } from "@/lib/finance/profitFirstReport";
 import { Allocations, OpexBar } from "./profit-first/parts";
+import { loadShooterSummary } from "@/lib/shooters";
 
 export default function FinancesOverviewPage() {
   return (
@@ -22,7 +23,7 @@ export default function FinancesOverviewPage() {
 
 async function Overview() {
   await connection();
-  const [ledger, pf] = await Promise.all([loadLedger(), loadProfitFirstReport()]);
+  const [ledger, pf, shooters] = await Promise.all([loadLedger(), loadProfitFirstReport(), loadShooterSummary()]);
   const r = overviewReport(ledger, pacificDate(new Date()));
   const { year, months, spend } = r;
   const thisMonth = r.month;
@@ -83,6 +84,8 @@ async function Overview() {
         </Card>
       </Link>
 
+      {(shooters.byShooter.length > 0 || shooters.owed.length > 0) && <ShootersCard summary={shooters} />}
+
       <Card className="p-0 gap-0 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="text-xs text-muted-foreground">
@@ -140,5 +143,71 @@ async function Overview() {
         </Card>
       )}
     </div>
+  );
+}
+
+function shortDay(ymd: string) {
+  const [y, m, d] = ymd.slice(0, 10).split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function ShootersCard({ summary }: { summary: Awaited<ReturnType<typeof loadShooterSummary>> }) {
+  const { year, owed, owedTotal, byShooter, form1099Threshold } = summary;
+  return (
+    <Card className="p-4 gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-foreground">Shooters</p>
+        {owed.length > 0 && (
+          <span className="text-xs font-medium text-amber-700 dark:text-amber-400">{formatDollars(owedTotal)} owed</span>
+        )}
+      </div>
+
+      {owed.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-muted-foreground">Owed now</p>
+          {owed.map((o) => (
+            <Link
+              key={o.bookingId}
+              href="/booked"
+              className="flex items-center justify-between gap-3 text-sm hover:text-foreground/70 transition-colors"
+            >
+              <span className="truncate text-foreground/90">
+                {[o.address, o.city].filter(Boolean).join(", ") || "No address"}
+                <span className="text-muted-foreground">
+                  {o.jobDate ? ` · ${shortDay(o.jobDate)}` : ""} · {o.shooterName}
+                </span>
+              </span>
+              <span className="shrink-0">{formatDollars(o.pay)}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {byShooter.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-muted-foreground">Paid in {year}</p>
+          {byShooter.map((s) => (
+            <div key={s.id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="flex items-center gap-1.5 text-foreground/90">
+                {s.name}
+                <span className="text-muted-foreground">
+                  · {s.jobs} {s.jobs === 1 ? "job" : "jobs"}
+                </span>
+                {s.needs1099 && (
+                  <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                    1099 needed
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0">{formatDollars(s.paidTotal)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        A 1099-NEC is due for anyone paid {formatDollars(form1099Threshold)}+ in a year; get a W-9 before paying.
+      </p>
+    </Card>
   );
 }

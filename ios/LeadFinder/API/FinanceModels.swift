@@ -305,6 +305,43 @@ enum PfAccount: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
+// MARK: - GET /finances/shooters
+//
+// What he owes the subcontracted photographers: the unpaid jobs behind the
+// number, and what each shooter has been paid this year (with the 1099 flag).
+
+struct ShooterSummary: Codable, Sendable, Hashable {
+    /// One unpaid job, with who shot it and what they're owed.
+    struct Owed: Codable, Sendable, Hashable, Identifiable {
+        var bookingId: String
+        var address: String?
+        var city: String?
+        var jobDate: String?
+        var shooterName: String
+        /// Whole dollars.
+        var pay: Int
+
+        var id: String { bookingId }
+    }
+
+    /// One shooter's year: paid so far, how many jobs, and whether they're over
+    /// the 1099 threshold.
+    struct ByShooter: Codable, Sendable, Hashable, Identifiable {
+        var id: String
+        var name: String
+        var paidTotal: Double
+        var jobs: Int
+        var needs1099: Bool
+    }
+
+    var year: Int
+    var owed: [Owed]
+    var owedTotal: Double
+    var byShooter: [ByShooter]
+    /// The IRS's $600, from the server so the app can't drift from it.
+    var form1099Threshold: Double
+}
+
 // MARK: - GET /finances/link-options
 
 struct FinanceLinkOptions: Codable, Sendable {

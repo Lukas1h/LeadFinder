@@ -304,6 +304,19 @@ Flambient (the Mac photo app) makes galleries with `POST /api/app/v1/bookings/[i
 sends nothing. A different folder already on the booking answers 409 `{ existing }` unless `replace`.
 The folder must be in the same Dropbox account as `DROPBOX_REFRESH_TOKEN` (thumbnails load by path).
 
+Shooters (subcontracted photographers, e.g. Portland jobs; Lukas still
+edits): `shooters` (`name` unique, `phone`, `email`, `notes`) and on the
+booking `shooter_id`, `shooter_pay` (whole dollars) and `shooter_expense_id`.
+Paid = `shooter_expense_id` set: **Paid <name>** (`setShooterPaid` in
+`src/lib/shooters.ts`; MCP `mark_shooter_paid`; phone `POST
+bookings/[id]/shooter-paid`) logs the pay as a `contract_labor`
+(Subcontractors) expense on the job, so it comes off the job's profit and off
+Profit First's real revenue; unpaying deletes that expense. Set the shooter
+with `shooterName` / `shooterPay` on create/update (web dialog, MCP, phone
+PATCH). `loadShooterSummary()` (Finances card; phone `GET finances/shooters`)
+lists pay owed on shot jobs and each shooter's year total, flagged at the
+1099-NEC threshold.
+
 Booking credit: `attributeBookingToSend()` in `src/lib/agentIdentity.ts`
 links a booking to the outreach send that won it.
 
