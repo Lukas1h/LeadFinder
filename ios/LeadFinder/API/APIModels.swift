@@ -670,6 +670,44 @@ struct MessagesResponse: Codable, Sendable {
             var texts: Int
             var textsTarget: Int
         }
+
+        /// The same week and today once for home, once for Portland, which sits
+        /// on top of it (the web's GoalProgress.quotas). Optional so a copy
+        /// cached before the server sent it still decodes.
+        var quotas: Quotas?
+        struct Quotas: Codable, Sendable, Hashable {
+            var home: MarketQuota
+            var portland: MarketQuota
+        }
+    }
+
+    /// One market's texting quota: the week's pace, the reply rate it was
+    /// worked back from, and what's been done so far. Home's numbers match the
+    /// goal's own thisWeek / today / plan; Portland's are extra.
+    struct MarketQuota: Codable, Sendable, Hashable {
+        /// "Local + Regional" | "Portland".
+        var label: String
+        var textsPerWeek: Int
+        var repliesPerWeek: Int
+        var replyRate: Double
+        /// False while the market's reply rate is the overall one, for want of
+        /// sends to measure.
+        var replyRateMeasured: Bool
+        var week: Week
+        var today: Today
+        /// One sentence on what the quota is worked back from.
+        var note: String
+
+        struct Week: Codable, Sendable, Hashable {
+            var texts: Int
+            var textsToGo: Int
+            var replies: Int
+        }
+
+        struct Today: Codable, Sendable, Hashable {
+            var texts: Int
+            var textsTarget: Int
+        }
     }
 
     struct Stats: Codable, Sendable {

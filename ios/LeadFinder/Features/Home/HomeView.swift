@@ -214,8 +214,14 @@ struct HomeView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.secondaryText)
                         .textCase(.uppercase)
+                    if let quotas = goal.quotas {
+                        marketQuota(quotas.home, title: "Local + Regional", accent: Theme.emerald)
+                        marketQuota(quotas.portland, title: "Portland · on top", accent: Theme.sky)
+                    }
                     if let plan = goal.plan {
-                        QuotaRow(label: "Texts this week", done: week.texts, target: plan.textsPerWeek)
+                        if goal.quotas == nil {
+                            QuotaRow(label: "Texts this week", done: week.texts, target: plan.textsPerWeek)
+                        }
                         QuotaRow(label: "Replies this week", done: week.replies, target: plan.repliesPerWeek)
                         QuotaRow(
                             label: "New clients this month",
@@ -226,6 +232,33 @@ struct HomeView: View {
                     QuotaRow(label: "Interested, in touch", done: goal.interested.live, target: goal.interested.needed)
                 }
             }
+        }
+    }
+
+    /// One market's texting quota: today against today's target, the week
+    /// against the weekly target, and what the number is worked back from.
+    private func marketQuota(_ q: MessagesResponse.MarketQuota, title: String, accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Circle().fill(accent).frame(width: 7, height: 7)
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+                Spacer()
+                Text(q.week.textsToGo == 0 ? "On pace" : "\(q.week.textsToGo) more this week")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(q.week.textsToGo == 0 ? Theme.emerald : Theme.secondaryText)
+            }
+            QuotaRow(label: "Texts today", done: q.today.texts, target: q.today.textsTarget)
+            QuotaRow(label: "Texts this week", done: q.week.texts, target: q.textsPerWeek)
+            Text(q.note)
+                .font(.caption)
+                .foregroundStyle(Theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.leading, 10)
+        .overlay(alignment: .leading) {
+            Capsule().fill(accent.opacity(0.5)).frame(width: 2)
         }
     }
 

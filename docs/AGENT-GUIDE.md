@@ -367,6 +367,15 @@ text was about, else `agentMarkets()` in `src/lib/agentMarket.ts`: latest
 listing, then `home_city`, then a 503/971/360 number = Portland). The daily texting target (`DAILY_TARGET` in
 `src/app/follow-up/data.ts`) moves with live reply rates on purpose.
 
+The texting quota (`src/lib/goal.ts`, the Messages goal card and Home's goal
+section; `goal` on `GET /api/app/v1/messages`) is two quotas, `quotas.home`
+and `quotas.portland`. Home (Local + Regional) works the $ `MONTHLY_GOAL`
+back into texts using only home bookings and home outreach texts; the
+top-level `thisWeek` / `today` / `plan` are the home numbers. Portland is on
+top of it, worked back from `PORTLAND_JOBS_PER_WEEK` (2) with Portland's own
+reply rate once it has 50+ sends in 28 days. Sends are placed by market the
+same way as the funnel split, so Portland texts never count toward home.
+
 ### Funnel and portfolio pages
 
 The funnel: cold text → reply → samples (email template variant C, or a
