@@ -311,7 +311,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   // Photo score, price and brokerage made no difference, so they only break
   // ties. After that: video puts agents he has never texted first, then the
   // priciest listing; backup the priciest; photo the pipeline's priority score.
-  // Texted goes by who has waited longest since his last text; unlikely by the
+  // Texted goes nearest first, then by who has waited longest since his last text; unlikely by the
   // priority score.
   //
   // The Portland tab ranks by distance from Oregon City instead (see
@@ -328,7 +328,11 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
         : key === "photo"
           ? outreachRank(a, b, market) || byLeadPriority(a.best, b.best)
           : key === "texted"
-            ? (a.textedAt?.getTime() ?? 0) - (b.textedAt?.getTime() ?? 0) || byLeadPriority(a.best, b.best)
+            ? // Nearest first (Lukas, 2026-11-14: second touches start close to
+              // home), then whoever has waited longest since his last text.
+              compareDistance(nearestDistance(a, market), nearestDistance(b, market)) ||
+              (a.textedAt?.getTime() ?? 0) - (b.textedAt?.getTime() ?? 0) ||
+              byLeadPriority(a.best, b.best)
             : byLeadPriority(a.best, b.best)
     );
   }
@@ -379,6 +383,25 @@ function outreachRank(a: LeadGroup, b: LeadGroup, market: Market | null): number
 /** Miles from Oregon City to the group's best listing; unknown is Infinity. */
 function portlandDistance(g: LeadGroup): number {
   return milesFromOregonCity(g.best) ?? Infinity;
+}
+
+/**
+ * How far the group's nearest listing is: drive minutes from Winston, or
+ * miles from Oregon City on the Portland tab. Unknown is Infinity.
+ */
+function nearestDistance(g: LeadGroup, market: Market | null): number {
+  let nearest = Infinity;
+  for (const { lead } of g.entries) {
+    const d =
+      market === "portland" ? milesFromOregonCity(lead) : lead.city ? estimateDriveMinutes(lead.city) : null;
+    if (d != null) nearest = Math.min(nearest, d);
+  }
+  return nearest;
+}
+
+/** Ascending, with Infinity (unknown) last and equal to itself. */
+function compareDistance(a: number, b: number): number {
+  return a === b ? 0 : a < b ? -1 : 1;
 }
 
 /** 541/458 (southern and central Oregon) first, Portland and Vancouver numbers last. */

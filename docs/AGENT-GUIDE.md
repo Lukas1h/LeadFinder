@@ -169,6 +169,9 @@ stored `lead_section` and template targeting are unchanged. Portland, cities
 missing from the drive table, Agents you know and Near your shoots never
 move there, and Texted before / Unlikely stay put (hard rule 5). Eugene and
 Medford are 90 min, Ashland and Corvallis 120, so those stay in place.
+Texted before is sorted nearest first (the group's closest listing: drive
+minutes from Winston, miles from Oregon City on the Portland tab), then by
+who has waited longest since the last text (Lukas, 2026-11-14).
 
 **Markets** (`src/lib/markets.ts`, since 2026-11-12). Every listing is in one
 of three markets, computed from its city/state (never stored):
