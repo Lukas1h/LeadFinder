@@ -153,10 +153,23 @@ export async function resolveZipDownloadUrl(sharedLink: string): Promise<string>
   return url.toString();
 }
 
-/** The Dropbox error's own tag ("path", "shared_link_already_exists", …), for handling the few that aren't failures. */
+/**
+ * The Dropbox error's own tag ("path", "shared_link_already_exists", …), for
+ * handling the few that aren't failures.
+ *
+ * The SDK hands back the parsed response body, and how deep the tagged union
+ * sits in it depends on the endpoint: sometimes the body *is* the union
+ * (`{ ".tag": "path" }`), sometimes it's wrapped once more
+ * (`{ error: { ".tag": "path", path: … } }`, which is what the files
+ * endpoints send for a 409). Check both, or an "already exists" reads as a
+ * failure and every second call breaks.
+ */
 function dropboxErrorTag(err: unknown): string | null {
-  const tagged = err as { error?: { ".tag"?: string } } | null;
-  return tagged?.error?.[".tag"] ?? null;
+  const body = (err as { error?: unknown } | null)?.error;
+  const tag =
+    (body as { ".tag"?: unknown } | undefined)?.[".tag"] ??
+    (body as { error?: { ".tag"?: unknown } } | undefined)?.error?.[".tag"];
+  return typeof tag === "string" ? tag : null;
 }
 
 /** DROPBOX_UPLOAD_ROOT, as a path: leading slash, no trailing slash. */
@@ -172,10 +185,22 @@ async function ensureFolder(path: string): Promise<string> {
     const res = await dbx.filesCreateFolderV2({ path, autorename: false });
     return res.result.metadata.path_display ?? res.result.metadata.path_lower ?? path;
   } catch (err) {
+    // A "path" error is the boring case — it's already there. Ask what it is
+    // rather than trusting the tag: a *file* with the folder's name means the
+    // upload can't go anywhere, and "Response failed with a 409" tells nobody
+    // that. If the lookup itself fails (missing parent, bad name), the
+    // original error is the one worth reporting.
     if (dropboxErrorTag(err) !== "path") throw err;
-    const meta = await dbx.filesGetMetadata({ path });
-    if (meta.result[".tag"] !== "folder") throw err;
-    return meta.result.path_display ?? meta.result.path_lower ?? path;
+    let existing: Awaited<ReturnType<typeof dbx.filesGetMetadata>>;
+    try {
+      existing = await dbx.filesGetMetadata({ path });
+    } catch {
+      throw err;
+    }
+    if (existing.result[".tag"] !== "folder") {
+      throw new Error(`Dropbox: \"${path}\" already exists as a file, so the upload folder can't be made`);
+    }
+    return existing.result.path_display ?? existing.result.path_lower ?? path;
   }
 }
 
