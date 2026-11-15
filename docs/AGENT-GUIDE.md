@@ -229,8 +229,9 @@ the trigger (the excuse in text 1, `COLD_TRIGGERS`: `near_shoot`, `in_area`,
 triggers prefer a booking marked **Showcase** (`bookings.showcase`, the switch
 in the booking dialog and the iPhone booking sheet, Lukas 2026-11-15): a
 showcase shoot gets the `showcase` pitch ("Cold pitch: showcase": can I share a
-few pics from it and what I charged?), any other shoot still works as the
-excuse but gets the soft pitch. A pass on any cold tab covers all of them.
+few pics from it and what I charged?); any other shoot still works as the
+excuse, with turnaround (video if high end) for agents who have a
+photographer and the soft pitch for the rest, whatever the samples date. A pass on any cold tab covers all of them.
 **Tapping Text on a cold card records a real send** (`recordColdFollowUpSend`,
 `src/lib/coldFollowUp/record.ts`, called from `startPendingInteraction`): type
 `follow_up`, the pitch preset/variant, body = both texts, and for a showcase

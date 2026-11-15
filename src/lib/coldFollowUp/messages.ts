@@ -71,13 +71,16 @@ export const COLD_FALLBACKS: Record<string, string> = {
 /**
  * Which pitch this agent gets.
  *
- * A shoot is the excuse (near_shoot, in_area), so the shoot itself is the
- * pitch: no segment or samples reasoning applies.
+ * A shoot is the excuse (near_shoot, in_area): a Showcase shoot is the pitch
+ * itself; any other shoot sends an agent with a photographer to turnaround
+ * (video if high end), and everyone else to soft. The samples date doesn't
+ * apply to shoot excuses.
  *
  * - showcase: the shoot he is pointing at is marked Showcase, so it is one he
  *   is happy to show — ask to share a few pics from it and what he charged.
  *   A yes leads to a portfolio page built around that shoot.
- * - soft: the shoot works as the excuse but isn't one he wants to show off, so
+ * - turnaround / video: the shoot isn't Showcase and they have a photographer.
+ * - soft: the shoot isn't Showcase and there's no photographer on record, so
  *   the ask stays vague.
  *
  * A new listing has no shoot, so the usual segment rules decide:
@@ -95,7 +98,13 @@ export function pickPitch(
   seg: AgentSegment | undefined
 ): ColdPitch {
   if (c.trigger === "near_shoot" || c.trigger === "in_area") {
-    return c.shoot?.showcase ? "showcase" : "soft";
+    if (c.shoot?.showcase) return "showcase";
+    // A shoot that isn't Showcase is only the excuse. Agents who already have
+    // a photographer get the switch pitch (turnaround, or video if high end)
+    // whatever their first-text date; everyone else the soft one (Lukas,
+    // 2026-11-15: he wants to send turnaround more).
+    if (seg?.segment === "has_photographer") return seg.highEnd ? "video" : "turnaround";
+    return "soft";
   }
   if (c.samplesAskEligible) return "samples";
   if (seg?.segment === "has_photographer" && seg.highEnd) return "video";
