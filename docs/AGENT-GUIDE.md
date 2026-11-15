@@ -237,7 +237,13 @@ excuse but gets the soft pitch. A pass on any cold tab covers all of them.
 shoot `message_sends.featured_booking_id`. So the reply is logged on that send
 in Messages and gets its quick actions; "Cold pitch: showcase" has "Portfolio
 link", and the builder (web and iPhone Create portfolio) prefills the featured
-shoot from the agent's latest send within 30 days. A "not sent" answer deletes
+shoot from the agent's latest send within 30 days. Texting a page with a
+featured shoot uses the "Portfolio link: featured shoot" template ("Thanks!",
+then the link + "Here are the pics from it, plus what I charged and some more
+of my work…"; `FEATURED_PORTFOLIO_PRESET_NAME` in
+`src/app/messaging/replyActions.ts`, picked from the link's content by slug,
+falling back to "Portfolio link"); Link not opened / Opened, no reply count
+both templates. A "not sent" answer deletes
 the send as usual. The portfolio page with `content.featuredBookingId` opens
 with that property (photos, address, "What I charged"), then "More of my
 work"; its title and preview image are the property. Each card has two texts: `suggestion` = the excuse

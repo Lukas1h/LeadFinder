@@ -14,6 +14,7 @@ import {
   messagePresets,
   messagePresetVariants,
   messageSends,
+  portfolioLinks,
   type Agent,
   type AgentRelationshipStatus,
   type Listing,
@@ -21,7 +22,7 @@ import {
   type MessageResult,
   type PresetType,
 } from "@/db/schema";
-import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { attachmentMetaSql, attachmentsForMarket, withContentTypes, type AttachmentMeta } from "@/lib/attachments";
 import { marketFor, variantsForMarket, type Market } from "@/lib/markets";
 import { agentMarkets } from "@/lib/agentMarket";
@@ -54,6 +55,12 @@ export interface SendDetail {
 
 /** The "Portfolio link" SMS template: its quick action opens the builder, whose "Text it" sends it. */
 const PORTFOLIO_PRESET_NAME = "Portfolio link";
+/**
+ * Its twin for a page built around one of his shoots (content.featuredBookingId,
+ * the yes to a cold "can I share a few pics from it?"), whose second text talks
+ * about that shoot. Falls back to "Portfolio link" when missing or off.
+ */
+export const FEATURED_PORTFOLIO_PRESET_NAME = "Portfolio link: featured shoot";
 
 /** One button on a sent message: another template, ready to go to the same agent. */
 export interface QuickAction {
@@ -529,22 +536,29 @@ export async function portfolioLinkTexts(
   agentId: string,
   url: string
 ): Promise<{ error?: string; first?: string; second?: string; phone?: string }> {
-  const ctx = await portfolioLinkContext(agentId);
+  const ctx = await portfolioLinkContext(agentId, url);
   if ("error" in ctx) return { error: ctx.error };
   return { first: ctx.first, second: ctx.secondTemplate.replaceAll(PORTFOLIO_LINK_MARKER, url), phone: ctx.agent.phone! };
 }
 
-async function portfolioLinkContext(agentId: string) {
+async function portfolioLinkContext(agentId: string, url: string) {
   const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
   if (!agent) return { error: "That agent is gone" } as const;
   if (!agent.phone) return { error: `${agent.name ?? "They"} have no phone number on file` } as const;
-  const [preset] = await db
-    .select({ id: messagePresets.id, type: messagePresets.type, secondMessage: messagePresets.secondMessage })
+  // A page built around one of his shoots gets the featured-shoot wording.
+  const slug = url.split("/").filter(Boolean).pop() ?? "";
+  const [link] = slug
+    ? await db.select({ content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.slug, slug))
+    : [];
+  const names = link?.content.featuredBookingId ? [FEATURED_PORTFOLIO_PRESET_NAME, PORTFOLIO_PRESET_NAME] : [PORTFOLIO_PRESET_NAME];
+  const found = await db
+    .select({ id: messagePresets.id, name: messagePresets.name, type: messagePresets.type, secondMessage: messagePresets.secondMessage })
     .from(messagePresets)
-    .where(and(eq(messagePresets.name, PORTFOLIO_PRESET_NAME), eq(messagePresets.channel, "sms"), eq(messagePresets.enabled, true)));
-  if (!preset) return { error: `The "${PORTFOLIO_PRESET_NAME}" text template is missing or off` } as const;
-  const variant = (await nextVariants([preset.id])).get(preset.id);
-  if (!variant) return { error: `"${PORTFOLIO_PRESET_NAME}" has no variant switched on` } as const;
+    .where(and(inArray(messagePresets.name, names), eq(messagePresets.channel, "sms"), eq(messagePresets.enabled, true), isNull(messagePresets.archivedAt)));
+  const variants = await nextVariants(found.map((p) => p.id));
+  const preset = names.map((n) => found.find((p) => p.name === n && variants.has(p.id))).find(Boolean);
+  if (!preset) return { error: `The "${PORTFOLIO_PRESET_NAME}" text template is missing, off or has no variant switched on` } as const;
+  const variant = variants.get(preset.id)!;
   // Their latest message from Lukas: the one this link answers.
   const [latest] = await db
     .select({ id: messageSends.id, channel: messageSends.channel, listingId: messageSends.listingId, recipientName: messageSends.recipientName })
@@ -571,14 +585,14 @@ export async function recordPortfolioLinkText(
   url: string,
   confirmed = false
 ): Promise<{ error?: string; text?: string; second?: string; phone?: string }> {
-  const ctx = await portfolioLinkContext(agentId);
+  const ctx = await portfolioLinkContext(agentId, url);
   if ("error" in ctx) return { error: ctx.error };
   const { agent, preset, variant, latest, name, first } = ctx;
   const second = ctx.secondTemplate.replaceAll(PORTFOLIO_LINK_MARKER, url);
   const firstText = first.replaceAll(PORTFOLIO_LINK_MARKER, url);
 
   const now = new Date();
-  if (latest) await recordReply(latest, agent, "samples", `Replied. Sent "${PORTFOLIO_PRESET_NAME}".`);
+  if (latest) await recordReply(latest, agent, "samples", `Replied. Sent "${preset.name}".`);
   else if (
     agent.relationshipStatus === "cold" ||
     agent.relationshipStatus === "declined" ||
@@ -606,7 +620,7 @@ export async function recordPortfolioLinkText(
     channel: "text",
     messageSendId: sent?.id ?? null,
   });
-  if (confirmed && interactionId) await resolvePendingInteraction(interactionId, "sent", `Sent "${PORTFOLIO_PRESET_NAME}".`);
+  if (confirmed && interactionId) await resolvePendingInteraction(interactionId, "sent", `Sent "${preset.name}".`);
 
   revalidateAll();
   return { text: firstText, second, phone: agent.phone! };

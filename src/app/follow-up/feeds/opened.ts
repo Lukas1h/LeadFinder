@@ -26,7 +26,7 @@ export async function getOpenedNoReplyGroup(): Promise<FeedGroup> {
     .innerJoin(messagePresets, eq(messageSends.presetId, messagePresets.id))
     .where(
       and(
-        eq(messagePresets.name, PRESET_NAME),
+        inArray(messagePresets.name, [PRESET_NAME, "Portfolio link: featured shoot"]),
         gte(messageSends.sentAt, new Date(now - MAX_DAYS * DAY)),
         lte(messageSends.sentAt, new Date(now - MIN_DAYS * DAY))
       )
