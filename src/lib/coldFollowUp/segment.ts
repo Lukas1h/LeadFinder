@@ -34,7 +34,13 @@ export interface AgentSegment {
 export const HAS_PHOTOGRAPHER_MIN_SCORE = 7;
 
 /** Below this many scored listings, one score is not enough to judge. */
-export const MIN_SCORED_LISTINGS = 2;
+export const MIN_SCORED_LISTINGS = 1;
+
+/**
+ * With a single scored listing, the bar is higher: Gemini puts most listings
+ * on 8, so one 7 says little (Lukas, 2026-11-15). Two or more use minScore.
+ */
+export const SINGLE_LISTING_MIN_SCORE = 8;
 
 /**
  * A listing's weight halves every SCORE_HALF_LIFE_DAYS days of age, so a
@@ -106,7 +112,7 @@ export function segmentAgent(
   const segment: ColdSegment =
     weightedScore === null || scored.length < MIN_SCORED_LISTINGS
       ? "unknown"
-      : weightedScore >= minScore
+      : weightedScore >= (scored.length === 1 ? Math.max(minScore, SINGLE_LISTING_MIN_SCORE) : minScore)
         ? "has_photographer"
         : "no_photographer";
 

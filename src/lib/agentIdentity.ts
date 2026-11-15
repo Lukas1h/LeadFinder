@@ -1,6 +1,14 @@
 import { and, desc, eq, gt, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, bookings, listings, messagePresets, messageSends, type AgentRelationshipStatus } from "@/db/schema";
+import {
+  agentInteractions,
+  agents,
+  bookings,
+  listings,
+  messagePresets,
+  messageSends,
+  type AgentRelationshipStatus,
+} from "@/db/schema";
 import { normalizeEmail, normalizeName, normalizePhone } from "./normalize";
 
 /**
@@ -129,6 +137,36 @@ export async function linkListingToAgent(
 }
 
 /**
+ * Whether a cold follow-up text went out to this agent in `(since, until]`.
+ *
+ * Cold follow-ups are the second texts to agents who never answered the first
+ * one (src/lib/coldFollowUp/), recorded only as outbound text interactions on a
+ * `cold_*` Follow up feed. When one lands between a send and a reply, the reply
+ * is answering that follow-up, not the older send, so the send must stay
+ * unanswered (see markLatestSendResponded). A parked or "didn't send"
+ * interaction didn't reach anyone and doesn't count.
+ */
+export async function coldFollowUpSince(agentId: string, since: Date, until: Date): Promise<boolean> {
+  const [row] = await db
+    .select({ id: agentInteractions.id })
+    .from(agentInteractions)
+    .where(
+      and(
+        eq(agentInteractions.agentId, agentId),
+        eq(agentInteractions.direction, "outbound"),
+        eq(agentInteractions.channel, "text"),
+        isNull(agentInteractions.pendingSince),
+        sql`(${agentInteractions.outcome} is null or ${agentInteractions.outcome} <> 'not_sent')`,
+        sql`left(coalesce(${agentInteractions.followUpFeed}, ''), 5) = 'cold_'`,
+        gt(agentInteractions.occurredAt, since),
+        lte(agentInteractions.occurredAt, until)
+      )
+    )
+    .limit(1);
+  return row != null;
+}
+
+/**
  * Marks an agent's most recent prior send as having been replied to.
  *
  * respondedAt was previously only reachable through resolveSendOutcome, which
@@ -144,10 +182,15 @@ export async function linkListingToAgent(
  * it's still unset, since respondedAt records the first response and nothing
  * after it. A reply with no prior send (someone reaching out cold) matches
  * nothing and is a no-op.
+ *
+ * One exception (2026-11-15): a cold follow-up text that went out after that
+ * send. Those agents never answered the first text, so a reply after one is
+ * answering the second text — it credits neither that send nor an older one,
+ * and the send stays unset (coldFollowUpSince).
  */
 export async function markLatestSendResponded(agentId: string, respondedAt: Date): Promise<string | null> {
   const [latest] = await db
-    .select({ id: messageSends.id })
+    .select({ id: messageSends.id, sentAt: messageSends.sentAt })
     .from(messageSends)
     .where(
       and(
@@ -160,6 +203,8 @@ export async function markLatestSendResponded(agentId: string, respondedAt: Date
     .limit(1);
 
   if (!latest) return null;
+  // The reply belongs to the cold follow-up between the send and now.
+  if (await coldFollowUpSince(agentId, latest.sentAt, respondedAt)) return null;
   await db.update(messageSends).set({ respondedAt }).where(eq(messageSends.id, latest.id));
   return latest.id;
 }
@@ -291,7 +336,9 @@ export async function attributeBookingToSend(
   // the result was before. It also implies a response — nobody books without
   // answering first — so a send credited with a job but still reading "no
   // response" is self-contradictory. The exact reply time isn't knowable, so
-  // the booking date stands in for it.
+  // the booking date stands in for it. A cold follow-up in between doesn't
+  // change this: the booking is the outcome of the conversation, and there is
+  // no "replied to the follow-up instead" send to credit it to.
   await db
     .update(messageSends)
     .set({ result: "booked", ...(winner.respondedAt ? {} : { respondedAt: at }) })

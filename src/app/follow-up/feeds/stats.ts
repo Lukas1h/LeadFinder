@@ -32,23 +32,51 @@ const emptyByMarket = (): Record<Market, FeedStats> => ({
   portland: empty(),
 });
 
+/** The cold follow-up tabs' feeds (COLD_FEED_KEYS in lib/coldFollowUp/pool.ts). */
+const COLD_PREFIX = "cold_";
+const isColdFeed = (feed: string | null): boolean => (feed ?? "").startsWith(COLD_PREFIX);
+
+/** A status change into one of these, after a cold reach, is a conversion. */
+const CONVERTED_TO = new Set(["warm", ...INTERESTED_OR_BETTER]);
+/**
+ * Where a change after a cold reach can start and still be a move up: cold
+ * itself, or ignored — a cold agent who never answered, which the nightly
+ * skip (lib/coldFollowUp/ignore.ts) writes and a reply then clears to warm.
+ */
+const COLD_STATUSES = new Set(["cold", "ignored"]);
+
 /**
  * How each feed is doing, from the calls and texts started on its cards
- * (agentInteractions.followUpFeed, recorded since 2026-10-21), plus `all`:
- * every agent reached from any feed, once (the Home funnel's Follow up row),
- * and `allByMarket`: the same tally split by the market each agent is in
- * (lib/agentMarket.ts). Summing `allByMarket` gives `all` back.
+ * (agentInteractions.followUpFeed, recorded since 2026-10-21), plus:
  *
- * A reply is an inbound call/text/email, or a send marked responded, within a
- * week of it. Warm → interested comes from agent_status_changes (a trigger,
- * since 2026-11-09): an agent was warm when reached if the first status change
- * after the reach starts from warm, or there's been none and they're warm now;
- * converted if a change after the reach went from warm to interested or better.
+ * - `all`: every agent reached from a regular (non-cold) feed, once — the Home
+ *   funnel's Follow up row. `allByMarket`: the same tally split by the market
+ *   each agent is in (lib/agentMarket.ts). Summing `allByMarket` gives `all`
+ *   back.
+ * - `allCold` / `allColdByMarket`: the same two, over the cold follow-up feeds
+ *   only (`follow_up_feed` starting "cold_": cold_new_listing, cold_near_shoot,
+ *   cold_in_area). They sit apart from `all` because a second text to someone
+ *   who never answered the first is not comparable to a Follow up card, and
+ *   what one is worth is unknown. Still one per agent, the first cold reach in
+ *   the window.
+ *
+ * `byFeed` keeps every feed, cold ones included, so each cold tab shows its own
+ * numbers. A reply is an inbound call/text/email, or a send marked responded,
+ * within a week of it. Warm → interested comes from agent_status_changes (a
+ * trigger, since 2026-11-09): an agent was warm when reached if the first status
+ * change after the reach starts from warm, or there's been none and they're warm
+ * now; converted if a change after the reach went from warm to interested or
+ * better. On a cold row `warm` stays 0 — those agents never answered the first
+ * text, so they were cold when reached — and `converted` is any move up from
+ * cold (or ignored) after the reach instead: to warm (a reply), interested,
+ * worked_once or regular.
  */
 export async function getFeedStatsWithTotal(): Promise<{
   byFeed: Map<string, FeedStats>;
   all: FeedStats;
   allByMarket: Record<Market, FeedStats>;
+  allCold: FeedStats;
+  allColdByMarket: Record<Market, FeedStats>;
 }> {
   const since = new Date(Date.now() - FEED_STATS_DAYS * DAY);
   const starts = await db
@@ -63,8 +91,10 @@ export async function getFeedStatsWithTotal(): Promise<{
   const byFeed = new Map<string, FeedStats>();
   const all = empty();
   const allByMarket = emptyByMarket();
+  const allCold = empty();
+  const allColdByMarket = emptyByMarket();
   const reachedStarts = starts.filter((s) => s.outcome !== "not_sent");
-  if (reachedStarts.length === 0) return { byFeed, all, allByMarket };
+  if (reachedStarts.length === 0) return { byFeed, all, allByMarket, allCold, allColdByMarket };
 
   const ids = [...new Set(reachedStarts.map((s) => s.agentId))];
   const [inbound, responded, changes, current, markets] = await Promise.all([
@@ -106,10 +136,20 @@ export async function getFeedStatsWithTotal(): Promise<{
   for (const list of changesBy.values()) list.sort((a, b) => a.at - b.at);
   const statusNow = new Map(current.map((a) => [a.id, a.status as string]));
 
-  const tally = (entry: FeedStats, agentId: string, at: number) => {
+  const tally = (entry: FeedStats, agentId: string, at: number, cold = false) => {
     entry.reached++;
     if ((replies.get(agentId) ?? []).some((t) => t > at && t < at + REPLY_WITHIN_DAYS * DAY)) entry.replied++;
     const after = (changesBy.get(agentId) ?? []).filter((c) => c.at > at);
+    if (cold) {
+      // Reached cold, so there's no "warm when reached" to count; a conversion
+      // is a move up from cold after the text — to warm (a reply), interested,
+      // worked_once or regular. Ignored counts as cold here: those agents were
+      // cold when texted, and the skip only ever ran after the cold follow-up.
+      if (after.some((c) => (c.from === null || COLD_STATUSES.has(c.from)) && CONVERTED_TO.has(c.to))) {
+        entry.converted++;
+      }
+      return;
+    }
     const wasWarm = after.length > 0 ? after[0].from === "warm" : statusNow.get(agentId) === "warm";
     if (!wasWarm) return;
     entry.warm++;
@@ -119,24 +159,36 @@ export async function getFeedStatsWithTotal(): Promise<{
   // One per agent per feed: the first time they were reached from it in the window.
   const first = new Map<string, { feed: string; agentId: string; at: number }>();
   const firstAny = new Map<string, number>();
+  const firstAnyCold = new Map<string, number>();
   for (const s of reachedStarts) {
     const key = `${s.feed}|${s.agentId}`;
     const at = s.at.getTime();
     if (!first.has(key) || at < first.get(key)!.at) first.set(key, { feed: s.feed!, agentId: s.agentId, at });
-    if (!firstAny.has(s.agentId) || at < firstAny.get(s.agentId)!) firstAny.set(s.agentId, at);
+    // `all` is the regular feeds only; the cold ones are tallied apart.
+    const any = isColdFeed(s.feed) ? firstAnyCold : firstAny;
+    if (!any.has(s.agentId) || at < any.get(s.agentId)!) any.set(s.agentId, at);
   }
   for (const { feed, agentId, at } of first.values()) {
     const entry = byFeed.get(feed) ?? empty();
-    tally(entry, agentId, at);
+    tally(entry, agentId, at, isColdFeed(feed));
     byFeed.set(feed, entry);
   }
-  for (const [agentId, at] of firstAny) {
-    tally(all, agentId, at);
-    // agentMarkets gives every id a market; regional only catches an id with
-    // no agents row at all, so the buckets always add back up to `all`.
-    tally(allByMarket[markets.get(agentId) ?? "regional"], agentId, at);
-  }
-  return { byFeed, all, allByMarket };
+  const tallyAll = (
+    total: FeedStats,
+    totalByMarket: Record<Market, FeedStats>,
+    reached: Map<string, number>,
+    cold: boolean
+  ) => {
+    for (const [agentId, at] of reached) {
+      tally(total, agentId, at, cold);
+      // agentMarkets gives every id a market; regional only catches an id with
+      // no agents row at all, so the buckets always add back up to the total.
+      tally(totalByMarket[markets.get(agentId) ?? "regional"], agentId, at, cold);
+    }
+  };
+  tallyAll(all, allByMarket, firstAny, false);
+  tallyAll(allCold, allColdByMarket, firstAnyCold, true);
+  return { byFeed, all, allByMarket, allCold, allColdByMarket };
 }
 
 /** Per feed only, for the Follow Up page. */

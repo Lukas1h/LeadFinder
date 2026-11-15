@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { runSync, insertAndEnrichListings, type SyncResult } from "@/lib/sync";
 import { extractZpidFromUrl, fetchFullListing } from "@/lib/zillapi";
 import { findFirstAddressResultUrl } from "@/lib/tavily";
-import { resolveAgentId } from "@/lib/agentIdentity";
+import { resolveAgentId, coldFollowUpSince } from "@/lib/agentIdentity";
 
 export async function touchAgentContact(
   listingId: string,
@@ -83,12 +83,17 @@ export async function bumpAgentRelationshipOnMilestone(
  * rather than being recorded as a rejection the agent never made. Writing
  * result="declined" off a pass is what made the messaging page's per-variant
  * decline numbers meaningless.
+ *
+ * "replied" leaves respondedAt unset when a cold follow-up text went out after
+ * the send (coldFollowUpSince in lib/agentIdentity.ts): the agent answered the
+ * follow-up, so crediting the earlier send would be wrong. The result change
+ * still applies — a decline or a booking is the outcome either way.
  */
 export async function resolveSendOutcome(listingId: string, status: LeadStatus) {
   if (status !== "replied" && status !== "quoted" && status !== "booked" && status !== "declined") return;
 
   const [latest] = await db
-    .select({ id: messageSends.id, respondedAt: messageSends.respondedAt })
+    .select({ id: messageSends.id, agentId: messageSends.agentId, sentAt: messageSends.sentAt, respondedAt: messageSends.respondedAt })
     .from(messageSends)
     .where(eq(messageSends.listingId, listingId))
     .orderBy(desc(messageSends.sentAt))
@@ -96,9 +101,11 @@ export async function resolveSendOutcome(listingId: string, status: LeadStatus) 
 
   if (!latest) return;
 
+  const now = new Date();
   const patch: { respondedAt?: Date; result?: "quoted" | "booked" | "declined" } = {};
   if (status === "replied") {
-    if (!latest.respondedAt) patch.respondedAt = new Date();
+    const coldFollowUp = latest.agentId != null && (await coldFollowUpSince(latest.agentId, latest.sentAt, now));
+    if (!latest.respondedAt && !coldFollowUp) patch.respondedAt = now;
   } else {
     patch.result = status;
   }

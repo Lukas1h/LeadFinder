@@ -215,9 +215,29 @@ marked these as declined with an "Ignored…" note; those 29 were moved by
 `scripts/backfill-ignored-agents.mts`. "Ignoring for now." (his choice, not
 theirs) stayed declined.
 
-**Cold follow-ups (in progress, 2026-11-15).** Texted-before cold agents who
-never replied get one more text, from a separate Cold group on the Follow Up
-page (not built yet). `src/lib/coldFollowUp/`: `pool.ts` (`loadColdPool`:
+**Cold follow-ups (2026-11-15).** Texted-before cold agents who never
+replied get one more text, from the Cold tabs at the end of the Follow Up page
+(`FollowUpFeed.cold`, `cold: true` in the iPhone API; shown behind a "Cold"
+divider). Only **Cold: new listing** (`cold_new_listing`) is on
+(`ENABLED_COLD_FEEDS` in `src/app/follow-up/feeds/coldFollowUps.ts`); near-shoot
+and in-area wait for the booking-based portfolio page. Each card has two texts:
+`suggestion` = the excuse (template "Cold follow-up: new listing" / "…: shot
+one near you" / "…: in the area"), `secondText` = the pitch, picked by
+`pickPitch` (`src/lib/coldFollowUp/messages.ts`): first texted before Oct 5 →
+"Cold pitch: samples"; has a photographer and high end → "Cold pitch: video
+(high end)"; has a photographer → "Cold pitch: turnaround"; else "Cold pitch:
+soft". Templates are type `follow_up`, read by name (first enabled variant by
+label), with code fallbacks; created by
+`scripts/create-cold-followup-presets.mts`. **Numbers stay apart:** cold feed
+texts are only interactions (`follow_up_feed` `cold_*`), never
+`message_sends`, so they're in no texting quota (`goal.ts` also drops them
+from the weekly follow-up count); the Home funnel's Follow up row excludes
+them and they get their own `coldFollowUp` row (`allCold` in `feeds/stats.ts`,
+where converted = any move up from cold/ignored after the text); and a reply
+after a cold follow-up doesn't mark the original send responded
+(`coldFollowUpSince` in `src/lib/agentIdentity.ts`, used by
+`markLatestSendResponded`, `recordReply`, `resolveSendOutcome`), so the cold
+reply rate isn't inflated. `src/lib/coldFollowUp/`: `pool.ts` (`loadColdPool`:
 cold, texted, never replied, quiet `MIN_GAP_DAYS` 21, fewer than
 `MAX_COLD_FOLLOW_UPS` 1 cold follow-ups; `samplesAskEligible` = first texted
 before 2026-10-05), `triggers.ts` (`getColdFollowUpCandidates`, one per agent,
@@ -226,8 +246,9 @@ job shot in the last 10 days within 15 miles, never the local market),
 `cold_new_listing` (listed since the last text, within 10 days); honours
 `follow_up_passes`), `segment.ts` (`loadAgentSegments`: recency-weighted
 listing photo score, half-life 90 days; >= 7 with 2+ scored listings =
-`has_photographer`; `HIGH_END_PRICE` is a placeholder for Lukas). Dry runs:
-`scripts/cold-followup-dryrun.mts`, `scripts/cold-segment-check.mts`. Cold
+`has_photographer`, or 8+ with a single scored listing; `HIGH_END_PRICE` is a placeholder for Lukas). Dry runs:
+`scripts/cold-followup-dryrun.mts`, `scripts/cold-segment-check.mts`,
+`scripts/cold-feed-check.mts`, `scripts/funnel-check.mts`. Cold
 follow-up texts must not count toward the texting quota (`goal.ts`) and get
 their own stats row, since their value per text is unknown.
 

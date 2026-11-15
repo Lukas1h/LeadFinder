@@ -14,6 +14,8 @@ import { getSavedContactGroup } from "./savedContact";
 import { getDroneBookingGroup } from "./droneBooking";
 import { getPhotoOfferRepliesGroup } from "./photoOfferReplies";
 import { getNearShootGroup } from "./nearShoot";
+import { COLD_FEED_BLURBS, COLD_FEED_TITLES, ENABLED_COLD_FEEDS, getColdFollowUpGroups } from "./coldFollowUps";
+import type { ColdFeedKey } from "@/lib/coldFollowUp/pool";
 import { feedAllows, loadFeedHistory, type FeedHistory } from "./history";
 import type { FeedGroup, FeedItem, FollowUpFeed } from "./types";
 
@@ -33,6 +35,8 @@ export interface OfferFeeds {
   droneBooking: FeedGroup;
   graphics: FeedGroup[];
   drone: FeedGroup[];
+  /** One per cold feed key; buildFeeds appends the enabled ones as their own "Cold" tabs. */
+  cold: Record<ColdFeedKey, FeedGroup>;
   stats: Map<string, FeedStats>;
   /** Passes and who's already had each feed's text (history.ts), applied to every feed in buildFeeds. */
   history: FeedHistory;
@@ -43,7 +47,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
   // established before any of these parallel branches touch the clock, or
   // whichever gets there first (not necessarily this one) fails the build.
   await connection();
-  const [touchUps, backOnMarket, staging, unopened, openedNoReply, savedContact, photoOfferReplies, nearShoot, droneBooking, graphics, drone, stats, history] = await Promise.all([
+  const [touchUps, backOnMarket, staging, unopened, openedNoReply, savedContact, photoOfferReplies, nearShoot, droneBooking, graphics, drone, cold, stats, history] = await Promise.all([
     getPhotoTouchUpGroups(),
     getBackOnMarketGroup(),
     getStagingGroup(),
@@ -55,6 +59,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
     getDroneBookingGroup(),
     getGraphicsGroups(),
     getDroneOffers(),
+    getColdFollowUpGroups(),
     getFeedStats(),
     loadFeedHistory(),
   ]);
@@ -82,6 +87,7 @@ export async function getOfferFeeds(): Promise<OfferFeeds> {
         ...byPriority(g.items.filter((e) => !e.listing).map((e) => ({ ...e, editorHref: null }))),
       ],
     })),
+    cold,
     stats,
     history,
   };
@@ -229,6 +235,18 @@ export function buildFeeds(board: Pick<FollowUpBoard, "today" | "later">, offers
       muted: true,
       groups: [group("Gone quiet", reason("quiet"))],
     },
+    // Cold follow-ups last, after every warm feed: agent never answered the
+    // first text, so the card leads with an excuse and carries the pitch as a
+    // second text (coldFollowUps.ts, lib/coldFollowUp/messages.ts).
+    ...ENABLED_COLD_FEEDS.map(
+      (key): FollowUpFeed => ({
+        key,
+        title: COLD_FEED_TITLES[key],
+        blurb: COLD_FEED_BLURBS[key],
+        cold: true,
+        groups: [offers.cold[key]],
+      })
+    ),
   ];
   return feeds
     .map((f) => {

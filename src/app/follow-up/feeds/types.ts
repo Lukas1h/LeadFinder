@@ -23,7 +23,11 @@ export type FollowUpFeedKey =
   | "staging"
   | "graphics"
   | "drone"
-  | "check_ins";
+  | "check_ins"
+  // Cold follow-ups: agents who never answered his first text (lib/coldFollowUp/).
+  | "cold_new_listing"
+  | "cold_near_shoot"
+  | "cold_in_area";
 
 export interface FeedItem {
   agent: Agent;
@@ -57,6 +61,8 @@ export interface FollowUpFeed {
   blurb: string;
   /** A plain "it's been a while" rather than a reason; its cards' lines are muted. */
   muted?: boolean;
+  /** A cold follow-up: an agent who never replied to his first text. Shown apart from the warm feeds. */
+  cold?: boolean;
   /** How texts from this feed have done lately (feeds/stats.ts), once there are any. */
   stats?: { reached: number; replied: number; warm: number; converted: number; days: number };
   groups: FeedGroup[];

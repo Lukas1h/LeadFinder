@@ -219,8 +219,43 @@ struct FollowUpView: View {
     /// Every category as one row: name, who's due, and how it's been doing.
     /// The ones with people waiting first, in the server's order.
     private func categoryList(_ feeds: [FollowUpResponse.Feed], upcoming: Int) -> some View {
-        let ordered = feeds.filter { $0.itemCount > 0 } + feeds.filter { $0.itemCount == 0 }
-        return VStack(spacing: 0) {
+        let warm = feeds.filter { !$0.isCold }
+        let cold = feeds.filter(\.isCold)
+        let ordered = warm.filter { $0.itemCount > 0 } + warm.filter { $0.itemCount == 0 }
+        let coldOrdered = cold.filter { $0.itemCount > 0 } + cold.filter { $0.itemCount == 0 }
+        return VStack(alignment: .leading, spacing: 14) {
+            if !ordered.isEmpty || upcoming > 0 {
+                warmCategories(ordered, upcoming: upcoming)
+            }
+            if !coldOrdered.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text("Cold")
+                            .font(.headline)
+                            .foregroundStyle(Theme.primaryText)
+                        BadgeChip(text: "\(coldOrdered.reduce(0) { $0 + $1.itemCount })", tint: Theme.slate)
+                        Spacer(minLength: 0)
+                    }
+                    Text("Agents who never replied to your first text. One follow-up each.")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.secondaryText)
+                    VStack(spacing: 0) {
+                        ForEach(Array(coldOrdered.enumerated()), id: \.element.key) { index, feed in
+                            if index > 0 { Divider().padding(.leading, 14) }
+                            NavigationLink(value: FollowUpFeedRoute(key: feed.key)) {
+                                categoryRow(title: feed.title, count: feed.itemCount, stats: feed.stats)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .card(padding: 0)
+                }
+            }
+        }
+    }
+
+    private func warmCategories(_ ordered: [FollowUpResponse.Feed], upcoming: Int) -> some View {
+        VStack(spacing: 0) {
             ForEach(Array(ordered.enumerated()), id: \.element.key) { index, feed in
                 if index > 0 { Divider().padding(.leading, 14) }
                 NavigationLink(value: FollowUpFeedRoute(key: feed.key)) {

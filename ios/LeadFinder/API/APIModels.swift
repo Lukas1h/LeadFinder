@@ -225,8 +225,11 @@ struct FollowUpResponse: Codable, Sendable {
         /// How the feed has done lately (server's feeds/stats.ts); nil until anyone's been reached from it.
         var stats: FeedStats?
         var groups: [FeedGroup]
+        /// Agents who never replied to his first text (server's `cold`). Missing from older servers.
+        var cold: Bool?
 
         var id: String { key }
+        var isCold: Bool { cold ?? false }
         var itemCount: Int { groups.reduce(0) { $0 + $1.items.count } }
     }
 
@@ -792,11 +795,15 @@ struct MessagesResponse: Codable, Sendable {
         struct MarketSplit: Codable, Sendable {
             var cold: Cold
             var followUp: FollowUpResponse.FeedStats
+            /// Cold follow-ups (one nudge to agents who never replied). Nil from older servers.
+            var coldFollowUp: FollowUpResponse.FeedStats?
         }
 
         var days: Int
         var cold: Cold
         var followUp: FollowUpResponse.FeedStats
+        /// Cold follow-ups (one nudge to agents who never replied). Nil from older servers.
+        var coldFollowUp: FollowUpResponse.FeedStats?
         /// Keyed "local", "regional", "portland". Nil from older servers.
         var byMarket: [String: MarketSplit]?
     }

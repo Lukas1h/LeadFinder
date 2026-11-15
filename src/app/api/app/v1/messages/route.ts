@@ -63,6 +63,7 @@ export async function GET(req: Request) {
     // follow-ups — the web's GoalCard, same numbers (lib/goal.ts).
     goal,
     // Home's funnel card: cold outreach vs Follow Up, reply and interested rates (lib/funnelSplit.ts).
+    // Passed whole, so the cold follow-up row (`coldFollowUp`, overall and per market) goes with it.
     funnel,
   });
 

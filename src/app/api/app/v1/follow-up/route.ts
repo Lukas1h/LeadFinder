@@ -75,6 +75,8 @@ export async function GET(req: Request) {
       key: f.key,
       title: f.title,
       blurb: f.blurb,
+      // A cold follow-up (an agent who never replied to the first text): the app groups these apart. Absent means false on the app's side.
+      cold: f.cold ?? false,
       // How the feed has done lately: reach, replies, and warm agents turned interested (feeds/stats.ts).
       stats: f.stats ?? null,
       groups: f.groups.map((g) => ({ title: g.title, heldBack: g.heldBack, items: g.items.map(feedItem(f.key)) })),

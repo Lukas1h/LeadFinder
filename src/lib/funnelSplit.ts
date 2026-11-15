@@ -22,18 +22,23 @@ export interface ColdStats {
  * - **Follow up**: agents reached from a Follow Up card in the window, once
  *   each (feeds/stats.ts). Replied within a week; interested = warm when
  *   reached and turned interested or better since.
+ * - **Cold follow-up**: the same numbers over the cold follow-up tabs only
+ *   (`follow_up_feed` starting "cold_"). Kept out of `followUp` because a
+ *   nudge to someone who never answered the first text is a different thing
+ *   from a Follow Up card, and what it's worth per text is unknown.
  *
  * `byMarket` holds the same numbers three ways: every cold agent is placed by
  * the listing on their first outreach text, or — when that send has no listing
- * — by their agent market (lib/agentMarket.ts), and the follow-up row is
- * feeds.allByMarket, so the three markets always add back up to `followUp`
- * and to `cold`.
+ * — by their agent market (lib/agentMarket.ts), and the follow-up rows are
+ * feeds.allByMarket / feeds.allColdByMarket, so the three markets always add
+ * back up to `followUp`, to `coldFollowUp` and to `cold`.
  */
 export interface FunnelSplit {
   days: number;
   cold: ColdStats;
   followUp: FeedStats;
-  byMarket: Record<Market, { cold: ColdStats; followUp: FeedStats }>;
+  coldFollowUp: FeedStats;
+  byMarket: Record<Market, { cold: ColdStats; followUp: FeedStats; coldFollowUp: FeedStats }>;
 }
 
 const emptyCold = (): ColdStats => ({ reached: 0, replied: 0, interested: 0 });
@@ -96,9 +101,9 @@ export async function computeFunnelSplit(): Promise<FunnelSplit> {
 
   const cold = emptyCold();
   const byMarket: FunnelSplit["byMarket"] = {
-    local: { cold: emptyCold(), followUp: feeds.allByMarket.local },
-    regional: { cold: emptyCold(), followUp: feeds.allByMarket.regional },
-    portland: { cold: emptyCold(), followUp: feeds.allByMarket.portland },
+    local: { cold: emptyCold(), followUp: feeds.allByMarket.local, coldFollowUp: feeds.allColdByMarket.local },
+    regional: { cold: emptyCold(), followUp: feeds.allByMarket.regional, coldFollowUp: feeds.allColdByMarket.regional },
+    portland: { cold: emptyCold(), followUp: feeds.allByMarket.portland, coldFollowUp: feeds.allColdByMarket.portland },
   };
 
   for (const row of rows) {
@@ -121,5 +126,5 @@ export async function computeFunnelSplit(): Promise<FunnelSplit> {
     }
   }
 
-  return { days: FEED_STATS_DAYS, cold, followUp: feeds.all, byMarket };
+  return { days: FEED_STATS_DAYS, cold, followUp: feeds.all, coldFollowUp: feeds.allCold, byMarket };
 }

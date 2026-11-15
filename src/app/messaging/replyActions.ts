@@ -32,7 +32,7 @@ import { PHOTOS_MARKER, PORTFOLIO_LINK_MARKER, RECENT_WORK_MARKER, renderMessage
 import { recentWorkLine } from "@/lib/recentWork";
 import { emailFilesFor, splitEmailFiles } from "@/lib/emailPhotos";
 import { normalizeEmail, EMAIL_RE } from "@/lib/normalize";
-import { setAgentRelationshipStatus } from "@/lib/agentIdentity";
+import { coldFollowUpSince, setAgentRelationshipStatus } from "@/lib/agentIdentity";
 
 export interface SendDetail {
   id: string;
@@ -222,6 +222,10 @@ const CLIENT_STATUSES: AgentRelationshipStatus[] = ["worked_once", "regular"];
  * history, respondedAt on the send itself (not just their latest one), and
  * the status changes the reply implies. A reply makes a cold agent warm;
  * "interested" is for someone asking more than "sure, send them".
+ *
+ * Except when a cold follow-up text went out after the send: then the reply is
+ * answering that text, not this one, and respondedAt stays unset
+ * (coldFollowUpSince in lib/agentIdentity.ts).
  */
 async function recordReply(
   send: { id: string; channel: MessageChannel; listingId: string | null },
@@ -231,12 +235,17 @@ async function recordReply(
 ) {
   const now = new Date();
   const [current] = await db
-    .select({ respondedAt: messageSends.respondedAt })
+    .select({ respondedAt: messageSends.respondedAt, sentAt: messageSends.sentAt })
     .from(messageSends)
     .where(eq(messageSends.id, send.id));
   // A second quick action on the same message (photos, then the vCard) is
   // still answering the one reply, so it isn't logged as another.
   if (kind === "samples" && current?.respondedAt) return;
+
+  // A cold follow-up text that went out after this send and before now is what
+  // they're answering, so this send stays unanswered (see coldFollowUpSince).
+  // The reply itself is still logged, and still warms them up.
+  const creditsSend = current ? !(await coldFollowUpSince(agent.id, current.sentAt, now)) : false;
 
   await db.insert(agentInteractions).values({
     agentId: agent.id,
@@ -251,7 +260,7 @@ async function recordReply(
   await db
     .update(messageSends)
     .set({
-      ...(current?.respondedAt ? {} : { respondedAt: now }),
+      ...(current?.respondedAt || !creditsSend ? {} : { respondedAt: now }),
       ...(kind === "declined" ? { result: "declined" as const } : {}),
     })
     .where(eq(messageSends.id, send.id));

@@ -16,6 +16,12 @@ import type { FollowUpStats, FollowUpUpcoming } from "./data";
 import type { FeedItem, FollowUpFeed } from "./feeds";
 
 const COMING_UP = "coming_up";
+const COLD_EXPLAINER = "Agents who never replied to your first text. One follow-up each.";
+const COLD_TAG =
+  "rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-none bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-950 dark:text-slate-400 dark:border-slate-800";
+
+/** Cold feeds: agents who never answered his first text (the logic workers' `cold` flag). */
+const isCold = (f: FollowUpFeed) => f.cold === true;
 
 /**
  * The Follow up page: one tab per feed (feeds/index.ts), each showing how
@@ -67,7 +73,7 @@ export function FollowUpList({
     );
   };
 
-  const card = (e: FeedItem, feedKey: string, muted = false) => (
+  const card = (e: FeedItem, feedKey: string, muted = false, cold = false) => (
     <AgentCard
       key={e.agent.id}
       agent={e.agent}
@@ -81,12 +87,12 @@ export function FollowUpList({
       lead={
         // The reason leads: it's what the text will be about. A plain check-in is the absence of one, so it's muted.
         <p
-          className={
-            muted
-              ? "text-sm text-muted-foreground"
-              : "text-sm font-medium text-emerald-700 dark:text-emerald-400"
-          }
+          className={cn(
+            muted || cold ? "text-sm text-muted-foreground" : "text-sm font-medium text-emerald-700 dark:text-emerald-400",
+            cold && "flex flex-wrap items-center gap-1.5"
+          )}
         >
+          {cold && <span className={COLD_TAG}>Cold</span>}
           {e.label}
         </p>
       }
@@ -132,9 +138,11 @@ export function FollowUpList({
       .filter((g) => g.items.length > 0 || g.heldBack > 0);
     return { ...f, groups, count: groups.reduce((n, g) => n + g.items.length, 0) };
   });
+  // Warm feeds and Coming up first, then the cold ones in their own group after a divider.
   const tabs = [
-    ...shownFeeds.map((f) => ({ key: f.key as string, title: f.title, count: f.count })),
-    { key: COMING_UP, title: "Coming up", count: upcoming.length },
+    ...shownFeeds.filter((f) => !isCold(f)).map((f) => ({ key: f.key as string, title: f.title, count: f.count, cold: false })),
+    { key: COMING_UP, title: "Coming up", count: upcoming.length, cold: false },
+    ...shownFeeds.filter(isCold).map((f) => ({ key: f.key as string, title: f.title, count: f.count, cold: true })),
   ];
   const asked = params.get("feed");
   const active =
@@ -186,7 +194,15 @@ export function FollowUpList({
 
       <div className="-mx-6 overflow-x-auto px-6 border-b">
         <div role="tablist" className="flex gap-1 w-max">
-          {tabs.map((t) => (
+          {tabs.map((t, i) => [
+            t.cold && !tabs[i - 1]?.cold && (
+              <div key="cold-divider" className="flex items-center gap-1.5 pl-2 pr-1" aria-hidden>
+                <span className="h-5 w-px bg-border" />
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Cold
+                </span>
+              </div>
+            ),
             <button
               key={t.key}
               type="button"
@@ -209,8 +225,8 @@ export function FollowUpList({
               >
                 {t.count}
               </span>
-            </button>
-          ))}
+            </button>,
+          ])}
         </div>
       </div>
 
@@ -218,6 +234,12 @@ export function FollowUpList({
         comingUp || <p className="text-sm text-muted-foreground">Everyone you know is due now.</p>
       ) : feed && (feed.count + feed.groups.reduce((n, g) => n + g.heldBack, 0) > 0 || feed.stats) ? (
         <section>
+          {isCold(feed) && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+              <span className={COLD_TAG}>Cold</span>
+              <p className="text-sm text-slate-700 dark:text-slate-300">{COLD_EXPLAINER}</p>
+            </div>
+          )}
           <p className="text-sm text-muted-foreground">{feed.blurb}</p>
           {feed.stats && (
             <p className="text-xs text-muted-foreground mt-1">
@@ -233,7 +255,7 @@ export function FollowUpList({
           {feed.groups.map((g) => (
             <div key={g.title} className="mt-5">
               {feed.groups.length > 1 && <h3 className="text-sm font-medium text-foreground">{g.title}</h3>}
-              {g.items.length > 0 && <div className="flex flex-col gap-4 mt-2">{g.items.map((e) => card(e, feed.key, feed.muted))}</div>}
+              {g.items.length > 0 && <div className="flex flex-col gap-4 mt-2">{g.items.map((e) => card(e, feed.key, feed.muted, isCold(feed)))}</div>}
               {g.heldBack > 0 && (
                 <p className="text-sm text-muted-foreground mt-2">
                   {g.items.length > 0 ? `${g.heldBack} more` : g.heldBack} heard from you too recently to ask.

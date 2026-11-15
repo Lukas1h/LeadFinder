@@ -341,6 +341,7 @@ struct HomeView: View {
                     let market = split.byMarket?[funnelMarket]
                     let cold = market?.cold ?? split.cold
                     let followUp = market?.followUp ?? split.followUp
+                    let coldFollowUp = market?.coldFollowUp ?? split.coldFollowUp
                     FunnelSplitRow(
                         label: "Cold",
                         reached: cold.reached,
@@ -357,6 +358,16 @@ struct HomeView: View {
                         interestedOf: followUp.warm ?? 0,
                         interestedSub: "of warm"
                     )
+                    if let coldFollowUp {
+                        FunnelSplitRow(
+                            label: "Cold follow-up",
+                            reached: coldFollowUp.reached,
+                            replied: coldFollowUp.replied,
+                            interested: coldFollowUp.converted ?? 0,
+                            interestedOf: coldFollowUp.reached,
+                            interestedSub: "of texted"
+                        )
+                    }
                     Text("Last \(split.days) days. Cold: first texts to new agents. Follow up: agents reached from a Follow up card, warm ones turned interested.")
                         .font(.caption2)
                         .foregroundStyle(Theme.tertiaryText)

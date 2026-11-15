@@ -120,7 +120,16 @@ async function loadAreaJobs(now: number): Promise<AreaJob[]> {
   return jobs;
 }
 
-export async function getColdFollowUpCandidates(now = Date.now()): Promise<ColdCandidate[]> {
+/**
+ * `triggers` narrows the run to a subset of the feeds (default: all of them),
+ * for a page that only shows one cold tab. A trigger left out is skipped
+ * entirely, so its agent falls through to the next trigger that is on — the
+ * strongest-first order above still decides who gets which excuse.
+ */
+export async function getColdFollowUpCandidates(
+  now = Date.now(),
+  triggers: readonly ColdFeedKey[] = COLD_FEED_KEYS
+): Promise<ColdCandidate[]> {
   const pool = await loadColdPool(now);
   if (pool.length === 0) return [];
   const ids = pool.map((p) => p.agent.id);
@@ -172,7 +181,7 @@ export async function getColdFollowUpCandidates(now = Date.now()): Promise<ColdC
 
     // 1. A listing near a home he just shot. Same test as the "Shot one near
     //    you" feed (feeds/nearShoot.ts), one card per agent.
-    if (!passedAgent.has(`${agentId}|cold_near_shoot`) && shoots.length > 0) {
+    if (triggers.includes("cold_near_shoot") && !passedAgent.has(`${agentId}|cold_near_shoot`) && shoots.length > 0) {
       let best: { listing: Listing; near: NearShoot } | null = null;
       for (const listing of usable) {
         if (!allowed("cold_near_shoot", listing.id)) continue;
@@ -194,7 +203,7 @@ export async function getColdFollowUpCandidates(now = Date.now()): Promise<ColdC
     }
 
     // 2. A job he shot in their (non-local) area in the last few days.
-    if (!passedAgent.has(`${agentId}|cold_in_area`) && areaJobs.length > 0) {
+    if (triggers.includes("cold_in_area") && !passedAgent.has(`${agentId}|cold_in_area`) && areaJobs.length > 0) {
       let best: { listing: Listing; job: AreaJob; miles: number } | null = null;
       for (const listing of usable) {
         if (!allowed("cold_in_area", listing.id)) continue;
@@ -221,17 +230,19 @@ export async function getColdFollowUpCandidates(now = Date.now()): Promise<ColdC
     }
 
     // 3. Something they listed since his text, fresh enough to mention.
-    const freshSince = now - NEW_LISTING_DAYS * DAY;
-    let newest: { listing: Listing; at: Date } | null = null;
-    for (const listing of usable) {
-      if (!allowed("cold_new_listing", listing.id)) continue;
-      const at = listing.listedAt ?? listing.foundAt;
-      // After his text, so it's news to them and not the listing he already pitched.
-      if (at.getTime() <= entry.lastTextedAt.getTime()) continue;
-      if (at.getTime() < freshSince) continue;
-      if (!newest || at > newest.at) newest = { listing, at };
+    if (triggers.includes("cold_new_listing")) {
+      const freshSince = now - NEW_LISTING_DAYS * DAY;
+      let newest: { listing: Listing; at: Date } | null = null;
+      for (const listing of usable) {
+        if (!allowed("cold_new_listing", listing.id)) continue;
+        const at = listing.listedAt ?? listing.foundAt;
+        // After his text, so it's news to them and not the listing he already pitched.
+        if (at.getTime() <= entry.lastTextedAt.getTime()) continue;
+        if (at.getTime() < freshSince) continue;
+        if (!newest || at > newest.at) newest = { listing, at };
+      }
+      if (newest) push(entry, "cold_new_listing", newest.listing, null);
     }
-    if (newest) push(entry, "cold_new_listing", newest.listing, null);
   }
 
   // Strongest trigger first, then whoever has been waiting longest.

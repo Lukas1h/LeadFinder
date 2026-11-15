@@ -31,6 +31,12 @@
 // by their own address when they have none; Portland ones are left out of every
 // home figure — booked work, jobs, repeat and first-job values, new clients —
 // so Portland can never make the home goal look closer than it is.
+//
+// Cold follow-up texts (agents who never answered the first text, recorded only
+// as outbound interactions on a `cold_*` Follow up feed) are in neither quota:
+// no count, no reply rate, nothing on the goal card. Their value per text is
+// unknown, so they're measured apart (feeds/stats.ts allCold). Both queries
+// below that look at agent_interactions skip them.
 
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -259,9 +265,13 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
           where a.relationship_status = 'interested'
             and greatest(a.last_contacted_at, i.at) > now() - make_interval(days => ${LIVE_DAYS}))::int as interested_live,
         (select dow from bounds) as dow,
-        -- A text to someone he had already texted before this week began.
+        -- A text to someone he had already texted before this week began. Cold
+        -- follow-up texts are left out: they're a later nudge to a cold agent,
+        -- counted apart (feeds/stats.ts allCold), not follow-up work on a live
+        -- conversation.
         (select count(*) from agent_interactions x, bounds
           where x.channel = 'text' and x.direction = 'outbound' and x.occurred_at >= week_start
+            and left(coalesce(x.follow_up_feed, ''), 5) <> 'cold_'
             and exists (
               select 1 from agent_interactions y
               where y.agent_id = x.agent_id and y.direction = 'outbound' and y.occurred_at < week_start
