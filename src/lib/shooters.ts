@@ -18,6 +18,8 @@ import { bookings, expenses, listings, shooters } from "@/db/schema";
 import type { BookingStage } from "@/lib/bookingStages";
 import { pacificDate } from "@/lib/finance/math";
 import { writeExpense, type ExpenseInput } from "@/lib/finance/writes";
+import { getOrCreateBookingUploadLink } from "@/lib/mediaUploads";
+import { normalizePhone } from "@/lib/normalize";
 
 
 /** The address a "Shoot at ..." expense description uses: the linked listing's, else the booking's. */
@@ -32,6 +34,7 @@ async function loadBookingShooterRow(bookingId: string) {
       shooterId: bookings.shooterId,
       shooterPay: bookings.shooterPay,
       shooterExpenseId: bookings.shooterExpenseId,
+      dropboxUploadLink: bookings.dropboxUploadLink,
       address: bookings.address,
       city: bookings.city,
       listingAddress: listings.address,
@@ -43,22 +46,34 @@ async function loadBookingShooterRow(bookingId: string) {
   return row ?? null;
 }
 
-/** Finds a shooter by name (case-insensitive, trimmed), or adds a new one. */
-async function findOrCreateShooter(name: string): Promise<{ id: string; name: string }> {
+/**
+ * Finds a shooter by name (case-insensitive, trimmed), or adds a new one. The
+ * phone is only touched when the caller sends one (undefined = leave it): the
+ * name + pay callers (MCP, the phone app) don't know it.
+ */
+async function findOrCreateShooter(name: string, phone?: string | null): Promise<{ id: string; name: string }> {
   const clean = name.trim();
+  const nextPhone = phone === undefined ? undefined : phone?.trim() ? normalizePhone(phone) : null;
+
   const [existing] = await db
-    .select({ id: shooters.id, name: shooters.name })
+    .select({ id: shooters.id, name: shooters.name, phone: shooters.phone })
     .from(shooters)
     .where(sql`lower(${shooters.name}) = ${clean.toLowerCase()}`)
     .limit(1);
-  if (existing) return existing;
+  if (existing) {
+    if (nextPhone !== undefined && nextPhone !== existing.phone) {
+      await db.update(shooters).set({ phone: nextPhone }).where(eq(shooters.id, existing.id));
+    }
+    return existing;
+  }
 
   // onConflictDoNothing so two saves of a new name at once can't blow up on the
   // unique constraint; the loser just reads the row the winner made.
-  const [created] = await db.insert(shooters).values({ name: clean }).onConflictDoNothing().returning({
-    id: shooters.id,
-    name: shooters.name,
-  });
+  const [created] = await db
+    .insert(shooters)
+    .values({ name: clean, phone: nextPhone ?? null })
+    .onConflictDoNothing()
+    .returning({ id: shooters.id, name: shooters.name });
   if (created) return created;
 
   const [row] = await db
@@ -76,9 +91,10 @@ function revalidateShooterPaths() {
 }
 
 /**
- * Attaches a shooter (and their pay) to a booking, or clears it with a null /
- * blank name. Clearing also deletes the pay expense if one was already logged,
- * so the job's costs follow the booking back to "Lukas shot it".
+ * Attaches a shooter (and their pay and phone) to a booking, or clears it with
+ * a null / blank name. Clearing also deletes the pay expense if one was
+ * already logged, so the job's costs follow the booking back to "Lukas shot
+ * it" — but keeps the Dropbox upload link, since the files are already in it.
  *
  * Once the pay has been logged, changing the shooter or the amount updates
  * that same expense rather than leaving a stale amount (or the wrong vendor)
@@ -86,7 +102,7 @@ function revalidateShooterPaths() {
  */
 export async function setBookingShooter(
   bookingId: string,
-  input: { name: string; pay: number | null } | null
+  input: { name: string; pay: number | null; phone?: string | null } | null
 ): Promise<{ error?: string }> {
   const booking = await loadBookingShooterRow(bookingId);
   if (!booking) return { error: "No booking with that id" };
@@ -107,8 +123,18 @@ export async function setBookingShooter(
   const pay = rawPay == null ? null : Math.round(rawPay);
   if (pay != null && pay < 0) return { error: "The shooter's pay can't be negative" };
 
-  const shooter = await findOrCreateShooter(name);
+  const shooter = await findOrCreateShooter(name, input?.phone);
   await db.update(bookings).set({ shooterId: shooter.id, shooterPay: pay }).where(eq(bookings.id, bookingId));
+
+  // Somewhere to put the raw files: the first time a shooter is put on a job,
+  // make its Dropbox upload folder and share it (src/lib/mediaUploads.ts), so
+  // the link is ready to copy or text from the booking. Best-effort on
+  // purpose — a Dropbox hiccup must not lose the shooter or the pay, and the
+  // dialog's buttons make the link again on demand.
+  if (!booking.dropboxUploadLink) {
+    const link = await getOrCreateBookingUploadLink(bookingId);
+    if (link.error) console.error("setBookingShooter: upload link not made", link.error);
+  }
 
   // Already paid: keep the expense in step with the new name/amount.
   if (booking.shooterExpenseId) {

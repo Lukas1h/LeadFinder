@@ -69,6 +69,8 @@ export interface BookingWithDetails {
   // client-facing gallery's token (null until "Get client gallery link" is
   // first clicked) — see src/app/gallery/[token]/page.tsx.
   dropboxFolderLink: string | null;
+  /** Where a subcontracted photographer uploads the raw files — see src/lib/mediaUploads.ts. */
+  dropboxUploadLink: string | null;
   galleryToken: string | null;
   /** The gallery's share link for non-clients (null until first copied). */
   shareToken: string | null;

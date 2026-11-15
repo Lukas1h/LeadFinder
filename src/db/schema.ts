@@ -463,6 +463,14 @@ export const bookings = pgTable("bookings", {
   // instead of a bare "here's a Dropbox link" message.
   dropboxFolderLink: text("dropbox_folder_link"),
 
+  // The Dropbox folder a subcontracted photographer uploads the shoot's raw
+  // photos and video into — made under DROPBOX_UPLOAD_ROOT (default
+  // /Media Uploads) and shared "anyone with the link can edit" the first time
+  // a shooter is put on the job, so it's ready to copy or text from the
+  // booking dialog (src/lib/mediaUploads.ts). Kept when the shooter is
+  // cleared: the files are already in it.
+  dropboxUploadLink: text("dropbox_upload_link"),
+
   // Assigned once, the first time "Get client gallery link" is clicked (see
   // getOrAssignGalleryToken in src/app/booked/actions.ts) — same
   // assign-lazily-never-reassign shape as invoiceNumber above, so

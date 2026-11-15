@@ -152,3 +152,79 @@ export async function resolveZipDownloadUrl(sharedLink: string): Promise<string>
   }
   return url.toString();
 }
+
+/** The Dropbox error's own tag ("path", "shared_link_already_exists", …), for handling the few that aren't failures. */
+function dropboxErrorTag(err: unknown): string | null {
+  const tagged = err as { error?: { ".tag"?: string } } | null;
+  return tagged?.error?.[".tag"] ?? null;
+}
+
+/** DROPBOX_UPLOAD_ROOT, as a path: leading slash, no trailing slash. */
+function uploadRootPath(): string {
+  const raw = (process.env.DROPBOX_UPLOAD_ROOT ?? "").trim() || "/Media Uploads";
+  return `/${raw.replace(/^\/+/, "")}`.replace(/\/+$/, "");
+}
+
+/** Creates the folder (and any missing parent), or returns the one that's already there. */
+async function ensureFolder(path: string): Promise<string> {
+  const dbx = getClient();
+  try {
+    const res = await dbx.filesCreateFolderV2({ path, autorename: false });
+    return res.result.metadata.path_display ?? res.result.metadata.path_lower ?? path;
+  } catch (err) {
+    if (dropboxErrorTag(err) !== "path") throw err;
+    const meta = await dbx.filesGetMetadata({ path });
+    if (meta.result[".tag"] !== "folder") throw err;
+    return meta.result.path_display ?? meta.result.path_lower ?? path;
+  }
+}
+
+/**
+ * Makes (or finds) `<DROPBOX_UPLOAD_ROOT>/<folderName>` and shares it with an
+ * "anyone with the link can edit" link — no Dropbox account or sign-in, so a
+ * subcontracted photographer can drag a shoot's raw photos and video straight
+ * in. Downloads stay allowed so he can see what already uploaded.
+ *
+ * The settings are deliberately just `access: editor`: Dropbox rejects a
+ * `settings_error/invalid_settings` when `audience: public` or
+ * `allow_download` are sent alongside it, and the editor link it makes is
+ * already public-audience with downloads allowed (verified against the live
+ * app).
+ *
+ * Needs the `sharing.write` scope, unlike the read-only gallery calls above.
+ * If the folder already has a view-only link (made by hand in Dropbox), that
+ * one can't be upgraded through the API (Dropbox answers invalid_settings),
+ * so this throws a message saying so rather than handing out a link nobody
+ * can upload through.
+ */
+export async function createUploadFolder(folderName: string): Promise<{ url: string; path: string }> {
+  const dbx = getClient();
+  const root = uploadRootPath();
+  await ensureFolder(root);
+  const path = await ensureFolder(`${root}/${folderName}`);
+
+  try {
+    const res = await dbx.sharingCreateSharedLinkWithSettings({
+      path,
+      settings: { access: { ".tag": "editor" } },
+    });
+    return { url: res.result.url, path };
+  } catch (err) {
+    if (dropboxErrorTag(err) !== "shared_link_already_exists") throw err;
+  }
+
+  const listed = await dbx.sharingListSharedLinks({ path, direct_only: true });
+  const existing = listed.result.links[0];
+  if (!existing) throw new Error("Dropbox says a link already exists for this folder but didn't list one");  if (existing.link_permissions?.link_access_level?.[".tag"] === "editor") {
+    return { url: existing.url, path };
+  }
+
+  // Dropbox won't raise a view-only link to editor through the API: both
+  // sharingModifySharedLinkSettings and a create retry answer
+  // settings_error/invalid_settings (checked against the live app, with and
+  // without audience / allow_download). So say what to do by hand instead of
+  // handing over a link the shooter can't upload through.
+  throw new Error(
+    "Dropbox: this folder's existing link is view-only — open it in Dropbox and change the link to \"can edit\", then try again"
+  );
+}

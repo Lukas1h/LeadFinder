@@ -3,10 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Users, Check, RotateCcw, Pencil, Plus, X } from "lucide-react";
-import { saveBookingShooter, markShooterPaid, getShooters } from "./shooterActions";
+import { Users, Check, RotateCcw, Pencil, Plus, X, Copy, MessageSquare } from "lucide-react";
+import { saveBookingShooter, markShooterPaid, getShooters, getBookingUploadLink } from "./shooterActions";
 import { stageIndex } from "@/lib/bookingStages";
-import { formatPrice } from "@/lib/format";
+import { formatPhone, formatPrice } from "@/lib/format";
+import { smsUrl } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { BookingWithDetails } from "./BookedList";
@@ -19,7 +20,9 @@ function shortDay(ymd: string) {
 
 /**
  * Who shoots this job when it isn't Lukas (a subcontracted photographer),
- * what they're paid, and whether that pay has been logged as an expense.
+ * what they're paid, whether that pay has been logged as an expense, and — for
+ * handing over the raw files — the job's Dropbox upload link: copy it, or text
+ * it to them.
  */
 export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
   const router = useRouter();
@@ -27,8 +30,11 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
   const shooter = booking.shooter;
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(shooter?.name ?? "");
+  const [phone, setPhone] = useState(shooter?.phone ?? "");
   const [pay, setPay] = useState(shooter?.pay != null ? String(shooter.pay) : "");
   const [suggestions, setSuggestions] = useState<{ id: string; name: string }[]>([]);
+  const [uploadLink, setUploadLink] = useState(booking.dropboxUploadLink);
+  const [copied, setCopied] = useState(false);
 
   const shot = stageIndex(booking.stage) >= stageIndex("editing");
   const paid = shooter?.expenseId != null;
@@ -36,6 +42,7 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
 
   const startEdit = () => {
     setName(shooter?.name ?? "");
+    setPhone(shooter?.phone ?? "");
     setPay(shooter?.pay != null ? String(shooter.pay) : "");
     setEditing(true);
     getShooters().then(setSuggestions).catch(() => {});
@@ -59,7 +66,11 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
     if (!trimmed) return toast.error("Enter a name");
     const n = pay.trim() === "" ? null : Math.round(Number(pay));
     if (n != null && (!Number.isFinite(n) || n < 0)) return toast.error("Pay must be a dollar amount");
-    act(() => saveBookingShooter(booking.id, { name: trimmed, pay: n }), "Shooter saved", () => setEditing(false));
+    act(
+      () => saveBookingShooter(booking.id, { name: trimmed, pay: n, phone: phone.trim() || null }),
+      "Shooter saved",
+      () => setEditing(false)
+    );
   };
 
   if (editing) {
@@ -86,6 +97,14 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
               <option key={s.id} value={s.name} />
             ))}
           </datalist>
+          <Input
+            type="tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="Phone"
+            className="h-8 w-32"
+          />
           <div className="relative">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
             <Input
@@ -141,6 +160,43 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
 
   const payLabel = shooter.pay != null ? formatPrice(shooter.pay) : null;
 
+  const copyUploadLink = () => {
+    startTransition(async () => {
+      let url = uploadLink;
+      if (!url) {
+        const res = await getBookingUploadLink(booking.id);
+        if (res.error || !res.url) {
+          toast.error(res.error ?? "Couldn't make the upload link");
+          return;
+        }
+        url = res.url;
+        setUploadLink(url);
+        router.refresh();
+      }
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  // The same "Copy upload link" work, but opens Messages with the link already
+  // written to the shooter — the text itself is built server-side.
+  const textUploadLink = () => {
+    startTransition(async () => {
+      const res = await getBookingUploadLink(booking.id);
+      if (res.error || !res.url) {
+        toast.error(res.error ?? "Couldn't make the upload link");
+        return;
+      }
+      if (!res.text || !shooter.phone) {
+        toast.error(`Add a phone number for ${shooter.name}`);
+        return;
+      }
+      setUploadLink(res.url);
+      window.location.href = smsUrl(shooter.phone, res.text);
+    });
+  };
+
   return (
     <div className="border-t pt-3">
       <p className="text-xs text-muted-foreground mb-1.5">Shooter</p>
@@ -148,6 +204,7 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
         <div className="text-sm flex items-center gap-1.5 flex-wrap">
           <Users className="size-3.5 text-muted-foreground" />
           <span className="text-foreground">{shooter.name}</span>
+          {shooter.phone && <span className="text-muted-foreground">· {formatPhone(shooter.phone)}</span>}
           {payLabel && <span className="text-muted-foreground">· {payLabel}</span>}
           {paid ? (
             <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
@@ -163,7 +220,21 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
             <span className="text-xs text-muted-foreground">not shot yet</span>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Button variant="outline" size="sm" disabled={isPending} onClick={copyUploadLink}>
+            {copied ? <Check className="text-green-600" /> : <Copy />}
+            {copied ? "Copied!" : "Copy upload link"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isPending || !shooter.phone}
+            title={shooter.phone ? undefined : "Add a phone number for this shooter first"}
+            onClick={textUploadLink}
+          >
+            <MessageSquare />
+            Text upload link
+          </Button>
           {shot && !paid && shooter.pay != null && (
             <Button
               size="sm"

@@ -340,7 +340,8 @@ Email is plain text by choice: no HTML, no tracking pixels.
 booking's own), `contact_agent_id`, `job_date`, `date_tentative`,
 `lockbox_code`, `notes`, line items in `booking_line_items` (`description`,
 `amount` in dollars; the total is their sum), `dropbox_folder_link`,
-`gallery_token`, `invoice_number`, `square_invoice_id` / `square_invoice_url`,
+`dropbox_upload_link` (a shooter's raw-file folder), `gallery_token`,
+`invoice_number`, `square_invoice_id` / `square_invoice_url`,
 `paid_at`, and the hours columns.
 
 Invoices: the first open of `/api/bookings/[id]/invoice` ("Create invoice")
@@ -407,6 +408,8 @@ The folder must be in the same Dropbox account as `DROPBOX_REFRESH_TOKEN` (thumb
 Shooters (subcontracted photographers, e.g. Portland jobs; Lukas still
 edits): `shooters` (`name` unique, `phone`, `email`, `notes`) and on the
 booking `shooter_id`, `shooter_pay` (whole dollars) and `shooter_expense_id`.
+The shooter's `phone` is entered in the booking dialog's shooter form (the
+MCP/phone callers only send name + pay, which leave it alone).
 Paid = `shooter_expense_id` set: **Paid <name>** (`setShooterPaid` in
 `src/lib/shooters.ts`; MCP `mark_shooter_paid`; phone `POST
 bookings/[id]/shooter-paid`) logs the pay as a `contract_labor`
@@ -416,6 +419,15 @@ with `shooterName` / `shooterPay` on create/update (web dialog, MCP, phone
 PATCH). `loadShooterSummary()` (Finances card; phone `GET finances/shooters`)
 lists pay owed on shot jobs and each shooter's year total, flagged at the
 1099-NEC threshold.
+
+Upload link: the first time a shooter is put on a booking,
+`getOrCreateBookingUploadLink` (`src/lib/mediaUploads.ts`) makes
+`<DROPBOX_UPLOAD_ROOT>/<address>` (default `/Media Uploads`), shares it
+"anyone with the link can edit" and saves the URL to
+`bookings.dropbox_upload_link`. **Copy upload link** and **Text upload link**
+in the booking dialog use it; it's never re-made, and clearing the shooter
+keeps it (the files are already there). Texting opens Messages with a drafted
+message — nothing is logged for shooters.
 
 Booking credit: `attributeBookingToSend()` in `src/lib/agentIdentity.ts`
 links a booking to the outreach send that won it.

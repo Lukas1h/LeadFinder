@@ -12,6 +12,8 @@ import { expenses, shooters } from "@/db/schema";
 export interface BookingShooter {
   id: string;
   name: string;
+  /** Their number, for texting them the shoot's upload link; null until it's entered. */
+  phone: string | null;
   /** Whole dollars agreed for this job; null until it's set. */
   pay: number | null;
   /** The linked expense's date ("YYYY-MM-DD") when paid; null while unpaid. */
@@ -42,7 +44,10 @@ export async function shootersByBookingId(
 
   const [shooterRows, expenseRows] = await Promise.all([
     shooterIds.length > 0
-      ? db.select({ id: shooters.id, name: shooters.name }).from(shooters).where(inArray(shooters.id, shooterIds))
+      ? db
+          .select({ id: shooters.id, name: shooters.name, phone: shooters.phone })
+          .from(shooters)
+          .where(inArray(shooters.id, shooterIds))
       : Promise.resolve([]),
     expenseIds.length > 0
       ? db
@@ -64,6 +69,7 @@ export async function shootersByBookingId(
         ? {
             id: shooter.id,
             name: shooter.name,
+            phone: shooter.phone,
             pay: row.shooterPay,
             paidAt: row.shooterExpenseId ? (expenseDateById.get(row.shooterExpenseId) ?? null) : null,
             expenseId: row.shooterExpenseId,

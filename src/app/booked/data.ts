@@ -108,6 +108,7 @@ export async function loadBookingsWithDetails(): Promise<BookingRow[]> {
       invoiceNumber: b.invoiceNumber,
       invoicedAt: b.invoicedAt,
       dropboxFolderLink: b.dropboxFolderLink,
+      dropboxUploadLink: b.dropboxUploadLink,
       galleryToken: b.galleryToken,
       shareToken: b.shareToken,
       stagingRequestsEnabled: b.stagingRequestsEnabled,
