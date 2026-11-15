@@ -60,7 +60,7 @@ const PORTFOLIO_PRESET_NAME = "Portfolio link";
  * the yes to a cold "can I share a few pics from it?"), whose second text talks
  * about that shoot. Falls back to "Portfolio link" when missing or off.
  */
-export const FEATURED_PORTFOLIO_PRESET_NAME = "Portfolio link: featured shoot";
+const FEATURED_PORTFOLIO_PRESET_NAME = "Portfolio link: featured shoot";
 
 /** One button on a sent message: another template, ready to go to the same agent. */
 export interface QuickAction {
