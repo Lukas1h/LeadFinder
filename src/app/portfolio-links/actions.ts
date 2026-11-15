@@ -55,9 +55,50 @@ export interface PortfolioPrefill {
   listings: PortfolioListing[];
   /** The area template for their area, if one covers it: its settings go on top of the builder's defaults. */
   template: { id: string; name: string; content: PortfolioTemplateContent } | null;
+  /** The showcase shoot the page leads with, so the builder can show which one. */
+  featuredBookingId: string | null;
+  featured: { bookingId: string; address: string; city: string | null } | null;
 }
 
 const LISTINGS_PREFILLED = 3;
+
+/** A cold follow-up's featured shoot only prefills the page this long after it went out. */
+const FEATURED_SEND_DAYS = 30;
+
+/**
+ * The showcase shoot the agent's latest text was about (message_sends.featured_booking_id),
+ * when that text went out in the last 30 days: the page built for their reply
+ * leads with it. Only the latest send counts, so a later text about something
+ * else leaves the page as it was.
+ */
+async function lastFeaturedBooking(
+  agentId: string
+): Promise<{ bookingId: string; address: string; city: string | null } | null> {
+  const [send] = await db
+    .select({ bookingId: messageSends.featuredBookingId, sentAt: messageSends.sentAt })
+    .from(messageSends)
+    .where(eq(messageSends.agentId, agentId))
+    .orderBy(desc(messageSends.sentAt))
+    .limit(1);
+  if (!send?.bookingId || Date.now() - send.sentAt.getTime() > FEATURED_SEND_DAYS * 24 * 60 * 60 * 1000) return null;
+
+  const [row] = await db
+    .select({
+      bookingId: bookings.id,
+      address: bookings.address,
+      city: bookings.city,
+      listingAddress: listings.address,
+      listingCity: listings.city,
+    })
+    .from(bookings)
+    .leftJoin(listings, eq(listings.id, bookings.listingId))
+    .where(eq(bookings.id, send.bookingId));
+  if (!row) return null;
+  // A linked listing's address wins, as it does everywhere else.
+  const address = (row.listingAddress ?? row.address ?? "").trim();
+  if (!address) return null;
+  return { bookingId: row.bookingId, address, city: (row.listingCity ?? row.city)?.trim() || null };
+}
 
 /**
  * Everything the builder fills in when an agent is picked: their first name,
@@ -113,6 +154,7 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
     .sort((a, b) => rank(a.city) - rank(b.city) || a.i - b.i)
     .slice(0, LISTINGS_PREFILLED)
     .map((j) => j.listing);
+  const featured = await lastFeaturedBooking(agent.id);
 
   return {
     agent: { id: agent.id, name: agent.name, phone: agent.phone, email: agent.email },
@@ -122,6 +164,8 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
     // A template's listings, when it sets any, replace the nearest jobs.
     listings: template?.content.listings?.length ? template.content.listings : nearest,
     template: template ? { id: template.id, name: template.name, content: template.content } : null,
+    featuredBookingId: featured?.bookingId ?? null,
+    featured,
   };
 }
 
@@ -364,10 +408,15 @@ export async function getPortfolioLinkForEdit(linkId: string): Promise<{
 
 /** Saves changes to a link in place — same URL, same activity. */
 export async function updatePortfolioLinkAction(linkId: string, agentId: string | null, content: PortfolioContent): Promise<{ id: string; slug: string; url: string }> {
-  // The builder doesn't edit prices, so a page's locked prices (content.prices) survive a save.
-  if (!content.prices) {
+  // The builder doesn't edit prices, so they survive a save. The featured shoot
+  // survives when the field is left out (iPhone builds that don't know it);
+  // an explicit null is the builder's Remove and clears it.
+  if (!content.prices || content.featuredBookingId === undefined) {
     const [existing] = await db.select({ content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.id, linkId));
-    if (existing?.content.prices) content = { ...content, prices: existing.content.prices };
+    if (!content.prices && existing?.content.prices) content = { ...content, prices: existing.content.prices };
+    if (content.featuredBookingId === undefined && existing?.content.featuredBookingId) {
+      content = { ...content, featuredBookingId: existing.content.featuredBookingId };
+    }
   }
   const [row] = await db.update(portfolioLinks).set({ agentId, content }).where(eq(portfolioLinks.id, linkId)).returning({ slug: portfolioLinks.slug });
   if (!row) throw new Error("That link no longer exists");

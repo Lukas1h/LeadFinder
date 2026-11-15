@@ -15,8 +15,15 @@ import type { BookingWithDetails } from "./BookedList";
  * than as a useMemo the client can only run for itself.
  */
 
+/**
+ * A booking as the Booked page and the iPhone app read it, plus the showcase
+ * flag (bookings.showcase) — kept beside BookedList.tsx's type rather than in
+ * it, since that file is UI.
+ */
+export type BookingRow = BookingWithDetails & { showcase: boolean };
+
 /** Every booking with its linked listing, contact agent and line items. */
-export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
+export async function loadBookingsWithDetails(): Promise<BookingRow[]> {
   const rows = await db.select().from(bookings);
 
   const listingIds = [...new Set(rows.map((b) => b.listingId).filter((id): id is string => id != null))];
@@ -105,6 +112,7 @@ export async function loadBookingsWithDetails(): Promise<BookingWithDetails[]> {
       shareToken: b.shareToken,
       stagingRequestsEnabled: b.stagingRequestsEnabled,
       hidePayOnline: b.hidePayOnline,
+      showcase: b.showcase,
       squareInvoiceUrl: b.squareInvoiceUrl,
       paidAt: b.paidAt,
       airspace: b.airspace,

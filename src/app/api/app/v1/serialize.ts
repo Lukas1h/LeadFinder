@@ -140,7 +140,7 @@ export function agentJson(agent: Agent) {
   return { id, name, phone, email, relationshipStatus, lastContactedAt, notes, createdAt, brokerage };
 }
 
-export function bookingJson(b: BookingWithDetails) {
+export function bookingJson(b: BookingWithDetails & { showcase?: boolean }) {
   return {
     id: b.id,
     listingId: b.listingId,
@@ -185,6 +185,9 @@ export function bookingJson(b: BookingWithDetails) {
     invoicedAt: b.invoicedAt,
     dropboxFolderLink: b.dropboxFolderLink,
     galleryUrl: b.galleryToken ? `${GALLERY_ORIGIN}/${b.galleryToken}` : null,
+    // A shoot worth showing other agents: cold follow-ups pitch it and the
+    // portfolio page built for the reply leads with it (bookings.showcase).
+    showcase: b.showcase === true,
     // The share link for non-clients (POST ./share-link makes it); null until first made.
     shareUrl: b.shareToken ? `${GALLERY_ORIGIN}/${b.shareToken}` : null,
     // "1811 NE Alameda Ave, Eugene, OR" — what the app hands to Maps for the

@@ -23,6 +23,8 @@ const flag = (v: unknown, field: string): boolean | undefined => {
 
 const LISTING_TEXT = ["status", "price", "beds", "baths", "sqft", "type", "address", "city", "agent", "brokerage"] as const;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function parseListing(v: unknown, i: number): PortfolioListing {
   if (v == null || typeof v !== "object") throw new BadBody(`listings[${i}] must be an object`);
   const o = v as Record<string, unknown>;
@@ -57,6 +59,11 @@ export function parseContent(raw: unknown): PortfolioContent {
   const afterSrc = text(c.afterSrc, "afterSrc");
   const beforeSrc = afterSrc ? text(c.beforeSrc, "beforeSrc") : null;
 
+  // The featured shoot (lib/portfolioFeatured.ts): its id is passed through as
+  // the builder sends it back, so saving an existing page keeps its lead.
+  const featuredBookingId = text(c.featuredBookingId, "featuredBookingId");
+  if (featuredBookingId && !UUID_RE.test(featuredBookingId)) throw new BadBody("featuredBookingId must be a booking id");
+
   return {
     area: text(c.area, "area"),
     agentFirstName: text(c.agentFirstName, "agentFirstName"),
@@ -71,5 +78,8 @@ export function parseContent(raw: unknown): PortfolioContent {
     afterSrc,
     listings: listings.map(parseListing),
     ogImage: text(c.ogImage, "ogImage"),
+    // Left out entirely (an older iPhone build) keeps the saved one; an
+    // explicit null removes it (updatePortfolioLinkAction).
+    ...(c.featuredBookingId === undefined ? {} : { featuredBookingId }),
   };
 }

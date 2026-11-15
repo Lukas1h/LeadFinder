@@ -426,10 +426,12 @@ actor APIClient {
         var editingHours: Double?
         var shootingHours: Double?
         var logisticsHours: Double?
+        /// Nil leaves it as is.
+        var showcase: Bool? = nil
 
         private enum CodingKeys: String, CodingKey {
             case address, city, state, contactName, contactPhone, jobDate, lockboxCode, notes, invoiceNote
-            case lineItems, editingHours, shootingHours, logisticsHours
+            case lineItems, editingHours, shootingHours, logisticsHours, showcase
         }
 
         func encode(to encoder: Encoder) throws {
@@ -451,6 +453,7 @@ actor APIClient {
             try c.encodeIfPresent(editingHours, forKey: .editingHours)
             try c.encodeIfPresent(shootingHours, forKey: .shootingHours)
             try c.encodeIfPresent(logisticsHours, forKey: .logisticsHours)
+            try c.encodeIfPresent(showcase, forKey: .showcase)
         }
     }
 

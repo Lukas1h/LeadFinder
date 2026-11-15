@@ -41,12 +41,27 @@ export const COLD_TRIGGERS = ["near_shoot", "in_area", "new_listing"] as const;
 export type ColdTrigger = (typeof COLD_TRIGGERS)[number];
 
 /**
+ * The triggers the Cold tabs draw candidates from (coldFollowUps.ts). All
+ * three since 2026-11-15: a home he just shot near their listing or a job in
+ * their area is the strongest excuse he has, and a shoot marked Showcase (see
+ * nearShoots.ts) also earns the "can I share a few pics?" pitch. Both shoot
+ * triggers still find a non-Showcase shoot too; it just gets the soft pitch.
+ */
+export const ENABLED_COLD_TRIGGERS: ColdTrigger[] = ["near_shoot", "in_area", "new_listing"];
+
+/**
  * The cold Follow up tabs, one per pitch: every card on a tab sends the same
  * second text. A cold text records one of these in
  * `agentInteractions.followUpFeed`, which is how each tab's stats measure its
  * pitch (feeds/stats.ts). The trigger above is a group inside the tab.
  */
-export const COLD_FEED_KEYS = ["cold_samples", "cold_video", "cold_turnaround", "cold_soft"] as const;
+export const COLD_FEED_KEYS = [
+  "cold_showcase",
+  "cold_samples",
+  "cold_video",
+  "cold_turnaround",
+  "cold_soft",
+] as const;
 export type ColdFeedKey = (typeof COLD_FEED_KEYS)[number];
 
 const DAY = 24 * 60 * 60 * 1000;

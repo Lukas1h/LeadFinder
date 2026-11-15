@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { bookings, followUpPasses, listings, type Booking, type Listing } from "@/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { marketFor, type Market } from "@/lib/markets";
-import { getRecentShoots, milesBetween, nearestShoot, type NearShoot } from "@/lib/nearShoots";
+import { getRecentShoots, milesBetween, nearestShoot, type NearShoot, type RecentShoot } from "@/lib/nearShoots";
 import { shotAddresses, shotByHim, stillActive } from "@/app/follow-up/feeds/shared";
 import { COLD_TRIGGERS, loadColdPool, type ColdPoolAgent, type ColdTrigger } from "./pool";
 
@@ -25,6 +25,11 @@ import { COLD_TRIGGERS, loadColdPool, type ColdPoolAgent, type ColdTrigger } fro
  *   listing the other day"). Past jobs only: the second text offers photos
  *   from that shoot. Local agents only get near_shoot, since around Roseburg
  *   he is always "in the area" (Lukas, 2026-11-15).
+ *
+ * Both shoot triggers prefer a shoot marked Showcase (bookings.showcase,
+ * 2026-11-15): it wins over a nearer one that isn't, because that is the shoot
+ * he is happy to show and the pitch asks about it (messages.ts). A shoot that
+ * isn't Showcase still works as the excuse — it just gets the soft pitch.
  * - new_listing: they listed something since his text, so the text has a
  *   reason that is squarely about them.
  *
@@ -39,7 +44,15 @@ export interface ColdCandidate extends ColdPoolAgent {
   /** The listing the excuse is about. */
   listing: Listing;
   /** The shoot/job the trigger points at; null for new_listing. */
-  shoot: { bookingId: string; address: string; city: string | null; miles: number; date: string } | null;
+  shoot: {
+    bookingId: string;
+    address: string;
+    city: string | null;
+    miles: number;
+    date: string;
+    /** Marked Showcase on the booking: the pitch asks to share pics from it (messages.ts). */
+    showcase: boolean;
+  } | null;
   market: Market;
 }
 
@@ -76,6 +89,8 @@ interface AreaJob {
   bookingId: string;
   address: string;
   city: string | null;
+  /** Marked Showcase on the booking (bookings.showcase). */
+  showcase: boolean;
   at: Date;
   lat: number;
   lng: number;
@@ -116,6 +131,7 @@ async function loadAreaJobs(now: number): Promise<AreaJob[]> {
       bookingId: b.id,
       address,
       city: row.listingCity ?? b.city,
+      showcase: b.showcase,
       at: when,
       ...point,
     });
@@ -192,12 +208,20 @@ export async function getColdFollowUpCandidates(
     // 1. A listing near a home he just shot. Same test as the "Shot one near
     //    you" feed (feeds/nearShoot.ts), one card per agent.
     if (triggers.includes("near_shoot") && shoots.length > 0) {
-      let best: { listing: Listing; near: NearShoot } | null = null;
-      for (const listing of usable) {
-        const near = nearestShoot(listing, shoots, shot);
-        if (!near) continue;
-        if (!best || near.miles < best.near.miles) best = { listing, near };
-      }
+      // Nearest (listing, shoot) pair among `candidates`; a Showcase shoot is
+      // the better excuse even when a nearer shoot isn't one.
+      const bestPair = (candidates: RecentShoot[]): { listing: Listing; near: NearShoot } | null => {
+        let best: { listing: Listing; near: NearShoot } | null = null;
+        for (const listing of usable) {
+          const near = nearestShoot(listing, candidates, shot);
+          if (!near) continue;
+          if (!best || near.miles < best.near.miles) best = { listing, near };
+        }
+        return best;
+      };
+      const showcaseShoots = shoots.filter((shoot) => shoot.showcase);
+      const best =
+        (showcaseShoots.length > 0 ? bestPair(showcaseShoots) : null) ?? bestPair(shoots);
       if (best) {
         const { listing, near } = best;
         push(entry, "near_shoot", listing, {
@@ -206,6 +230,7 @@ export async function getColdFollowUpCandidates(
           city: near.shoot.city,
           miles: near.miles,
           date: ymd(near.shoot.shotAt),
+          showcase: near.shoot.showcase,
         });
         continue;
       }
@@ -213,17 +238,24 @@ export async function getColdFollowUpCandidates(
 
     // 2. A job he shot in their (non-local) area in the last few days.
     if (triggers.includes("in_area") && areaJobs.length > 0) {
-      let best: { listing: Listing; job: AreaJob; miles: number } | null = null;
-      for (const listing of usable) {
-        if (marketFor(listing) === "local") continue;
-        const point = usablePoint(listing);
-        if (!point) continue;
-        for (const job of areaJobs) {
-          const miles = milesBetween(point, job);
-          if (miles > IN_AREA_MILES) continue;
-          if (!best || miles < best.miles) best = { listing, job, miles };
+      // Same preference as near_shoot: a job marked Showcase wins over a nearer one.
+      const bestPair = (onlyShowcase: boolean): { listing: Listing; job: AreaJob; miles: number } | null => {
+        let best: { listing: Listing; job: AreaJob; miles: number } | null = null;
+        for (const listing of usable) {
+          if (marketFor(listing) === "local") continue;
+          const point = usablePoint(listing);
+          if (!point) continue;
+          for (const job of areaJobs) {
+            if (onlyShowcase && !job.showcase) continue;
+            const miles = milesBetween(point, job);
+            if (miles > IN_AREA_MILES) continue;
+            if (!best || miles < best.miles) best = { listing, job, miles };
+          }
         }
-      }
+        return best;
+      };
+      const best =
+        (areaJobs.some((job) => job.showcase) ? bestPair(true) : null) ?? bestPair(false);
       if (best) {
         const { listing, job, miles } = best;
         push(entry, "in_area", listing, {
@@ -232,6 +264,7 @@ export async function getColdFollowUpCandidates(
           city: job.city,
           miles,
           date: ymd(job.at),
+          showcase: job.showcase,
         });
         continue;
       }

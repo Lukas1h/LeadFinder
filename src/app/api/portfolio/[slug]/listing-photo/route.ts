@@ -8,7 +8,8 @@ import { listingCardPhotoNames } from "@/lib/listingCardPhotos";
 /**
  * A "Recent listings" card photo on a public agent page — same
  * validate-before-serve pattern as /api/gallery/[token]/thumbnail: only for a
- * booking that page's content lists, and only a photo its card shows
+ * booking that page's content lists (or the page's featured shoot,
+ * content.featuredBookingId), and only a photo its card shows
  * (lib/listingCardPhotos.ts), still in the booking's Dropbox folder now.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -18,7 +19,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   if (!bookingId || !name) return NextResponse.json({ error: "bookingId and name are required" }, { status: 400 });
 
   const [link] = await db.select({ content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
-  const referenced = link?.content.listings?.some((l) => l.bookingId === bookingId);
+  const referenced =
+    link?.content.featuredBookingId === bookingId || link?.content.listings?.some((l) => l.bookingId === bookingId);
   if (!referenced) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const [booking] = await db.select({ dropboxFolderLink: bookings.dropboxFolderLink, highlightPhotos: bookings.highlightPhotos }).from(bookings).where(eq(bookings.id, bookingId));

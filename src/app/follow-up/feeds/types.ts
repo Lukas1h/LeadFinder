@@ -25,6 +25,7 @@ export type FollowUpFeedKey =
   | "drone"
   | "check_ins"
   // Cold follow-ups: agents who never answered his first text, one key per pitch (lib/coldFollowUp/).
+  | "cold_showcase"
   | "cold_samples"
   | "cold_video"
   | "cold_turnaround"

@@ -18,7 +18,9 @@ import type { ColdCandidate } from "./triggers";
  * turnaround and a soft "back on your radar".
  *
  * The pitch is also the tab: each cold Follow up feed key is one second text,
- * so a tab's cards all send the same thing (pitchFeedKey).
+ * so a tab's cards all send the same thing (pitchFeedKey). A shoot-based
+ * excuse skips the segment rules entirely (2026-11-15): a shoot he marked
+ * Showcase gets the share ask, any other shoot the soft nudge.
  *
  * Both are editable on the Messaging page as ordinary SMS presets; the
  * FALLBACKS here are only the seed wording for a preset that doesn't exist
@@ -32,7 +34,7 @@ export const COLD_TEXT1_PRESETS: Record<ColdTrigger, string> = {
   in_area: "Cold follow-up: in the area",
 };
 
-export type ColdPitch = "samples" | "video" | "turnaround" | "soft";
+export type ColdPitch = "showcase" | "samples" | "video" | "turnaround" | "soft";
 
 /** The cold Follow up tab a pitch's cards live on: one tab per second text. */
 export function pitchFeedKey(p: ColdPitch): ColdFeedKey {
@@ -41,6 +43,7 @@ export function pitchFeedKey(p: ColdPitch): ColdFeedKey {
 
 /** The SMS preset behind each pitch. */
 export const COLD_PITCH_PRESETS: Record<ColdPitch, string> = {
+  showcase: "Cold pitch: showcase",
   samples: "Cold pitch: samples",
   video: "Cold pitch: video (high end)",
   turnaround: "Cold pitch: turnaround",
@@ -55,6 +58,7 @@ export const COLD_FALLBACKS: Record<string, string> = {
     "Hi {{firstName}}, it's Lukas again. I just shot a listing near your {{street}} property.",
   "Cold follow-up: in the area":
     "Hi {{firstName}}, it's Lukas again. I was in the {{city}} area and shot a listing the other day.",
+  "Cold pitch: showcase": "I was wondering if I could share a few pics from it and what I charged?",
   "Cold pitch: samples": "Would it be okay if I sent over a few samples of my work?",
   "Cold pitch: video (high end)":
     "Quick question, does your photographer do video too? I do walkthrough videos and could send you one I just made.",
@@ -67,6 +71,17 @@ export const COLD_FALLBACKS: Record<string, string> = {
 /**
  * Which pitch this agent gets.
  *
+ * A shoot is the excuse (near_shoot, in_area), so the shoot itself is the
+ * pitch: no segment or samples reasoning applies.
+ *
+ * - showcase: the shoot he is pointing at is marked Showcase, so it is one he
+ *   is happy to show — ask to share a few pics from it and what he charged.
+ *   A yes leads to a portfolio page built around that shoot.
+ * - soft: the shoot works as the excuse but isn't one he wants to show off, so
+ *   the ask stays vague.
+ *
+ * A new listing has no shoot, so the usual segment rules decide:
+ *
  * - samples: his first text went out before the samples ask did, so "can I
  *   send a few?" is still news (pool.ts: samplesAskEligible).
  * - video: they already have a photographer and their listings are high end,
@@ -75,31 +90,50 @@ export const COLD_FALLBACKS: Record<string, string> = {
  *   a backup are the sell.
  * - soft: no score on file, so nothing is known and nothing is assumed.
  */
-export function pickPitch(c: { samplesAskEligible: boolean }, seg: AgentSegment | undefined): ColdPitch {
+export function pickPitch(
+  c: { trigger: ColdTrigger; shoot?: { showcase: boolean } | null; samplesAskEligible: boolean },
+  seg: AgentSegment | undefined
+): ColdPitch {
+  if (c.trigger === "near_shoot" || c.trigger === "in_area") {
+    return c.shoot?.showcase ? "showcase" : "soft";
+  }
   if (c.samplesAskEligible) return "samples";
   if (seg?.segment === "has_photographer" && seg.highEnd) return "video";
   if (seg?.segment === "has_photographer") return "turnaround";
   return "soft";
 }
 
+/** The preset + variant behind one cold text, for recording the send. */
+export interface ColdPresetRef {
+  presetId: string;
+  variantId: string;
+  body: string;
+}
+
 /**
- * Preset name → the body of its first enabled SMS variant (by variant label),
- * for every cold text at once. Names with no preset get their FALLBACK, so a
- * caller can always read a body out of the map.
+ * Preset name → its first enabled SMS variant (by variant label) among the
+ * presets that are in use (enabled, not archived). Only names that actually
+ * exist on the Messaging page come back, which is how a caller tells "Lukas's
+ * wording" from "the code fallback" — a send can only be recorded against a
+ * real variant.
  */
-export async function loadColdTemplates(): Promise<Map<string, string>> {
+export async function loadColdPresetIds(): Promise<Map<string, ColdPresetRef>> {
   const names = [...Object.values(COLD_TEXT1_PRESETS), ...Object.values(COLD_PITCH_PRESETS)];
-  const templates = new Map<string, string>(Object.entries(COLD_FALLBACKS));
-  if (names.length === 0) return templates;
 
   const rows = await db
-    .select({ name: messagePresets.name, body: messagePresetVariants.body })
+    .select({
+      name: messagePresets.name,
+      presetId: messagePresets.id,
+      variantId: messagePresetVariants.id,
+      body: messagePresetVariants.body,
+    })
     .from(messagePresetVariants)
     .innerJoin(messagePresets, eq(messagePresets.id, messagePresetVariants.presetId))
     .where(
       and(
         inArray(messagePresets.name, names),
         eq(messagePresets.channel, "sms"),
+        eq(messagePresets.enabled, true),
         // Archived presets are "deleted" on the Messaging page (schema.ts): not in use.
         isNull(messagePresets.archivedAt),
         eq(messagePresetVariants.enabled, true)
@@ -108,12 +142,22 @@ export async function loadColdTemplates(): Promise<Map<string, string>> {
     .orderBy(messagePresets.name, messagePresetVariants.label);
 
   // Ordered by name then label, so the first row of each name is its first variant.
-  const seen = new Set<string>();
+  const first = new Map<string, ColdPresetRef>();
   for (const row of rows) {
-    if (seen.has(row.name)) continue;
-    seen.add(row.name);
-    templates.set(row.name, row.body);
+    if (first.has(row.name)) continue;
+    first.set(row.name, { presetId: row.presetId, variantId: row.variantId, body: row.body });
   }
+  return first;
+}
+
+/**
+ * Preset name → the body of its first enabled variant, for every cold text at
+ * once. Names with no preset get their FALLBACK, so a caller can always read a
+ * body out of the map.
+ */
+export async function loadColdTemplates(): Promise<Map<string, string>> {
+  const templates = new Map<string, string>(Object.entries(COLD_FALLBACKS));
+  for (const [name, preset] of await loadColdPresetIds()) templates.set(name, preset.body);
   return templates;
 }
 

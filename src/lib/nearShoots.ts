@@ -38,6 +38,12 @@ export interface RecentShoot {
   shotAt: Date;
   /** Who booked it: never pitched their own shoot. */
   contactAgentId: string | null;
+  /**
+   * Marked Showcase on the booking (bookings.showcase): a shoot he's happy to
+   * show off. A cold follow-up near one pitches "can I share a few pics from
+   * it and what I charged?" instead of the soft nudge (coldFollowUp/).
+   */
+  showcase: boolean;
   lat: number;
   lng: number;
   radiusMiles: number;
@@ -80,6 +86,7 @@ export async function getRecentShoots(now = Date.now()): Promise<RecentShoot[]> 
       invoiceSentAt: bookings.invoiceSentAt,
       paidAt: bookings.paidAt,
       contactAgentId: bookings.contactAgentId,
+      showcase: bookings.showcase,
       lat: bookings.lat,
       lng: bookings.lng,
       geocodeSource: bookings.geocodeSource,
@@ -117,6 +124,7 @@ export async function getRecentShoots(now = Date.now()): Promise<RecentShoot[]> 
       city: r.listingCity ?? r.city,
       shotAt: when,
       contactAgentId: r.contactAgentId,
+      showcase: r.showcase,
       ...p,
     });
   }

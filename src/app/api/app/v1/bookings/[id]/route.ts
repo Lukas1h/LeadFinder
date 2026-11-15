@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireAppAuth } from "@/lib/appApiAuth";
-import { deleteBooking, getBookingWithDetails, getGalleryActivity, updateBooking } from "@/app/booked/actions";
+import { deleteBooking, getBookingWithDetails, getGalleryActivity, setBookingShowcase, updateBooking } from "@/app/booked/actions";
 import { applyDateTentative, setBookingStage } from "@/lib/bookingStage";
 import { BOOKING_STAGES, isBookingStage } from "@/lib/bookingStages";
 import { setBookingShooter } from "@/lib/shooters";
 import { bookingJson } from "../../serialize";
 import {
+  BadBody,
   badRequest,
   isUuid,
   lineItemList,
@@ -59,6 +60,16 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
   if (body.stage !== undefined && !isBookingStage(body.stage)) {
     return badRequest(`stage must be one of: ${BOOKING_STAGES.join(", ")}`);
   }
+  if (body.showcase !== undefined && typeof body.showcase !== "boolean") {
+    throw new BadBody("showcase must be true or false");
+  }
+  // A bare showcase toggle (the app's "Show this shoot" switch) skips the full
+  // rewrite: it's one flag, not an edit of the booking.
+  if (typeof body.showcase === "boolean" && Object.keys(body).length === 1) {
+    await setBookingShowcase(id, body.showcase);
+    const toggled = await getBookingWithDetails(id);
+    return NextResponse.json({ ok: true, booking: toggled ? bookingJson(toggled) : null });
+  }
   // A bare stage move (the app's "Confirm date") skips the full rewrite.
   if (isBookingStage(body.stage) && Object.keys(body).length === 1) {
     await setBookingStage(id, body.stage);
@@ -93,6 +104,9 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
     },
   });
   if (result.error) return badRequest(result.error);
+
+  // The showcase flag: a shoot worth showing other agents (portfolio pages).
+  if (typeof body.showcase === "boolean") await setBookingShowcase(id, body.showcase);
 
   // The tentative checkbox flips tentative ⇄ scheduled on a job still to
   // shoot; an explicit stage then sets the state outright.

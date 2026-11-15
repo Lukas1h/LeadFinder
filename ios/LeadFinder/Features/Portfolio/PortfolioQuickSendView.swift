@@ -85,6 +85,9 @@ struct PortfolioQuickSendView: View {
                 Spacer(minLength: 8)
                 BadgeChip(text: d.templateName ?? "No template", tint: d.templateName == nil ? Theme.tertiaryText : Theme.accent)
             }
+            if let f = d.featured, d.featuredBookingId == f.bookingId {
+                row("star", "Featured: \([f.address, f.city?.nilIfBlank].compactMap { $0 }.joined(separator: ", "))")
+            }
             row("person", [d.firstName.nilIfBlank.map { "\u{201C}\($0)\u{201D}" }, d.brokerage.nilIfBlank].compactMap { $0 }.joined(separator: " · ").nilIfBlank ?? "No name or brokerage")
             row("mappin.and.ellipse", d.area.nilIfBlank ?? "No area")
             row("house", listings.isEmpty ? "No listings" : "\(listings.count) listing\(listings.count == 1 ? "" : "s"): \(listings.joined(separator: " · "))")

@@ -27,6 +27,7 @@ import { cancelSquareInvoice, syncSquareInvoice } from "@/lib/squareInvoice";
 import { listGalleryMedia } from "@/lib/dropbox";
 import { CARD_PHOTOS, listingCardPhotoNames } from "@/lib/listingCardPhotos";
 import type { BookingWithDetails } from "./BookedList";
+import type { BookingRow } from "./data";
 
 export interface BookingLineItemInput {
   description: string;
@@ -263,7 +264,7 @@ export async function updateBooking(bookingId: string, input: UpdateBookingInput
  * little reference card on a listing's detail modal (BookingRow), so that
  * card doesn't need every listing page load to eagerly join bookings.
  */
-export async function getBookingWithDetails(bookingId: string): Promise<BookingWithDetails | null> {
+export async function getBookingWithDetails(bookingId: string): Promise<BookingRow | null> {
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
   if (!booking) return null;
 
@@ -294,6 +295,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingW
     id: booking.id,
     listingId: booking.listingId,
     contactAgentId: booking.contactAgentId,
+    showcase: booking.showcase,
     address: linkedListing?.address ?? booking.address,
     city,
     state,
@@ -464,6 +466,16 @@ export async function getBookingHighlightPhotos(
 export async function setBookingHighlightPhotos(bookingId: string, names: string[]): Promise<void> {
   const clean = [...new Set(names.filter((n) => typeof n === "string" && n.length > 0))].slice(0, CARD_PHOTOS);
   await db.update(bookings).set({ highlightPhotos: clean.length ? clean : null }).where(eq(bookings.id, bookingId));
+  revalidatePath("/booked");
+}
+
+/**
+ * Marks the shoot as one worth showing other agents (bookings.showcase): cold
+ * follow-ups near it pitch it, and the portfolio page built for the reply
+ * leads with it.
+ */
+export async function setBookingShowcase(bookingId: string, showcase: boolean): Promise<void> {
+  await db.update(bookings).set({ showcase }).where(eq(bookings.id, bookingId));
   revalidatePath("/booked");
 }
 

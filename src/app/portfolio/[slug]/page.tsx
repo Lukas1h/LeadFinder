@@ -15,6 +15,8 @@ import { parseUserAgent } from "@/lib/galleryViews";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, isPortlandArea, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { BeforeAfterSlider, ListingCard, LoopVideo, MutableVideo } from "./client";
 import { PageTracker } from "./tracker";
+import { FeaturedShootSection } from "./featured";
+import { getFeaturedShoot } from "@/lib/portfolioFeatured";
 import { formatPrice, resolvePortfolioPrices, type PortfolioPrices } from "@/lib/portfolioPrices";
 import { templateForArea } from "@/app/portfolio-links/actions";
 
@@ -59,9 +61,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const [link] = await db.select({ content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
   const c = link?.content;
   const area = c?.area?.trim() || "Eugene";
-  const title = `Real estate photo & video in ${area} | Hahn Media`;
+  // A page leading with a shoot near theirs previews as that shoot.
+  const featured = c?.featuredBookingId ? await getFeaturedShoot(c.featuredBookingId, slug).catch(() => null) : null;
+  const title = featured
+    ? [featured.address, featured.city].filter(Boolean).join(", ")
+    : `Real estate photo & video in ${area} | Hahn Media`;
   const description = "Cinematic media that sells listings quicker.";
-  const images = [previewImage(c)];
+  const firstFeatured = featured?.photoUrls[0];
+  const images = [
+    !c?.ogImage && firstFeatured ? (firstFeatured.startsWith("http") ? firstFeatured : `${SITE}${firstFeatured}`) : previewImage(c),
+  ];
   return {
     title,
     description,
@@ -144,6 +153,7 @@ export default async function PortfolioPage({
   const gridBottom = ba ? photos.slice(4, 10) : photos.slice(0, 6);
   const featureLast = ba ? null : photos[photos.length - 1];
   const listings = c.listings ?? [];
+  const featured = c.featuredBookingId ? await getFeaturedShoot(c.featuredBookingId, slug).catch(() => null) : null;
 
   const who = firstName ? `this is ${firstName}${brokerage ? ` with ${brokerage}` : ""}. ` : "";
   const bookHref = `sms:${PHONE}?&body=` + encodeURIComponent(`Hi Lukas, ${who}I'd like to book a shoot for a listing in ${area}.`);
@@ -207,6 +217,7 @@ export default async function PortfolioPage({
       </header>
 
       <main id="top">
+        {featured && <FeaturedShootSection shoot={featured} />}
         {/* Hero */}
         {newStyle ? (
           <section data-section="hero" className="px-4 pt-[clamp(20px,3vw,32px)] pb-[clamp(20px,3vw,28px)] text-center">

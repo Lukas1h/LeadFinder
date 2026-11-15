@@ -462,6 +462,11 @@ struct Booking: Codable, Sendable, Identifiable, Hashable {
     /// The subcontracted photographer on the job, if one shot it. Optional so a
     /// cache written before the server sent it still decodes.
     var shooter: BookingShooter?
+    /// A nice shoot he's happy to show other agents: cold follow-ups near it
+    /// offer to share pics from it. Optional so an older cache decodes; nil = off.
+    var showcase: Bool?
+
+    var isShowcase: Bool { showcase ?? false }
 
     var addressLine: String {
         [address, city, state].compactMap { $0?.nilIfBlank }.joined(separator: ", ")
@@ -1090,6 +1095,8 @@ struct PortfolioContent: Codable, Sendable, Hashable {
     var listings: [PortfolioListing]?
     /// The link preview image, from an area template; nil = the lead photo.
     var ogImage: String?
+    /// The shoot the page opens with ("I just shot one down the road").
+    var featuredBookingId: String?
 }
 
 struct PortfolioAgentMatch: Codable, Sendable, Identifiable, Hashable {
@@ -1116,6 +1123,14 @@ struct PortfolioPrefill: Codable, Sendable {
     var listings: [PortfolioListing]
     /// The area template covering their area, if any (set on the web's Portfolio settings).
     var template: PortfolioTemplate?
+    /// The shoot the page leads with: the one the cold follow-up was about.
+    var featured: PortfolioFeatured?
+}
+
+struct PortfolioFeatured: Codable, Sendable, Hashable {
+    var bookingId: String
+    var address: String
+    var city: String?
 }
 
 /// An area template's defaults (`PortfolioTemplateContent` in src/db/schema.ts).

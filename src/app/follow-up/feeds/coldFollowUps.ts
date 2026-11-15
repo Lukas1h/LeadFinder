@@ -1,7 +1,15 @@
-import { COLD_FEED_KEYS, COLD_TRIGGERS, type ColdFeedKey, type ColdTrigger } from "@/lib/coldFollowUp/pool";
+import {
+  COLD_FEED_KEYS,
+  COLD_TRIGGERS,
+  ENABLED_COLD_TRIGGERS,
+  type ColdFeedKey,
+  type ColdTrigger,
+} from "@/lib/coldFollowUp/pool";
 import { loadAgentSegments, type AgentSegment } from "@/lib/coldFollowUp/segment";
 import { getColdFollowUpCandidates, type ColdCandidate } from "@/lib/coldFollowUp/triggers";
 import { loadColdTemplates, pitchFeedKey, renderColdTexts } from "@/lib/coldFollowUp/messages";
+import { milesLabel } from "@/lib/nearShoots";
+import { naturalStreetName } from "@/lib/sms";
 import { shortDate } from "./shared";
 import type { FeedGroup, FeedItem } from "./types";
 
@@ -17,11 +25,12 @@ import type { FeedGroup, FeedItem } from "./types";
  * page's shape of them.
  */
 
-/** The triggers the page draws candidates from. New listing on its own while the other two wait for the portfolio page. */
-export const ENABLED_COLD_TRIGGERS: ColdTrigger[] = ["new_listing"];
+/** The triggers the page draws candidates from (pool.ts): all three since 2026-11-15. */
+export { ENABLED_COLD_TRIGGERS };
 
 /** Tab titles, one per pitch (feeds/index.ts), warm feeds' style: short, in his words. */
 export const COLD_FEED_TITLES: Record<ColdFeedKey, string> = {
+  cold_showcase: "Cold: share a shoot",
   cold_samples: "Cold: samples ask",
   cold_video: "Cold: video (high end)",
   cold_turnaround: "Cold: turnaround",
@@ -30,12 +39,15 @@ export const COLD_FEED_TITLES: Record<ColdFeedKey, string> = {
 
 /**
  * What each cold tab is: who lands on it, and which second text it sends. The
- * tail is the same on all four, since the pool and the one-follow-up rule are.
+ * tail is the same on all of them, since the pool and the one-follow-up rule are.
  */
 const COLD_ONLY =
   " Cold agents you texted 3+ weeks ago who never replied, with a fresh excuse. One follow-up only: no answer in 3 days and they’re marked Ignored.";
 
 export const COLD_FEED_BLURBS: Record<ColdFeedKey, string> = {
+  cold_showcase:
+    "A shoot you marked Showcase is near their listing or in their area. Text 1 mentions the shoot, text 2 asks if you can share a few pics from it and what you charged. If they say yes, the portfolio page you send leads with that shoot." +
+    COLD_ONLY,
   cold_samples:
     "Cold agents first texted before Oct 5, so they never got the samples question. Text 1 is the excuse, text 2 asks if you can send a few samples." +
     COLD_ONLY,
@@ -45,7 +57,7 @@ export const COLD_FEED_BLURBS: Record<ColdFeedKey, string> = {
   cold_turnaround:
     "Cold agents who already have a photographer. Text 2 asks how fast their photographer delivers." + COLD_ONLY,
   cold_soft:
-    "Cold agents without a regular photographer (or no photo data). Text 2 is a soft nudge offering a few pics from a recent shoot." +
+    "Cold agents without a regular photographer (or no photo data), plus the shoot-based excuses whose shoot isn’t marked Showcase. Text 2 is a soft nudge offering a few pics from a recent shoot." +
     COLD_ONLY,
 };
 
@@ -56,7 +68,22 @@ const GROUP_TITLES: Record<ColdTrigger, string> = {
   in_area: "In their area",
 };
 
-/** The one line under the agent's name: dates, and what they already have. */
+/** "2026-11-15" → "Nov 15", the way shortDate reads a date (no timezone to shift it). */
+function ymdShort(date: string): string {
+  const [, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(2000, month - 1, day)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * The one line under the agent's name: for a shoot-based excuse it names the
+ * shoot and how far it is (that is what the text is about), plus the dates and
+ * what they already have. A Showcase shoot says so, since that's what the pitch
+ * is asking about.
+ */
 function label(c: ColdCandidate, seg: AgentSegment | undefined): string {
   const listedAt = c.listing.listedAt ?? c.listing.foundAt;
   const photos =
@@ -65,7 +92,13 @@ function label(c: ColdCandidate, seg: AgentSegment | undefined): string {
       : seg?.segment === "no_photographer"
         ? `no regular photographer${seg.weightedScore != null ? ` ${seg.weightedScore.toFixed(1)}` : ""}`
         : "photos unknown";
-  return [`Listed ${shortDate(listedAt)}`, `Texted ${shortDate(c.lastTextedAt)}`, photos].join(" · ");
+  const texted = `Texted ${shortDate(c.lastTextedAt)}`;
+  if ((c.trigger === "near_shoot" || c.trigger === "in_area") && c.shoot) {
+    const street = naturalStreetName(c.shoot.address) ?? "a listing";
+    const line = [`Shot ${street} ${milesLabel(c.shoot.miles)} away ${ymdShort(c.shoot.date)}`, texted, photos];
+    return [...line, ...(c.shoot.showcase ? ["showcase"] : [])].join(" · ");
+  }
+  return [`Listed ${shortDate(listedAt)}`, texted, photos].join(" · ");
 }
 
 /**

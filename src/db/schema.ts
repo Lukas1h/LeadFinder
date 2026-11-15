@@ -481,6 +481,11 @@ export const bookings = pgTable("bookings", {
   // under "Highlight photos" on the booking. Null/empty = spread evenly
   // across the gallery (lib/listingCardPhotos.ts).
   highlightPhotos: text("highlight_photos").array(),
+  // A shoot Lukas is proud of and happy to show other agents (2026-11-15).
+  // Cold follow-ups near it pitch "can I share a few pics from it and what I
+  // charged?" and the reply gets a portfolio page built around it; a shoot
+  // that isn't showcase still works as the excuse, with the soft pitch.
+  showcase: boolean("showcase").notNull().default(false),
   // Shows "Request virtual staging" on the client gallery — off unless
   // Lukas turns it on for this booking (BookingDetailDialog).
   stagingRequestsEnabled: boolean("staging_requests_enabled").notNull().default(false),
@@ -619,6 +624,15 @@ export interface PortfolioContent {
    * an agent who has seen a price keeps seeing it. Kept across builder saves.
    */
   prices?: Partial<PortfolioPrices>;
+  /**
+   * The shoot the page leads with ("featured shoot", 2026-11-15): its photos,
+   * address and what he charged, before the usual sections. Prefilled from the
+   * showcase booking the agent's latest text was about
+   * (message_sends.featured_booking_id); lib/portfolioFeatured.ts reads it and
+   * /api/portfolio/[slug]/listing-photo serves its photos. Kept across builder
+   * saves. Null = the usual page.
+   */
+  featuredBookingId?: string | null;
 }
 
 /** What an area template presets in the builder; every field optional = leave the builder's default. */
@@ -1117,6 +1131,9 @@ export const messageSends = pgTable("message_sends", {
   // can be null).
   listingId: uuid("listing_id").references(() => listings.id, { onDelete: "cascade" }),
   agentId: uuid("agent_id").references((): AnyPgColumn => agents.id, { onDelete: "set null" }),
+  // The shoot a cold follow-up was about ("I just shot one down the road"),
+  // so the portfolio page built for the reply leads with it (2026-11-15).
+  featuredBookingId: uuid("featured_booking_id").references((): AnyPgColumn => bookings.id, { onDelete: "set null" }),
   presetId: uuid("preset_id")
     .notNull()
     .references(() => messagePresets.id),

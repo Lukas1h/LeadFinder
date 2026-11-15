@@ -39,6 +39,9 @@ struct PortfolioDraft: Hashable, Sendable {
     var ogImage: String?
     /// The area template it was filled in from, if any.
     var templateName: String?
+    /// The shoot the page opens with; `featured` is only known from a prefill.
+    var featuredBookingId: String?
+    var featured: PortfolioFeatured?
 
     init(agent: PortfolioAgentMatch? = nil) {
         self.agent = agent
@@ -60,6 +63,8 @@ struct PortfolioDraft: Hashable, Sendable {
         video = t?.video ?? "summit"
         leadPhoto = t?.leadPhoto ?? ""
         ogImage = t?.ogImage
+        featured = prefill.featured
+        featuredBookingId = prefill.featured?.bookingId
     }
 
     init(saved: PortfolioEditResponse) {
@@ -74,6 +79,7 @@ struct PortfolioDraft: Hashable, Sendable {
         showTourOfHomes = c.showTourOfHomes ?? true
         showOffer = c.showOffer ?? true
         ogImage = c.ogImage
+        featuredBookingId = c.featuredBookingId
         if c.beforeAfter == true {
             beforeSrc = c.beforeSrc
             afterSrc = c.afterSrc
@@ -94,7 +100,8 @@ struct PortfolioDraft: Hashable, Sendable {
             beforeSrc: afterSrc != nil ? beforeSrc : nil,
             afterSrc: afterSrc,
             listings: listings,
-            ogImage: ogImage
+            ogImage: ogImage,
+            featuredBookingId: featuredBookingId
         )
     }
 

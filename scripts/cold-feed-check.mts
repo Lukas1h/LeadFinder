@@ -5,7 +5,8 @@
  *
  * Read-only (SELECT only). Prints, for every cold feed key in turn, how many
  * cards it has and its first three: agent id, the group (trigger) the card
- * sits under, the label, and the two texts.
+ * sits under, whether its shoot is marked Showcase, the label, and the two
+ * texts.
  *
  * This runs the page's own code (feeds/coldFollowUps.ts), so it checks the
  * whole path: pool → triggers → segments → templates → FeedItems.
@@ -21,8 +22,14 @@ const { COLD_FEED_KEYS } = await import("../src/lib/coldFollowUp/pool");
 const { ENABLED_COLD_TRIGGERS, getColdFollowUpGroups } = await import(
   "../src/app/follow-up/feeds/coldFollowUps"
 );
+const { getColdFollowUpCandidates } = await import("../src/lib/coldFollowUp/triggers");
 
 const feeds = await getColdFollowUpGroups();
+// A FeedItem carries the texts but not the shoot behind them, so the flag comes
+// from the candidate the card was built from (same run, same clock).
+const candidates = new Map(
+  (await getColdFollowUpCandidates(Date.now(), ENABLED_COLD_TRIGGERS)).map((c) => [c.agent.id, c])
+);
 
 console.log(`Enabled cold triggers: ${ENABLED_COLD_TRIGGERS.join(", ") || "(none)"}`);
 console.log(`Cold feed keys: ${COLD_FEED_KEYS.join(", ")}`);
@@ -32,8 +39,10 @@ for (const key of COLD_FEED_KEYS) {
   const shape = groups.length === 0 ? "empty" : groups.map((g) => `"${g.title}": ${g.items.length}`).join(", ");
   console.log(`\n${key} — ${items.length} item(s) (${shape})`);
   for (const { group, item } of items.slice(0, 3)) {
+    const shoot = candidates.get(item.agent.id)?.shoot;
     console.log(`\n  agent ${item.agent.id}`);
     console.log(`  group     ${group}`);
+    console.log(`  showcase  ${shoot ? (shoot.showcase ? "yes" : "no") : "—"}`);
     console.log(`  label     ${item.label}`);
     console.log(`  text 1    ${item.suggestion}`);
     console.log(`  text 2    ${item.secondText ?? "(none)"}`);

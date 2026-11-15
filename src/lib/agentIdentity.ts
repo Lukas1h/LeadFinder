@@ -140,11 +140,19 @@ export async function linkListingToAgent(
  * Whether a cold follow-up text went out to this agent in `(since, until]`.
  *
  * Cold follow-ups are the second texts to agents who never answered the first
- * one (src/lib/coldFollowUp/), recorded only as outbound text interactions on a
+ * one (src/lib/coldFollowUp/), recorded as outbound text interactions on a
  * `cold_*` Follow up feed. When one lands between a send and a reply, the reply
  * is answering that follow-up, not the older send, so the send must stay
  * unanswered (see markLatestSendResponded). A parked or "didn't send"
  * interaction didn't reach anyone and doesn't count.
+ *
+ * Since 2026-11-15 a cold card's tap also records its own `message_sends` row,
+ * linked through `agentInteractions.message_send_id` (coldFollowUp/record.ts).
+ * That send is now the agent's latest one, so the reply credits it through the
+ * ordinary path — an interaction that is linked to its own send isn't a
+ * follow-up sitting on top of an older one, and counting it here would leave
+ * the reply crediting nothing at all. Only the unlinked ones (cold follow-ups
+ * recorded before sends existed) still block the reply.
  */
 export async function coldFollowUpSince(agentId: string, since: Date, until: Date): Promise<boolean> {
   const [row] = await db
@@ -156,6 +164,7 @@ export async function coldFollowUpSince(agentId: string, since: Date, until: Dat
         eq(agentInteractions.direction, "outbound"),
         eq(agentInteractions.channel, "text"),
         isNull(agentInteractions.pendingSince),
+        isNull(agentInteractions.messageSendId),
         sql`(${agentInteractions.outcome} is null or ${agentInteractions.outcome} <> 'not_sent')`,
         sql`left(coalesce(${agentInteractions.followUpFeed}, ''), 5) = 'cold_'`,
         gt(agentInteractions.occurredAt, since),

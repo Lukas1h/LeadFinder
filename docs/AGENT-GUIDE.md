@@ -220,14 +220,27 @@ replied get one more text, from the Cold tabs at the end of the Follow Up page
 (`FollowUpFeed.cold`, `cold: true` in the iPhone API; shown behind a "Cold"
 divider). **One tab per pitch** (Lukas, 2026-11-15), so every card in a tab
 sends the same second text and each tab's stats measure that pitch:
-`cold_samples` "Cold: samples ask", `cold_video` "Cold: video (high end)",
+`cold_showcase` "Cold: share a shoot", `cold_samples` "Cold: samples ask", `cold_video` "Cold: video (high end)",
 `cold_turnaround` "Cold: turnaround", `cold_soft` "Cold: soft nudge"
 (`COLD_FEED_KEYS`, `src/lib/coldFollowUp/pool.ts`; titles/blurbs in
 `src/app/follow-up/feeds/coldFollowUps.ts`). Inside a tab, cards are grouped by
 the trigger (the excuse in text 1, `COLD_TRIGGERS`: `near_shoot`, `in_area`,
-`new_listing`). Only `new_listing` is on (`ENABLED_COLD_TRIGGERS`); near-shoot
-and in-area wait for the booking-based portfolio page. A pass on any cold tab
-covers all of them. Each card has two texts: `suggestion` = the excuse
+`new_listing`), all on (`ENABLED_COLD_TRIGGERS` in `pool.ts`). The shoot
+triggers prefer a booking marked **Showcase** (`bookings.showcase`, the switch
+in the booking dialog and the iPhone booking sheet, Lukas 2026-11-15): a
+showcase shoot gets the `showcase` pitch ("Cold pitch: showcase": can I share a
+few pics from it and what I charged?), any other shoot still works as the
+excuse but gets the soft pitch. A pass on any cold tab covers all of them.
+**Tapping Text on a cold card records a real send** (`recordColdFollowUpSend`,
+`src/lib/coldFollowUp/record.ts`, called from `startPendingInteraction`): type
+`follow_up`, the pitch preset/variant, body = both texts, and for a showcase
+shoot `message_sends.featured_booking_id`. So the reply is logged on that send
+in Messages and gets its quick actions; "Cold pitch: showcase" has "Portfolio
+link", and the builder (web and iPhone Create portfolio) prefills the featured
+shoot from the agent's latest send within 30 days. A "not sent" answer deletes
+the send as usual. The portfolio page with `content.featuredBookingId` opens
+with that property (photos, address, "What I charged"), then "More of my
+work"; its title and preview image are the property. Each card has two texts: `suggestion` = the excuse
 (template "Cold follow-up: new listing" / "…: shot one near you" / "…: in the
 area"), `secondText` = the pitch, picked by `pickPitch`
 (`src/lib/coldFollowUp/messages.ts`): first texted before Oct 5 → "Cold pitch:
@@ -235,12 +248,13 @@ samples"; has a photographer and high end → "Cold pitch: video (high end)";
 has a photographer → "Cold pitch: turnaround"; else "Cold pitch: soft". Templates are type `follow_up`, read by name (first enabled variant by
 label), with code fallbacks; created by
 `scripts/create-cold-followup-presets.mts`. **Numbers stay apart:** cold feed
-texts are only interactions (`follow_up_feed` `cold_*`), never
-`message_sends`, so they're in no texting quota (`goal.ts` also drops them
+texts are interactions (`follow_up_feed` `cold_*`) plus a `follow_up` send,
+never `initial_outreach`, so they're in no texting quota (`goal.ts` also drops them
 from the weekly follow-up count); the Home funnel's Follow up row excludes
 them and they get their own `coldFollowUp` row (`allCold` in `feeds/stats.ts`,
 where converted = any move up from cold/ignored after the text); and a reply
-after a cold follow-up doesn't mark the original send responded
+after a cold follow-up doesn't mark the original send responded (it marks
+the cold follow-up's own send; unlinked cold interactions block crediting)
 (`coldFollowUpSince` in `src/lib/agentIdentity.ts`, used by
 `markLatestSendResponded`, `recordReply`, `resolveSendOutcome`), so the cold
 reply rate isn't inflated. `src/lib/coldFollowUp/`: `pool.ts` (`loadColdPool`:
@@ -528,6 +542,16 @@ next listing comes up (usually 1–4 weeks after first contact).
   `/api/site-listings/photo` (only jobs currently shown). The `lukashahnart`
   project's home page fetches it from `r.lukashahn.media` every 5 minutes
   (`app/(real-estate)/RecentListings.tsx`) and hides the section when empty.
+- Featured shoot (2026-11-15): a link's `content.featuredBookingId` makes the
+  page lead with one of his shoots — its photos (the same `listingCardPhotoNames`
+  picks as a card, served by `/api/portfolio/[slug]/listing-photo`, which also
+  allows that booking), address (the linked listing's wins) and what he charged
+  (`booking_line_items`, whole dollars), read live by `getFeaturedShoot`
+  (`src/lib/portfolioFeatured.ts`). The builder prefills it from the agent's
+  latest `message_sends` row when that send had `featured_booking_id` and went
+  out in the last 30 days: a cold follow-up about a shoot Lukas marked
+  **showcase** (`bookings.showcase`, `setBookingShowcase` on the web, `showcase`
+  on `PATCH /api/app/v1/bookings/[id]`). Builder saves keep the id.
 - Card photos (agent pages and the website alike): `bookings.highlight_photos`
   (Dropbox file names, in order, max 10), picked with **Highlight photos** in
   the booking dialog (`src/app/booked/HighlightPhotosButton.tsx`, thumbnails

@@ -27,6 +27,7 @@ struct BookingEditSheet: View {
     @State private var editingHours: String
     @State private var shootingHours: String
     @State private var logisticsHours: String
+    @State private var showcase: Bool
     @State private var isSaving = false
     @State private var confirmDelete = false
     @State private var error: String?
@@ -57,6 +58,7 @@ struct BookingEditSheet: View {
         _editingHours = State(initialValue: Self.text(booking?.editingHours))
         _shootingHours = State(initialValue: Self.text(booking?.shootingHours))
         _logisticsHours = State(initialValue: Self.text(booking?.logisticsHours))
+        _showcase = State(initialValue: booking?.isShowcase ?? false)
     }
 
     private var hasListing: Bool { booking?.listingId != nil }
@@ -132,6 +134,16 @@ struct BookingEditSheet: View {
                         .lineLimit(2...)
                 }
                 .listRowBackground(Theme.card)
+
+                if booking != nil {
+                    Section {
+                        Toggle("Showcase", isOn: $showcase)
+                            .tint(Theme.accent)
+                    } footer: {
+                        Text("Nice shoot you're happy to show other agents. Cold follow-ups near it offer to share pics from it.")
+                    }
+                    .listRowBackground(Theme.card)
+                }
 
                 if isCompleted {
                     // Drive time and costs come from the job's trips and
@@ -230,7 +242,8 @@ struct BookingEditSheet: View {
                 .map { .init(description: $0.description, amount: Int($0.amount) ?? 0) },
             editingHours: isCompleted ? Double(editingHours) : nil,
             shootingHours: isCompleted ? Double(shootingHours) : nil,
-            logisticsHours: isCompleted ? Double(logisticsHours) : nil
+            logisticsHours: isCompleted ? Double(logisticsHours) : nil,
+            showcase: booking != nil ? showcase : nil
         )
         do {
             if let booking {

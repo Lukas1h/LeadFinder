@@ -30,6 +30,8 @@ export interface BookingWithDetails {
   jobDate: Date | null;
   // Booked, but the day isn't settled: jobDate is a placeholder or empty.
   dateTentative: boolean;
+  // A nice shoot he's happy to show other agents (cold follow-ups near it offer pics from it).
+  showcase?: boolean;
   lockboxCode: string | null;
   notes: string | null;
   invoiceNote: string | null;

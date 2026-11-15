@@ -19,6 +19,7 @@ import {
 import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { markLatestSendResponded } from "@/lib/agentIdentity";
+import { recordColdFollowUpSend } from "@/lib/coldFollowUp/record";
 
 /**
  * One agent's history as a single list, merging templated sends
@@ -221,6 +222,17 @@ export async function startPendingInteraction(input: {
   /** The Follow up feed it was started from, for that feed's reply rate. */
   followUpFeed?: string | null;
 }): Promise<string | null> {
+  // A cold card's Text tap is the one send the page can't hand in: the card is
+  // two texts rendered from a preset, not a send-dialog pick. So it records the
+  // send itself (message_sends, with the shoot it was about) before parking the
+  // interaction, and the interaction links to it — the reply then answers a
+  // real send and gets its quick actions. null is fine (no card any more, or no
+  // preset on file); the interaction alone still says he texted.
+  let messageSendId = input.messageSendId ?? null;
+  if (!messageSendId && input.followUpFeed?.startsWith("cold_")) {
+    messageSendId = await recordColdFollowUpSend(input.agentId, input.followUpFeed);
+  }
+
   const [row] = await db
     .insert(agentInteractions)
     .values({
@@ -229,7 +241,7 @@ export async function startPendingInteraction(input: {
       channel: input.channel,
       direction: "outbound",
       pendingSince: new Date(),
-      messageSendId: input.messageSendId ?? null,
+      messageSendId,
       listingStatusBefore: input.listingStatusBefore ?? null,
       followUpFeed: input.followUpFeed?.slice(0, 40) ?? null,
       source: "app",

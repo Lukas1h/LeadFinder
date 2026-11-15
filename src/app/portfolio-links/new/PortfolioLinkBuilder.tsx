@@ -36,6 +36,8 @@ export interface BuilderStart {
   content: PortfolioContent;
   /** The area template the content came from, shown as a note. */
   templateName?: string | null;
+  /** The shoot the page leads with (content.featuredBookingId), for its label. */
+  featured?: { bookingId: string; address: string; city: string | null } | null;
 }
 
 /**
@@ -63,6 +65,9 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
   const [afterSrc, setAfterSrc] = useState<string | null>(c.beforeAfter ? (c.afterSrc ?? null) : null);
   const [ogImage, setOgImage] = useState<string | null>(c.ogImage ?? null);
   const [templateName, setTemplateName] = useState<string | null>(start.templateName ?? null);
+  const [featured, setFeatured] = useState<{ bookingId: string; address: string | null; city: string | null } | null>(
+    start.featured ?? (c.featuredBookingId ? { bookingId: c.featuredBookingId, address: null, city: null } : null)
+  );
   const [editorOpen, setEditorOpen] = useState(false);
 
   const [creating, setCreating] = useState(false);
@@ -97,6 +102,7 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
       setArea(prefill.area);
       setBrokerage(prefill.brokerage);
       setListings(prefill.listings);
+      setFeatured(prefill.featured ?? null);
       // The area template's settings, else back to the builder's defaults.
       const t = prefill.template?.content;
       setTemplateName(prefill.template?.name ?? null);
@@ -133,6 +139,7 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
         afterSrc,
         listings,
         ogImage,
+        featuredBookingId: featured?.bookingId ?? null,
       };
       const saved = start.linkId
         ? await updatePortfolioLinkAction(start.linkId, agent?.id ?? null, content)
@@ -190,6 +197,19 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
 
   return (
     <div className="flex flex-col gap-8">
+      {featured && (
+        <section className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+          <p className="min-w-0 truncate text-sm">
+            <span className="text-muted-foreground">Featured shoot: </span>
+            <span className="font-medium">
+              {featured.address ? [featured.address, featured.city].filter(Boolean).join(", ") : "a recent shoot"}
+            </span>
+          </p>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setFeatured(null)}>
+            Remove
+          </Button>
+        </section>
+      )}
       <section className="flex flex-col gap-1.5">
         <Label>Agent</Label>
         <AgentSearch value={agent} onChange={pickAgent} />
