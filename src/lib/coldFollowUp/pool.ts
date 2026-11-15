@@ -36,7 +36,17 @@ export const MIN_GAP_DAYS = 21;
  */
 export const MAX_COLD_FOLLOW_UPS = 1;
 
-export const COLD_FEED_KEYS = ["cold_near_shoot", "cold_in_area", "cold_new_listing"] as const;
+/** Why a cold agent is worth one more text: the excuse the first text leads with (triggers.ts). Strongest first. */
+export const COLD_TRIGGERS = ["near_shoot", "in_area", "new_listing"] as const;
+export type ColdTrigger = (typeof COLD_TRIGGERS)[number];
+
+/**
+ * The cold Follow up tabs, one per pitch: every card on a tab sends the same
+ * second text. A cold text records one of these in
+ * `agentInteractions.followUpFeed`, which is how each tab's stats measure its
+ * pitch (feeds/stats.ts). The trigger above is a group inside the tab.
+ */
+export const COLD_FEED_KEYS = ["cold_samples", "cold_video", "cold_turnaround", "cold_soft"] as const;
 export type ColdFeedKey = (typeof COLD_FEED_KEYS)[number];
 
 const DAY = 24 * 60 * 60 * 1000;

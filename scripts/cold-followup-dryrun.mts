@@ -16,7 +16,7 @@ import type { ColdCandidate } from "@/lib/coldFollowUp/triggers";
 // is imported dynamically below (the same pattern as the other scripts).
 config({ path: ".env.local", quiet: true });
 
-const { COLD_FEED_KEYS, MAX_COLD_FOLLOW_UPS, MIN_GAP_DAYS, loadColdPool } = await import("@/lib/coldFollowUp/pool");
+const { COLD_TRIGGERS, MAX_COLD_FOLLOW_UPS, MIN_GAP_DAYS, loadColdPool } = await import("@/lib/coldFollowUp/pool");
 const { getColdFollowUpCandidates } = await import("@/lib/coldFollowUp/triggers");
 const { MARKET_ORDER } = await import("@/lib/markets");
 
@@ -61,7 +61,7 @@ console.log(`Candidates: ${candidates.length}\n`);
 // By trigger ------------------------------------------------------------------
 console.log(pad("by trigger", 24) + padLeft("count", 6));
 console.log("  " + "-".repeat(30));
-for (const key of COLD_FEED_KEYS) {
+for (const key of COLD_TRIGGERS) {
   console.log("  " + pad(key, 22) + padLeft(candidates.filter((c) => c.trigger === key).length, 6));
 }
 
@@ -69,7 +69,7 @@ for (const key of COLD_FEED_KEYS) {
 console.log("\n" + pad("by trigger x market", 24) + MARKET_ORDER.map((m) => padLeft(m, 10)).join(""));
 console.log("  " + "-".repeat(24 + MARKET_ORDER.length * 10));
 const byMarket = tally(candidates, (c) => `${c.trigger}|${c.market}`);
-for (const key of COLD_FEED_KEYS) {
+for (const key of COLD_TRIGGERS) {
   const counts = MARKET_ORDER.map((m) => byMarket.get(`${key}|${m}`) ?? 0);
   console.log("  " + pad(key, 22) + counts.map((n) => padLeft(n, 10)).join(""));
 }
@@ -77,7 +77,7 @@ for (const key of COLD_FEED_KEYS) {
 // By trigger x samples eligibility -------------------------------------------
 console.log("\n" + pad("by trigger x samples ask", 24) + padLeft("eligible", 10) + padLeft("not", 6));
 console.log("  " + "-".repeat(40));
-for (const key of COLD_FEED_KEYS) {
+for (const key of COLD_TRIGGERS) {
   const rows = candidates.filter((c) => c.trigger === key);
   const yes = rows.filter((c) => c.samplesAskEligible).length;
   console.log("  " + pad(key, 22) + padLeft(yes, 10) + padLeft(rows.length - yes, 6));
@@ -91,7 +91,7 @@ const COLUMNS: [string, number][] = [
   ["shoot", 34],
   ["since text", 11],
 ];
-for (const key of COLD_FEED_KEYS) {
+for (const key of COLD_TRIGGERS) {
   const rows = candidates.filter((c) => c.trigger === key).slice(0, SAMPLES_PER_TRIGGER);
   console.log(`\n${key} — ${rows.length ? `first ${rows.length}` : "nobody"}`);
   if (rows.length === 0) continue;

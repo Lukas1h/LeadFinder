@@ -1,59 +1,63 @@
-import { COLD_FEED_KEYS, type ColdFeedKey } from "@/lib/coldFollowUp/pool";
+import { COLD_FEED_KEYS, COLD_TRIGGERS, type ColdFeedKey, type ColdTrigger } from "@/lib/coldFollowUp/pool";
 import { loadAgentSegments, type AgentSegment } from "@/lib/coldFollowUp/segment";
 import { getColdFollowUpCandidates, type ColdCandidate } from "@/lib/coldFollowUp/triggers";
-import { loadColdTemplates, renderColdTexts, type ColdPitch } from "@/lib/coldFollowUp/messages";
+import { loadColdTemplates, pitchFeedKey, renderColdTexts } from "@/lib/coldFollowUp/messages";
 import { shortDate } from "./shared";
 import type { FeedGroup, FeedItem } from "./types";
 
 /**
  * The cold feeds: agents Lukas texted once who never answered, on the Follow
- * up page's own "Cold" tabs after the warm ones. Each card has two texts —
- * the excuse for writing now, then the pitch — because the first text is the
- * one this person already ignored.
+ * up page's own "Cold" tabs after the warm ones. One tab per pitch, so every
+ * card on a tab sends the same second text and that tab's own numbers
+ * (`follow_up_feed`) measure that pitch; the trigger — the excuse text 1 leads
+ * with — is a group inside the tab.
  *
  * The pool and triggers (21 days of silence, one cold follow-up ever, the
  * strongest available excuse) live in src/lib/coldFollowUp/; this is just the
  * page's shape of them.
  */
 
-/** The cold tabs the page shows. One at a time while they're being written, so the list stays small. */
-export const ENABLED_COLD_FEEDS: ColdFeedKey[] = ["cold_new_listing"];
+/** The triggers the page draws candidates from. New listing on its own while the other two wait for the portfolio page. */
+export const ENABLED_COLD_TRIGGERS: ColdTrigger[] = ["new_listing"];
 
-/** Tab titles for the cold feeds (feeds/index.ts), warm feeds' style: short, in his words. */
+/** Tab titles, one per pitch (feeds/index.ts), warm feeds' style: short, in his words. */
 export const COLD_FEED_TITLES: Record<ColdFeedKey, string> = {
-  cold_new_listing: "Cold: new listing",
-  cold_near_shoot: "Cold: shot one near you",
-  cold_in_area: "Cold: in the area",
+  cold_samples: "Cold: samples ask",
+  cold_video: "Cold: video (high end)",
+  cold_turnaround: "Cold: turnaround",
+  cold_soft: "Cold: soft nudge",
 };
 
 /**
- * What each cold tab is, in a sentence or two. All three share the shape: cold
- * agents, one follow-up ever, Ignored if they stay quiet 3 days, text 1 the
- * excuse and text 2 the pitch.
+ * What each cold tab is: who lands on it, and which second text it sends. The
+ * tail is the same on all four, since the pool and the one-follow-up rule are.
  */
 const COLD_ONLY =
-  "One follow-up only: if they don’t answer within 3 days they’re marked Ignored. Text 1 is the excuse, text 2 the pitch (picked by whether they already have a photographer).";
+  " Cold agents you texted 3+ weeks ago who never replied, with a fresh excuse. One follow-up only: no answer in 3 days and they’re marked Ignored.";
 
 export const COLD_FEED_BLURBS: Record<ColdFeedKey, string> = {
-  cold_new_listing:
-    "Cold agents you texted 3+ weeks ago who never replied, with a listing put up in the last 10 days. " + COLD_ONLY,
-  cold_near_shoot:
-    "Cold agents you texted 3+ weeks ago who never replied, with a listing for sale near a home you shot in the last 30 days. " +
+  cold_samples:
+    "Cold agents first texted before Oct 5, so they never got the samples question. Text 1 is the excuse, text 2 asks if you can send a few samples." +
     COLD_ONLY,
-  cold_in_area:
-    "Cold agents you texted 3+ weeks ago who never replied, with a listing within 15 miles of a job you shot in the last 10 days, outside Roseburg. " +
+  cold_video:
+    "High-end cold agents who already have a photographer. Text 2 asks whether their photographer does video." +
+    COLD_ONLY,
+  cold_turnaround:
+    "Cold agents who already have a photographer. Text 2 asks how fast their photographer delivers." + COLD_ONLY,
+  cold_soft:
+    "Cold agents without a regular photographer (or no photo data). Text 2 is a soft nudge offering a few pics from a recent shoot." +
     COLD_ONLY,
 };
 
-/** Group title per trigger: the reason the card leads with. */
-const GROUP_TITLES: Record<ColdFeedKey, string> = {
-  cold_new_listing: "Listed since your text",
-  cold_near_shoot: "Near a recent shoot",
-  cold_in_area: "In their area",
+/** Group title per trigger: the excuse the card leads with (the tab already says the pitch). */
+const GROUP_TITLES: Record<ColdTrigger, string> = {
+  new_listing: "Listed since your text",
+  near_shoot: "Near a recent shoot",
+  in_area: "In their area",
 };
 
-/** The one line under the agent's name: dates, what they already have, and the pitch. */
-function label(c: ColdCandidate, seg: AgentSegment | undefined, pitch: ColdPitch): string {
+/** The one line under the agent's name: dates, and what they already have. */
+function label(c: ColdCandidate, seg: AgentSegment | undefined): string {
   const listedAt = c.listing.listedAt ?? c.listing.foundAt;
   const photos =
     seg?.segment === "has_photographer"
@@ -61,46 +65,50 @@ function label(c: ColdCandidate, seg: AgentSegment | undefined, pitch: ColdPitch
       : seg?.segment === "no_photographer"
         ? `no regular photographer${seg.weightedScore != null ? ` ${seg.weightedScore.toFixed(1)}` : ""}`
         : "photos unknown";
-  return [
-    `Listed ${shortDate(listedAt)}`,
-    `Texted ${shortDate(c.lastTextedAt)}`,
-    photos,
-    `pitch: ${pitch}`,
-  ].join(" · ");
+  return [`Listed ${shortDate(listedAt)}`, `Texted ${shortDate(c.lastTextedAt)}`, photos].join(" · ");
 }
 
 /**
- * Every cold feed, empty ones included: the page decides what to show, and a
- * tab with nobody due should explain itself rather than vanish.
+ * Every cold feed's groups, empty ones included and in COLD_TRIGGERS order: the
+ * page decides what to show, and buildFeeds drops the tabs with nobody on them.
  */
-export async function getColdFollowUpGroups(): Promise<Record<ColdFeedKey, FeedGroup>> {
-  const groups = {} as Record<ColdFeedKey, FeedGroup>;
+export async function getColdFollowUpGroups(): Promise<Record<ColdFeedKey, FeedGroup[]>> {
+  const items = {} as Record<ColdFeedKey, Record<ColdTrigger, FeedItem[]>>;
   for (const key of COLD_FEED_KEYS) {
-    groups[key] = { title: GROUP_TITLES[key], items: [], heldBack: 0 };
+    items[key] = { near_shoot: [], in_area: [], new_listing: [] };
   }
 
-  const candidates = await getColdFollowUpCandidates(Date.now(), ENABLED_COLD_FEEDS);
-  if (candidates.length === 0) return groups;
+  const candidates = await getColdFollowUpCandidates(Date.now(), ENABLED_COLD_TRIGGERS);
+  if (candidates.length > 0) {
+    const [segments, templates] = await Promise.all([
+      loadAgentSegments(candidates.map((c) => c.agent.id)),
+      loadColdTemplates(),
+    ]);
 
-  const [segments, templates] = await Promise.all([
-    loadAgentSegments(candidates.map((c) => c.agent.id)),
-    loadColdTemplates(),
-  ]);
+    // The candidates arrive strongest trigger first, then longest silence: kept as-is.
+    for (const c of candidates) {
+      const seg = segments.get(c.agent.id);
+      const { text1, text2, pitch } = renderColdTexts(c, seg, templates);
+      items[pitchFeedKey(pitch)][c.trigger].push({
+        agent: c.agent,
+        lastReplyAt: null,
+        listing: c.listing,
+        editorHref: null,
+        suggestion: text1,
+        secondText: text2,
+        label: label(c, seg),
+      });
+    }
+  }
 
-  // The candidates arrive strongest trigger first, then longest silence: kept as-is.
-  for (const c of candidates) {
-    const seg = segments.get(c.agent.id);
-    const { text1, text2, pitch } = renderColdTexts(c, seg, templates);
-    const item: FeedItem = {
-      agent: c.agent,
-      lastReplyAt: null,
-      listing: c.listing,
-      editorHref: null,
-      suggestion: text1,
-      secondText: text2,
-      label: label(c, seg, pitch),
-    };
-    groups[c.trigger].items.push(item);
+  const groups = {} as Record<ColdFeedKey, FeedGroup[]>;
+  for (const key of COLD_FEED_KEYS) {
+    // A trigger with nobody in it has no heading to explain, so it's left out.
+    groups[key] = COLD_TRIGGERS.filter((t) => items[key][t].length > 0).map((t) => ({
+      title: GROUP_TITLES[t],
+      items: items[key][t],
+      heldBack: 0,
+    }));
   }
   return groups;
 }

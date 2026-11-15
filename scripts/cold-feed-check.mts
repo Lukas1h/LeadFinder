@@ -3,9 +3,9 @@
  *
  *   npx tsx scripts/cold-feed-check.mts
  *
- * Read-only (SELECT only). Prints each enabled cold feed's item count and its
- * first five cards: agent id, the label under the name, and the two texts.
- * Names appear only as the first name inside the text; no phones or emails.
+ * Read-only (SELECT only). Prints, for every cold feed key in turn, how many
+ * cards it has and its first three: agent id, the group (trigger) the card
+ * sits under, the label, and the two texts.
  *
  * This runs the page's own code (feeds/coldFollowUps.ts), so it checks the
  * whole path: pool → triggers → segments → templates → FeedItems.
@@ -17,16 +17,23 @@ import { config } from "dotenv";
 // is imported dynamically below (the same pattern as the other scripts).
 config({ path: ".env.local", quiet: true });
 
-const { ENABLED_COLD_FEEDS, getColdFollowUpGroups } = await import("../src/app/follow-up/feeds/coldFollowUps");
+const { COLD_FEED_KEYS } = await import("../src/lib/coldFollowUp/pool");
+const { ENABLED_COLD_TRIGGERS, getColdFollowUpGroups } = await import(
+  "../src/app/follow-up/feeds/coldFollowUps"
+);
 
-const groups = await getColdFollowUpGroups();
+const feeds = await getColdFollowUpGroups();
 
-console.log(`Enabled cold feeds: ${ENABLED_COLD_FEEDS.join(", ") || "(none)"}`);
-for (const key of ENABLED_COLD_FEEDS) {
-  const group = groups[key];
-  console.log(`\n${key} — "${group.title}": ${group.items.length} item(s)`);
-  for (const item of group.items.slice(0, 5)) {
+console.log(`Enabled cold triggers: ${ENABLED_COLD_TRIGGERS.join(", ") || "(none)"}`);
+console.log(`Cold feed keys: ${COLD_FEED_KEYS.join(", ")}`);
+for (const key of COLD_FEED_KEYS) {
+  const groups = feeds[key];
+  const items = groups.flatMap((group) => group.items.map((item) => ({ group: group.title, item })));
+  const shape = groups.length === 0 ? "empty" : groups.map((g) => `"${g.title}": ${g.items.length}`).join(", ");
+  console.log(`\n${key} — ${items.length} item(s) (${shape})`);
+  for (const { group, item } of items.slice(0, 3)) {
     console.log(`\n  agent ${item.agent.id}`);
+    console.log(`  group     ${group}`);
     console.log(`  label     ${item.label}`);
     console.log(`  text 1    ${item.suggestion}`);
     console.log(`  text 2    ${item.secondText ?? "(none)"}`);

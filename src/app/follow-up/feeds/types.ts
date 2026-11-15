@@ -24,10 +24,11 @@ export type FollowUpFeedKey =
   | "graphics"
   | "drone"
   | "check_ins"
-  // Cold follow-ups: agents who never answered his first text (lib/coldFollowUp/).
-  | "cold_new_listing"
-  | "cold_near_shoot"
-  | "cold_in_area";
+  // Cold follow-ups: agents who never answered his first text, one key per pitch (lib/coldFollowUp/).
+  | "cold_samples"
+  | "cold_video"
+  | "cold_turnaround"
+  | "cold_soft";
 
 export interface FeedItem {
   agent: Agent;

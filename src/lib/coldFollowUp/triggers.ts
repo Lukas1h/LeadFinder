@@ -4,38 +4,41 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { marketFor, type Market } from "@/lib/markets";
 import { getRecentShoots, milesBetween, nearestShoot, type NearShoot } from "@/lib/nearShoots";
 import { shotAddresses, shotByHim, stillActive } from "@/app/follow-up/feeds/shared";
-import { COLD_FEED_KEYS, loadColdPool, type ColdFeedKey, type ColdPoolAgent } from "./pool";
+import { COLD_TRIGGERS, loadColdPool, type ColdPoolAgent, type ColdTrigger } from "./pool";
 
 /**
  * Why a cold agent is worth one more text. Each trigger is a fact about the
  * world, not about them: a home he just shot nearby, a job he is doing in
  * their area this week, or a listing they put up since he last texted.
  *
- * Strongest first (COLD_FEED_KEYS order) and one candidate per agent, because
+ * Strongest first (COLD_TRIGGERS order) and one candidate per agent, because
  * sending two of these in the same week is exactly the pestering the 21-day
- * floor exists to prevent.
+ * floor exists to prevent. The trigger is only the excuse: which tab the card
+ * lands on (and so which pitch it sends) is the text's own question, decided
+ * in messages.ts.
  *
- * - cold_near_shoot: one of their active listings is within range of a home
- *   he shot in the last 30 days (getRecentShoots/nearestShoot — 1 mile in
- *   town, 3 in the country), so the text can open with the shoot.
- * - cold_in_area: a job he shot in the last 10 days within 15 miles of one of
- *   their listings, outside the local market ("I was in the Eugene area and
- *   shot a listing the other day"). Past jobs only: the second text offers
- *   photos from that shoot. Local agents only get cold_near_shoot, since
- *   around Roseburg he is always "in the area" (Lukas, 2026-11-15).
- * - cold_new_listing: they listed something since his text, so the text has a
+ * - near_shoot: one of their active listings is within range of a home he
+ *   shot in the last 30 days (getRecentShoots/nearestShoot — 1 mile in town,
+ *   3 in the country), so the text can open with the shoot.
+ * - in_area: a job he shot in the last 10 days within 15 miles of one of their
+ *   listings, outside the local market ("I was in the Eugene area and shot a
+ *   listing the other day"). Past jobs only: the second text offers photos
+ *   from that shoot. Local agents only get near_shoot, since around Roseburg
+ *   he is always "in the area" (Lukas, 2026-11-15).
+ * - new_listing: they listed something since his text, so the text has a
  *   reason that is squarely about them.
  *
- * Passes are honoured the way every Follow up feed honours them: a pass with a
- * listing covers that listing in that feed only, one without covers the agent
- * in that feed for good (follow_up_passes).
+ * Passes are honoured the way every Follow up feed honours them: a pass on any
+ * cold feed covers the agent on all of them for good without a listing, and
+ * covers that listing on all of them with one (follow_up_passes). The tabs are
+ * pitches now, not reasons, so a pass on one is not about the excuse.
  */
 
 export interface ColdCandidate extends ColdPoolAgent {
-  trigger: ColdFeedKey;
+  trigger: ColdTrigger;
   /** The listing the excuse is about. */
   listing: Listing;
-  /** The shoot/job the trigger points at; null for cold_new_listing. */
+  /** The shoot/job the trigger points at; null for new_listing. */
   shoot: { bookingId: string; address: string; city: string | null; miles: number; date: string } | null;
   market: Market;
 }
@@ -121,14 +124,14 @@ async function loadAreaJobs(now: number): Promise<AreaJob[]> {
 }
 
 /**
- * `triggers` narrows the run to a subset of the feeds (default: all of them),
- * for a page that only shows one cold tab. A trigger left out is skipped
- * entirely, so its agent falls through to the next trigger that is on — the
- * strongest-first order above still decides who gets which excuse.
+ * `triggers` narrows the run to a subset of the excuses (default: all of them),
+ * for a page that only draws candidates from one. A trigger left out is
+ * skipped entirely, so its agent falls through to the next trigger that is on —
+ * the strongest-first order above still decides which excuse a card leads with.
  */
 export async function getColdFollowUpCandidates(
   now = Date.now(),
-  triggers: readonly ColdFeedKey[] = COLD_FEED_KEYS
+  triggers: readonly ColdTrigger[] = COLD_TRIGGERS
 ): Promise<ColdCandidate[]> {
   const pool = await loadColdPool(now);
   if (pool.length === 0) return [];
@@ -139,9 +142,14 @@ export async function getColdFollowUpCandidates(
     getRecentShoots(now),
     shotAddresses(),
     db
-      .select({ agentId: followUpPasses.agentId, feed: followUpPasses.feed, listingId: followUpPasses.listingId })
+      .select({ agentId: followUpPasses.agentId, listingId: followUpPasses.listingId })
       .from(followUpPasses)
-      .where(and(inArray(followUpPasses.agentId, ids), inArray(followUpPasses.feed, [...COLD_FEED_KEYS]))),
+      .where(
+        and(
+          inArray(followUpPasses.agentId, ids),
+          sql`left(coalesce(${followUpPasses.feed}, ''), 5) = 'cold_'`
+        )
+      ),
     loadAreaJobs(now),
   ]);
 
@@ -153,17 +161,19 @@ export async function getColdFollowUpCandidates(
     listingsByAgent.set(listing.agentId, list);
   }
 
+  // A pass anywhere in the cold tabs covers the agent everywhere; a pass on a
+  // listing covers that listing in every tab.
   const passedAgent = new Set<string>();
   const passedListing = new Set<string>();
   for (const pass of passes) {
-    if (pass.listingId) passedListing.add(`${pass.agentId}|${pass.feed}|${pass.listingId}`);
-    else passedAgent.add(`${pass.agentId}|${pass.feed}`);
+    if (pass.listingId) passedListing.add(`${pass.agentId}|${pass.listingId}`);
+    else passedAgent.add(pass.agentId);
   }
 
   const candidates: ColdCandidate[] = [];
   const push = (
     entry: ColdPoolAgent,
-    trigger: ColdFeedKey,
+    trigger: ColdTrigger,
     listing: Listing,
     shoot: ColdCandidate["shoot"]
   ) => {
@@ -172,26 +182,25 @@ export async function getColdFollowUpCandidates(
 
   for (const entry of pool) {
     const agentId = entry.agent.id;
-    const allowed = (feed: ColdFeedKey, listingId: string) =>
-      !passedAgent.has(`${agentId}|${feed}`) && !passedListing.has(`${agentId}|${feed}|${listingId}`);
+    if (passedAgent.has(agentId)) continue;
 
     const usable = (listingsByAgent.get(agentId) ?? []).filter(
-      (listing) => stillActive(listing) && !shotByHim(listing, shot)
+      (listing) =>
+        !passedListing.has(`${agentId}|${listing.id}`) && stillActive(listing) && !shotByHim(listing, shot)
     );
 
     // 1. A listing near a home he just shot. Same test as the "Shot one near
     //    you" feed (feeds/nearShoot.ts), one card per agent.
-    if (triggers.includes("cold_near_shoot") && !passedAgent.has(`${agentId}|cold_near_shoot`) && shoots.length > 0) {
+    if (triggers.includes("near_shoot") && shoots.length > 0) {
       let best: { listing: Listing; near: NearShoot } | null = null;
       for (const listing of usable) {
-        if (!allowed("cold_near_shoot", listing.id)) continue;
         const near = nearestShoot(listing, shoots, shot);
         if (!near) continue;
         if (!best || near.miles < best.near.miles) best = { listing, near };
       }
       if (best) {
         const { listing, near } = best;
-        push(entry, "cold_near_shoot", listing, {
+        push(entry, "near_shoot", listing, {
           bookingId: near.shoot.bookingId,
           address: near.shoot.address,
           city: near.shoot.city,
@@ -203,10 +212,9 @@ export async function getColdFollowUpCandidates(
     }
 
     // 2. A job he shot in their (non-local) area in the last few days.
-    if (triggers.includes("cold_in_area") && !passedAgent.has(`${agentId}|cold_in_area`) && areaJobs.length > 0) {
+    if (triggers.includes("in_area") && areaJobs.length > 0) {
       let best: { listing: Listing; job: AreaJob; miles: number } | null = null;
       for (const listing of usable) {
-        if (!allowed("cold_in_area", listing.id)) continue;
         if (marketFor(listing) === "local") continue;
         const point = usablePoint(listing);
         if (!point) continue;
@@ -218,7 +226,7 @@ export async function getColdFollowUpCandidates(
       }
       if (best) {
         const { listing, job, miles } = best;
-        push(entry, "cold_in_area", listing, {
+        push(entry, "in_area", listing, {
           bookingId: job.bookingId,
           address: job.address,
           city: job.city,
@@ -230,25 +238,24 @@ export async function getColdFollowUpCandidates(
     }
 
     // 3. Something they listed since his text, fresh enough to mention.
-    if (triggers.includes("cold_new_listing")) {
+    if (triggers.includes("new_listing")) {
       const freshSince = now - NEW_LISTING_DAYS * DAY;
       let newest: { listing: Listing; at: Date } | null = null;
       for (const listing of usable) {
-        if (!allowed("cold_new_listing", listing.id)) continue;
         const at = listing.listedAt ?? listing.foundAt;
         // After his text, so it's news to them and not the listing he already pitched.
         if (at.getTime() <= entry.lastTextedAt.getTime()) continue;
         if (at.getTime() < freshSince) continue;
         if (!newest || at > newest.at) newest = { listing, at };
       }
-      if (newest) push(entry, "cold_new_listing", newest.listing, null);
+      if (newest) push(entry, "new_listing", newest.listing, null);
     }
   }
 
   // Strongest trigger first, then whoever has been waiting longest.
   candidates.sort(
     (a, b) =>
-      COLD_FEED_KEYS.indexOf(a.trigger) - COLD_FEED_KEYS.indexOf(b.trigger) ||
+      COLD_TRIGGERS.indexOf(a.trigger) - COLD_TRIGGERS.indexOf(b.trigger) ||
       a.lastTextedAt.getTime() - b.lastTextedAt.getTime()
   );
   return candidates;

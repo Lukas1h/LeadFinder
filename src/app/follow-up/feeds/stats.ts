@@ -54,8 +54,8 @@ const COLD_STATUSES = new Set(["cold", "ignored"]);
  *   each agent is in (lib/agentMarket.ts). Summing `allByMarket` gives `all`
  *   back.
  * - `allCold` / `allColdByMarket`: the same two, over the cold follow-up feeds
- *   only (`follow_up_feed` starting "cold_": cold_new_listing, cold_near_shoot,
- *   cold_in_area). They sit apart from `all` because a second text to someone
+ *   only (`follow_up_feed` starting "cold_": cold_samples, cold_video,
+ *   cold_turnaround, cold_soft). They sit apart from `all` because a second text to someone
  *   who never answered the first is not comparable to a Follow up card, and
  *   what one is worth is unknown. Still one per agent, the first cold reach in
  *   the window.

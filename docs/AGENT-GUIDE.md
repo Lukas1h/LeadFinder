@@ -218,15 +218,21 @@ theirs) stayed declined.
 **Cold follow-ups (2026-11-15).** Texted-before cold agents who never
 replied get one more text, from the Cold tabs at the end of the Follow Up page
 (`FollowUpFeed.cold`, `cold: true` in the iPhone API; shown behind a "Cold"
-divider). Only **Cold: new listing** (`cold_new_listing`) is on
-(`ENABLED_COLD_FEEDS` in `src/app/follow-up/feeds/coldFollowUps.ts`); near-shoot
-and in-area wait for the booking-based portfolio page. Each card has two texts:
-`suggestion` = the excuse (template "Cold follow-up: new listing" / "…: shot
-one near you" / "…: in the area"), `secondText` = the pitch, picked by
-`pickPitch` (`src/lib/coldFollowUp/messages.ts`): first texted before Oct 5 →
-"Cold pitch: samples"; has a photographer and high end → "Cold pitch: video
-(high end)"; has a photographer → "Cold pitch: turnaround"; else "Cold pitch:
-soft". Templates are type `follow_up`, read by name (first enabled variant by
+divider). **One tab per pitch** (Lukas, 2026-11-15), so every card in a tab
+sends the same second text and each tab's stats measure that pitch:
+`cold_samples` "Cold: samples ask", `cold_video` "Cold: video (high end)",
+`cold_turnaround` "Cold: turnaround", `cold_soft` "Cold: soft nudge"
+(`COLD_FEED_KEYS`, `src/lib/coldFollowUp/pool.ts`; titles/blurbs in
+`src/app/follow-up/feeds/coldFollowUps.ts`). Inside a tab, cards are grouped by
+the trigger (the excuse in text 1, `COLD_TRIGGERS`: `near_shoot`, `in_area`,
+`new_listing`). Only `new_listing` is on (`ENABLED_COLD_TRIGGERS`); near-shoot
+and in-area wait for the booking-based portfolio page. A pass on any cold tab
+covers all of them. Each card has two texts: `suggestion` = the excuse
+(template "Cold follow-up: new listing" / "…: shot one near you" / "…: in the
+area"), `secondText` = the pitch, picked by `pickPitch`
+(`src/lib/coldFollowUp/messages.ts`): first texted before Oct 5 → "Cold pitch:
+samples"; has a photographer and high end → "Cold pitch: video (high end)";
+has a photographer → "Cold pitch: turnaround"; else "Cold pitch: soft". Templates are type `follow_up`, read by name (first enabled variant by
 label), with code fallbacks; created by
 `scripts/create-cold-followup-presets.mts`. **Numbers stay apart:** cold feed
 texts are only interactions (`follow_up_feed` `cold_*`), never

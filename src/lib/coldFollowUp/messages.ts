@@ -3,7 +3,7 @@ import { messagePresets, messagePresetVariants } from "@/db/schema";
 import { renderMessageBody } from "@/lib/messageTemplate";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { AgentSegment } from "./segment";
-import type { ColdFeedKey } from "./pool";
+import type { ColdFeedKey, ColdTrigger } from "./pool";
 import type { ColdCandidate } from "./triggers";
 
 /**
@@ -17,19 +17,27 @@ import type { ColdCandidate } from "./triggers";
  * already shooting for them, segment.ts), and the rest split between
  * turnaround and a soft "back on your radar".
  *
+ * The pitch is also the tab: each cold Follow up feed key is one second text,
+ * so a tab's cards all send the same thing (pitchFeedKey).
+ *
  * Both are editable on the Messaging page as ordinary SMS presets; the
  * FALLBACKS here are only the seed wording for a preset that doesn't exist
  * yet, so the tab reads sensibly before Lukas writes his own.
  */
 
-/** The SMS preset each cold feed's first text comes from. */
-export const COLD_TEXT1_PRESETS: Record<ColdFeedKey, string> = {
-  cold_new_listing: "Cold follow-up: new listing",
-  cold_near_shoot: "Cold follow-up: shot one near you",
-  cold_in_area: "Cold follow-up: in the area",
+/** The SMS preset each cold trigger's first text comes from. */
+export const COLD_TEXT1_PRESETS: Record<ColdTrigger, string> = {
+  new_listing: "Cold follow-up: new listing",
+  near_shoot: "Cold follow-up: shot one near you",
+  in_area: "Cold follow-up: in the area",
 };
 
 export type ColdPitch = "samples" | "video" | "turnaround" | "soft";
+
+/** The cold Follow up tab a pitch's cards live on: one tab per second text. */
+export function pitchFeedKey(p: ColdPitch): ColdFeedKey {
+  return `cold_${p}`;
+}
 
 /** The SMS preset behind each pitch. */
 export const COLD_PITCH_PRESETS: Record<ColdPitch, string> = {
