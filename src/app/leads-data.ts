@@ -73,7 +73,7 @@ export interface LeadsBoard {
   queuedCount: number;
   /** Cards with an agent behind them; the header's "N agents · M listings". */
   agentCount: number;
-  /** Addresses of the listings declined agents turned down, named in their Declined badge. */
+  /** Addresses of the listings declined/ignored agents turned down, named in their badges. */
   addressById: Map<string, string | null>;
   /** Open leads from the last few days whose photos never got scored — a lot of them means scoring is down. */
   unscoredCount: number;
@@ -197,9 +197,9 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   ]);
   const agentById = new Map(applyLastContact(attachedRows, lastContact).map((a) => [a.id, a] as const));
 
-  // The listing a declined agent turned down, named in their Declined badge.
+  // The listing a declined/ignored agent turned down, named in their badge.
   const referencedIds = [...agentById.values()]
-    .filter((a) => a.relationshipStatus === "declined")
+    .filter((a) => a.relationshipStatus === "declined" || a.relationshipStatus === "ignored")
     .map((a) => a.lastContactedListingId)
     .filter((id): id is string => id != null);
   const referencedListings =
@@ -240,13 +240,18 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     // Shooting for someone in their office is a warm intro even to a stranger,
     // so a cold agent at a client's brokerage moves up with the people he
     // knows. Only for a real agent (a listing with no one to text stays where
-    // it is), never the client themself or someone who declined, and only
-    // when one of their listings is near where that client works.
+    // it is), never the client themself or someone who declined or never
+    // replied, and only when one of their listings is near where that client works.
     const client = g.agent
       ? officeClientFor(offices, g.entries[0].lead.brokerName, g.entries.map((e) => e.lead.city))
       : null;
     const officeClient =
-      client && client.agentId !== g.agent?.id && g.agent?.relationshipStatus !== "declined" ? client : null;
+      client &&
+      client.agentId !== g.agent?.id &&
+      g.agent?.relationshipStatus !== "declined" &&
+      g.agent?.relationshipStatus !== "ignored"
+        ? client
+        : null;
     // Once texted, the office intro has been used too, so they move on to
     // "Texted before" with everyone else who didn't answer.
     const group = known ?? (officeClient && !g.textedAt ? ("office" as const) : undefined);
@@ -268,7 +273,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   // in the last 30 days, so the first text can open with "I just shot a home a
   // few blocks from your listing". Any entry can match; the nearest one across
   // the group wins. Never someone he knows (they're in Agents you know), an
-  // Unlikely lead, or an agent who declined. Keys stay in `sections` as well —
+  // Unlikely lead, or an agent who declined / never replied. Keys stay in `sections` as well —
   // see LeadsBoard.near.
   const near = new Map<string, { near: NearShoot; leadId: string }>();
   for (const g of groups) {
@@ -276,7 +281,14 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     // section whatever else is true of them (leadSection(), and hard rule 5
     // in docs/AGENT-GUIDE.md).
     if (g.known || g.section === "unlikely" || g.section === "texted") continue;
-    if (g.agent && (g.agent.relationshipStatus === "declined" || g.agent.declinedAt)) continue;
+    if (
+      g.agent &&
+      (g.agent.relationshipStatus === "declined" ||
+        g.agent.relationshipStatus === "ignored" ||
+        g.agent.declinedAt ||
+        g.agent.ignoredAt)
+    )
+      continue;
     let match: { near: NearShoot; leadId: string } | null = null;
     for (const { lead } of g.entries) {
       const nearest = nearestShoot(lead, recentShoots, shotKeys);

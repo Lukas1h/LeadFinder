@@ -20,6 +20,7 @@ const RELATIONSHIP_ORDER: AgentRelationshipStatus[] = [
   "interested",
   "warm",
   "declined",
+  "ignored",
   "cold",
 ];
 
@@ -137,6 +138,7 @@ export function AgentsList({
       worked_once: [],
       regular: [],
       declined: [],
+      ignored: [],
     };
     for (const a of effectiveAgents) groups[a.relationshipStatus].push(a);
     for (const status of RELATIONSHIP_ORDER) groups[status].sort(status === "cold" ? byCreatedDesc : byRecency);

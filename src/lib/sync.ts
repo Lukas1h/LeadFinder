@@ -357,7 +357,8 @@ export async function insertAndEnrichListings(
         and(
           inArray(agents.id, [...agentIdByListing.values()]),
           inArray(agents.relationshipStatus, [...WARM_AGENT_STATUSES]),
-          isNull(agents.declinedAt)
+          isNull(agents.declinedAt),
+          isNull(agents.ignoredAt)
         )
       );
     const warmById = new Map(warmAgents.map((a) => [a.id, a]));

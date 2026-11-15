@@ -239,6 +239,11 @@ export const AGENT_RELATIONSHIP_STATUSES = [
   "worked_once",
   "regular",
   "declined",
+  // Never answered the first cold text or the one cold follow-up after it
+  // (Lukas, 2026-11-15). Like declined, but silent: they never said no. Set
+  // nightly by markIgnoredAgents (src/lib/coldFollowUp/ignore.ts); a reply
+  // later bumps them to interested like any cold agent.
+  "ignored",
 ] as const;
 export type AgentRelationshipStatus = (typeof AGENT_RELATIONSHIP_STATUSES)[number];
 export const agentRelationshipStatusEnum = pgEnum(
@@ -266,6 +271,10 @@ export const agents = pgTable("agents", {
   // separate "declined" section and its 30-day resurface logic — null
   // means the agent isn't currently in that bucket.
   declinedAt: timestamp("declined_at", { withTimezone: true }),
+
+  // When the agent went "ignored" (see AGENT_RELATIONSHIP_STATUSES). Cleared
+  // when a reply or booking moves them on.
+  ignoredAt: timestamp("ignored_at", { withTimezone: true }),
 
   // Set when the agent used the List-Unsubscribe link in a cold email. Kept
   // deliberately separate from relationshipStatus: declining a listing is a

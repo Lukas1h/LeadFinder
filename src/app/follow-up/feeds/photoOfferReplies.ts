@@ -73,7 +73,15 @@ export async function getPhotoOfferRepliesGroup(): Promise<FeedGroup> {
     const listing = listingById.get(o.listingId);
     if (o.done || !listing || !stillActive(listing) || shotByHim(listing, shot)) continue;
     // A real reply makes them warm; one still cold after replying said no thanks.
-    if (agent.declinedAt || agent.relationshipStatus === "declined" || agent.relationshipStatus === "cold") continue;
+    // Ignored is the same dead end as declined for outreach.
+    if (
+      agent.declinedAt ||
+      agent.ignoredAt ||
+      agent.relationshipStatus === "declined" ||
+      agent.relationshipStatus === "ignored" ||
+      agent.relationshipStatus === "cold"
+    )
+      continue;
     if (agent.followUpSnoozedUntil && agent.followUpSnoozedUntil.getTime() > now) continue;
     const last = Math.max(history.lastTouch.get(agent.id) ?? 0, o.repliedAt.getTime());
     if (now - last < QUIET_DAYS * DAY) {

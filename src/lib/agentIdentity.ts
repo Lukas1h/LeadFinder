@@ -165,7 +165,8 @@ export async function markLatestSendResponded(agentId: string, respondedAt: Date
 }
 
 /**
- * Sets an agent's relationship status and keeps declinedAt in step with it.
+ * Sets an agent's relationship status and keeps declinedAt/ignoredAt in step
+ * with it.
  *
  * declinedAt is not a mirror of the status — it's what puts someone in the
  * Agents tab's declined section, what search_agents(declinedOnly) matches on,
@@ -177,12 +178,17 @@ export async function markLatestSendResponded(agentId: string, respondedAt: Date
  * its values from touchAgentDeclined, which no longer exists, so nothing was
  * stamping it at all.
  *
+ * ignoredAt is the same bookkeeping for "ignored": a cold agent who never
+ * answered the first text or its follow-up. It behaves like declined for every
+ * outreach query but is not a no, so a reply still moves them to warm.
+ *
  * One helper rather than a rule repeated per call site, because that repetition
  * is what let the two drift apart in the first place.
  *
  * Stamped on the way in and only when unset, so re-saving an already-declined
- * agent doesn't restart the resurface clock; cleared on the way out, because
- * someone you've un-declined shouldn't still be sitting in the declined bucket.
+ * (or ignored) agent doesn't restart the resurface clock; cleared on the way
+ * out, because someone you've un-declined shouldn't still be sitting in the
+ * declined bucket.
  */
 export async function setAgentRelationshipStatus(
   agentId: string,
@@ -193,6 +199,7 @@ export async function setAgentRelationshipStatus(
     .set({
       relationshipStatus: status,
       declinedAt: status === "declined" ? sql`COALESCE(${agents.declinedAt}, now())` : null,
+      ignoredAt: status === "ignored" ? sql`COALESCE(${agents.ignoredAt}, now())` : null,
     })
     .where(eq(agents.id, agentId));
 }

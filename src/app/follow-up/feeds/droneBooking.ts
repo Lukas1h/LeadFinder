@@ -34,7 +34,7 @@ export async function getDroneBookingGroup(): Promise<FeedGroup> {
   const known = await db
     .select()
     .from(agents)
-    .where(and(inArray(agents.relationshipStatus, ["interested", "warm"]), isNull(agents.declinedAt)));
+    .where(and(inArray(agents.relationshipStatus, ["interested", "warm"]), isNull(agents.declinedAt), isNull(agents.ignoredAt)));
   if (known.length === 0) return group;
   const ids = known.map((a) => a.id);
   const now = Date.now();

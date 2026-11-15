@@ -1,7 +1,7 @@
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { FEW_PHOTOS_THRESHOLD, isUnscored } from "@/lib/pipeline";
 import { isBuilderListing } from "@/lib/leadSections";
-import { officeClientBadge, agentDeclinedBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, unscoredBadge, type BadgeText } from "@/lib/leadBadges";
+import { officeClientBadge, agentDeclinedBadge, agentIgnoredBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, unscoredBadge, type BadgeText } from "@/lib/leadBadges";
 import { sampleCardPhotos } from "@/lib/cardPhotos";
 import { listingDriveTime } from "@/lib/markets";
 import type { BookingWithDetails } from "@/app/booked/BookedList";
@@ -92,9 +92,12 @@ export function leadBadges(
 
   if (isBuilderListing(lead.brokerName)) badges.push({ kind: "builder", label: "Builder" });
 
-  if (agent?.relationshipStatus === "declined") {
-    const declined = agentDeclinedBadge(agent, declinedAddress);
-    if (declined) badges.push(declined);
+  if (agent?.relationshipStatus === "declined" || agent?.relationshipStatus === "ignored") {
+    const badge =
+      agent.relationshipStatus === "ignored"
+        ? agentIgnoredBadge(agent, declinedAddress)
+        : agentDeclinedBadge(agent, declinedAddress);
+    if (badge) badges.push(badge);
   }
 
   return badges;
@@ -208,6 +211,7 @@ const RELATIONSHIP_TAGS: Record<AgentRelationshipStatus, string> = {
   interested: "Interested",
   warm: "Warm",
   declined: "Declined",
+  ignored: "Ignored",
   // Cold has no relationship to report, so it borrows the one useful fact we
   // do have: who they work for.
   cold: "Realtor",

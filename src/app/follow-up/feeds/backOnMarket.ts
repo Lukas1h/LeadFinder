@@ -26,7 +26,7 @@ export async function getBackOnMarketGroup(): Promise<FeedGroup> {
   const known = await db
     .select()
     .from(agents)
-    .where(and(inArray(agents.relationshipStatus, ["regular", "worked_once", "interested", "warm"]), isNull(agents.declinedAt)));
+    .where(and(inArray(agents.relationshipStatus, ["regular", "worked_once", "interested", "warm"]), isNull(agents.declinedAt), isNull(agents.ignoredAt)));
   if (known.length === 0) return group;
   const now = Date.now();
 

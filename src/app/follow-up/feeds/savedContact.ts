@@ -42,7 +42,13 @@ export async function getSavedContactGroup(): Promise<FeedGroup> {
   const items: FeedItem[] = [];
   for (const agent of people) {
     const at = savedAt.get(agent.id)!.getTime();
-    if (agent.declinedAt || agent.relationshipStatus === "declined") continue;
+    if (
+      agent.declinedAt ||
+      agent.ignoredAt ||
+      agent.relationshipStatus === "declined" ||
+      agent.relationshipStatus === "ignored"
+    )
+      continue;
     if (agent.followUpSnoozedUntil && agent.followUpSnoozedUntil.getTime() > now) continue;
     // Quiet since the last touch either way, or since the save itself if there's been none.
     const quietSince = Math.max(at, history.lastTouch.get(agent.id) ?? 0);

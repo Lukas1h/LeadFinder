@@ -108,7 +108,7 @@ function sameDay(a: Date, b: Date): boolean {
  * or was "passed" on is put back at the top of the leads queue
  * (resurfacedAt) with a push notification — the relaunch-with-new-photos
  * pitch. Listings further along (contacted, quoted, booked, declined) just
- * get the cut recorded; so does anything whose agent is marked declined.
+ * get the cut recorded; so does anything whose agent is marked declined or ignored.
  */
 export async function applyPriceCutsToExisting(cuts: EmailPriceCut[]): Promise<number> {
   if (cuts.length === 0) return 0;
@@ -136,7 +136,7 @@ export async function applyPriceCutsToExisting(cuts: EmailPriceCut[]): Promise<n
       ? await db
           .select({ id: agents.id })
           .from(agents)
-          .where(and(inArray(agents.id, agentIds), eq(agents.relationshipStatus, "declined")))
+          .where(and(inArray(agents.id, agentIds), inArray(agents.relationshipStatus, ["declined", "ignored"])))
       : [];
   const declined = new Set(declinedAgents.map((a) => a.id));
   const cutByZpid = new Map(cuts.map((c) => [c.zpid, c]));

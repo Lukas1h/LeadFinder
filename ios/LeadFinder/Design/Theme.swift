@@ -46,6 +46,7 @@ extension LeadBadge {
         case "fewPhotos": Theme.red
         case "builder": Theme.tertiaryText
         case "declined": Theme.amber
+        case "ignored": Theme.amber
         // Photo score is tiered, so its colour needs the score. Without one,
         // muted is the safe middle of the ramp rather than a wrong bright end.
         case "photoScore": Theme.tertiaryText
@@ -95,6 +96,7 @@ extension String {
         case "worked_once": Theme.violet
         case "regular": Theme.emerald
         case "declined": Theme.red
+        case "ignored": Theme.red
         default: Theme.slate
         }
     }

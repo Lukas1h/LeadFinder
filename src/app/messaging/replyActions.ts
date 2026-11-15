@@ -258,7 +258,11 @@ async function recordReply(
 
   if (kind === "declined") {
     if (!CLIENT_STATUSES.includes(agent.relationshipStatus)) await setAgentRelationshipStatus(agent.id, "declined");
-  } else if (agent.relationshipStatus === "cold" || agent.relationshipStatus === "declined") {
+  } else if (
+    agent.relationshipStatus === "cold" ||
+    agent.relationshipStatus === "declined" ||
+    agent.relationshipStatus === "ignored"
+  ) {
     await setAgentRelationshipStatus(agent.id, "warm");
   }
 
@@ -566,7 +570,12 @@ export async function recordPortfolioLinkText(
 
   const now = new Date();
   if (latest) await recordReply(latest, agent, "samples", `Replied. Sent "${PORTFOLIO_PRESET_NAME}".`);
-  else if (agent.relationshipStatus === "cold" || agent.relationshipStatus === "declined") await setAgentRelationshipStatus(agent.id, "warm");
+  else if (
+    agent.relationshipStatus === "cold" ||
+    agent.relationshipStatus === "declined" ||
+    agent.relationshipStatus === "ignored"
+  )
+    await setAgentRelationshipStatus(agent.id, "warm");
   await db.update(agents).set({ lastContactedAt: now }).where(eq(agents.id, agent.id));
   const [sent] = await db
     .insert(messageSends)

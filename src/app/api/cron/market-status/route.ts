@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { matchBookingsToListings } from "@/lib/bookingListingMatch";
 import { refreshMarketStatuses } from "@/lib/marketStatus";
 import { recordMissingSquareFees } from "@/lib/squareInvoice";
+import { markIgnoredAgents } from "@/lib/coldFollowUp/ignore";
 
 // A couple of hundred Compass lookups, four at a time, a second or two each.
 export const maxDuration = 300;
@@ -26,5 +27,8 @@ export async function GET(request: NextRequest) {
   if (result.changed.length > 0) revalidatePath("/follow-up");
   // Riding along: Square fees that hadn't settled when their payment came in.
   const squareFees = await recordMissingSquareFees().catch(() => 0);
-  return NextResponse.json({ matched, squareFees, ...result });
+  // Also riding along: cold agents silent 3 days after their cold follow-up.
+  const ignored = await markIgnoredAgents().catch(() => [] as string[]);
+  if (ignored.length > 0) revalidatePath("/agents");
+  return NextResponse.json({ matched, squareFees, ignored: ignored.length, ...result });
 }

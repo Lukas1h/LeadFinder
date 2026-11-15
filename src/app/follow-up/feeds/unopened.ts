@@ -63,7 +63,13 @@ export async function getUnopenedLinkGroup(): Promise<FeedGroup> {
     const at = sentAt.get(agent.id)!.getTime();
     const slug = newestLink.get(agent.id);
     if (!slug || seen.has(agent.id)) continue;
-    if (agent.declinedAt || agent.relationshipStatus === "declined") continue;
+    if (
+      agent.declinedAt ||
+      agent.ignoredAt ||
+      agent.relationshipStatus === "declined" ||
+      agent.relationshipStatus === "ignored"
+    )
+      continue;
     if (agent.followUpSnoozedUntil && agent.followUpSnoozedUntil.getTime() > now) continue;
     // Anything from either side after the link (a minute's slack for the send's own record) means it's moved on.
     if ((history.lastTouch.get(agent.id) ?? 0) > at + 60_000) continue;

@@ -53,15 +53,20 @@ export async function bumpAgentRelationshipOnMilestone(
 
   const current = existing?.relationshipStatus ?? "cold";
   let target: AgentRelationshipStatus | null = null;
+  // An ignored agent who finally answers is back in, same as a cold one.
+  const fresh = current === "cold" || current === "ignored";
   if (milestone === "replied") {
-    if (current === "cold" || current === "warm") target = "interested";
+    if (fresh || current === "warm") target = "interested";
   } else {
-    if (current === "cold" || current === "warm" || current === "interested") target = "worked_once";
+    if (fresh || current === "warm" || current === "interested") target = "worked_once";
     else if (current === "worked_once") target = "regular";
   }
   if (!target) return;
 
-  await db.update(agents).set({ relationshipStatus: target }).where(eq(agents.id, agentId));
+  await db
+    .update(agents)
+    .set({ relationshipStatus: target, ...(current === "ignored" ? { ignoredAt: null } : {}) })
+    .where(eq(agents.id, agentId));
 }
 
 /**

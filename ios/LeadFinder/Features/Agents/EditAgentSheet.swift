@@ -22,6 +22,7 @@ struct EditAgentSheet: View {
     private static let statuses: [(value: String, label: String)] = [
         ("cold", "Cold"), ("warm", "Warm"), ("interested", "Interested"),
         ("worked_once", "Worked once"), ("regular", "Regular"), ("declined", "Declined"),
+        ("ignored", "Ignored"),
     ]
 
     init(agent: Agent, onDone: @escaping (Bool) -> Void) {

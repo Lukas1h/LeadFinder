@@ -98,7 +98,7 @@ export async function getDroneOffers(): Promise<DroneOfferGroup[]> {
   const known = await db
     .select()
     .from(agents)
-    .where(and(inArray(agents.relationshipStatus, ["interested", "warm"]), isNull(agents.declinedAt)));
+    .where(and(inArray(agents.relationshipStatus, ["interested", "warm"]), isNull(agents.declinedAt), isNull(agents.ignoredAt)));
   if (known.length === 0) return [];
   const ids = known.map((a) => a.id);
   // Read after the first query, not before: the clock can't be read ahead of

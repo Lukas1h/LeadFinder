@@ -12,6 +12,7 @@ export const RELATIONSHIP_LABELS: Record<AgentRelationshipStatus, string> = {
   worked_once: "Worked once",
   regular: "Regular",
   declined: "Declined",
+  ignored: "Ignored",
 };
 
 export const RELATIONSHIP_OPTIONS = Object.entries(RELATIONSHIP_LABELS) as [AgentRelationshipStatus, string][];

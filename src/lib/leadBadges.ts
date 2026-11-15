@@ -25,7 +25,7 @@ function shortMoney(n: number): string {
 }
 
 export interface BadgeText {
-  kind: "new" | "comingSoon" | "priceCut" | "fewPhotos" | "photoScore" | "unscored" | "builder" | "declined" | "officeClient";
+  kind: "new" | "comingSoon" | "priceCut" | "fewPhotos" | "photoScore" | "unscored" | "builder" | "declined" | "ignored" | "officeClient";
   label: string;
   /** Tooltip text, where the badge has one. */
   detail?: string;
@@ -96,6 +96,20 @@ export function agentDeclinedBadge(
     kind: "declined",
     label: "Agent declined",
     detail: `${agent.name ?? "This agent"} has marked their status as declined${
+      duplicateAddress ? ` · previously on ${duplicateAddress}` : ""
+    }`,
+  };
+}
+
+/** Null unless this agent is actually ignored — the card only shows it then. */
+export function agentIgnoredBadge(
+  agent: Pick<Agent, "name">,
+  duplicateAddress?: string | null
+): BadgeText | null {
+  return {
+    kind: "ignored",
+    label: "Ignored",
+    detail: `${agent.name ?? "This agent"} never replied (ignored)${
       duplicateAddress ? ` · previously on ${duplicateAddress}` : ""
     }`,
   };

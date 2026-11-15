@@ -33,7 +33,7 @@ export async function getPhotoTouchUpGroups(): Promise<FeedGroup[]> {
   const known = await db
     .select()
     .from(agents)
-    .where(and(inArray(agents.relationshipStatus, ["interested", "warm"]), isNull(agents.declinedAt)));
+    .where(and(inArray(agents.relationshipStatus, ["interested", "warm"]), isNull(agents.declinedAt), isNull(agents.ignoredAt)));
   if (known.length === 0) return [];
   const ids = known.map((a) => a.id);
   // After the first query: the clock can't be read ahead of request-time data while prerendering.

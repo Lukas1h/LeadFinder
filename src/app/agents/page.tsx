@@ -29,7 +29,7 @@ async function AgentsContent() {
   // from the lead scrapers) and is the entire reason this page used to be
   // slow — fetching and shipping every one of them just to render 15 was
   // the real cost, not the render itself. Every other bucket (any real
-  // relationship, or declined) is small and fetched in full; "cold" gets only
+  // relationship, declined or ignored) is small and fetched in full; "cold" gets only
   // its most recent page, plus a count for the "View all" button — the rest
   // loads on demand (see getAllColdAgents).
   const isColdAndFresh = eq(agents.relationshipStatus, "cold");

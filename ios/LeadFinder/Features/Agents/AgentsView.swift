@@ -198,6 +198,7 @@ enum AgentFilter: String, CaseIterable, Identifiable {
     case interested
     case warm
     case declined
+    case ignored
     case cold
 
     var id: String { rawValue }
@@ -209,6 +210,7 @@ enum AgentFilter: String, CaseIterable, Identifiable {
         case .interested: "Interested"
         case .warm: "Warm"
         case .declined: "Declined"
+        case .ignored: "Ignored"
         case .cold: "Cold"
         }
     }

@@ -71,7 +71,7 @@ export async function updateAgentRelationshipStatus(id: string, status: AgentRel
   revalidatePath("/agents");
 }
 
-/** Clears declined status — moves an agent back to cold. */
+/** Clears declined/ignored status — moves an agent back to cold. */
 export async function reconnectAgent(id: string) {
   await setAgentRelationshipStatus(id, "cold");
   revalidatePath("/agents");
@@ -208,7 +208,7 @@ export async function updateAgentContactInfo(
     .set({ name: input.name.trim() ? normalizeName(input.name) : null, phone, email })
     .where(eq(agents.id, id));
 
-  // Split from the contact write above so the declinedAt bookkeeping stays in
+  // Split from the contact write above so the declinedAt/ignoredAt bookkeeping stays in
   // one place (setAgentRelationshipStatus) rather than being a fourth field
   // reimplemented here — which is how the two drifted apart before.
   await setAgentRelationshipStatus(id, input.relationshipStatus);
@@ -453,7 +453,7 @@ export async function getAllColdAgents(): Promise<Agent[]> {
   return db
     .select()
     .from(agents)
-    .where(and(eq(agents.relationshipStatus, "cold"), isNull(agents.declinedAt)))
+    .where(and(eq(agents.relationshipStatus, "cold"), isNull(agents.declinedAt), isNull(agents.ignoredAt)))
     .orderBy(desc(agents.createdAt));
 }
 

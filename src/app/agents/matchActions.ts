@@ -14,6 +14,7 @@ export interface AgentMatchSummary {
   lastContactedAt: Date | null;
   relationshipStatus: string;
   declinedAt: Date | null;
+  ignoredAt: Date | null;
 }
 
 export interface AgentMatchResult {
@@ -29,6 +30,7 @@ const SELECT_COLUMNS = {
   lastContactedAt: agents.lastContactedAt,
   relationshipStatus: agents.relationshipStatus,
   declinedAt: agents.declinedAt,
+  ignoredAt: agents.ignoredAt,
 };
 
 /**

@@ -65,6 +65,7 @@ const RELATIONSHIP_GUIDANCE: Record<AgentRelationshipStatus, string> = {
   worked_once: "Done one job with this agent already — write casually, like texting someone who already knows the work.",
   regular: "Regular, established client — keep it brief and low-friction, like texting a colleague about a new listing.",
   declined: "This agent has declined — typically not contacted unless reconnecting after 30+ days.",
+  ignored: "This agent never replied to the first text or a follow-up — a dead end for outreach unless they get back in touch.",
 };
 
 // Confirmed with Lukas: he doesn't re-introduce himself to agents who

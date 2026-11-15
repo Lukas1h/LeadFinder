@@ -136,7 +136,7 @@ floors.
 Unlikely (`isLeadUnlikely` in `src/lib/leadSections.ts`): every lot/land
 listing (`home_type` `LOT`, for now, Lukas 2026-11-13), under the price
 floor, no agent, a builder, Redfin (books its own media; not even synced), a
-declined agent, and Berkshire Hathaway HomeServices NW Real Estate listings in
+declined or ignored agent, and Berkshire Hathaway HomeServices NW Real Estate listings in
 the Portland market (`hasAssignedMediaInMarket`: that office assigns its agents
 a photographer, learned from Tim Sellers 2026-11-12; its Eugene/Florence
 listings and the Netarts office are unaffected).
@@ -200,7 +200,36 @@ Portland outreach is on top of the home markets, never instead of them.
 (`homes_listings_per_year`, `homes_avg_sale_price`).
 
 `relationship_status` is one of `cold → warm → interested → worked_once →
-regular`, or `declined`. It is bumped automatically by replies and bookings.
+regular`, or `declined` / `ignored`. It is bumped automatically by replies and bookings.
+
+`ignored` (since 2026-11-15, with `ignored_at`): a cold agent who never answered
+the first text nor the one cold follow-up after it. Set nightly by
+`markIgnoredAgents` (`src/lib/coldFollowUp/ignore.ts`, run from the
+market-status cron): at least `MAX_COLD_FOLLOW_UPS` (1) outbound interaction
+from a `cold_*` Follow Up feed, the last one 3+ days ago, no inbound ever. It
+behaves like `declined` everywhere outreach is concerned (Leads Unlikely, every
+Follow Up feed, office intros, price-cut resurfacing; its own Agents tab
+section), but it isn't a no: a reply moves them to warm/interested and a
+booking to worked_once, clearing `ignored_at`. Before the status existed Lukas
+marked these as declined with an "Ignored…" note; those 29 were moved by
+`scripts/backfill-ignored-agents.mts`. "Ignoring for now." (his choice, not
+theirs) stayed declined.
+
+**Cold follow-ups (in progress, 2026-11-15).** Texted-before cold agents who
+never replied get one more text, from a separate Cold group on the Follow Up
+page (not built yet). `src/lib/coldFollowUp/`: `pool.ts` (`loadColdPool`:
+cold, texted, never replied, quiet `MIN_GAP_DAYS` 21, fewer than
+`MAX_COLD_FOLLOW_UPS` 1 cold follow-ups; `samplesAskEligible` = first texted
+before 2026-10-05), `triggers.ts` (`getColdFollowUpCandidates`, one per agent,
+strongest first: `cold_near_shoot` (nearShoots.ts radius), `cold_in_area` (a
+job shot in the last 10 days within 15 miles, never the local market),
+`cold_new_listing` (listed since the last text, within 10 days); honours
+`follow_up_passes`), `segment.ts` (`loadAgentSegments`: recency-weighted
+listing photo score, half-life 90 days; >= 7 with 2+ scored listings =
+`has_photographer`; `HIGH_END_PRICE` is a placeholder for Lukas). Dry runs:
+`scripts/cold-followup-dryrun.mts`, `scripts/cold-segment-check.mts`. Cold
+follow-up texts must not count toward the texting quota (`goal.ts`) and get
+their own stats row, since their value per text is unknown.
 
 Matching people: match on phone or email first. Names repeat (there are 60+
 Lisas), and one person can have a phone-only and an email-only record.

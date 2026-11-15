@@ -207,7 +207,7 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   }
 
   // Same rules as the Leads page's "Same office" group: a real agent, not the
-  // client or someone who declined, near where the client works.
+  // client or someone who declined or never replied, near where the client works.
   const [offices, [listingAgent]] = await Promise.all([
     clientOffices(),
     listing.agentId
@@ -215,7 +215,13 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       : Promise.resolve([]),
   ]);
   const office = listingAgent ? officeClientFor(offices, listing.brokerName, [listing.city]) : null;
-  const officeClient = office && office.agentId !== listingAgent?.id && listingAgent?.status !== "declined" ? office : null;
+  const officeClient =
+    office &&
+    office.agentId !== listingAgent?.id &&
+    listingAgent?.status !== "declined" &&
+    listingAgent?.status !== "ignored"
+      ? office
+      : null;
 
   // An office template is a false statement for anyone else, so it's only
   // offered when it fits. One written for this very office replaces the general one.

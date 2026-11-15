@@ -158,7 +158,7 @@ export function isRecentlyTexted(lastTextedAt: Date | null | undefined): boolean
   return age != null && age < LEAD_RECENT_CONTACT_DAYS;
 }
 
-/** Under the floor, unreachable, a builder, a brokerage that handles its own media, or the agent already turned us down. */
+/** Under the floor, unreachable, a builder, a brokerage that handles its own media, or the agent already turned us down / never replied. */
 export function isLeadUnlikely(listing: LeadSectionInput): boolean {
   // All land ("LOT") is Unlikely for now (Lukas, 2026-11-13), whatever the price.
   if (listing.homeType === "LOT") return true;
@@ -167,7 +167,9 @@ export function isLeadUnlikely(listing: LeadSectionInput): boolean {
   if (isBuilderListing(listing.brokerName)) return true;
   if (hasInHouseMedia(listing.brokerName)) return true;
   if (hasAssignedMediaInMarket(listing)) return true;
-  return listing.relationshipStatus === "declined";
+  // "ignored" is a dead end for outreach exactly like "declined" (they never
+  // answered either text), but it is not a no: a reply still warms them up.
+  return listing.relationshipStatus === "declined" || listing.relationshipStatus === "ignored";
 }
 
 /**

@@ -9,7 +9,7 @@ import { RELATIONSHIP_LABELS } from "./agents/relationshipLabels";
 // The wording lives in lib/leadBadges.ts (a plain module) so the iPhone app's
 // JSON API can render the same labels server-side — a value can't be imported
 // out of a "use client" file — while this file keeps the presentation.
-import { officeClientBadge, agentDeclinedBadge, duplicateAgentBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, unscoredBadge } from "@/lib/leadBadges";
+import { officeClientBadge, agentDeclinedBadge, agentIgnoredBadge, duplicateAgentBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, unscoredBadge } from "@/lib/leadBadges";
 
 export function NewBadge() {
   return (
@@ -214,6 +214,26 @@ export function AgentDeclinedBadge({
   );
 }
 
+export function AgentIgnoredBadge({
+  agent,
+  duplicateAddress,
+}: {
+  agent: Agent;
+  duplicateAddress?: string | null | undefined;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge className="bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900">
+          <TriangleAlert />
+          Agent ignored
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{agentIgnoredBadge(agent, duplicateAddress)?.detail}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 const RELATIONSHIP_BADGE_ROSE =
   "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-900";
 
@@ -227,7 +247,7 @@ const RELATIONSHIP_BADGE_ROSE =
 // warmth ramp — rose for warm, amber as they get interested, violet once
 // there's history, emerald for a regular — while the two ends stay out of the
 // ramp: slate for cold, which is the neutral baseline and the overwhelming
-// majority of agents, and red for declined, the one genuinely negative state.
+// majority of agents, and red for the two dead ends, declined and ignored.
 // Every one follows the bg-{hue}-50 / text-{hue}-700 / border-{hue}-200 plus
 // dark:-950 / -400 / -900 shape the rest of this file uses.
 const RELATIONSHIP_BADGE_STYLES: Record<AgentRelationshipStatus, string> = {
@@ -237,6 +257,7 @@ const RELATIONSHIP_BADGE_STYLES: Record<AgentRelationshipStatus, string> = {
   worked_once: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950 dark:text-violet-400 dark:border-violet-900",
   regular: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-900",
   declined: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900",
+  ignored: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900",
 };
 
 function relationshipHint(status: AgentRelationshipStatus, agentName: string | null | undefined): string {
@@ -245,6 +266,7 @@ function relationshipHint(status: AgentRelationshipStatus, agentName: string | n
     return `You already have a relationship with ${who} — ${RELATIONSHIP_LABELS[status].toLowerCase()} status`;
   }
   if (status === "declined") return `${who} has marked their status as declined`;
+  if (status === "ignored") return `${who} never replied (ignored)`;
   return `${who} hasn't been contacted yet — cold status`;
 }
 
@@ -270,8 +292,8 @@ export function RelationshipBadge({
 }
 
 // The warm-agent mark: shown on a listing card whenever the attached agent has
-// a relationship status that isn't cold or declined (see WARM_AGENT_STATUSES in
-// lib/pipeline.ts). Routed through RelationshipBadge so the listing cards can't
+// a relationship status that isn't cold, declined or ignored (see
+// WARM_AGENT_STATUSES in lib/pipeline.ts). Routed through RelationshipBadge so the listing cards can't
 // drift from the agent row or the agent dialog. Renders the same
 // RELATIONSHIP_LABELS wording as the Agents tab so the two never disagree about
 // what each status means.

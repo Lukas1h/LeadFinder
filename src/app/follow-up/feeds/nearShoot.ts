@@ -38,7 +38,8 @@ export async function getNearShootGroup(): Promise<FeedGroup> {
     .where(
       and(
         inArray(agents.relationshipStatus, ["interested", "warm"]),
-        isNull(agents.declinedAt)
+        isNull(agents.declinedAt),
+        isNull(agents.ignoredAt)
       )
     );
   if (known.length === 0) return group;

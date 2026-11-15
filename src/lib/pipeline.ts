@@ -2,8 +2,9 @@ import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { daysSince } from "@/lib/format";
 
 // Statuses that mean "we already have a relationship" — the opposite of cold
-// (never in touch) and declined (said no). Everything warm from "warm" up to
-// "regular", since a proven client is simply a warmer case of the same thing.
+// (never in touch) and of the two dead ends, declined (said no) and ignored
+// (never answered). Everything warm from "warm" up to "regular", since a proven
+// client is simply a warmer case of the same thing.
 // Drives the warm-agent badge on listings and the warm-agent push notification
 // on new listings (see badges.tsx and push.ts).
 export const WARM_AGENT_STATUSES: ReadonlySet<AgentRelationshipStatus> = new Set([
@@ -243,7 +244,7 @@ export function isAgentDeclined(
   agentByName?: Map<string, Agent>
 ): boolean {
   const agent = findAttachedAgent(lead, agentByPhone, agentByName);
-  return agent?.relationshipStatus === "declined";
+  return agent?.relationshipStatus === "declined" || agent?.relationshipStatus === "ignored";
 }
 
 /**

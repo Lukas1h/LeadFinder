@@ -51,6 +51,7 @@ export async function homesRefreshDue(limit: number): Promise<Agent[]> {
       and(
         inArray(agents.relationshipStatus, ["regular", "worked_once", "interested", "warm"]),
         isNull(agents.declinedAt),
+        isNull(agents.ignoredAt),
         isNotNull(agents.name),
         // A capture from the userscript counts as a check.
         or(
