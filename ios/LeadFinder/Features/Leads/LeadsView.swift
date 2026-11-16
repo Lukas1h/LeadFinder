@@ -194,7 +194,25 @@ struct LeadsView: View {
             .init(key: "central_coast", label: "Central Coast", count: 0),
         ]
         let tabs = markets ?? fallback
-        return HStack(spacing: 4) {
+        // Equal-width segments when every label fits; otherwise (narrow phone,
+        // more markets) a scrolling row of intrinsic-width segments.
+        return ViewThatFits(in: .horizontal) {
+            marketTabRow(tabs, showCounts: markets != nil, equalWidth: true)
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    marketTabRow(tabs, showCounts: markets != nil, equalWidth: false)
+                }
+                .onAppear { proxy.scrollTo(appState.leadsMarket, anchor: .center) }
+                .onChange(of: appState.leadsMarket) { _, key in
+                    proxy.scrollTo(key, anchor: .center)
+                }
+            }
+        }
+    }
+
+    private func marketTabRow(_ tabs: [LeadsResponse.Market], showCounts: Bool, equalWidth: Bool) -> some View {
+        let layout = equalWidth ? AnyLayout(EqualWidthHStack(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
+        return layout {
             ForEach(tabs) { market in
                 let selected = market.key == appState.leadsMarket
                 Button {
@@ -204,34 +222,38 @@ struct LeadsView: View {
                     appState.leadsMarket = market.key
                     Task { await appState.leads.load() }
                 } label: {
-                    HStack(spacing: 5) {
+                    VStack(spacing: 1) {
                         Text(market.label)
-                        if markets != nil {
-                            Text("\(market.count)")
-                                .font(.caption.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(selected ? Theme.secondaryText : Theme.tertiaryText)
-                        }
-                        if let fresh = market.newAgents, fresh > 0 {
-                            // Brand-new agents (first seen today) in this market.
-                            Text("+\(fresh)")
-                                .font(.caption2.weight(.bold).monospacedDigit())
-                                .foregroundStyle(Theme.accent)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Theme.accent.opacity(0.16), in: Capsule())
-                                .accessibilityLabel("\(fresh) new agents")
+                            .font(.footnote.weight(selected ? .semibold : .medium))
+                        if showCounts {
+                            HStack(spacing: 4) {
+                                Text("\(market.count)")
+                                    .font(.caption.weight(.semibold).monospacedDigit())
+                                    .foregroundStyle(selected ? Theme.secondaryText : Theme.tertiaryText)
+                                if let fresh = market.newAgents, fresh > 0 {
+                                    // Brand-new agents (first seen today) in this market.
+                                    Text("+\(fresh)")
+                                        .font(.caption2.weight(.bold).monospacedDigit())
+                                        .foregroundStyle(Theme.accent)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1)
+                                        .background(Theme.accent.opacity(0.16), in: Capsule())
+                                        .accessibilityLabel("\(fresh) new agents")
+                                }
+                            }
                         }
                     }
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .font(.subheadline.weight(selected ? .semibold : .medium))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
+                    .fixedSize()
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: equalWidth ? .infinity : nil)
+                    .padding(.vertical, 6)
                     .background(selected ? Theme.cardRaised : Color.clear, in: RoundedRectangle(cornerRadius: 8))
                     .foregroundStyle(selected ? Theme.primaryText : Theme.secondaryText)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .id(market.key)
             }
         }
         .padding(3)
@@ -323,6 +345,39 @@ struct LeadsView: View {
 /// the card rather than leaving a row that no longer exists.
 extension Notification.Name {
     static let leadsDidChange = Notification.Name("leadsDidChange")
+}
+
+/// An HStack whose children all get the widest child's width. Reports that
+/// real width (widest × count), so `ViewThatFits` can tell when the market
+/// tabs no longer fit side by side and fall back to scrolling.
+private struct EqualWidthHStack: Layout {
+    var spacing: CGFloat = 4
+
+    private func maxSize(_ subviews: Subviews) -> CGSize {
+        subviews.reduce(.zero) { acc, view in
+            let s = view.sizeThatFits(.unspecified)
+            return CGSize(width: max(acc.width, s.width), height: max(acc.height, s.height))
+        }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard !subviews.isEmpty else { return .zero }
+        let item = maxSize(subviews)
+        let gaps = spacing * CGFloat(subviews.count - 1)
+        let needed = item.width * CGFloat(subviews.count) + gaps
+        return CGSize(width: max(needed, proposal.width ?? needed), height: item.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard !subviews.isEmpty else { return }
+        let gaps = spacing * CGFloat(subviews.count - 1)
+        let width = (bounds.width - gaps) / CGFloat(subviews.count)
+        var x = bounds.minX
+        for view in subviews {
+            view.place(at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(width: width, height: bounds.height))
+            x += width + spacing
+        }
+    }
 }
 
 /// Pins content below the navigation bar. On iOS 26+ a `safeAreaBar`, which
