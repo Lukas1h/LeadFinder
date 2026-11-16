@@ -184,6 +184,8 @@ export function bookingJson(b: BookingWithDetails & { showcase?: boolean }) {
     invoiceNumber: b.invoiceNumber,
     invoicedAt: b.invoicedAt,
     dropboxFolderLink: b.dropboxFolderLink,
+    // The subcontracted shooter's raw-upload folder (lib/mediaUploads.ts); Flambient pulls it as an import source.
+    dropboxUploadLink: b.dropboxUploadLink ?? null,
     galleryUrl: b.galleryToken ? `${GALLERY_ORIGIN}/${b.galleryToken}` : null,
     // A shoot worth showing other agents: cold follow-ups pitch it and the
     // portfolio page built for the reply leads with it (bookings.showcase).
