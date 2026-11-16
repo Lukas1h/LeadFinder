@@ -73,13 +73,14 @@ final class AppState {
     let leadsLocal = Resource<LeadsResponse>(path: "api/app/v1/leads?market=local", key: .leads)
     let leadsRegional = Resource<LeadsResponse>(path: "api/app/v1/leads?market=regional", key: .leadsRegional)
     let leadsPortland = Resource<LeadsResponse>(path: "api/app/v1/leads?market=portland", key: .leadsPortland)
+    let leadsCentralCoast = Resource<LeadsResponse>(path: "api/app/v1/leads?market=central_coast", key: .leadsCentralCoast)
     var leadsMarket: String = UserDefaults.standard.string(forKey: "leadsMarket") ?? "local" {
         didSet { UserDefaults.standard.set(leadsMarket, forKey: "leadsMarket") }
     }
     /// Loads the markets not on screen (cached first, then the network), so a
     /// tab switch has cards to show immediately.
     func preloadLeadMarkets() async {
-        for resource in [leadsLocal, leadsRegional, leadsPortland] where resource !== leads {
+        for resource in [leadsLocal, leadsRegional, leadsPortland, leadsCentralCoast] where resource !== leads {
             await resource.load()
         }
     }
@@ -88,6 +89,7 @@ final class AppState {
         switch leadsMarket {
         case "regional": leadsRegional
         case "portland": leadsPortland
+        case "central_coast": leadsCentralCoast
         default: leadsLocal
         }
     }

@@ -175,19 +175,23 @@ struct LeadsView: View {
         }
     }
 
-    /// Local | Regional | Portland, as on the web (lib/markets.ts). Each
-    /// market is its own board, sorted by nearness to who shoots it: Winston
-    /// for local and regional, the Oregon City photographer for Portland.
+    /// Local | Regional | each shooter market (Portland, Central Coast), as on
+    /// the web (lib/markets.ts; the server's `markets` list drives the tabs).
+    /// Each market is its own board, sorted by nearness to who shoots it:
+    /// Winston for local and regional, the subcontracted photographer's base
+    /// for a shooter market (Oregon City for Portland).
     private var marketTabs: some View {
         // Counts are the same on every market's response; use whichever is loaded.
         let markets = appState.leads.value?.markets
             ?? appState.leadsLocal.value?.markets
             ?? appState.leadsRegional.value?.markets
             ?? appState.leadsPortland.value?.markets
+            ?? appState.leadsCentralCoast.value?.markets
         let fallback: [LeadsResponse.Market] = [
             .init(key: "local", label: "Local", count: 0),
             .init(key: "regional", label: "Regional", count: 0),
             .init(key: "portland", label: "Portland", count: 0),
+            .init(key: "central_coast", label: "Central Coast", count: 0),
         ]
         let tabs = markets ?? fallback
         return HStack(spacing: 4) {

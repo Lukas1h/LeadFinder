@@ -1,7 +1,7 @@
 "use server";
 
 import { cleanPortfolioPrices } from "@/lib/portfolioPrices";
-import { marketFor, PORTLAND_AREA } from "@/lib/markets";
+import { marketFor, shooterMarket } from "@/lib/markets";
 import { and, asc, count, desc, eq, ilike, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -140,10 +140,11 @@ export async function getPortfolioPrefill(agentId: string): Promise<PortfolioPre
   if (!agent) return null;
 
   const city0 = (await agentArea(agent.id)) ?? agent.homeCity?.trim() ?? "";
-  // Portland-market agents get "the Portland area", not their suburb
-  // ("Wilsonville"): the photographer covers the whole metro. The template is
-  // still matched on the city itself.
-  const area = marketFor({ city: city0 }) === "portland" ? PORTLAND_AREA : city0;
+  // Shooter-market agents get the market's portfolioArea ("the Portland
+  // area"), not their suburb ("Wilsonville"): the photographer covers the
+  // whole market. The template is still matched on the city itself.
+  const shooter = shooterMarket(marketFor({ city: city0 }));
+  const area = shooter ? shooter.portfolioArea : city0;
   const template = await templateForArea(city0);
   const jobs = await finishedJobs();
   const city = city0.toLowerCase();

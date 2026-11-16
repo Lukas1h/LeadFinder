@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { portfolioLinks } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { isPortlandArea } from "@/lib/agentPage";
+import { shooterMarketForArea } from "@/lib/markets";
 import { lukasVcard } from "@/lib/agentVcard";
 
 /**
@@ -14,7 +14,7 @@ import { lukasVcard } from "@/lib/agentVcard";
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const [link] = await db.select({ content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
-  return new Response(lukasVcard(isPortlandArea(link?.content?.area)), {
+  return new Response(lukasVcard(shooterMarketForArea(link?.content?.area)), {
     headers: {
       "Content-Type": "text/vcard; charset=utf-8",
       "Content-Disposition": 'inline; filename="Lukas Hahn Photographer.vcf"',

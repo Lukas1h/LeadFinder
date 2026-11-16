@@ -165,33 +165,52 @@ whose nearest listing is more than `FAR_DRIVE_MINUTES` (120) from Winston
 (`estimateDriveMinutes`) get pulled into their own section, just above Texted
 before, nearest first (`LeadsBoard.far` in `src/app/leads-data.ts`; the
 iPhone API sends it as section `far`). It's a display grouping only: the
-stored `lead_section` and template targeting are unchanged. Portland, cities
-missing from the drive table, Agents you know and Near your shoots never
+stored `lead_section` and template targeting are unchanged. Shooter markets
+(Portland, Central Coast), cities missing from the drive table, Agents you know and Near your shoots never
 move there, and Texted before / Unlikely stay put (hard rule 5). Eugene and
 Medford are 90 min, Ashland and Corvallis 120, so those stay in place.
 Texted before is sorted nearest first (the group's closest listing: drive
-minutes from Winston, miles from Oregon City on the Portland tab), then by
+minutes from Winston, miles from the photographer's base on a shooter-market
+tab), then by
 who has waited longest since the last text (Lukas, 2026-11-14).
 
 **Markets** (`src/lib/markets.ts`, since 2026-11-12). Every listing is in one
-of three markets, computed from its city/state (never stored):
+market, computed from its city/state (never stored):
 `local` (within 45 min of Winston: Roseburg, Sutherlin, Glide, Myrtle Creek…),
+`regional` (everything else he drives to himself, Eugene to Salem, Medford,
+Ashland, the rest of the coast, Bend, plus any city missing from the drive
+table), and the **shooter markets**, areas shot by a subcontracted
+photographer while Lukas edits. Each is one entry in `SHOOTER_MARKETS`
+(key, label, shooters, base town + coordinates, city → miles table, optional
+states and area codes, point fallback box, nearness bands, drive-time
+formula, `{{area}}` phrase, portfolio area, page footer, vCard, `jobsPerWeek`);
+adding a region is one more entry there plus its data (below). Today:
 `portland` (Multnomah, Washington, Clackamas, Yamhill and Columbia counties
-plus Clark County WA; shot by a subcontracted photographer based in Oregon
-City, Lukas edits), and `regional` (everything else he drives to himself,
-Eugene to Salem, Medford, Ashland, the coast, Bend, plus any city missing from
-the drive table). Salem and the rest of Marion County are regional. The Leads
-page has a tab per market (`/?market=local|regional|portland`, Local by
-default); `getLeadsBoard({ market })` filters the board and always returns
-`marketCounts` for all three. The Portland tab is sorted purely by miles from
-Oregon City (`milesFromOregonCity`: geocode, else a city table; unknown last),
-with no coming-soon or area-code steps; the other tabs keep the drive bands
-from Winston. Cards' drive time comes from `listingDriveTime()`: from Winston
-for local/regional, "~25 min from Oregon City" for Portland.
+plus Clark County WA; Elijah and Chris, based from Oregon City) and
+`central_coast` (2026-11-16: Lincoln County, Lincoln City to Yachats and
+inland to Siletz/Eddyville; Christian, based from Newport; Florence and the
+coast north of Cascade Head stay regional). Salem and the rest of Marion
+County are regional. The Leads page has a tab per market
+(`/?market=local|regional|portland|central_coast`, Local by default);
+`getLeadsBoard({ market })` filters the board and always returns
+`marketCounts` for every market. A shooter-market tab is sorted purely by
+miles from its base (`milesFromBase`: geocode, else the city table; unknown
+last), with no coming-soon or area-code steps; local/regional keep the drive
+bands from Winston. Cards' drive time comes from `listingDriveTime()`: from
+Winston for local/regional, "~25 min from Oregon City" / "~35 min from
+Newport" for shooter markets.
+
+A new region's data, besides the `SHOOTER_MARKETS` entry: a `search_sources`
+row over it with `coming_soon_only` false (Central Coast: "Central Coast
+(Lincoln County, all listings)", $375k+), market variants of the outreach
+templates (copies of the Portland wording ones, `{{area}}` does the rest),
+a portfolio template whose towns are the market's cities plus its
+`portfolioArea`, and the photographer on `shooters`. The iPhone app needs a
+`CacheKey` + `Resource` per market (`AppState.swift`) for its tab to load.
 Sections, templates and hard rule 5 are the same in every market. The iPhone
 API takes `?market=` too (left out = all markets, for older builds) and
-returns `markets` (key, label, count, `newAgents`). Each tab shows a small "+N" when brand-new agents came in today (`newAgentCounts`: agents whose `created_at` is today, Pacific, placed by the market of their first listing). Portland jobs pay Lukas less, so
-Portland outreach is on top of the home markets, never instead of them.
+returns `markets` (key, label, count, `newAgents`). Each tab shows a small "+N" when brand-new agents came in today (`newAgentCounts`: agents whose `created_at` is today, Pacific, placed by the market of their first listing). Shooter-market jobs pay Lukas less, so
+their outreach is on top of the home markets, never instead of them.
 
 ### Agents
 
@@ -285,8 +304,8 @@ Lisas), and one person can have a phone-only and an email-only record.
 ### Messages and contact history
 
 - `message_presets` / `message_preset_variants`: text and email templates,
-  A/B variants with `enabled`. A variant's `market` (`local` / `regional` /
-  `portland`, null = regular wording) limits it to that market's listings: a
+  A/B variants with `enabled`. A variant's `market` (any `MARKET_ORDER` key:
+  `local` / `regional` / `portland` / `central_coast`, null = regular wording) limits it to that market's listings: a
   listing in a market whose template has enabled variants of its own rotates
   through only those (`variantsForMarket`, `src/lib/markets.ts`), everyone else
   gets the regular ones. Email (with a listing) and reply quick actions do the
@@ -303,7 +322,10 @@ Lisas), and one person can have a phone-only and an email-only record.
   Portland variants (2026-11-12): Backup Option "Portland A–D" and Bad Photos
   "Portland A" ("I do real estate photography", no "some"; Bad Photos ends
   "I'd love to get it shot as soon as possible for you!"). Set on the variant
-  form's Market field. Placeholders include `{{firstName}}`,
+  form's Market field. Central Coast variants (2026-11-16): the same wording
+  as "Central Coast A–D" / "Central Coast A" on Backup Option, Bad Photos and
+  Coming Soon; no Central Coast pricing variants or sheet, so its agents get
+  the regular $300 / $400 prices. Placeholders include `{{firstName}}`,
   `{{area}}`, `{{city}}`, `{{recentWork}}`, `{{portfolioLink}}` (`src/lib/messageTemplate.ts`;
   only in the "Portfolio link" template's second text). `{{area}}` uses the
   listing's city, else the agent's `home_city` in reply quick actions; with
@@ -405,7 +427,8 @@ Flambient (the Mac photo app) makes galleries with `POST /api/app/v1/bookings/[i
 sends nothing. A different folder already on the booking answers 409 `{ existing }` unless `replace`.
 The folder must be in the same Dropbox account as `DROPBOX_REFRESH_TOKEN` (thumbnails load by path).
 
-Shooters (subcontracted photographers, e.g. Portland jobs; Lukas still
+Shooters (subcontracted photographers for the shooter markets: Elijah and
+Chris in Portland, Christian on the Central Coast; Lukas still
 edits): `shooters` (`name` unique, `phone`, `email`, `notes`) and on the
 booking `shooter_id`, `shooter_pay` (whole dollars) and `shooter_expense_id`.
 The shooter's `phone` is entered in the booking dialog's shooter form (the
@@ -492,17 +515,21 @@ and Follow up row (the same stats across all tabs, each agent once), served
 as `funnel` on `GET /api/app/v1/messages`, plus `byMarket` (the same two
 rows per market; an agent's market is that of the listing their first cold
 text was about, else `agentMarkets()` in `src/lib/agentMarket.ts`: latest
-listing, then `home_city`, then a 503/971/360 number = Portland). The daily texting target (`DAILY_TARGET` in
+listing, then `home_city`, then the phone's area code against each shooter
+market's `areaCodes`: 503/971/360 = Portland; the Central Coast has none,
+541 being all of southern Oregon). The daily texting target (`DAILY_TARGET` in
 `src/app/follow-up/data.ts`) moves with live reply rates on purpose.
 
 The texting quota (`src/lib/goal.ts`, the Messages goal card and Home's goal
-section; `goal` on `GET /api/app/v1/messages`) is two quotas, `quotas.home`
-and `quotas.portland`. Home (Local + Regional) works the $ `MONTHLY_GOAL`
-back into texts using only home bookings and home outreach texts; the
-top-level `thisWeek` / `today` / `plan` are the home numbers. Portland is on
-top of it, worked back from `PORTLAND_JOBS_PER_WEEK` (2) with Portland's own
-reply rate once it has 50+ sends in 28 days. Sends are placed by market the
-same way as the funnel split, so Portland texts never count toward home.
+section; `goal` on `GET /api/app/v1/messages`) is `quotas.home` plus one
+quota per shooter market in `quotas.markets` (each with `key`;
+`quotas.portland` is kept for older iPhone builds). Home (Local + Regional)
+works the $ `MONTHLY_GOAL` back into texts using only home bookings and home
+outreach texts; the top-level `thisWeek` / `today` / `plan` are the home
+numbers. Each shooter market is on top of it, worked back from its
+`jobsPerWeek` (Portland 2, Central Coast 1 to start) with its own reply rate
+once it has 50+ sends in 28 days. Sends are placed by market the same way as
+the funnel split, so shooter-market texts never count toward home.
 
 ### Funnel and portfolio pages
 
@@ -548,10 +575,12 @@ next listing comes up (usually 1–4 weeks after first contact).
   staging +$50, twilight +$50, video $400, photo+video+drone $650; empty in
   the editor = default). Edited on `/portfolio-links/settings`. When a picked
   agent's area matches a town, `getPortfolioPrefill` returns it as `template`
-  and its listings replace the nearest jobs. A Portland-market agent's area
-  prefills as "the Portland area" (not their suburb), and the "Portland
+  and its listings replace the nearest jobs. A shooter-market agent's area
+  prefills as the market's `portfolioArea` ("the Portland area", "the central
+  Oregon coast"), not their town. The "Central Coast (Lincoln County)"
+  template (2026-11-16) copies the Eugene one, default prices. The "Portland
   metro" template (2026-11-12; towns = every Portland-market city from
-  `portlandTowns()`, Vancouver-area WA cities and "the portland area") starts
+  `shooterMarketTowns("portland")`, Vancouver-area WA cities and "the portland area") starts
   from the Mid-Valley one with Tour of Homes off. `content.ogImage` on a link
   overrides the link preview image (default: the lead photo).
 - Main website "Recent listings": `app_settings.site_listing_ids` (booking ids,
@@ -588,7 +617,8 @@ next listing comes up (usually 1–4 weeks after first contact).
   tomorrow; in and out in as little as 45 minutes, next morning turnaround;
   real edits; licensed and insured) → testimonial → pricing → the
   save-contact section. On both styles the footer and the
-  vCard (`lukasVcard`) say Portland when `isPortlandArea(content.area)`.
+  vCard (`lukasVcard`) name the shooter market `shooterMarketForArea(content.area)`
+  finds (Portland, Central Oregon Coast), else Eugene & Roseburg.
 - Agent page pricing (both styles, above the last section): a highlighted
   "Most booked" Interior & Exterior Photography $300 box with "Edited by
   hand, not AI" and "Next morning turnaround" as bullets under the name, and
@@ -599,7 +629,7 @@ next listing comes up (usually 1–4 weeks after first contact).
   template's `content.prices` (`photo`, `drone`, `floorPlans`, `staging`,
   `twilight`, `video`, `bundle`, dollars, missing key = default) overrides
   them, resolved at render time from the link's `content.area` (exact town
-  match like `templateForArea`; a Portland area falls back to "portland").
+  match like `templateForArea`; a shooter-market area falls back to its base town).
   A link's own `content.prices` (a full set) wins over the template: it locks
   what an agent has already seen, and `updatePortfolioLinkAction` keeps it
   across builder saves. Portland metro template since 2026-11-14: photo $324,

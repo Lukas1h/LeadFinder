@@ -20,17 +20,19 @@
 //   it.
 //
 // The goal is the HOME goal: Local and Regional work only (2026-11-13).
-// Portland jobs are subcontracted and pay him less, so Portland outreach sits
-// on top of home outreach, never instead of it. Portland gets a quota of its
-// own, worked back from wanting a couple of bookings a week there by the new
-// year — see PORTLAND_JOBS_PER_WEEK.
+// Shooter-market jobs (Portland first, then the Central Coast; see
+// SHOOTER_MARKETS in lib/markets.ts) are subcontracted and pay him less, so
+// their outreach sits on top of home outreach, never instead of it. Each
+// shooter market gets a quota of its own, worked back from its config's
+// `jobsPerWeek` (Portland: a couple of bookings a week by the new year).
 //
-// Both quotas split outreach by market the way the Home funnel does
+// All quotas split outreach by market the way the Home funnel does
 // (lib/funnelSplit.ts): the listing on the send, else the agent's own market
 // (lib/agentMarket.ts), else regional. Bookings are placed by their listing, or
-// by their own address when they have none; Portland ones are left out of every
-// home figure — booked work, jobs, repeat and first-job values, new clients —
-// so Portland can never make the home goal look closer than it is.
+// by their own address when they have none; shooter-market ones are left out of
+// every home figure — booked work, jobs, repeat and first-job values, new
+// clients — so a shooter market can never make the home goal look closer than
+// it is.
 //
 // Cold follow-up texts (agents who never answered the first text, recorded only
 // as outbound interactions on a `cold_*` Follow up feed) are in neither quota:
@@ -42,16 +44,10 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { getFollowUpBoard } from "@/app/follow-up/data";
 import { agentMarkets } from "@/lib/agentMarket";
-import { marketFor, type Market, type MarketPlace } from "@/lib/markets";
+import { isShooterMarket, marketFor, SHOOTER_MARKETS, type Market, type MarketPlace } from "@/lib/markets";
 
 /** Dollars of booked work a month. Change it here. Raised from $3,000 on 2026-10-15, after October passed it mid-month. */
 export const MONTHLY_GOAL = 4000;
-
-/**
- * Lukas's target for Portland (2026-11-13): a couple of Portland bookings a
- * week by the new year, on top of whatever home brings.
- */
-const PORTLAND_JOBS_PER_WEEK = 2;
 
 /** Lukas's own estimate (2026-10-10): 1 in 50 interested agents. Only used when there are too few people to measure. */
 const ASSUMED_BOOK_RATE = 0.02;
@@ -98,10 +94,12 @@ const TZ = "America/Los_Angeles";
 
 /**
  * One market's texting quota. The home one's numbers are the same as the
- * top-level thisWeek / today / plan; Portland's is on top of them.
+ * top-level thisWeek / today / plan; each shooter market's is on top of them.
  */
 export interface MarketQuota {
-  /** "Local + Regional" | "Portland". */
+  /** The shooter market's key ("portland", "central_coast"); absent on the home quota. */
+  key?: string;
+  /** "Local + Regional" | "Portland" | "Central Coast". */
   label: string;
   textsPerWeek: number;
   repliesPerWeek: number;
@@ -118,7 +116,7 @@ export interface GoalProgress {
   goal: number;
   /** "October". */
   month: string;
-  /** Value of the jobs dated this month, done or still to come, Portland left out. */
+  /** Value of the jobs dated this month, done or still to come, shooter markets left out. */
   booked: number;
   jobs: number;
   /** What's left to book this month. 0 once the goal is met. */
@@ -137,7 +135,7 @@ export interface GoalProgress {
   bookSample: { booked: number; of: number };
   /** Interested agents in touch in the last 30 days, and how many a month the plan takes. */
   interested: { live: number; needed: number };
-  /** The steady pace that reaches the goal. Home only: Portland is `quotas.portland`. */
+  /** The steady pace that reaches the goal. Home only: shooter markets are `quotas.markets`. */
   plan: {
     /** This month's work from people who had already booked before. */
     repeat: number;
@@ -169,8 +167,12 @@ export interface GoalProgress {
     texts: number;
     textsTarget: number;
   };
-  /** The same week and today once for home, once for Portland, which is on top of it. */
-  quotas: { home: MarketQuota; portland: MarketQuota };
+  /**
+   * The same week and today once for home, then once per shooter market (in
+   * SHOOTER_MARKETS order), each on top of home. `portland` repeats the
+   * Portland entry of `markets` for older iPhone builds that only read it.
+   */
+  quotas: { home: MarketQuota; portland: MarketQuota; markets: MarketQuota[] };
 }
 
 /** One initial-outreach text, placed in a market, with the facts both quotas need. */
@@ -364,8 +366,7 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
         : fallback.get(send.agent_id ?? "") ?? "regional";
     return { send, market };
   });
-  const homeSends = placed.filter((p) => p.market !== "portland").map((p) => p.send);
-  const portlandSends = placed.filter((p) => p.market === "portland").map((p) => p.send);
+  const homeSends = placed.filter((p) => !isShooterMarket(p.market)).map((p) => p.send);
 
   const tally = (rows: SendRow[]) => ({
     sent28: rows.filter((s) => s.in_28).length,
@@ -376,9 +377,8 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
   });
   const allTexts = tally(sends);
   const homeTexts = tally(homeSends);
-  const portlandTexts = tally(portlandSends);
 
-  // --- Bookings, Portland left out of the home plan -------------------------
+  // --- Bookings, shooter markets left out of the home plan ------------------
 
   const jobs = (jobResult.rows as unknown as JobRow[]).filter((row) => {
     const place: MarketPlace =
@@ -391,7 +391,7 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
             geocodeSource: row.listing_geocode_source,
           }
         : { city: row.city, state: row.state, lat: row.lat, lng: row.lng, geocodeSource: row.geocode_source };
-    return marketFor(place) !== "portland";
+    return !isShooterMarket(marketFor(place));
   });
 
   const monthJobs = jobs.filter((j) => j.in_month);
@@ -434,23 +434,51 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
   const textsPerWeek = Math.ceil(repliesPerWeek / Math.max(reply, 0.01));
   const live = n("interested_live");
 
-  // --- The Portland plan, on top of home ------------------------------------
-
-  // Portland has too few bookings to measure its own interested → client rate,
-  // so it plans on the same `book` as home and works back from the weekly job
-  // target instead.
-  const portlandMeasured = portlandTexts.sent28 >= MIN_REPLY_SAMPLE;
-  const portlandReply = portlandMeasured ? portlandTexts.replied28 / portlandTexts.sent28 : overallReply;
-  const portlandInterestedPerWeek = PORTLAND_JOBS_PER_WEEK / book;
-  const portlandRepliesPerWeek = Math.ceil(portlandInterestedPerWeek / Math.max(interestedRate, 0.01));
-  const portlandTextsPerWeek = Math.ceil(portlandRepliesPerWeek / Math.max(portlandReply, 0.01));
-
   // --- The words ------------------------------------------------------------
 
   const percent = (rate: number) => `${Math.round(rate * 100)}%`;
   const dollars = (amount: number) => `$${Math.round(amount).toLocaleString("en-US")}`;
   const clients = Math.ceil(newClientsPerMonth);
   const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+
+  // --- The shooter-market plans, each on top of home ------------------------
+
+  // A shooter market has too few bookings to measure its own interested →
+  // client rate, so it plans on the same `book` as home and works back from
+  // its weekly job target (`jobsPerWeek`) instead.
+  const shooterQuota = (key: string, label: string, jobsPerWeek: number): MarketQuota => {
+    const texts = tally(placed.filter((p) => p.market === key).map((p) => p.send));
+    const measured = texts.sent28 >= MIN_REPLY_SAMPLE;
+    const replyRate = measured ? texts.replied28 / texts.sent28 : overallReply;
+    const interestedPerWeek = jobsPerWeek / book;
+    const repliesPerWeek = Math.ceil(interestedPerWeek / Math.max(interestedRate, 0.01));
+    const textsPerWeek = Math.ceil(repliesPerWeek / Math.max(replyRate, 0.01));
+    const note =
+      `${plural(jobsPerWeek, `${label} job`)} a week, on top of home: about ` +
+      `${plural(Math.ceil(interestedPerWeek), "interested agent")} and ${plural(repliesPerWeek, "reply", "replies")} a week ` +
+      `at a ${percent(replyRate)} reply rate (` +
+      (measured ? `${label}'s own` : `the overall rate, for want of ${MIN_REPLY_SAMPLE} ${label} sends to measure`) +
+      `), so ${plural(textsPerWeek, "text")}.`;
+    return {
+      key,
+      label,
+      textsPerWeek,
+      repliesPerWeek,
+      replyRate,
+      replyRateMeasured: measured,
+      week: {
+        texts: texts.weekTexts,
+        textsToGo: Math.max(0, textsPerWeek - texts.weekTexts),
+        replies: texts.weekReplies,
+      },
+      today: {
+        texts: texts.todayTexts,
+        textsTarget: todayTarget(textsPerWeek, texts.weekTexts, texts.todayTexts, dow),
+      },
+      note,
+    };
+  };
+  const marketQuotas = SHOOTER_MARKETS.map((m) => shooterQuota(m.key, m.label, m.jobsPerWeek));
   const note =
     `Local + Regional: repeat clients cover ${dollars(MONTHLY_GOAL - newRevenue)} of a month, so new ones need to bring ` +
     `${dollars(newRevenue)}, about ${plural(clients, "client")} at ${dollars(firstJob)} a first job. ` +
@@ -464,18 +492,9 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
     `${dollars(newRevenue)} of new work a month, about ${plural(clients, "new client")} at ${dollars(firstJob)} a first job: ` +
     `${plural(repliesPerWeek, "reply", "replies")} and ${plural(textsPerWeek, "text")} a week.`;
 
-  const portlandInterested = Math.ceil(portlandInterestedPerWeek);
-  const portlandQuotaNote =
-    `${plural(PORTLAND_JOBS_PER_WEEK, "Portland job")} a week, on top of home: about ` +
-    `${plural(portlandInterested, "interested agent")} and ${plural(portlandRepliesPerWeek, "reply", "replies")} a week ` +
-    `at a ${percent(portlandReply)} reply rate (` +
-    (portlandMeasured ? "Portland's own" : "the overall rate, for want of 50 Portland sends to measure") +
-    `), so ${plural(portlandTextsPerWeek, "text")}.`;
-
   // --- Assemble -------------------------------------------------------------
 
   const homeWeek = { texts: homeTexts.weekTexts, replies: homeTexts.weekReplies };
-  const portlandWeek = { texts: portlandTexts.weekTexts, replies: portlandTexts.weekReplies };
   const textsToGo = Math.max(0, textsPerWeek - homeWeek.texts);
   const repliesToGo = Math.max(0, repliesPerWeek - homeWeek.replies);
 
@@ -530,23 +549,9 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
         },
         note: homeQuotaNote,
       },
-      portland: {
-        label: "Portland",
-        textsPerWeek: portlandTextsPerWeek,
-        repliesPerWeek: portlandRepliesPerWeek,
-        replyRate: portlandReply,
-        replyRateMeasured: portlandMeasured,
-        week: {
-          texts: portlandWeek.texts,
-          textsToGo: Math.max(0, portlandTextsPerWeek - portlandWeek.texts),
-          replies: portlandWeek.replies,
-        },
-        today: {
-          texts: portlandTexts.todayTexts,
-          textsTarget: todayTarget(portlandTextsPerWeek, portlandWeek.texts, portlandTexts.todayTexts, dow),
-        },
-        note: portlandQuotaNote,
-      },
+      // Older iPhone builds read only this; newer clients use `markets`.
+      portland: marketQuotas.find((q) => q.key === "portland") ?? marketQuotas[0],
+      markets: marketQuotas,
     },
   };
 }

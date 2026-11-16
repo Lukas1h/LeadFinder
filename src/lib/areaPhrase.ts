@@ -1,3 +1,5 @@
+import { SHOOTER_MARKETS, shooterMarketTowns } from "@/lib/markets";
+
 // Shared by the AI drafts (draftMessage.ts) and the {{area}} template
 // placeholder (messageTemplate.ts), so a template and an AI draft always
 // describe the same city the same way.
@@ -8,7 +10,7 @@
 // "here in" the city itself, and their smaller neighbors "here in the
 // Roseburg/Eugene area"; the Oregon coast is "here around the coast". Medford
 // is a regular area for him too. Anywhere else is "in the {City} area".
-const AREA_PHRASES: [string, string[]][] = [
+const HAND_WRITTEN_PHRASES: [string, string[]][] = [
   ["in the Portland area", [
     "portland", "beaverton", "hillsboro", "gresham", "lake oswego", "tigard", "tualatin", "west linn",
     "oregon city", "milwaukie", "happy valley", "clackamas", "wilsonville", "sherwood", "troutdale",
@@ -46,6 +48,15 @@ const AREA_PHRASES: [string, string[]][] = [
     "medford", "ashland", "central point", "phoenix", "talent", "white city", "eagle point",
     "jacksonville", "gold hill", "rogue river", "shady cove", "butte falls", "grants pass",
   ]],
+];
+
+// Shooter markets' towns come from markets.ts and win over the list above
+// (Portland keeps its hand-written list, which reaches into Vancouver WA).
+const AREA_PHRASES: [string, string[]][] = [
+  ...SHOOTER_MARKETS.filter((m) => m.key !== "portland").map(
+    (m) => [m.areaPhrase, shooterMarketTowns(m.key)] as [string, string[]],
+  ),
+  ...HAND_WRITTEN_PHRASES,
 ];
 
 /** "in the Portland area", "here in Roseburg", "in the Bend area", … — null only with no city at all. */

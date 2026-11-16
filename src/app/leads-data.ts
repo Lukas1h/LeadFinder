@@ -11,7 +11,7 @@ import { estimateDriveMinutes } from "@/lib/driveTime";
 import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
 import { getRecentShoots, nearestShoot, type NearShoot } from "@/lib/nearShoots";
 import { shotAddresses } from "@/app/follow-up/feeds/shared";
-import { marketFor, milesFromOregonCity, type Market } from "@/lib/markets";
+import { emptyMarketRecord, isShooterMarket, marketFor, milesFromBase, type Market, type ShooterMarketKey } from "@/lib/markets";
 
 /**
  * Everything the Leads page shows, as data.
@@ -161,11 +161,11 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   const queuedCount = leads.filter((l) => queuedIds.has(l.id)).length;
   const openLeads = leads.filter((l) => !queuedIds.has(l.id));
 
-  // Each open listing's market, computed once. The tab counts always cover all
-  // three markets, even when the board below is narrowed to one, so the tabs
+  // Each open listing's market, computed once. The tab counts always cover every
+  // market, even when the board below is narrowed to one, so the tabs
   // still show what waits in the others.
   const marketByLead = new Map(openLeads.map((l) => [l.id, marketFor(l)] as const));
-  const marketCounts: Record<Market, number> = { local: 0, regional: 0, portland: 0 };
+  const marketCounts = emptyMarketRecord(() => 0);
   for (const leadMarket of marketByLead.values()) marketCounts[leadMarket]++;
 
   // From here on the board is one market's worth of leads. Everything the tab
@@ -300,7 +300,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   // "Farther than 2 hours" (Lukas, 2026-11-14): driving past two hours from
   // Winston is a hassle, so cold Photo/Video/Backup cards out there wait in
   // their own section above Texted before. Measured to the group's nearest
-  // listing; Portland (the subcontractor's) and cities missing from the drive
+  // listing; shooter markets (subcontracted) and cities missing from the drive
   // table never count as far. Known agents and Near your shoots are left
   // alone, and Texted before / Unlikely never move (hard rule 5).
   const farMinutes = new Map<string, number>();
@@ -309,7 +309,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     if (g.section !== "photo" && g.section !== "video" && g.section !== "backup") continue;
     let nearest = Infinity;
     for (const { lead } of g.entries) {
-      const minutes = marketFor(lead) === "portland" ? 0 : lead.city ? estimateDriveMinutes(lead.city) : null;
+      const minutes = isShooterMarket(marketFor(lead)) ? 0 : lead.city ? estimateDriveMinutes(lead.city) : null;
       if (minutes != null) nearest = Math.min(nearest, minutes);
     }
     if (nearest !== Infinity && nearest > FAR_DRIVE_MINUTES) farMinutes.set(g.key, nearest);
@@ -332,9 +332,9 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   // Texted goes nearest first, then by who has waited longest since his last text; unlikely by the
   // priority score.
   //
-  // The Portland tab ranks by distance from Oregon City instead (see
-  // outreachRank): the photographer is out there, so 503/971 numbers are the
-  // local numbers and the drive from Winston says nothing.
+  // Each shooter-market tab ranks by distance from its photographer's base
+  // instead (see outreachRank): the photographer is out there, so the drive
+  // from Winston and the agent's area code say nothing.
   for (const key of LEAD_SECTION_ORDER) {
     sections[key].sort((a, b) =>
       key === "backup"
@@ -391,20 +391,20 @@ async function countNewAgentsToday(): Promise<Record<Market, number>> {
       select city, state from listings where listings.agent_id = a.id order by found_at asc limit 1
     ) l on true
     where a.created_at >= (date_trunc('day', now() at time zone 'America/Los_Angeles') at time zone 'America/Los_Angeles')`);
-  const counts: Record<Market, number> = { local: 0, regional: 0, portland: 0 };
+  const counts = emptyMarketRecord(() => 0);
   for (const r of result.rows) counts[marketFor({ city: r.city, state: r.state })]++;
   return counts;
 }
 
 /**
  * Who to text first: listed before coming soon, then nearer, then a local
- * number (see the sort above). The Portland tab is simply nearest to Oregon
- * City first (the photographer is based there; Lukas asked for a plain
- * distance sort, 2026-11-12): the drive from Winston says nothing there and
- * 503/971 is the local number. Unknown distance sorts last.
+ * number (see the sort above). A shooter-market tab is simply nearest to its
+ * photographer's base first (Lukas asked for a plain distance sort on the
+ * Portland tab, 2026-11-12): the drive from Winston says nothing there and
+ * the area code is the local one. Unknown distance sorts last.
  */
 function outreachRank(a: LeadGroup, b: LeadGroup, market: Market | null): number {
-  if (market === "portland") return portlandDistance(a) - portlandDistance(b);
+  if (isShooterMarket(market)) return compareDistance(shooterDistance(a, market), shooterDistance(b, market));
   const listed = Number(a.best.isComingSoon) - Number(b.best.isComingSoon);
   if (listed) return listed;
   return (
@@ -413,20 +413,20 @@ function outreachRank(a: LeadGroup, b: LeadGroup, market: Market | null): number
   );
 }
 
-/** Miles from Oregon City to the group's best listing; unknown is Infinity. */
-function portlandDistance(g: LeadGroup): number {
-  return milesFromOregonCity(g.best) ?? Infinity;
+/** Miles from the shooter market's base to the group's best listing; unknown is Infinity. */
+function shooterDistance(g: LeadGroup, market: ShooterMarketKey): number {
+  return milesFromBase(g.best, market) ?? Infinity;
 }
 
 /**
  * How far the group's nearest listing is: drive minutes from Winston, or
- * miles from Oregon City on the Portland tab. Unknown is Infinity.
+ * miles from the photographer's base on a shooter-market tab. Unknown is Infinity.
  */
 function nearestDistance(g: LeadGroup, market: Market | null): number {
   let nearest = Infinity;
   for (const { lead } of g.entries) {
     const d =
-      market === "portland" ? milesFromOregonCity(lead) : lead.city ? estimateDriveMinutes(lead.city) : null;
+      isShooterMarket(market) ? milesFromBase(lead, market) : lead.city ? estimateDriveMinutes(lead.city) : null;
     if (d != null) nearest = Math.min(nearest, d);
   }
   return nearest;

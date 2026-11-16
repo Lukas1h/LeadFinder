@@ -701,21 +701,27 @@ struct MessagesResponse: Codable, Sendable {
             var textsTarget: Int
         }
 
-        /// The same week and today once for home, once for Portland, which sits
-        /// on top of it (the web's GoalProgress.quotas). Optional so a copy
-        /// cached before the server sent it still decodes.
+        /// The same week and today once for home, then once per shooter market
+        /// (Portland, Central Coast, ...), each on top of it (the web's
+        /// GoalProgress.quotas). Optional so a copy cached before the server
+        /// sent it still decodes.
         var quotas: Quotas?
         struct Quotas: Codable, Sendable, Hashable {
             var home: MarketQuota
+            /// The Portland entry of `markets`, kept for older builds.
             var portland: MarketQuota
+            /// One per shooter market, in order. Nil from older servers.
+            var markets: [MarketQuota]?
         }
     }
 
     /// One market's texting quota: the week's pace, the reply rate it was
     /// worked back from, and what's been done so far. Home's numbers match the
-    /// goal's own thisWeek / today / plan; Portland's are extra.
+    /// goal's own thisWeek / today / plan; each shooter market's are extra.
     struct MarketQuota: Codable, Sendable, Hashable {
-        /// "Local + Regional" | "Portland".
+        /// The shooter market's key ("portland", "central_coast"). Nil on home.
+        var key: String?
+        /// "Local + Regional" | "Portland" | "Central Coast".
         var label: String
         var textsPerWeek: Int
         var repliesPerWeek: Int
@@ -809,7 +815,8 @@ struct MessagesResponse: Codable, Sendable {
         var followUp: FollowUpResponse.FeedStats
         /// Cold follow-ups (one nudge to agents who never replied). Nil from older servers.
         var coldFollowUp: FollowUpResponse.FeedStats?
-        /// Keyed "local", "regional", "portland". Nil from older servers.
+        /// Keyed by market: "local", "regional", then each shooter market
+        /// ("portland", "central_coast", ...). Nil from older servers.
         var byMarket: [String: MarketSplit]?
     }
     var stats: Stats

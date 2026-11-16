@@ -5,6 +5,7 @@ enum CacheKey: String, CaseIterable {
     case leads
     case leadsRegional = "leads-regional"
     case leadsPortland = "leads-portland"
+    case leadsCentralCoast = "leads-central-coast"
     case followUp = "follow-up"
     case schedule
     case bookings

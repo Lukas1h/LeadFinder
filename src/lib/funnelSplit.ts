@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 import { agentMarkets } from "@/lib/agentMarket";
-import { marketFor, type Market } from "@/lib/markets";
+import { MARKET_ORDER, marketFor, type Market } from "@/lib/markets";
 import { FEED_STATS_DAYS, getFeedStatsWithTotal, type FeedStats } from "@/app/follow-up/feeds/stats";
 
 /** The Cold row: agents texted, how many answered, how many are interested or better. */
@@ -13,7 +13,7 @@ export interface ColdStats {
 
 /**
  * The Home funnel card's two rows, over the last FEED_STATS_DAYS, overall and
- * split by market (the card's Local / Regional / Portland tabs):
+ * split by market (the card's market tabs: Local, Regional and each shooter market):
  *
  * - **Cold**: agents whose first outreach text (an initial_outreach template)
  *   went out in the window. Replied = any of those texts answered; interested
@@ -27,10 +27,10 @@ export interface ColdStats {
  *   nudge to someone who never answered the first text is a different thing
  *   from a Follow Up card, and what it's worth per text is unknown.
  *
- * `byMarket` holds the same numbers three ways: every cold agent is placed by
+ * `byMarket` holds the same numbers split by market: every cold agent is placed by
  * the listing on their first outreach text, or — when that send has no listing
  * — by their agent market (lib/agentMarket.ts), and the follow-up rows are
- * feeds.allByMarket / feeds.allColdByMarket, so the three markets always add
+ * feeds.allByMarket / feeds.allColdByMarket, so the markets always add
  * back up to `followUp`, to `coldFollowUp` and to `cold`.
  */
 export interface FunnelSplit {
@@ -100,11 +100,12 @@ export async function computeFunnelSplit(): Promise<FunnelSplit> {
   const fallback = await agentMarkets(rows.filter((r) => r.listing_id == null).map((r) => r.agent_id));
 
   const cold = emptyCold();
-  const byMarket: FunnelSplit["byMarket"] = {
-    local: { cold: emptyCold(), followUp: feeds.allByMarket.local, coldFollowUp: feeds.allColdByMarket.local },
-    regional: { cold: emptyCold(), followUp: feeds.allByMarket.regional, coldFollowUp: feeds.allColdByMarket.regional },
-    portland: { cold: emptyCold(), followUp: feeds.allByMarket.portland, coldFollowUp: feeds.allColdByMarket.portland },
-  };
+  const byMarket = Object.fromEntries(
+    MARKET_ORDER.map((m) => [
+      m,
+      { cold: emptyCold(), followUp: feeds.allByMarket[m], coldFollowUp: feeds.allColdByMarket[m] },
+    ]),
+  ) as FunnelSplit["byMarket"];
 
   for (const row of rows) {
     const market =

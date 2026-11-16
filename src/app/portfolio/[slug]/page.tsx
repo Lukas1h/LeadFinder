@@ -12,13 +12,14 @@ import { notifyPortfolioView } from "@/lib/push";
 import { PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
 import { LUKAS_PHONE as PHONE } from "@/lib/agentVcard";
 import { parseUserAgent } from "@/lib/galleryViews";
-import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, isPortlandArea, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
+import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { BeforeAfterSlider, ListingCard, LoopVideo, MutableVideo } from "./client";
 import { PageTracker } from "./tracker";
 import { FeaturedShootSection } from "./featured";
 import { getFeaturedShoot } from "@/lib/portfolioFeatured";
 import { formatPrice, resolvePortfolioPrices, type PortfolioPrices } from "@/lib/portfolioPrices";
 import { templateForArea } from "@/app/portfolio-links/actions";
+import { shooterMarketForArea, shooterMarketTowns } from "@/lib/markets";
 
 // Same reasoning as the gallery route: a fresh navigation from outside the
 // app, not an in-app tab switch, so there's no "instant" shell to preserve.
@@ -367,7 +368,7 @@ export default async function PortfolioPage({
       <footer className="border-t border-[#181A1C]/10 px-4 py-7">
         <div className="mx-auto flex max-w-[1152px] flex-wrap justify-between gap-x-6 gap-y-2 text-[13px] text-[#181A1C]/62">
           <span>Hahn Media · Lukas Hahn</span>
-          <span>{isPortlandArea(c.area) ? "Portland, Oregon" : "Eugene & Roseburg, Oregon"}</span>
+          <span>{shooterMarketForArea(c.area)?.pageLocation ?? "Eugene & Roseburg, Oregon"}</span>
         </div>
       </footer>
     </div>
@@ -497,11 +498,18 @@ const NEW_TILES = [
 
 /**
  * The area template for a link's area, the same exact-town match the builder
- * uses (templateForArea). A Portland link's area is "the Portland area", not a
- * town, so it falls back to the template covering "portland".
+ * uses (templateForArea). A shooter-market link's area is its portfolioArea
+ * ("the Portland area"), not a town, so it falls back to the template covering
+ * the market's base town, else its first town.
  */
 async function templateForLinkArea(area: string) {
-  return (await templateForArea(area)) ?? (isPortlandArea(area) ? await templateForArea("portland") : null);
+  const m = shooterMarketForArea(area);
+  return (
+    (await templateForArea(area)) ??
+    (m
+      ? (await templateForArea(m.base.name.toLowerCase())) ?? (await templateForArea(shooterMarketTowns(m.key)[0]))
+      : null)
+  );
 }
 
 /**

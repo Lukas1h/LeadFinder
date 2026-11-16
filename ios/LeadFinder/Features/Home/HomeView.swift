@@ -216,7 +216,9 @@ struct HomeView: View {
                         .textCase(.uppercase)
                     if let quotas = goal.quotas {
                         marketQuota(quotas.home, title: "Local + Regional", accent: Theme.emerald)
-                        marketQuota(quotas.portland, title: "Portland · on top", accent: Theme.sky)
+                        ForEach(quotas.markets ?? [quotas.portland], id: \.label) { q in
+                            marketQuota(q, title: "\(q.label) · on top", accent: Theme.sky)
+                        }
                     }
                     if let plan = goal.plan {
                         if goal.quotas == nil {
@@ -335,6 +337,7 @@ struct HomeView: View {
                             Text("Local").tag("local")
                             Text("Regional").tag("regional")
                             Text("Portland").tag("portland")
+                            Text("Coast").tag("central_coast")
                         }
                         .pickerStyle(.segmented)
                     }

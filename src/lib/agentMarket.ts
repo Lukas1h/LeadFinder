@@ -1,10 +1,7 @@
 import { db } from "@/db";
 import { agents } from "@/db/schema";
 import { inArray, sql } from "drizzle-orm";
-import { marketFor, type Market } from "@/lib/markets";
-
-/** Portland, its 971 overlay and Vancouver WA — the metro's area codes. */
-const PORTLAND_AREA_CODES = new Set(["503", "971", "360"]);
+import { marketFor, SHOOTER_MARKETS, type Market } from "@/lib/markets";
 
 /** The area code of a phone number as stored (any formatting, optional leading 1). */
 function areaCode(phone: string | null): string | null {
@@ -26,8 +23,9 @@ function areaCode(phone: string | null): string | null {
  * 2. agents.homeCity, the city most of their tracked listings are in (see
  *    lib/agentHomeCity.ts). Agents carry no state — everyone on file is in
  *    Oregon or Washington, and the WA cases have a listing anyway.
- * 3. The phone's area code: 503/971/360 is the Portland metro, anything else
- *    (including no phone) is regional. Never local — without an address,
+ * 3. The phone's area code: the first shooter market listing it in its
+ *    `areaCodes` (503/971/360 is Portland), anything else (including no
+ *    phone) is regional. Never local — without an address,
  *    claiming someone is in the home ring is the guess most likely to be
  *    wrong.
  *
@@ -90,7 +88,8 @@ export async function agentMarkets(ids: string[]): Promise<Map<string, Market>> 
       continue;
     }
     const code = areaCode(agent?.phone ?? null);
-    byAgent.set(id, code && PORTLAND_AREA_CODES.has(code) ? "portland" : "regional");
+    const byCode = code ? SHOOTER_MARKETS.find((m) => m.areaCodes?.includes(code)) : undefined;
+    byAgent.set(id, byCode?.key ?? "regional");
   }
   return byAgent;
 }

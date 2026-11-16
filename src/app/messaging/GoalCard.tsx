@@ -7,7 +7,7 @@ import { Stat, Sub } from "../Stat";
 const count = (n: number) => n.toLocaleString("en-US");
 
 /** One market's texting quota: today vs today's target, the week vs the weekly target. */
-function QuotaRow({ quota, accent }: { quota: MarketQuota; accent: "home" | "portland" }) {
+function QuotaRow({ quota, accent }: { quota: MarketQuota; accent: "home" | "shooter" }) {
   const { today, week } = quota;
   const pct = today.textsTarget > 0 ? Math.min(100, (today.texts / today.textsTarget) * 100) : 100;
   const todayMet = today.texts >= today.textsTarget;
@@ -20,7 +20,7 @@ function QuotaRow({ quota, accent }: { quota: MarketQuota; accent: "home" | "por
             className={`inline-block size-1.5 rounded-full ${accent === "home" ? "bg-emerald-600" : "bg-sky-600"}`}
           />
           {quota.label}
-          {accent === "portland" && <span className="text-xs font-normal text-muted-foreground">on top of home</span>}
+          {accent === "shooter" && <span className="text-xs font-normal text-muted-foreground">on top of home</span>}
         </span>
         <span className="text-xs text-muted-foreground text-right tabular-nums">
           Today {count(today.texts)} of {count(today.textsTarget)} · Week{" "}
@@ -71,7 +71,9 @@ export function GoalCard({ goal }: { goal: GoalProgress }) {
       {goal.quotas && (
         <div className="flex flex-col gap-3">
           <QuotaRow quota={goal.quotas.home} accent="home" />
-          <QuotaRow quota={goal.quotas.portland} accent="portland" />
+          {(goal.quotas.markets ?? [goal.quotas.portland]).map((quota) => (
+            <QuotaRow key={quota.label} quota={quota} accent="shooter" />
+          ))}
         </div>
       )}
 

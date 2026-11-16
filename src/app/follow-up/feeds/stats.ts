@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { agentInteractions, agentStatusChanges, agents, messageSends } from "@/db/schema";
 import { agentMarkets } from "@/lib/agentMarket";
-import type { Market } from "@/lib/markets";
+import { emptyMarketRecord, type Market } from "@/lib/markets";
 import { and, gt, inArray, isNotNull } from "drizzle-orm";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -26,11 +26,7 @@ export interface FeedStats {
 const empty = (): FeedStats => ({ reached: 0, replied: 0, warm: 0, converted: 0 });
 
 /** `empty()`, one entry per market — the shape the Home funnel's market tabs want. */
-const emptyByMarket = (): Record<Market, FeedStats> => ({
-  local: empty(),
-  regional: empty(),
-  portland: empty(),
-});
+const emptyByMarket = (): Record<Market, FeedStats> => emptyMarketRecord(empty);
 
 /** The cold follow-up tabs' feeds (COLD_FEED_KEYS in lib/coldFollowUp/pool.ts). */
 const COLD_PREFIX = "cold_";
