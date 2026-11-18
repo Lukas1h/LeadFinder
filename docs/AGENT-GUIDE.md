@@ -23,6 +23,10 @@ pages, and his books (trips, expenses, receipts, taxes).
   (login-gated). Client galleries are public at `gallery.lukashahn.art/<token>`,
   agent portfolio pages at `r.lukashahn.media/<slug>`.
 - iPhone/Mac app: SwiftUI in `ios/`, talks to `/api/app/v1/*`.
+  Its Flambient screen (`ios/LeadFinder/Features/Flambient/`) talks straight to the
+  Flambient Mac app over MultipeerConnectivity, with no server and no Wi-Fi network, to run
+  card imports while the Mac is closed. `RemoteProtocol.swift` is a verbatim copy of
+  FlambientApp's `Sources/Remote/RemoteProtocol.swift`; change both together.
 - Database: Neon Postgres, schema in `src/db/schema.ts` (Drizzle). The schema
   file's comments are the best documentation of each column.
 
