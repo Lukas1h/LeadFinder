@@ -1474,3 +1474,68 @@ export const receipts = pgTable("receipts", {
   data: bytea("data").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ── Other verticals ─────────────────────────────────────────────────────────
+// Side niches outside real estate (roofing companies first, 2026-11-18), on
+// purpose kept completely apart from agents, the funnel, follow-ups and
+// stats: nothing here joins to the real estate tables. One page per company,
+// texted by Lukas by hand (/verticals/<vertical>), served at
+// lukashahn.media/<vertical>/<word>. Copy of the portfolio_* trio, scoped by
+// `vertical` (a key of VERTICALS in src/lib/verticals.ts).
+export const verticalLinks = pgTable("vertical_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  vertical: text("vertical").notNull(),
+  // A word from PORTFOLIO_WORDS, unique within this table (the path differs from agent pages').
+  slug: text("slug").notNull().unique(),
+  company: text("company").notNull(),
+  // First name for the page's sign-off ("Thanks for taking a look, Mike!"); the page never shows the company.
+  contactName: text("contact_name"),
+  phone: text("phone"),
+  // Shown in the hero ("… in Salem"); blank = no place named.
+  area: text("area"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  viewCount: integer("view_count").notNull().default(0),
+  firstViewedAt: timestamp("first_viewed_at", { withTimezone: true }),
+  lastViewedAt: timestamp("last_viewed_at", { withTimezone: true }),
+});
+
+export type VerticalLink = typeof verticalLinks.$inferSelect;
+
+// One visit to a vertical page; same shape and rules as portfolio_sessions.
+export const verticalSessions = pgTable("vertical_sessions", {
+  id: uuid("id").primaryKey(),
+  linkId: uuid("link_id")
+    .notNull()
+    .references(() => verticalLinks.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  activeSeconds: integer("active_seconds").notNull().default(0),
+  maxScrollPct: integer("max_scroll_pct").notNull().default(0),
+  sectionSeconds: jsonb("section_seconds").$type<Record<string, number>>().notNull().default({}),
+  screen: text("screen"),
+  ip: text("ip"),
+  city: text("city"),
+  region: text("region"),
+  country: text("country"),
+  userAgent: text("user_agent"),
+  referer: text("referer"),
+});
+
+export type VerticalSession = typeof verticalSessions.$inferSelect;
+
+export const VERTICAL_EVENTS = ["save_contact", "text_me", "sound_on", "sound_off"] as const;
+export type VerticalEvent = (typeof VERTICAL_EVENTS)[number];
+
+export const verticalEvents = pgTable("vertical_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sessionId: uuid("session_id")
+    .notNull()
+    .references(() => verticalSessions.id, { onDelete: "cascade" }),
+  linkId: uuid("link_id")
+    .notNull()
+    .references(() => verticalLinks.id, { onDelete: "cascade" }),
+  event: text("event").$type<VerticalEvent>().notNull(),
+  detail: text("detail"),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+});

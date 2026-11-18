@@ -655,6 +655,37 @@ next listing comes up (usually 1–4 weeks after first contact).
   Lukas's 2026-11-12 set in the main website's order. Card carousels preload
   every photo after the first loads, so the arrows flip instantly.
 
+### Other verticals (roofing)
+
+Side niches outside real estate, started 2026-11-18 with roofing companies
+(~60 within a 1–2 hour drive) as a winter test. **Kept completely apart from
+the agent funnel on purpose**: no agents, messages, queue, follow-ups,
+activity feed or funnel stats touch it, and it's web only (sidebar **Other
+verticals** → `/verticals`, not in the iPhone app or mobile tabs). Lukas texts
+the companies himself and tracks who he texted on his phone.
+
+- Content per vertical is config, not data: `VERTICALS` in
+  `src/lib/verticals.ts` (path, header subtitle "Photo, Video & Aerial",
+  headline, photos, tiles, packages, first-job offer, vCard note). Roofing
+  prices: Single job $300, Monthly $1,000 for up to 4 jobs; "$100 off your
+  first job". Photos are placeholders from `public/agent-page/` until his
+  drone set arrives.
+- `vertical_links` (one per company: `vertical`, word `slug`, `company`,
+  `contact_name`, `phone`, `area`, `notes`, view counts),
+  `vertical_sessions`, `vertical_events` (`save_contact`, `text_me`, …) —
+  copies of the portfolio trio. Made with **Create portfolio** on
+  `/verticals/roofing`, which lists each link's visits, time, scroll and
+  Saved contact / Texted you.
+- Page: `lukashahn.media/roofing/<word>` (the main site forwards `/roofing/*`
+  and `/api/vertical/*` to `r.lukashahn.media`); `src/app/roofing/[slug]`.
+  Never names the company; the sign-off uses `contact_name`. `?preview=1`
+  isn't a visit. Tracking `POST /api/vertical/[slug]/track`, contact card
+  `/api/vertical/[slug]/vcard` (Hahn Media, title = the subtitle). Push on
+  view, Save contact and Text me (`notifyVerticalView` /
+  `notifyVerticalAction`), linking to `/verticals/<vertical>`.
+- A new vertical = a `VERTICALS` entry, a `src/app/<path>/[slug]` page
+  reusing the shared component, and a `/<path>/:slug` forward on the main site.
+
 ### Finances
 
 The app is the books (since 2026-10-16).
@@ -736,6 +767,7 @@ from portfolio_links l left join agents a on a.id=l.agent_id order by l.created_
 | Schedule | `src/lib/scheduleItems.ts`, `src/app/schedule/` |
 | Follow Up | `src/app/follow-up/` |
 | Portfolio pages | `src/app/portfolio/[slug]/`, `src/app/portfolio-links/`, `src/lib/portfolioLink.ts` |
+| Other verticals | `src/lib/verticals.ts`, `src/app/verticals/`, `src/app/roofing/[slug]/`, `src/app/api/vertical/` |
 | Finances | `src/lib/finance/`, `src/app/finances/` |
 | Photo editor (Gemini; two presets: Bright interior, Sunset exterior) | `src/lib/photoPresets.ts`, `src/lib/photoEdit.ts`, `src/app/photo-editor/` |
 | Push to Lukas's devices | `src/lib/push.ts`, `scripts/notify-me.mjs` |

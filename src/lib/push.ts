@@ -2,6 +2,7 @@ import webpush from "web-push";
 import { db } from "@/db";
 import { pushSubscriptions } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { getVertical } from "@/lib/verticals";
 
 let configured = false;
 
@@ -137,6 +138,26 @@ export async function notifyPortfolioAction(linkId: string, agentName: string | 
     title: action === "save_contact" ? `${who} saved your contact` : `${who} tapped Book a shoot`,
     body: action === "save_contact" ? "From their portfolio page" : "Their text to you should be on its way",
     url: `/portfolio-links/${linkId}`,
+  });
+}
+
+/** Someone opened an other-verticals page (a roofing company…); kept apart from the agent page pushes. */
+export async function notifyVerticalView(linkId: string, vertical: string, company: string, viewCount: number): Promise<void> {
+  const nth = viewCount === 1 ? "" : viewCount === 2 ? " (2nd visit)" : ` (${viewCount}th visit)`;
+  await broadcast({
+    title: `${company} is looking at their page`,
+    body: `View${viewCount === 1 ? "" : "s"}: ${viewCount}${nth}`,
+    url: `/verticals/${vertical}`,
+  });
+}
+
+/** They tapped Save contact or Text me on an other-verticals page. */
+export async function notifyVerticalAction(linkId: string, vertical: string, company: string, action: "save_contact" | "text_me"): Promise<void> {
+  const label = getVertical(vertical)?.label.toLowerCase() ?? vertical;
+  await broadcast({
+    title: action === "save_contact" ? `${company} saved your contact` : `${company} tapped Text me`,
+    body: `From their ${label} page`,
+    url: `/verticals/${vertical}`,
   });
 }
 

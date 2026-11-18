@@ -12,6 +12,7 @@ import {
   Wallet,
   Wand2,
   Link2,
+  Layers,
 } from "lucide-react";
 
 // The desktop sidebar shows every link. Mobile shows MOBILE_TABS instead.
@@ -29,6 +30,8 @@ export const NAV_LINKS = [
   { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { href: "/photo-editor", label: "Photo editor", icon: Wand2 },
   { href: "/portfolio-links", label: "Portfolio links", icon: Link2 },
+  // Side niches (roofing…), kept apart from the agent funnel. Desktop only: not in MOBILE_TABS.
+  { href: "/verticals", label: "Other verticals", icon: Layers },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

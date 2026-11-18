@@ -50,7 +50,7 @@ the table rather than waiting.
 **A. Paseo available** (tools named `mcp__paseo__*` exist — Lukas's machine / Paseo app):
 `mcp__paseo__create_agent` with
 `provider: "opencode/opencode/deepseek-v4.1-flash-free"`,
-`settings: { modeId: "build", thinkingOptionId: "medium", features: { auto_accept: true } }`.
+`settings: { modeId: "build", thinkingOptionId: "high", features: { auto_accept: true } }` (DeepSeek flash has no `medium` variant — it errors at once).
 You get a notification when it finishes — don't poll.
 
 **B. No Paseo** (Claude Code cloud/web, plain terminal): the CLI works anywhere and

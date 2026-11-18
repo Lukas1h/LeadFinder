@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { bookings, portfolioLinks } from "@/db/schema";
+import { bookings, portfolioLinks, verticalLinks } from "@/db/schema";
+import { VERTICALS } from "@/lib/verticals";
 import { byGalleryToken } from "@/lib/galleryToken";
 import { eq } from "drizzle-orm";
 import { authGateEnabled, isValidSession, safeNextPath, SESSION_COOKIE } from "@/lib/adminSession";
@@ -82,12 +83,16 @@ const PUBLIC_PATHS = new Set([
   "/api/compose/cold-outreach",
 ]);
 
-const PUBLIC_PREFIXES = ["/gallery/", "/portfolio/", "/api/gallery/", "/api/portfolio/", "/api/portfolio-image/", "/api/site-listings", "/api/webhooks/", "/api/cron/", "/api/app/", "/.well-known/"];
+const PUBLIC_PREFIXES = ["/gallery/", "/portfolio/", "/api/gallery/", "/api/portfolio/", "/api/portfolio-image/", "/api/vertical/", "/api/site-listings", "/api/webhooks/", "/api/cron/", "/api/app/", "/.well-known/"];
 
 const HANDOFF_FILE_RE = /^\/api\/(agents|bookings)\/[^/]+\/(vcard|calendar)$/;
 
+/** "/roofing/" etc.: the public pages of the other verticals (lib/verticals.ts). */
+const VERTICAL_PREFIXES = Object.values(VERTICALS).map((v) => `/${v.path}/`);
+
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
+  if (VERTICAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
   if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
   if (HANDOFF_FILE_RE.test(pathname)) return true;
   // Everything else under /api/ is admin data.
@@ -146,7 +151,7 @@ export async function proxy(req: NextRequest) {
     // domain (the admin app's own aliases, or someone who bookmarked an old
     // link) still needs to be chrome-less — same header, same single source
     // of truth in layout.tsx.
-    if (pathname.startsWith("/gallery/") || pathname.startsWith("/portfolio/")) {
+    if (pathname.startsWith("/gallery/") || pathname.startsWith("/portfolio/") || VERTICAL_PREFIXES.some((p) => pathname.startsWith(p))) {
       return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
     }
     return NextResponse.next();
@@ -172,6 +177,18 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
   }
   if (pathname.startsWith("/gallery/")) {
+    return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
+  }
+  // A vertical's page (lukashahn.media/roofing/<word>, forwarded by the main
+  // site): same treatment as an agent page.
+  if (VERTICAL_PREFIXES.some((p) => pathname.startsWith(p))) {
+    const slug = decodeURIComponent(pathname.split("/")[2] ?? "");
+    try {
+      const [match] = await db.select({ id: verticalLinks.id }).from(verticalLinks).where(eq(verticalLinks.slug, slug));
+      if (!match) return NextResponse.redirect(MAIN_SITE_URL);
+    } catch (err) {
+      console.error("proxy: vertical slug lookup failed", err);
+    }
     return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
   }
 
