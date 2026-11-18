@@ -31,8 +31,15 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_flambient-link._tcp</string>
+		<string>_flambient-link._udp</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>LeadFinder uses the camera to photograph receipts for your expenses.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>LeadFinder connects to Flambient on your Mac to import cards with no Wi-Fi.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

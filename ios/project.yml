@@ -50,6 +50,13 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         # Photographing receipts for an expense (Finances).
         NSCameraUsageDescription: LeadFinder uses the camera to photograph receipts for your expenses.
+        # Flambient: the photographer's Mac app, reached peer-to-peer over Wi-Fi
+        # and Bluetooth while the phone has no network at all. The Bonjour
+        # types are the ones MultipeerConnectivity browses in RemoteProtocol.
+        NSLocalNetworkUsageDescription: LeadFinder connects to Flambient on your Mac to import cards with no Wi-Fi.
+        NSBonjourServices:
+          - _flambient-link._tcp
+          - _flambient-link._udp
         # Xcode expands $(VAR) in Info.plist from the build settings, which come
         # from Config/Base.xcconfig and the git-ignored Secrets.xcconfig. Left
         # unexpanded when the secret is missing, which AppConfig detects.

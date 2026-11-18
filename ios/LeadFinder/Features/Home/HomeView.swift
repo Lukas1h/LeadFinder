@@ -46,6 +46,7 @@ struct HomeView: View {
             .navigationDestination(for: BookingsRoute.self) { _ in BookingsView() }
             .navigationDestination(for: FinancesRoute.self) { route in FinancesView(tab: route.tab) }
             .navigationDestination(for: PortfolioLinksRoute.self) { _ in PortfolioLinksView() }
+            .navigationDestination(for: FlambientRoute.self) { _ in FlambientView() }
             .sheet(item: $openBooking) { booking in
                 BookingDetailView(booking: booking)
                     .presentationDetents([.large])
@@ -79,6 +80,7 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 ErrorBanner(message: firstError, onRetry: { Task { await reload() } })
+                FlambientHomeCard()
 
                 if let goal = appState.messages.value?.goal {
                     goalSection(goal).id("goal")

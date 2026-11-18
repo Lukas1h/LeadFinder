@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct LeadFinderApp: App {
     @State private var appState = AppState()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -23,6 +24,10 @@ struct LeadFinderApp: App {
                 }
             }
             .preferredColorScheme(.dark)
+            // Browse for Flambient's Mac only while the app is on screen.
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                FlambientLink.shared.handleScenePhase(phase)
+            }
         }
     }
 }
