@@ -42,9 +42,9 @@ export interface VerticalConfig {
   smsBody: string;
 }
 
-// Placeholder photos (aerials and exteriors from the agent page) until Lukas
-// sends his drone set for this; then they go in public/vertical/roofing/.
-const AP = "/agent-page/";
+// Lukas's drone set (2026-11-18, ~/Desktop/Drone Portfolio), in his order,
+// resized to 2048px like public/agent-page/.
+const RF = "/vertical/roofing/";
 
 export const VERTICALS: Record<string, VerticalConfig> = {
   roofing: {
@@ -56,13 +56,21 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     tagline: "Show off every finished roof from the angle that sells it.",
     ogTitle: "Aerial photo & video for roofers | Hahn Media",
     photos: [
-      { src: `${AP}pf-19.jpg`, alt: "Aerial drone view of house in autumn woods with mountains beyond" },
-      { src: `${AP}pf-17.jpg`, alt: "Aerial drone view of house and fenced acreage surrounded by autumn woods" },
-      { src: `${AP}pf-16.jpg`, alt: "Exterior of sage green ranch house with white garage door and lawn" },
-      { src: `${AP}pf-18.jpg`, alt: "Exterior of gray-green house with covered porch and leaf-covered yard" },
-      { src: `${AP}pf-15.jpg`, alt: "Exterior of olive-green house with brick chimney and two-car garage" },
-      { src: `${AP}pf-20.jpg`, alt: "Covered patio with wood pergola roof, stone columns and fenced garden" },
-    ],
+      ["rf-01", "Aerial drone photo of roofs from above"],
+      ["rf-02", "Aerial drone photo of roofs from above"],
+      ["rf-03", "Aerial drone photo of roofs from above"],
+      ["rf-04", "Aerial drone photo of roofs from above"],
+      ["rf-05", "Aerial drone photo of roofs from above"],
+      ["rf-06", "Aerial drone photo of roofs from above"],
+      ["rf-07", "Aerial drone photo of roofs from above"],
+      ["rf-08", "Aerial drone photo of roofs from above"],
+      ["rf-09", "Aerial drone photo of roofs from above"],
+      ["rf-10", "Aerial drone photo of roofs from above"],
+      ["rf-11", "Aerial drone photo of roofs from above"],
+      ["rf-12", "Aerial drone photo of roofs from above"],
+      ["rf-13", "Aerial drone photo of roofs from above"],
+      ["rf-14", "Aerial drone photo of roofs from above"],
+    ].map(([key, alt]) => ({ src: `${RF}${key}.jpg`, alt })),
     video: null,
     tiles: [
       { title: "Licensed and insured", body: "FAA Part 107 certified drone pilot, fully insured on every job site." },
@@ -72,19 +80,19 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     ],
     packages: [
       {
+        name: "Single job",
+        price: "$300",
+        badge: "Most booked",
+        perks: ["About 25 edited aerial + ground photos", "30–60s vertical video for social", "Edited by hand, not AI"],
+      },
+      {
         name: "Monthly",
         price: "$1,000",
         unit: "/mo",
-        badge: "Best value",
-        perks: ["Up to 4 jobs a month ($250 each)", "Aerial + ground photos and a vertical clip per job", "Priority scheduling"],
-      },
-      {
-        name: "Single job",
-        price: "$300",
-        perks: ["About 25 edited aerial + ground photos", "30–60s vertical video for social"],
+        perks: ["Up to 4 jobs a month ($250 each)", "Priority scheduling"],
       },
     ],
-    offer: "$100 off your first job",
+    offer: null,
     saveReason: "Save my contact for your next finished roof.",
     vcardNote: "Photo\\, video & aerial for roofing and construction. FAA Part 107 certified & insured.",
     smsBody: "Hi Lukas, I saw your page. I'd like to talk about photos for one of our jobs.",

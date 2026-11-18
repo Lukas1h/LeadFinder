@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { headers } from "next/headers";
@@ -130,13 +131,12 @@ export async function VerticalPage({ vertical: v, slug, previewParam }: { vertic
 
         <section id="portfolio" className="px-4">
           <div className="mx-auto max-w-[1040px]">
-            {v.video ? (
-              <div data-section="video">
+            {v.video && (
+              <div data-section="video" className="mb-2 sm:mb-3">
                 <LoopVideo src={v.video.mp4} poster={v.video.poster} title={v.video.title} />
               </div>
-            ) : (
-              <Gallery photos={v.photos} />
             )}
+            <Gallery photos={v.photos} />
           </div>
         </section>
 
@@ -207,29 +207,37 @@ export async function VerticalPage({ vertical: v, slug, previewParam }: { vertic
 }
 
 /**
- * First photo full width, then the rest in a grid — 2 columns on a phone, 3
- * from lg — trimmed so each size only shows full rows.
+ * In the config's order: one photo full width, then up to six in a grid (2
+ * columns on a phone, 3 from lg — six fills both), repeated. A last grid that
+ * can't fill its rows is trimmed per size.
  */
 function Gallery({ photos }: { photos: VerticalPhoto[] }) {
   if (photos.length === 0) return null;
-  const [first, ...rest] = photos;
-  const small = rest.length - (rest.length % 2);
-  const large = rest.length - (rest.length % 3);
+  const blocks: { wide: VerticalPhoto; grid: VerticalPhoto[] }[] = [];
+  for (let i = 0; i < photos.length; i += 7) blocks.push({ wide: photos[i], grid: photos.slice(i + 1, i + 7) });
   return (
-    <div data-section="photos">
-      {/* eslint-disable-next-line @next/next/no-img-element -- static portfolio photo */}
-      <img src={first.src} alt={first.alt} className="aspect-[3/2] w-full bg-[#F9F4F1] object-cover" />
-      {rest.length > 1 && (
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:gap-3 lg:grid-cols-3">
-          {rest.slice(0, Math.max(small, large)).map((p, i) => {
-            const visibility = i >= small && i < large ? "hidden lg:block" : i < small && i >= large ? "lg:hidden" : "";
-            return (
-              // eslint-disable-next-line @next/next/no-img-element -- static portfolio photo
-              <img key={p.src} src={p.src} alt={p.alt} loading="lazy" className={`aspect-[3/2] w-full bg-[#F9F4F1] object-cover ${visibility}`} />
-            );
-          })}
-        </div>
-      )}
+    <div data-section="photos" className="flex flex-col gap-2 sm:gap-3">
+      {blocks.map(({ wide, grid }) => {
+        const small = grid.length - (grid.length % 2);
+        const large = grid.length - (grid.length % 3);
+        return (
+          <Fragment key={wide.src}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static portfolio photo */}
+            <img src={wide.src} alt={wide.alt} loading={wide === photos[0] ? undefined : "lazy"} className="aspect-[3/2] w-full bg-[#F9F4F1] object-cover" />
+            {Math.max(small, large) > 0 && (
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
+                {grid.slice(0, Math.max(small, large)).map((p, i) => {
+                  const visibility = i >= small && i < large ? "hidden lg:block" : i < small && i >= large ? "lg:hidden" : "";
+                  return (
+                    // eslint-disable-next-line @next/next/no-img-element -- static portfolio photo
+                    <img key={p.src} src={p.src} alt={p.alt} loading="lazy" className={`aspect-[3/2] w-full bg-[#F9F4F1] object-cover ${visibility}`} />
+                  );
+                })}
+              </div>
+            )}
+          </Fragment>
+        );
+      })}
     </div>
   );
 }

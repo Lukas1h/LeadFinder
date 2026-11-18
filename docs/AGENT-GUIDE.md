@@ -666,18 +666,21 @@ the companies himself and tracks who he texted on his phone.
 
 - Content per vertical is config, not data: `VERTICALS` in
   `src/lib/verticals.ts` (path, header subtitle "Photo, Video & Aerial",
-  headline, photos, tiles, packages, first-job offer, vCard note). Roofing
-  prices: Single job $300, Monthly $1,000 for up to 4 jobs; "$100 off your
-  first job". Photos are placeholders from `public/agent-page/` until his
-  drone set arrives.
+  headline, photos, video, tiles, packages, optional first-job offer, vCard
+  note). Roofing pricing: Single job $300 is the highlighted "Most booked"
+  box, Monthly $1,000 for up to 4 jobs under it; no offer for now
+  (`offer: null`). Photos: Lukas's 14 drone shots in his order,
+  `public/vertical/roofing/rf-01…14.jpg` (2048px), laid out wide photo + grid
+  of six, twice; a `video` loops above them. `/vertical/` is excluded from the
+  proxy matcher and forwarded by the main site, like `/agent-page/`.
 - `vertical_links` (one per company: `vertical`, word `slug`, `company`,
   `contact_name`, `phone`, `area`, `notes`, view counts),
   `vertical_sessions`, `vertical_events` (`save_contact`, `text_me`, …) —
   copies of the portfolio trio. Made with **Create portfolio** on
   `/verticals/roofing`, which lists each link's visits, time, scroll and
   Saved contact / Texted you.
-- Page: `lukashahn.media/roofing/<word>` (the main site forwards `/roofing/*`
-  and `/api/vertical/*` to `r.lukashahn.media`); `src/app/roofing/[slug]`.
+- Page: `lukashahn.media/roofing/<word>` (the main site forwards `/roofing/*`,
+  `/api/vertical/*` and `/vertical/*` to `r.lukashahn.media`); `src/app/roofing/[slug]`.
   Never names the company; the sign-off uses `contact_name`. `?preview=1`
   isn't a visit. Tracking `POST /api/vertical/[slug]/track`, contact card
   `/api/vertical/[slug]/vcard` (Hahn Media, title = the subtitle). Push on
