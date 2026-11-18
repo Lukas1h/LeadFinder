@@ -14,6 +14,8 @@ struct FlambientActions {
     var ejectCard: (String) -> Void = { _ in }
     var planShoot: (String) -> Void = { _ in }
     var requestShootDetail: (String) -> Void = { _ in }
+    var requestSessionPreview: (_ card: String, _ session: Date, _ limit: Int) -> Void = { _, _, _ in }
+    var requestCardPhoto: (_ card: String, _ path: String) -> Void = { _, _ in }
     var setStayAwake: (Bool) -> Void = { _ in }
     var setAutoImport: (Bool) -> Void = { _ in }
 
@@ -26,6 +28,8 @@ struct FlambientActions {
             ejectCard: { link.ejectCard(cardID: $0) },
             planShoot: { link.planShoot(path: $0) },
             requestShootDetail: { link.requestShootDetail(path: $0) },
+            requestSessionPreview: { link.requestSessionPreview(card: $0, session: $1, limit: $2) },
+            requestCardPhoto: { link.requestCardPhoto(card: $0, path: $1) },
             setStayAwake: { link.setStayAwake($0) },
             setAutoImport: { link.setAutoImport($0) }
         )
@@ -35,6 +39,12 @@ struct FlambientActions {
 struct FlambientShootRoute: Hashable {
     let path: String
     let name: String
+}
+
+/// A session still on a card, before it's imported.
+struct FlambientCardSessionRoute: Hashable {
+    let cardID: String
+    let sessionID: Date
 }
 
 // MARK: - Screen
@@ -52,6 +62,8 @@ struct FlambientView: View {
             lastError: link.lastError,
             nearbyMacs: link.nearbyMacs,
             shootDetails: link.shootDetails,
+            sessionPreviews: link.sessionPreviews,
+            cardPhotos: link.cardPhotos,
             actions: .live(link)
         )
         .onAppear { link.start() }
@@ -66,6 +78,8 @@ struct FlambientDashboard: View {
     let lastError: String?
     let nearbyMacs: [String]
     let shootDetails: [String: RemoteShootDetail]
+    var sessionPreviews: [String: RemoteSessionPreview] = [:]
+    var cardPhotos: [String: Data] = [:]
     let actions: FlambientActions
 
     @State private var importTarget: ImportTarget?
@@ -107,6 +121,15 @@ struct FlambientDashboard: View {
                 route: route,
                 shoot: status?.shoots.first { $0.id == route.path },
                 detail: shootDetails[route.path],
+                actions: actions
+            )
+        }
+        .navigationDestination(for: FlambientCardSessionRoute.self) { route in
+            FlambientCardSessionView(
+                route: route,
+                session: status?.cards.first { $0.id == route.cardID }?.sessions.first { $0.id == route.sessionID },
+                preview: sessionPreviews[FlambientLink.sessionKey(card: route.cardID, session: route.sessionID)],
+                cardPhotos: cardPhotos,
                 actions: actions
             )
         }
@@ -205,6 +228,20 @@ struct FlambientDashboard: View {
     }
 
     private func sessionRow(_ session: RemoteSession, cardID: String) -> some View {
+        let preview = sessionPreviews[FlambientLink.sessionKey(card: cardID, session: session.id)]
+        return VStack(alignment: .leading, spacing: 10) {
+            NavigationLink(value: FlambientCardSessionRoute(cardID: cardID, sessionID: session.id)) {
+                FlambientSessionSpan(preview: preview, photoCount: session.photos)
+                    .opacity(session.importedAs == nil ? 1 : 0.5)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            sessionInfo(session, cardID: cardID)
+        }
+        .onAppear { actions.requestSessionPreview(cardID, session.id, 2) }
+    }
+
+    private func sessionInfo(_ session: RemoteSession, cardID: String) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(Self.timeRange(session))
@@ -679,6 +716,279 @@ private struct AngleTile: View {
     }
 }
 
+// MARK: - Card session previews
+
+/// A card session at a glance: its first photo, an arrow, its last photo, so the span of the shoot
+/// reads before importing. Tapping it opens the full preview.
+struct FlambientSessionSpan: View {
+    let preview: RemoteSessionPreview?
+    let photoCount: Int
+
+    var body: some View {
+        let first = preview?.frames.first
+        let last = (preview?.frames.count ?? 0) > 1 ? preview?.frames.last : nil
+        HStack(spacing: 8) {
+            FlambientCardThumb(frame: first, loading: preview == nil, caption: first.flatMap(Self.time))
+            if photoCount > 1 || preview == nil {
+                Image(systemName: "arrow.right")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Theme.tertiaryText)
+                FlambientCardThumb(frame: last, loading: preview == nil, caption: last.flatMap(Self.time))
+            } else {
+                Color.clear.aspectRatio(3 / 2, contentMode: .fit).frame(maxWidth: .infinity)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.tertiaryText)
+        }
+    }
+
+    static func time(_ frame: RemoteCardFrame) -> String? {
+        frame.date?.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+/// One photo on a card, 3:2, with an optional caption chip in the corner.
+struct FlambientCardThumb: View {
+    let frame: RemoteCardFrame?
+    var loading = false
+    var caption: String?
+    var cornerRadius: CGFloat = 8
+
+    var body: some View {
+        Theme.cardRaised
+            .aspectRatio(3 / 2, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay {
+                if let data = frame?.thumbnail, let image = UIImage(data: data) {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else if loading {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: frame?.kind == "video" ? "video.fill" : "photo")
+                        .foregroundStyle(Theme.tertiaryText)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(alignment: .bottomLeading) {
+                if let caption {
+                    Text(caption)
+                        .font(.caption2.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .padding(5)
+                }
+            }
+    }
+}
+
+/// What's in a session on the card: an even spread of its photos from first to last, any of which
+/// opens full screen, and the Import button.
+struct FlambientCardSessionView: View {
+    @Environment(AppState.self) private var appState
+    let route: FlambientCardSessionRoute
+    let session: RemoteSession?
+    let preview: RemoteSessionPreview?
+    let cardPhotos: [String: Data]
+    let actions: FlambientActions
+
+    @State private var showImport = false
+    @State private var viewing: RemoteCardFrame?
+
+    /// Enough to see every room of a typical house without a slow send over Bluetooth.
+    static let gridLimit = 48
+    private let columns = [GridItem(.adaptive(minimum: 104), spacing: 6)]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if let session {
+                    header(session)
+                    if let preview {
+                        if preview.frames.isEmpty {
+                            EmptyStateView(icon: "photo.on.rectangle", title: "No photos", message: "This session has nothing to preview.")
+                        } else {
+                            if preview.frames.count < preview.photoCount {
+                                Text("\(preview.frames.count) of \(preview.photoCount) photos, spread from first to last")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.secondaryText)
+                            }
+                            LazyVGrid(columns: columns, spacing: 6) {
+                                ForEach(preview.frames) { frame in
+                                    Button { viewing = frame } label: {
+                                        FlambientCardThumb(frame: frame, caption: "\(frame.index + 1)", cornerRadius: 6)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    } else {
+                        ProgressView("Reading the card…")
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+                    }
+                } else {
+                    EmptyStateView(icon: "sdcard", title: "Card removed", message: "This session isn't on a connected card any more.")
+                }
+            }
+            .padding(16)
+        }
+        .background(Theme.background)
+        .navigationTitle(session.map { $0.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()) } ?? "Card")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { actions.requestSessionPreview(route.cardID, route.sessionID, Self.gridLimit) }
+        .sheet(isPresented: $showImport) {
+            if let session {
+                FlambientImportSheet(
+                    session: session,
+                    bookings: appState.bookings.value.map { FlambientBookingMatch.candidates(for: session, in: $0) } ?? []
+                ) { address, bookingId in
+                    actions.importSession(route.cardID, session.id, address, bookingId)
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
+        .fullScreenCover(item: $viewing) { start in
+            FlambientCardPhotoPager(
+                frames: preview?.frames ?? [start],
+                photoCount: preview?.photoCount ?? 1,
+                photos: cardPhotos,
+                start: start.id
+            ) { actions.requestCardPhoto(route.cardID, $0) }
+        }
+    }
+
+    private func header(_ session: RemoteSession) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(FlambientDashboard.timeRange(session))
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+                Text(FlambientDashboard.counts(session))
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondaryText)
+                if let imported = session.importedAs {
+                    Text("Imported as \(imported)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiaryText)
+                } else if let suggested = session.suggestedAddress {
+                    Text(suggested)
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondaryText)
+                }
+            }
+            FlambientSessionSpan(preview: preview, photoCount: session.photos)
+            if session.importedAs == nil {
+                Button {
+                    showImport = true
+                } label: {
+                    Label("Import", systemImage: "square.and.arrow.down")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.accent)
+                .foregroundStyle(.black)
+            }
+        }
+        .card(padding: 14)
+    }
+}
+
+/// Card photos full screen, swiped through. Each page shows its thumbnail at once and swaps in the
+/// screen-size JPEG when the Mac sends it.
+struct FlambientCardPhotoPager: View {
+    @Environment(\.dismiss) private var dismiss
+    let frames: [RemoteCardFrame]
+    let photoCount: Int
+    let photos: [String: Data]
+    let request: (String) -> Void
+    @State private var selection: String
+
+    init(frames: [RemoteCardFrame], photoCount: Int, photos: [String: Data], start: String,
+         request: @escaping (String) -> Void) {
+        self.frames = frames
+        self.photoCount = photoCount
+        self.photos = photos
+        self.request = request
+        _selection = State(initialValue: start)
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.black.ignoresSafeArea()
+            TabView(selection: $selection) {
+                ForEach(frames) { frame in
+                    page(frame).tag(frame.id)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .ignoresSafeArea()
+            topBar
+        }
+        .statusBarHidden()
+        .onChange(of: selection, initial: true) { _, id in
+            request(id)
+            // The next one too, so a swipe forward rarely waits.
+            if let i = frames.firstIndex(where: { $0.id == id }), i + 1 < frames.count {
+                request(frames[i + 1].id)
+            }
+        }
+    }
+
+    private var current: RemoteCardFrame? { frames.first { $0.id == selection } }
+
+    private var topBar: some View {
+        HStack(alignment: .top) {
+            if let current {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(current.index + 1) of \(photoCount)")
+                        .font(.headline.monospacedDigit())
+                    Text([current.name, current.date?.formatted(date: .omitted, time: .standard)]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                .foregroundStyle(.white)
+            }
+            Spacer()
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.white.opacity(0.15), in: Circle())
+            }
+            .accessibilityLabel("Close")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .background(LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea())
+    }
+
+    @ViewBuilder private func page(_ frame: RemoteCardFrame) -> some View {
+        let full = photos[frame.id]
+        ZStack {
+            if let data = full ?? frame.thumbnail, let image = UIImage(data: data) {
+                Image(uiImage: image).resizable().scaledToFit()
+            } else {
+                Image(systemName: frame.kind == "video" ? "video.fill" : "photo")
+                    .font(.largeTitle)
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+            if full == nil, frame.kind != "video" {
+                ProgressView().tint(.white)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 // MARK: - Home card
 
 /// The Home tab's at-a-glance Flambient line: connection and current import.
@@ -769,6 +1079,27 @@ struct FlambientRoute: Hashable {}
             shootDetails: ["/shoots/5 Elm Ct": RemoteShootDetail(path: "/shoots/5 Elm Ct", name: "5 Elm Ct", angles: (0..<6).map {
                 RemoteAngle(id: "a\($0)", thumbnail: nil, frames: 5, flashes: $0 % 3, isHDR: $0 == 2, flags: $0 == 4 ? ["Person in frame"] : [])
             })],
+            actions: FlambientActions()
+        )
+    }
+    .environment(AppState())
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Card session") {
+    let now = Date()
+    let session = RemoteSession(id: now, start: now, end: now.addingTimeInterval(3600), photos: 412, videos: 2,
+                                importedAs: nil, suggestedAddress: "1234 Maple Ave", suggestedBookingId: nil)
+    let frames = (0..<12).map {
+        RemoteCardFrame(id: "/card/P\($0).RW2", name: "P\($0).RW2", date: now.addingTimeInterval(Double($0) * 300),
+                        kind: "camera", index: $0 * 37, thumbnail: nil)
+    }
+    return NavigationStack {
+        FlambientCardSessionView(
+            route: FlambientCardSessionRoute(cardID: "card1", sessionID: now),
+            session: session,
+            preview: RemoteSessionPreview(cardID: "card1", sessionID: now, photoCount: 412, frames: frames),
+            cardPhotos: [:],
             actions: FlambientActions()
         )
     }

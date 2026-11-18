@@ -55,6 +55,12 @@ enum RemoteCommand: Codable, Sendable {
     case planShoot(path: String)
     /// Ask for a shoot's angles with small thumbnails; answered with `.shootDetail`.
     case shootDetail(path: String)
+    /// Thumbnails of a session still on a card, before importing; answered with `.sessionPreview`.
+    /// `limit` caps the photos sent: 2 is just the first and last (a list row), more is an even
+    /// spread across the session from first to last (the preview grid).
+    case sessionPreview(cardID: String, sessionID: Date, limit: Int)
+    /// One photo on a card at screen size (the `id` of a `RemoteCardFrame`); answered with `.cardPhoto`.
+    case cardPhoto(cardID: String, path: String)
     /// Keep the Mac awake with the lid closed (true) or let it sleep normally (false).
     case setStayAwake(Bool)
     /// Turn automatic import of inserted cards on or off.
@@ -68,6 +74,8 @@ enum RemoteEvent: Codable, Sendable {
     case paired(token: String, macName: String)
     case status(RemoteStatus)
     case shootDetail(RemoteShootDetail)
+    case sessionPreview(RemoteSessionPreview)
+    case cardPhoto(RemoteCardPhoto)
     /// A command failed; `message` is for a person to read.
     case error(message: String)
 }
@@ -150,4 +158,35 @@ struct RemoteAngle: Codable, Sendable, Identifiable {
     var flashes: Int
     var isHDR: Bool
     var flags: [String]
+}
+
+// MARK: Card previews
+
+struct RemoteSessionPreview: Codable, Sendable, Equatable {
+    var cardID: String
+    var sessionID: Date
+    /// Photos in the session (the frames are a sample of these).
+    var photoCount: Int
+    /// In capture order; the session's first and last photo are always included.
+    var frames: [RemoteCardFrame]
+}
+
+struct RemoteCardFrame: Codable, Sendable, Equatable, Identifiable {
+    /// The file's path on the card; what `.cardPhoto` asks for.
+    var id: String
+    var name: String
+    var date: Date?
+    /// MediaKind raw value: "camera", "drone" or "video".
+    var kind: String
+    /// 0-based position among the session's photos.
+    var index: Int
+    /// JPEG, about 240 px on the long side, from the raw's embedded preview.
+    var thumbnail: Data?
+}
+
+struct RemoteCardPhoto: Codable, Sendable, Equatable {
+    var cardID: String
+    var path: String
+    /// JPEG, about 1280 px on the long side; nil when the file has no readable preview.
+    var image: Data?
 }

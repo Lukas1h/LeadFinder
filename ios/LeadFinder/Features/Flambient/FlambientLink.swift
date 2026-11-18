@@ -136,6 +136,12 @@ final class FlambientLink: NSObject {
     private(set) var lastStatusAt: Date?
     /// Angles with thumbnails, by shoot path, filled by `.shootDetail`.
     private(set) var shootDetails: [String: RemoteShootDetail] = [:]
+    /// Thumbnails of sessions still on a card, by `sessionKey(card:session:)`.
+    private(set) var sessionPreviews: [String: RemoteSessionPreview] = [:]
+    /// Screen-size JPEGs of photos on a card, by path; only the most recent few are kept.
+    private(set) var cardPhotos: [String: Data] = [:]
+    @ObservationIgnored private var cardPhotoOrder: [String] = []
+    @ObservationIgnored private var previewsAsked: [String: Int] = [:]
     private(set) var lastError: String?
     /// The Mac paired last, so the app prefers it when several are around.
     private(set) var pairedMac: String?
@@ -296,6 +302,25 @@ final class FlambientLink: NSObject {
     /// `shootDetails[path]`.
     func requestShootDetail(path: String) {
         send(.shootDetail(path: path))
+    }
+
+    static func sessionKey(card: String, session: Date) -> String {
+        "\(card)|\(session.timeIntervalSince1970)"
+    }
+
+    /// Ask for a card session's thumbnails (first and last at `limit` 2, an even spread above);
+    /// the answer lands in `sessionPreviews`. Asking again for no more than was asked is a no-op.
+    func requestSessionPreview(card cardID: String, session sessionID: Date, limit: Int) {
+        let key = Self.sessionKey(card: cardID, session: sessionID)
+        guard (previewsAsked[key] ?? 0) < limit, connection.isConnected else { return }
+        previewsAsked[key] = limit
+        send(.sessionPreview(cardID: cardID, sessionID: sessionID, limit: limit))
+    }
+
+    /// Ask for one card photo at screen size; the answer lands in `cardPhotos[path]`.
+    func requestCardPhoto(card cardID: String, path: String) {
+        guard cardPhotos[path] == nil else { return }
+        send(.cardPhoto(cardID: cardID, path: path))
     }
 
     func setStayAwake(_ stayAwake: Bool) {
@@ -477,6 +502,8 @@ final class FlambientLink: NSObject {
 
     private func peerDisconnected(_ mac: String) {
         guard activeMac == mac || connection.macName == mac else { return }
+        // Requests in flight are lost with the link; let the screens ask again once it's back.
+        previewsAsked = sessionPreviews.mapValues(\.frames.count)
 
         if pendingInvite?.mac == mac {
             // The Mac turned the invitation down.
@@ -568,6 +595,22 @@ final class FlambientLink: NSObject {
         case .shootDetail(let detail):
             didHandshake = true
             shootDetails[detail.path] = detail
+
+        case .sessionPreview(let preview):
+            didHandshake = true
+            let key = Self.sessionKey(card: preview.cardID, session: preview.sessionID)
+            // A row's 2-frame answer can arrive after the grid's bigger one; keep the bigger.
+            if (sessionPreviews[key]?.frames.count ?? 0) <= preview.frames.count {
+                sessionPreviews[key] = preview
+            }
+
+        case .cardPhoto(let photo):
+            didHandshake = true
+            guard let image = photo.image else { break }
+            cardPhotos[photo.path] = image
+            cardPhotoOrder.removeAll { $0 == photo.path }
+            cardPhotoOrder.append(photo.path)
+            while cardPhotoOrder.count > 30 { cardPhotos[cardPhotoOrder.removeFirst()] = nil }
 
         case .error(let message):
             lastError = message
