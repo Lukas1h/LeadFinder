@@ -174,8 +174,8 @@ stored `lead_section` and template targeting are unchanged. Shooter markets
 move there, and Texted before / Unlikely stay put (hard rule 5). Eugene and
 Medford are 90 min, Ashland and Corvallis 120, so those stay in place.
 Texted before is sorted nearest first (the group's closest listing: drive
-minutes from Winston, miles from the photographer's base on a shooter-market
-tab), then by
+minutes from Winston, minutes from its nearest main shooter on a
+shooter-market tab), then by
 who has waited longest since the last text (Lukas, 2026-11-14).
 
 **Markets** (`src/lib/markets.ts`, since 2026-11-12). Every listing is in one
@@ -185,28 +185,46 @@ market, computed from its city/state (never stored):
 Ashland, the rest of the coast, Bend, plus any city missing from the drive
 table), and the **shooter markets**, areas shot by a subcontracted
 photographer while Lukas edits. Each is one entry in `SHOOTER_MARKETS`
-(key, label, shooters, base town + coordinates, city → miles table, optional
-states and area codes, point fallback box, nearness bands, drive-time
-formula, `{{area}}` phrase, portfolio area, page footer, vCard, `jobsPerWeek`);
-adding a region is one more entry there plus its data (below). Today:
-`portland` (Multnomah, Washington, Clackamas, Yamhill and Columbia counties
-plus Clark County WA; Elijah and Chris, based from Oregon City) and
-`central_coast` (2026-11-16: Lincoln County, Lincoln City to Yachats and
-inland to Siletz/Eddyville; Christian, based from Newport; Florence and the
-coast north of Cascade Head stay regional). Salem and the rest of Marion
-County are regional. The Leads page has a tab per market
+(key, label, its shooters, a base town for wording and the point box, its
+towns with coordinates in `src/lib/marketCities.ts`, optional states and area
+codes, point fallback box, drive-time formula, `{{area}}` phrase, portfolio
+area, page footer, vCard, `jobsPerWeek`); adding a region is one more entry
+there plus its data (below). Today: `portland` (Multnomah, Washington,
+Clackamas, Yamhill and Columbia counties plus Clark County WA) and
+`central_coast`, labelled **Coast** since 2026-11-19 (Tillamook and Lincoln
+counties, Manzanita to Yachats and inland to Siletz/Eddyville; the key stays
+`central_coast` because stored variants and the iPhone app use it; Clatsop
+County and Florence stay regional). Salem and the rest of Marion County are
+regional. The Leads page has a tab per market
 (`/?market=local|regional|portland|central_coast`, Local by default);
 `getLeadsBoard({ market })` filters the board and always returns
-`marketCounts` for every market. A shooter-market tab is sorted purely by
-miles from its base (`milesFromBase`: geocode, else the city table; unknown
-last), with no coming-soon or area-code steps; local/regional keep the drive
-bands from Winston. Cards' drive time comes from `listingDriveTime()`: from
-Winston for local/regional, "~25 min from Oregon City" / "~35 min from
-Newport" for shooter markets.
+`marketCounts` for every market.
+
+**Shooters per market** (2026-11-19). Each market lists its shooters
+(`MarketShooter`: DB `name`, card `label`, `role` main | backup, home
+point, `freeMinutes` of drive with no charge, optional `drivePerHour`):
+Portland = Chris (main, SE Woodstock & 52nd, free to ~60 min, no drive
+charge) and Elijah (main, Spyglass Ln Oregon City, free within 20 min, then
+$50/h); Coast = Jenny Bocko (main, Netarts) and Emily Castleberry (backup,
+Newport; too pricey to centre outreach on). Backups show on cards but never
+steer sorting. Drive minutes = `startMinutes + straight-line miles ×
+minutesPerMile` from the listing's geocode, else its town's coordinates.
+A listing's **owner** is its nearest main shooter (`ownerMinutes`). The
+Photo / Video / Backup sections of a shooter-market tab are ordered by
+`balanceByShooter`: each owner's queue sorted by owner minutes + 0.5 × the
+other mains' average minutes (close to both beats close to one), then the
+queues interleaved round-robin so every main shooter gets an even share of
+outreach (Lukas didn't want Chris favoured over Elijah); unknown location
+last; Video still puts never-texted first. Texted before goes by owner
+minutes. Cards' drive time: `listingDriveTime()` from Winston for
+local/regional; for shooter markets `shooterDrives()` lists every shooter,
+owner first, backups marked, Elijah's estimated drive charge as "+$N"
+(web `ShooterDrives` component; the iPhone gets the joined string, e.g.
+"~20 min Chris · ~30 min Elijah").
 
 A new region's data, besides the `SHOOTER_MARKETS` entry: a `search_sources`
-row over it with `coming_soon_only` false (Central Coast: "Central Coast
-(Lincoln County, all listings)", $375k+), market variants of the outreach
+row over it with `coming_soon_only` false (Coast: "Central Coast
+(Lincoln County, all listings)" and "Coast (Tillamook County, all listings)", $375k+), market variants of the outreach
 templates (copies of the Portland wording ones, `{{area}}` does the rest),
 a portfolio template whose towns are the market's cities plus its
 `portfolioArea`, and the photographer on `shooters`. The iPhone app needs a
@@ -459,9 +477,10 @@ Flambient (the Mac photo app) makes galleries with `POST /api/app/v1/bookings/[i
 sends nothing. A different folder already on the booking answers 409 `{ existing }` unless `replace`.
 The folder must be in the same Dropbox account as `DROPBOX_REFRESH_TOKEN` (thumbnails load by path).
 
-Shooters (subcontracted photographers for the shooter markets: Elijah and
-Chris in Portland, Christian on the Central Coast; Lukas still
-edits): `shooters` (`name` unique, `phone`, `email`, `notes`) and on the
+Shooters (subcontracted photographers for the shooter markets: Chris and
+Elijah in Portland, Jenny Bocko and backup Emily Castleberry on the Coast;
+Christian was dropped 2026-11-19; where each is based and their role is in
+`SHOOTER_MARKETS`, see Markets; Lukas still edits): `shooters` (`name` unique, `phone`, `email`, `notes`) and on the
 booking `shooter_id`, `shooter_pay` (whole dollars) and `shooter_expense_id`.
 The shooter's `phone` is entered in the booking dialog's shooter form (the
 MCP/phone callers only send name + pay, which leave it alone).

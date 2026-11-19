@@ -11,7 +11,15 @@ import { estimateDriveMinutes } from "@/lib/driveTime";
 import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
 import { getRecentShoots, nearestShoot, type NearShoot } from "@/lib/nearShoots";
 import { shotAddresses } from "@/app/follow-up/feeds/shared";
-import { emptyMarketRecord, isShooterMarket, marketFor, milesFromBase, type Market, type ShooterMarketKey } from "@/lib/markets";
+import {
+  balanceByShooter,
+  emptyMarketRecord,
+  isShooterMarket,
+  marketFor,
+  ownerMinutes,
+  type Market,
+  type ShooterMarketKey,
+} from "@/lib/markets";
 
 /**
  * Everything the Leads page shows, as data.
@@ -332,10 +340,13 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   // Texted goes nearest first, then by who has waited longest since his last text; unlikely by the
   // priority score.
   //
-  // Each shooter-market tab ranks by distance from its photographer's base
-  // instead (see outreachRank): the photographer is out there, so the drive
-  // from Winston and the agent's area code say nothing.
+  // A shooter-market tab splits those three sections between its photographers
+  // instead (see balanceByShooter): the shooters are out there, so the drive
+  // from Winston and the agent's area code say nothing, and an even share each
+  // is what keeps them all working. Each section is pre-sorted by the
+  // tie-breakers below so they only order cards inside one shooter's queue.
   for (const key of LEAD_SECTION_ORDER) {
+    if (isShooterMarket(market) && (key === "photo" || key === "video" || key === "backup")) continue;
     sections[key].sort((a, b) =>
       key === "backup"
         ? outreachRank(a, b, market) || (b.best.price ?? 0) - (a.best.price ?? 0)
@@ -353,6 +364,26 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
               byLeadPriority(a.best, b.best)
             : byLeadPriority(a.best, b.best)
     );
+  }
+  if (isShooterMarket(market)) {
+    const placeOf = (g: LeadGroup) => g.best;
+    // Photo: the pipeline's priority score breaks ties.
+    sections.photo.sort((a, b) => byLeadPriority(a.best, b.best));
+    sections.photo = balanceByShooter(sections.photo, placeOf, market);
+    // Backup: the priciest first.
+    sections.backup.sort((a, b) => (b.best.price ?? 0) - (a.best.price ?? 0));
+    sections.backup = balanceByShooter(sections.backup, placeOf, market);
+    // Video: never-texted agents before texted ones, each group priciest
+    // first, and each balanced separately so a texted card never jumps ahead
+    // of a never-texted one.
+    const neverTexted = sections.video.filter((g) => !g.textedAt);
+    const texted = sections.video.filter((g) => g.textedAt);
+    neverTexted.sort((a, b) => (b.best.price ?? 0) - (a.best.price ?? 0));
+    texted.sort((a, b) => (b.best.price ?? 0) - (a.best.price ?? 0));
+    sections.video = [
+      ...balanceByShooter(neverTexted, placeOf, market),
+      ...balanceByShooter(texted, placeOf, market),
+    ];
   }
   known.sort(
     (a, b) =>
@@ -398,10 +429,9 @@ async function countNewAgentsToday(): Promise<Record<Market, number>> {
 
 /**
  * Who to text first: listed before coming soon, then nearer, then a local
- * number (see the sort above). A shooter-market tab is simply nearest to its
- * photographer's base first (Lukas asked for a plain distance sort on the
- * Portland tab, 2026-11-12): the drive from Winston says nothing there and
- * the area code is the local one. Unknown distance sorts last.
+ * number (see the sort above). Shooter-market photo/video/backup sections are
+ * balanced across the market's shooters instead (balanceByShooter), so this
+ * only ranks the other sections there — texted before, by nearest owner.
  */
 function outreachRank(a: LeadGroup, b: LeadGroup, market: Market | null): number {
   if (isShooterMarket(market)) return compareDistance(shooterDistance(a, market), shooterDistance(b, market));
@@ -413,20 +443,20 @@ function outreachRank(a: LeadGroup, b: LeadGroup, market: Market | null): number
   );
 }
 
-/** Miles from the shooter market's base to the group's best listing; unknown is Infinity. */
+/** Minutes from the shooter market's owner (nearest main shooter) to the group's best listing; unknown is Infinity. */
 function shooterDistance(g: LeadGroup, market: ShooterMarketKey): number {
-  return milesFromBase(g.best, market) ?? Infinity;
+  return ownerMinutes(g.best, market) ?? Infinity;
 }
 
 /**
  * How far the group's nearest listing is: drive minutes from Winston, or
- * miles from the photographer's base on a shooter-market tab. Unknown is Infinity.
+ * minutes from its owner shooter on a shooter-market tab. Unknown is Infinity.
  */
 function nearestDistance(g: LeadGroup, market: Market | null): number {
   let nearest = Infinity;
   for (const { lead } of g.entries) {
     const d =
-      isShooterMarket(market) ? milesFromBase(lead, market) : lead.city ? estimateDriveMinutes(lead.city) : null;
+      isShooterMarket(market) ? ownerMinutes(lead, market) : lead.city ? estimateDriveMinutes(lead.city) : null;
     if (d != null) nearest = Math.min(nearest, d);
   }
   return nearest;

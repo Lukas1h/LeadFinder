@@ -1,0 +1,133 @@
+/**
+ * Town centre coordinates (lowercase name → [lat, lng]) for listings with no usable geocode.
+ *
+ * The Portland metro: Multnomah, Washington, Clackamas, Yamhill and Columbia
+ * counties. Salem and the rest of Marion County stay regional.
+ */
+export const PORTLAND_CITIES: Record<string, readonly [number, number]> = {
+  // Clackamas
+  "oregon city": [45.3374, -122.5995],
+  gladstone: [45.3956, -122.5861],
+  "west linn": [45.3586, -122.646],
+  beavercreek: [45.2878, -122.5357],
+  redland: [45.3435, -122.4929],
+  "lake oswego": [45.4212, -122.6824],
+  milwaukie: [45.4243, -122.6268],
+  clackamas: [45.4147, -122.5533],
+  "oak grove": [45.4166, -122.6422],
+  "jennings lodge": [45.3912, -122.6126],
+  "happy valley": [45.4372, -122.5058],
+  mulino: [45.1925, -122.5416],
+  damascus: [45.4062, -122.5041],
+  canby: [45.2577, -122.6862],
+  rivergrove: [45.3846, -122.7297],
+  barlow: [45.2523, -122.7212],
+  wilsonville: [45.308, -122.7882],
+  boring: [45.4345, -122.2986],
+  molalla: [45.1517, -122.5865],
+  colton: [45.1721, -122.4379],
+  "eagle creek": [45.3577, -122.3594],
+  estacada: [45.3069, -122.3247],
+  sandy: [45.396, -122.2703],
+  welches: [45.3385, -121.9634],
+  rhododendron: [45.3666, -121.9238],
+  "government camp": [45.3041, -121.7548],
+  // Multnomah
+  portland: [45.5178, -122.6759],
+  gresham: [45.4864, -122.4178],
+  fairview: [45.5424, -122.4511],
+  "wood village": [45.537, -122.4185],
+  troutdale: [45.5302, -122.388],
+  "maywood park": [45.5527, -122.5613],
+  corbett: [45.5315, -122.2923],
+  // Washington
+  tualatin: [45.3667, -122.7716],
+  tigard: [45.4121, -122.7854],
+  "king city": [45.4028, -122.8041],
+  durham: [45.3947, -122.7563],
+  sherwood: [45.3589, -122.8506],
+  beaverton: [45.4677, -122.8589],
+  "garden home": [45.466, -122.7537],
+  "cedar mill": [45.5248, -122.8109],
+  aloha: [45.4926, -122.8768],
+  bethany: [45.56, -122.8365],
+  hillsboro: [45.5216, -122.9188],
+  cornelius: [45.5129, -123.0457],
+  "north plains": [45.5945, -122.979],
+  "forest grove": [45.5379, -123.1323],
+  gaston: [45.4362, -123.1392],
+  banks: [45.6186, -123.1143],
+  timber: [45.7199, -123.2946],
+  // Yamhill
+  newberg: [45.313, -122.9576],
+  dundee: [45.2791, -123.0402],
+  dayton: [45.2163, -123.0801],
+  lafayette: [45.2505, -123.1128],
+  yamhill: [45.3425, -123.1864],
+  carlton: [45.2891, -123.1719],
+  mcminnville: [45.2134, -123.2093],
+  amity: [45.1046, -123.1928],
+  sheridan: [45.0668, -123.4046],
+  willamina: [45.0787, -123.4859],
+  // Columbia
+  scappoose: [45.7573, -122.8744],
+  "saint helens": [45.864, -122.8065],
+  "st. helens": [45.864, -122.8065],
+  "st helens": [45.864, -122.8065],
+  "columbia city": [45.8898, -122.8086],
+  vernonia: [45.8587, -123.1929],
+  rainier: [46.0889, -122.936],
+  clatskanie: [46.1037, -123.2048],
+};
+
+/**
+ * Town centre coordinates (lowercase name → [lat, lng]) for listings with no usable geocode.
+ *
+ * The Oregon coast: Lincoln County (Lincoln City to Yachats, inland to Siletz
+ * and Eddyville) and Tillamook County (Neskowin to Neahkahnie). Clatsop County
+ * (Seaside, Cannon Beach) and Florence stay regional.
+ */
+export const COAST_CITIES: Record<string, readonly [number, number]> = {
+  // Lincoln
+  newport: [44.6396, -124.056],
+  "south beach": [44.5919, -124.0655],
+  "agate beach": [44.6773, -124.0618],
+  toledo: [44.6328, -123.9305],
+  "otter rock": [44.753, -124.0574],
+  "seal rock": [44.4733, -124.0789],
+  "depoe bay": [44.8118, -124.0618],
+  "lincoln beach": [44.8825, -124.0339],
+  waldport: [44.429, -124.079],
+  siletz: [44.7261, -123.9181],
+  "gleneden beach": [44.8864, -124.027],
+  eddyville: [44.6346, -123.7765],
+  kernville: [44.9007, -124.006],
+  logsden: [44.7429, -123.7932],
+  yachats: [44.3129, -124.1022],
+  tidewater: [44.4067, -123.907],
+  "lincoln city": [44.9748, -124.0104],
+  neotsu: [44.9984, -123.9868],
+  otis: [45.0016, -123.9818],
+  "rose lodge": [45.0217, -123.9059],
+  // Tillamook
+  tillamook: [45.4493, -123.8428],
+  netarts: [45.4321, -123.9375],
+  oceanside: [45.4563, -123.9637],
+  "cape meares": [45.4981, -123.9586],
+  "bay city": [45.5273, -123.8906],
+  garibaldi: [45.5598, -123.9112],
+  barview: [45.5697, -123.9435],
+  "twin rocks": [45.5969, -123.9595],
+  "rockaway beach": [45.6131, -123.9401],
+  wheeler: [45.6885, -123.8831],
+  nehalem: [45.7153, -123.8952],
+  manzanita: [45.7212, -123.9349],
+  neahkahnie: [45.7297, -123.9414],
+  "pacific city": [45.2011, -123.9637],
+  woods: [45.2132, -123.9542],
+  cloverdale: [45.1868, -123.9245],
+  hebo: [45.223, -123.8609],
+  beaver: [45.279, -123.8236],
+  neskowin: [45.1195, -123.9734],
+  sandlake: [45.3032, -123.9235],
+};

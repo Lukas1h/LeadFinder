@@ -11,7 +11,8 @@ import { ListingRow } from "./ListingRow";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { Card } from "@/components/ui/card";
 import { sampleCardPhotos } from "@/lib/cardPhotos";
-import { listingDriveTime } from "@/lib/markets";
+import { listingDriveTime, shooterDrives } from "@/lib/markets";
+import { ShooterDrives } from "./ShooterDrives";
 
 /**
  * One agent on the Leads page. Outreach is about the person now — most texts
@@ -43,6 +44,7 @@ export function AgentLeadCard({
 }) {
   const [modalOpen, setModalOpen] = useState(false);
   const driveTime = listingDriveTime(lead);
+  const drives = shooterDrives(lead);
   const [showOthers, setShowOthers] = useState(false);
   const name = agent?.name ?? agentName ?? "No agent listed";
   const total = others.length + 1;
@@ -108,7 +110,7 @@ export function AgentLeadCard({
             <div className="text-sm text-muted-foreground mt-1 flex flex-wrap gap-x-3">
               <span className="font-semibold text-foreground">{formatPrice(lead.price)}</span>
               <span>{[lead.city, lead.state].filter(Boolean).join(", ")}</span>
-              {driveTime && <span>{driveTime}</span>}
+              {drives ? <ShooterDrives drives={drives} /> : driveTime && <span>{driveTime}</span>}
               <span>
                 {lead.bedrooms ?? "—"} bd / {lead.bathrooms ?? "—"} ba
               </span>

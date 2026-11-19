@@ -15,7 +15,8 @@ import { AgentRow } from "./AgentRow";
 import { LinkAgentForm } from "./LinkAgentForm";
 import { FindLinkButton } from "./FindLinkButton";
 import { formatPrice, formatDate } from "@/lib/format";
-import { listingDriveTime } from "@/lib/markets";
+import { listingDriveTime, shooterDrives } from "@/lib/markets";
+import { ShooterDrives } from "./ShooterDrives";
 import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -138,13 +139,20 @@ export function ListingModal({
             <h2 className="text-xl font-semibold text-foreground">
               {lead.address ?? "Unknown address"}
             </h2>
-            <div className="text-sm text-muted-foreground flex items-center gap-1.5">
+            <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
               {[lead.city, lead.state, lead.zipcode].filter(Boolean).join(", ")}
-              {listingDriveTime(lead) && (
+              {shooterDrives(lead) ? (
                 <span className="flex items-center gap-1">
-                  <Car className="size-3.5" />
-                  {listingDriveTime(lead)}
+                  <Car className="size-3.5 shrink-0" />
+                  <ShooterDrives drives={shooterDrives(lead)!} />
                 </span>
+              ) : (
+                listingDriveTime(lead) && (
+                  <span className="flex items-center gap-1">
+                    <Car className="size-3.5" />
+                    {listingDriveTime(lead)}
+                  </span>
+                )
               )}
             </div>
           </div>
