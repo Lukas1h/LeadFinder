@@ -4,6 +4,7 @@ import SwiftUI
 /// Read-only in Phase 2 — Text and Pass arrive with the texting phase.
 struct LeadsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Sections the server marked collapsed (just "Unlikely matches") start
     /// closed, matching the web page.
@@ -32,7 +33,7 @@ struct LeadsView: View {
             // primary scroll view, so the nav bar collapses with it and the
             // cards scroll under the bar rather than over or through it.
             // Outside the list, so a market switch only swaps the cards.
-            .modifier(TopBar { marketTabs.padding(.top, 4).padding(.bottom, 8) })
+            .modifier(TopBar { marketTabs.padding(.top, 4).padding(.bottom, 10) })
             .background(Theme.background)
             .navigationTitle("Leads")
             .toolbar {
@@ -67,6 +68,12 @@ struct LeadsView: View {
                     try? await Task.sleep(for: .milliseconds(250))
                 }
                 #endif
+            }
+            // Back in the app after a while: refetch the board on screen, so
+            // a phone that kept the app alive for hours doesn't sit on an old
+            // order (load() skips it when the copy is under two minutes old).
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await appState.leads.load() } }
             }
             .onReceive(NotificationCenter.default.publisher(for: .leadsDidChange)) { _ in
                 Task { await appState.leads.load(force: true) }
@@ -175,91 +182,43 @@ struct LeadsView: View {
         }
     }
 
-    /// Local | Regional | each shooter market (Portland, Central Coast), as on
-    /// the web (lib/markets.ts; the server's `markets` list drives the tabs).
-    /// Each market is its own board, sorted by nearness to who shoots it:
-    /// Winston for local and regional, the subcontracted photographer's base
-    /// for a shooter market (Oregon City for Portland).
+    /// Local | Regional | each shooter market (Portland, Coast), as on the
+    /// web (lib/markets.ts; the server's `markets` list drives the segments).
+    /// A plain segmented control, like Home's funnel picker. Switching shows
+    /// the market's cached board at once and refreshes it behind.
     private var marketTabs: some View {
-        // Counts are the same on every market's response; use whichever is loaded.
-        let markets = appState.leads.value?.markets
+        Picker("Market", selection: Binding(
+            get: { appState.leadsMarket },
+            set: { key in
+                guard key != appState.leadsMarket else { return }
+                appState.leadsMarket = key
+                Task { await appState.leads.load() }
+            }
+        )) {
+            ForEach(marketList) { market in
+                Text(market.label).tag(market.key)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .padding(.horizontal, 16)
+        .sensoryFeedback(.selection, trigger: appState.leadsMarket)
+    }
+
+    /// The server's markets (labels and counts are the same on every
+    /// market's response, so use whichever is loaded), else the known four.
+    private var marketList: [LeadsResponse.Market] {
+        appState.leads.value?.markets
             ?? appState.leadsLocal.value?.markets
             ?? appState.leadsRegional.value?.markets
             ?? appState.leadsPortland.value?.markets
             ?? appState.leadsCentralCoast.value?.markets
-        let fallback: [LeadsResponse.Market] = [
-            .init(key: "local", label: "Local", count: 0),
-            .init(key: "regional", label: "Regional", count: 0),
-            .init(key: "portland", label: "Portland", count: 0),
-            .init(key: "central_coast", label: "Central Coast", count: 0),
-        ]
-        let tabs = markets ?? fallback
-        // Equal-width segments when every label fits; otherwise (narrow phone,
-        // more markets) a scrolling row of intrinsic-width segments.
-        return ViewThatFits(in: .horizontal) {
-            marketTabRow(tabs, showCounts: markets != nil, equalWidth: true)
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    marketTabRow(tabs, showCounts: markets != nil, equalWidth: false)
-                }
-                .onAppear { proxy.scrollTo(appState.leadsMarket, anchor: .center) }
-                .onChange(of: appState.leadsMarket) { _, key in
-                    proxy.scrollTo(key, anchor: .center)
-                }
-            }
-        }
-    }
-
-    private func marketTabRow(_ tabs: [LeadsResponse.Market], showCounts: Bool, equalWidth: Bool) -> some View {
-        let layout = equalWidth ? AnyLayout(EqualWidthHStack(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
-        return layout {
-            ForEach(tabs) { market in
-                let selected = market.key == appState.leadsMarket
-                Button {
-                    guard !selected else { return }
-                    // No animation: animating hundreds of cards out and in
-                    // is what made the switch stutter.
-                    appState.leadsMarket = market.key
-                    Task { await appState.leads.load() }
-                } label: {
-                    VStack(spacing: 1) {
-                        Text(market.label)
-                            .font(.footnote.weight(selected ? .semibold : .medium))
-                        if showCounts {
-                            HStack(spacing: 4) {
-                                Text("\(market.count)")
-                                    .font(.caption.weight(.semibold).monospacedDigit())
-                                    .foregroundStyle(selected ? Theme.secondaryText : Theme.tertiaryText)
-                                if let fresh = market.newAgents, fresh > 0 {
-                                    // Brand-new agents (first seen today) in this market.
-                                    Text("+\(fresh)")
-                                        .font(.caption2.weight(.bold).monospacedDigit())
-                                        .foregroundStyle(Theme.accent)
-                                        .padding(.horizontal, 5)
-                                        .padding(.vertical, 1)
-                                        .background(Theme.accent.opacity(0.16), in: Capsule())
-                                        .accessibilityLabel("\(fresh) new agents")
-                                }
-                            }
-                        }
-                    }
-                    .lineLimit(1)
-                    .fixedSize()
-                    .padding(.horizontal, 10)
-                    .frame(maxWidth: equalWidth ? .infinity : nil)
-                    .padding(.vertical, 6)
-                    .background(selected ? Theme.cardRaised : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-                    .foregroundStyle(selected ? Theme.primaryText : Theme.secondaryText)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .id(market.key)
-            }
-        }
-        .padding(3)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border, lineWidth: 0.5))
-        .padding(.horizontal, 16)
+            ?? [
+                .init(key: "local", label: "Local", count: 0),
+                .init(key: "regional", label: "Regional", count: 0),
+                .init(key: "portland", label: "Portland", count: 0),
+                .init(key: "central_coast", label: "Coast", count: 0),
+            ]
     }
 
     private func header(_ counts: LeadsResponse.Counts) -> some View {
@@ -268,6 +227,11 @@ struct LeadsView: View {
             if counts.queued > 0 {
                 Text("·")
                 Text("\(counts.queued) queued").foregroundStyle(Theme.warning)
+            }
+            if let fresh = marketList.first(where: { $0.key == appState.leadsMarket })?.newAgents, fresh > 0 {
+                // Brand-new agents (first seen today) in this market.
+                Text("·")
+                Text("+\(fresh) new today").foregroundStyle(Theme.accent)
             }
             Spacer(minLength: 0)
         }
@@ -345,39 +309,6 @@ struct LeadsView: View {
 /// the card rather than leaving a row that no longer exists.
 extension Notification.Name {
     static let leadsDidChange = Notification.Name("leadsDidChange")
-}
-
-/// An HStack whose children all get the widest child's width. Reports that
-/// real width (widest × count), so `ViewThatFits` can tell when the market
-/// tabs no longer fit side by side and fall back to scrolling.
-private struct EqualWidthHStack: Layout {
-    var spacing: CGFloat = 4
-
-    private func maxSize(_ subviews: Subviews) -> CGSize {
-        subviews.reduce(.zero) { acc, view in
-            let s = view.sizeThatFits(.unspecified)
-            return CGSize(width: max(acc.width, s.width), height: max(acc.height, s.height))
-        }
-    }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard !subviews.isEmpty else { return .zero }
-        let item = maxSize(subviews)
-        let gaps = spacing * CGFloat(subviews.count - 1)
-        let needed = item.width * CGFloat(subviews.count) + gaps
-        return CGSize(width: max(needed, proposal.width ?? needed), height: item.height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard !subviews.isEmpty else { return }
-        let gaps = spacing * CGFloat(subviews.count - 1)
-        let width = (bounds.width - gaps) / CGFloat(subviews.count)
-        var x = bounds.minX
-        for view in subviews {
-            view.place(at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(width: width, height: bounds.height))
-            x += width + spacing
-        }
-    }
 }
 
 /// Pins content below the navigation bar. On iOS 26+ a `safeAreaBar`, which

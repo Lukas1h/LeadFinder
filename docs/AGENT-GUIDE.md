@@ -216,7 +216,9 @@ other mains' average minutes (close to both beats close to one), then the
 queues interleaved round-robin so every main shooter gets an even share of
 outreach (Lukas didn't want Chris favoured over Elijah); unknown location
 last; Video still puts never-texted first. Texted before goes by owner
-minutes. Cards' drive time: `listingDriveTime()` from Winston for
+minutes, and so does Agents you know within each of its groups. The iPhone's
+market picker is a native segmented control; the board refetches when the app
+returns to the foreground. Cards' drive time: `listingDriveTime()` from Winston for
 local/regional; for shooter markets `shooterDrives()` lists every shooter,
 owner first, backups marked, Elijah's estimated drive charge as "+$N"
 (web `ShooterDrives` component; the iPhone gets the joined string, e.g.

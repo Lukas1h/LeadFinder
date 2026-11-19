@@ -137,9 +137,10 @@ const SHOOTER_MARKETS_CONFIG = [
     base: { name: "Tillamook", lat: 45.4562, lng: -123.844 },
     cities: COAST_CITIES,
     pointArea: { minLat: 44.27, maxLat: 45.76, maxLng: -123.55, radiusMiles: 85 },
-    // Mostly 101 at 45-55 mph with towns to slow through; roads run about
-    // 1.3x the straight line.
-    drive: { startMinutes: 5, minutesPerMile: 1.3 },
+    // 101 winds through Cape Meares, Hebo and every beach town at 35-55 mph
+    // (Netarts to Lincoln City ≈ 1h, to Newport ≈ 1h40; Newport to Yachats
+    // ≈ 35 min), so a bit slower per straight-line mile than the metro.
+    drive: { startMinutes: 5, minutesPerMile: 1.7 },
     areaPhrase: "on the Oregon coast",
     portfolioArea: "the Oregon coast",
     pageLocation: "Oregon Coast",

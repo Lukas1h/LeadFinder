@@ -388,6 +388,9 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   known.sort(
     (a, b) =>
       KNOWN_AGENT_GROUP_ORDER.indexOf(a.known!) - KNOWN_AGENT_GROUP_ORDER.indexOf(b.known!) ||
+      // On a shooter-market tab, nearest to its shooters first within a group
+      // (Lukas, 2026-11-19: the Coast tab opened on Lincoln County agents).
+      (isShooterMarket(market) ? compareDistance(nearestDistance(a, market), nearestDistance(b, market)) : 0) ||
       byLeadPriority(a.best, b.best)
   );
   const far = LEAD_SECTION_ORDER.flatMap((key) => sections[key].filter((g) => farMinutes.has(g.key)));
