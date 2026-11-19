@@ -36,6 +36,9 @@ struct LeadsView: View {
             .modifier(TopBar { marketTabs.padding(.top, 4).padding(.bottom, 10) })
             .background(Theme.background)
             .navigationTitle("Leads")
+            // Inline, not large: the large title collapsing over the pinned
+            // market picker made the top of the list jump (Lukas, 2026-11-19).
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink {

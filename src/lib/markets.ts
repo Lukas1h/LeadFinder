@@ -141,8 +141,8 @@ const SHOOTER_MARKETS_CONFIG = [
     // (Netarts to Lincoln City ≈ 1h, to Newport ≈ 1h40; Newport to Yachats
     // ≈ 35 min), so a bit slower per straight-line mile than the metro.
     drive: { startMinutes: 5, minutesPerMile: 1.7 },
-    areaPhrase: "on the Oregon coast",
-    portfolioArea: "the Oregon coast",
+    areaPhrase: "here on the coast",
+    portfolioArea: "the coast",
     pageLocation: "Oregon Coast",
     vcard: { city: "Tillamook", note: "Oregon Coast." },
     // A guess to start from (2026-11-16): one a week. Change it here.
@@ -424,6 +424,15 @@ export function listingDriveTime(place: MarketPlace): string | null {
 export function variantsForMarket<T extends { market: string | null }>(variants: T[], market: Market | null): T[] {
   const own = market ? variants.filter((v) => v.market === market) : [];
   return own.length > 0 ? own : variants.filter((v) => v.market == null);
+}
+
+/**
+ * "in the Portland area" / "on the coast": the preposition a portfolio page
+ * puts before its area (Lukas, 2026-11-19: say "the coast" like a local,
+ * not "the Oregon coast").
+ */
+export function inArea(area: string): string {
+  return /\bcoast$/i.test(area.trim()) ? `on ${area}` : `in ${area}`;
 }
 
 /** Every city name a shooter market knows (lowercase), for its portfolio template's towns and {{area}}. */

@@ -207,7 +207,10 @@ Portland = Chris (main, SE Woodstock & 52nd, free to ~60 min, no drive
 charge) and Elijah (main, Spyglass Ln Oregon City, free within 20 min, then
 $50/h); Coast = Jenny Bocko (main, Netarts) and Emily Castleberry (backup,
 Newport; too pricey to centre outreach on). Backups show on cards but never
-steer sorting. Drive minutes = `startMinutes + straight-line miles ×
+steer sorting. Coast wording (Lukas, 2026-11-19, sound local): `{{area}}` is "here
+on the coast" and the portfolio area is "the coast" (page reads "Real estate
+photo & video on the coast", `inArea()`); the "Coast (Tillamook + Lincoln
+County)" portfolio template covers every Coast town. Drive minutes = `startMinutes + straight-line miles ×
 minutesPerMile` from the listing's geocode, else its town's coordinates.
 A listing's **owner** is its nearest main shooter (`ownerMinutes`). The
 Photo / Video / Backup sections of a shooter-market tab are ordered by
@@ -682,7 +685,7 @@ next listing comes up (usually 1–4 weeks after first contact).
   real edits; licensed and insured) → testimonial → pricing → the
   save-contact section. On both styles the footer and the
   vCard (`lukasVcard`) name the shooter market `shooterMarketForArea(content.area)`
-  finds (Portland, Central Oregon Coast), else Eugene & Roseburg.
+  finds (Portland, Oregon Coast), else Eugene & Roseburg.
 - Agent page pricing (both styles, above the last section): a highlighted
   "Most booked" Interior & Exterior Photography $300 box with "Edited by
   hand, not AI" and "Next morning turnaround" as bullets under the name, and

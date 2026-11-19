@@ -19,7 +19,7 @@ import { FeaturedShootSection } from "./featured";
 import { getFeaturedShoot } from "@/lib/portfolioFeatured";
 import { formatPrice, resolvePortfolioPrices, type PortfolioPrices } from "@/lib/portfolioPrices";
 import { templateForArea } from "@/app/portfolio-links/actions";
-import { shooterMarketForArea, shooterMarketTowns } from "@/lib/markets";
+import { inArea, shooterMarketForArea, shooterMarketTowns } from "@/lib/markets";
 
 // Same reasoning as the gallery route: a fresh navigation from outside the
 // app, not an in-app tab switch, so there's no "instant" shell to preserve.
@@ -66,7 +66,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const featured = c?.featuredBookingId ? await getFeaturedShoot(c.featuredBookingId, slug).catch(() => null) : null;
   const title = featured
     ? [featured.address, featured.city].filter(Boolean).join(", ")
-    : `Real estate photo & video in ${area} | Hahn Media`;
+    : `Real estate photo & video ${inArea(area)} | Hahn Media`;
   const description = "Cinematic media that sells listings quicker.";
   const firstFeatured = featured?.photoUrls[0];
   const images = [
@@ -157,7 +157,7 @@ export default async function PortfolioPage({
   const featured = c.featuredBookingId ? await getFeaturedShoot(c.featuredBookingId, slug).catch(() => null) : null;
 
   const who = firstName ? `this is ${firstName}${brokerage ? ` with ${brokerage}` : ""}. ` : "";
-  const bookHref = `sms:${PHONE}?&body=` + encodeURIComponent(`Hi Lukas, ${who}I'd like to book a shoot for a listing in ${area}.`);
+  const bookHref = `sms:${PHONE}?&body=` + encodeURIComponent(`Hi Lukas, ${who}I'd like to book a shoot for a listing ${inArea(area)}.`);
 
   const whySection = (
         <section data-section="why" className="px-4 pt-[clamp(56px,8vw,88px)]">
@@ -224,7 +224,7 @@ export default async function PortfolioPage({
           <section data-section="hero" className="px-4 pt-[clamp(20px,3vw,32px)] pb-[clamp(20px,3vw,28px)] text-center">
             <div className="mx-auto flex max-w-[760px] flex-col items-center">
               <h1 className={`${serif} text-[clamp(34px,5.6vw,58px)] font-bold leading-[1.1] tracking-[-0.02em] text-balance`}>
-                Real estate photo &amp; video in <span className="text-[#D67F1F]">{area}</span>
+                Real estate photo &amp; video {inArea(area).split(" ")[0]} <span className="text-[#D67F1F]">{area}</span>
               </h1>
               {showTour && (
                 <p className="mt-3 text-[clamp(14px,1.8vw,16px)] font-semibold uppercase tracking-[0.18em] text-[#995000]">Featured in the Eugene Tour of Homes</p>
@@ -241,7 +241,7 @@ export default async function PortfolioPage({
               </p>
             )}
             <h1 className={`${serif} text-[clamp(34px,5.6vw,58px)] font-bold leading-[1.1] tracking-[-0.02em] text-balance`}>
-              Real estate photo &amp; video in <span className="text-[#D67F1F]">{area}</span>
+              Real estate photo &amp; video {inArea(area).split(" ")[0]} <span className="text-[#D67F1F]">{area}</span>
             </h1>
             <p className="mt-4 text-[clamp(17px,2vw,20px)] text-[#181A1C]/75">Cinematic media that sells listings quicker.</p>
             {!newStyle && showOffer && (
