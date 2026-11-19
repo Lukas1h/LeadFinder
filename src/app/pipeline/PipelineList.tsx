@@ -25,6 +25,7 @@ import {
   DaysSinceContactBadge,
   FollowUpBadge,
   WarmAgentBadge,
+  AgentSignalBadges,
   QueuedBadge,
 } from "../badges";
 import { findAttachedAgent, findDuplicateAgentContact, byLeadPriority, FEW_PHOTOS_THRESHOLD, isWarmAgentStatus } from "@/lib/pipeline";
@@ -176,6 +177,7 @@ export function PipelineList({
             {attachedAgent && isWarmAgentStatus(attachedAgent.relationshipStatus) && (
               <WarmAgentBadge agent={attachedAgent} />
             )}
+            {attachedAgent && <AgentSignalBadges agent={attachedAgent} />}
             {lead.isComingSoon && <ComingSoonBadge />}
             {lead.photoCount != null && lead.photoCount < FEW_PHOTOS_THRESHOLD && (
               <FewPhotosBadge count={lead.photoCount} />

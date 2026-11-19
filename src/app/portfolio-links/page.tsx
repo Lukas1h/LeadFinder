@@ -7,6 +7,7 @@ import { listPortfolioLinks } from "./actions";
 import { formatDuration } from "./duration";
 import { CopyLinkButton } from "./CopyLinkButton";
 import { portfolioPreviewUrl } from "@/lib/siteUrls";
+import { AgentSignalBadges } from "@/app/badges";
 
 /**
  * Personalized portfolio links: who they were made for (Lukas's own
@@ -48,9 +49,12 @@ async function LinkList() {
       {links.map((l) => (
         <li key={l.id} className="rounded-lg border p-4">
           <div className="flex items-center justify-between gap-3">
-            <Link href={`/portfolio-links/${l.id}`} className="font-medium hover:underline">
-              {l.agentName ?? "No agent attached"}
-            </Link>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Link href={`/portfolio-links/${l.id}`} className="font-medium hover:underline">
+                {l.agentName ?? "No agent attached"}
+              </Link>
+              <AgentSignalBadges agent={{ portfolioEngagement: l.agentEngagement }} />
+            </div>
             <span className="text-sm text-muted-foreground">
               {l.visits} visit{l.visits === 1 ? "" : "s"}
               {l.visits > 0 && ` · ${formatDuration(l.activeSeconds)}`}

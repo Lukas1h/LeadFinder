@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse, after } from "next/server";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, PORTFOLIO_EVENTS, portfolioEvents, portfolioLinks, portfolioSessions, type PortfolioEvent } from "@/db/schema";
 import { notifyPortfolioAction } from "@/lib/push";
+import { refreshAgentPortfolioEngagement } from "@/lib/portfolioEngagement";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SECTION_RE = /^[a-z_]{1,32}$/;
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   if (!sessionId) return NextResponse.json({ error: "Bad session" }, { status: 400 });
 
   const [link] = await db
-    .select({ id: portfolioLinks.id, agentName: agents.name })
+    .select({ id: portfolioLinks.id, agentId: portfolioLinks.agentId, agentName: agents.name })
     .from(portfolioLinks)
     .leftJoin(agents, eq(agents.id, portfolioLinks.agentId))
     .where(eq(portfolioLinks.slug, slug));
@@ -95,6 +96,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     .returning({ id: portfolioSessions.id });
   if (upserted.length === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Recompute how they took the page from every visit, after this report is
+  // safely stored: the first ping marks a bounce, a later real look upgrades it.
+  if (link.agentId) {
+    const agentId = link.agentId;
+    after(() =>
+      refreshAgentPortfolioEngagement(agentId).catch((err) => console.error("portfolio engagement refresh failed", err))
+    );
+  }
+
   const events = (Array.isArray(body.events) ? body.events : [])
     .slice(0, 20)
     .map((e) => e as { event?: unknown; detail?: unknown })
@@ -110,6 +120,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const [{ n }] = await db.select({ n: count() }).from(portfolioEvents).where(and(eq(portfolioEvents.sessionId, sessionId)));
     if (n < MAX_EVENTS_PER_SESSION) {
       await db.insert(portfolioEvents).values(events);
+      // First save only: keep the date they actually first saved his contact.
+      if (link.agentId && events.some((e) => e.event === "save_contact")) {
+        await db
+          .update(agents)
+          .set({ savedContactAt: new Date() })
+          .where(and(eq(agents.id, link.agentId), isNull(agents.savedContactAt)));
+      }
       for (const action of ["save_contact", "book_shoot"] as const) {
         if (events.some((e) => e.event === action)) {
           after(() => notifyPortfolioAction(link.id, link.agentName, action).catch((err) => console.error("portfolio action push failed", err)));

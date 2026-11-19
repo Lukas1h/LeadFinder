@@ -7,7 +7,7 @@ import { resolveAvgDaysBetweenListings } from "./stats";
 import { AgentDetailDialog } from "./AgentDetailDialog";
 import { ComposeEmailDialog } from "@/app/messaging/ComposeEmailDialog";
 import { startPendingInteraction } from "./interactionActions";
-import { RelationshipBadge } from "@/app/badges";
+import { AgentSignalBadges, RelationshipBadge } from "@/app/badges";
 import { scoreAgent } from "@/lib/agentBadge";
 import { formatDate } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
@@ -80,6 +80,7 @@ export function AgentCard({
             }
           />
           <RelationshipBadge status={agent.relationshipStatus} agentName={agent.name} className="shrink-0" />
+          <AgentSignalBadges agent={agent} />
           {score.tier !== "unknown" && (
             <span
               className="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"

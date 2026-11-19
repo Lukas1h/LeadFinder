@@ -355,6 +355,32 @@ export const agents = pgTable("agents", {
   // your brokerage" work (see lib/clientOffices.ts).
   brokerage: text("brokerage"),
 
+  // When they saved Lukas's contact card. Set automatically the first time
+  // they tap "Save my contact" on their portfolio page (a save_contact
+  // portfolio_event, in /api/portfolio/[slug]/track), or by hand from the
+  // agent dialog / MCP when they saved it some other way. Null = not known to
+  // have saved it. Drives the "Saved your contact" badge and the "Saved your
+  // contact, quiet 3 weeks" Follow Up feed.
+  savedContactAt: timestamp("saved_contact_at", { withTimezone: true }),
+
+  // "Listed without you": a warm or interested agent who put up another
+  // listing after Lukas first contacted them and didn't book him for it — a
+  // sign they're less keen than their status says. Recomputed nightly by
+  // refreshRelistedAfterContact (src/lib/relistedAfterContact.ts) from
+  // listings + agent_interactions, so it clears itself once they book (status
+  // moves to worked_once) and is null for every other status. At = the newest
+  // such listing's listed date, count = how many, listing = the newest one.
+  relistedAfterContactAt: timestamp("relisted_after_contact_at", { withTimezone: true }),
+  relistedCount: integer("relisted_count").notNull().default(0),
+  relistedListingId: uuid("relisted_listing_id").references((): AnyPgColumn => listings.id, { onDelete: "set null" }),
+
+  // How they took their portfolio page, across all their links and visits:
+  // null = never opened, "bounced" = opened but barely looked (see
+  // isPortfolioBounce in src/lib/portfolioEngagement.ts), "viewed" = really
+  // looked. Updated on every tracker report, so a bounce turns into "viewed"
+  // if they come back and look properly.
+  portfolioEngagement: text("portfolio_engagement").$type<"bounced" | "viewed">(),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -9,7 +9,9 @@ import type { FeedGroup, FeedItem } from "./types";
  * opened their page (a real portfolio_sessions visit), and haven't said
  * anything since. The other half of unopened.ts, with the same exclusions:
  * gone once they reply or hear from him again after the link, and never for
- * declined or snoozed agents.
+ * declined or snoozed agents. Agents who opened it but barely looked
+ * (portfolioEngagement = "bounced") belong in the "Opened, bounced" feed
+ * instead, so they're skipped here.
  */
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -60,6 +62,8 @@ export async function getOpenedNoReplyGroup(): Promise<FeedGroup> {
     const at = sentAt.get(agent.id)!.getTime();
     const slug = newestLink.get(agent.id);
     if (!slug || !seen.has(agent.id)) continue;
+    // A bounce has its own feed with its own nudge.
+    if (agent.portfolioEngagement === "bounced") continue;
     if (
       agent.declinedAt ||
       agent.ignoredAt ||

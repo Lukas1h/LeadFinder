@@ -5,7 +5,7 @@ import { ChevronRight, StickyNote } from "lucide-react";
 import type { Agent, Listing } from "@/db/schema";
 import { formatPrice, formatDate } from "@/lib/format";
 import { AgentDetailDialog } from "./agents/AgentDetailDialog";
-import { RelationshipBadge } from "./badges";
+import { AgentSignalBadges, RelationshipBadge } from "./badges";
 import { ListingModal } from "./ListingModal";
 import { ListingRow } from "./ListingRow";
 import { PhotoCarousel } from "./PhotoCarousel";
@@ -71,6 +71,7 @@ export function AgentLeadCard({
             {agent && agent.relationshipStatus !== "cold" && (
               <RelationshipBadge status={agent.relationshipStatus} agentName={agent.name} className="shrink-0" />
             )}
+            <AgentSignalBadges agent={agent} />
           </div>
           <p className="text-sm text-muted-foreground truncate">
             {/* Contact first: brokerages can be long enough to truncate it. */}

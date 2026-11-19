@@ -13,7 +13,7 @@ import { telUrl, smsUrl } from "@/lib/sms";
 import { ListingRow } from "@/app/ListingRow";
 import { ComposeEmailDialog } from "@/app/messaging/ComposeEmailDialog";
 import { FindEmailButton } from "./FindEmailButton";
-import { RelationshipBadge } from "@/app/badges";
+import { AgentSignalBadges, RelationshipBadge } from "@/app/badges";
 import { getAgentBookings } from "@/app/booked/actions";
 import { BookingRow } from "@/app/booked/BookingRow";
 import type { BookingWithDetails } from "@/app/booked/BookedList";
@@ -24,6 +24,7 @@ import {
   deleteAgent,
   getAgentListings,
   getAgentById,
+  setAgentSavedContact,
 } from "./actions";
 import { resolveAvgDaysBetweenListings } from "./stats";
 import { RELATIONSHIP_OPTIONS } from "./relationshipLabels";
@@ -31,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -233,6 +235,26 @@ export function AgentDetailDialog({
   const [contactError, setContactError] = useState<string | null>(null);
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  // Optimistic copy of savedContactAt so the switch and badge flip instantly.
+  const [savedContactAt, setSavedContactAt] = useState<Date | null>(agent.savedContactAt);
+  // Follow the server's value when it changes (adjusting state during render, not in an effect).
+  const [serverSavedContactAt, setServerSavedContactAt] = useState(agent.savedContactAt);
+  if (serverSavedContactAt?.getTime() !== agent.savedContactAt?.getTime()) {
+    setServerSavedContactAt(agent.savedContactAt);
+    setSavedContactAt(agent.savedContactAt);
+  }
+
+  const handleSavedContactChange = async (checked: boolean) => {
+    const previous = savedContactAt;
+    setSavedContactAt(checked ? (previous ?? new Date()) : null);
+    try {
+      await setAgentSavedContact(agent.id, checked);
+      router.refresh();
+    } catch {
+      setSavedContactAt(previous);
+      toast.error("Couldn't update \"Saved your contact\"");
+    }
+  };
 
   const startEditingContact = () => {
     setEditName(agent.name ?? "");
@@ -363,6 +385,18 @@ export function AgentDetailDialog({
             {agent.phone && <span>{agent.phone}</span>}
             {agent.email && <span>{agent.email}</span>}
           </DialogDescription>
+          <AgentSignalBadges agent={{ ...agent, savedContactAt }} />
+          <div className="flex items-center gap-2 pt-1">
+            <Switch
+              id={`saved-contact-${agent.id}`}
+              size="sm"
+              checked={savedContactAt != null}
+              onCheckedChange={handleSavedContactChange}
+            />
+            <Label htmlFor={`saved-contact-${agent.id}`} className="text-xs text-muted-foreground font-normal">
+              Saved your contact
+            </Label>
+          </div>
         </DialogHeader>
 
         {isEditingContact ? (

@@ -5,7 +5,7 @@ import { User } from "lucide-react";
 import type { Agent, AgentRelationshipStatus } from "@/db/schema";
 import { getOrCreateAgentByPhone, getAgentRelationshipByPhone } from "./agents/actions";
 import { AgentDetailDialog } from "./agents/AgentDetailDialog";
-import { RelationshipBadge } from "./badges";
+import { AgentSignalBadges, RelationshipBadge, type AgentSignalFields } from "./badges";
 import { formatPhone } from "@/lib/format";
 
 /**
@@ -37,6 +37,7 @@ export function AgentRow({
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [relationship, setRelationship] = useState<AgentRelationshipStatus | null>(null);
+  const [signals, setSignals] = useState<Partial<AgentSignalFields> | null>(null);
 
   // Read-only lookup on mount: show the relationship at a glance (Warm,
   // Interested, …) without minting an agent row for a never-seen phone.
@@ -46,6 +47,16 @@ export function AgentRow({
     getAgentRelationshipByPhone(phone, agentId).then((res) => {
       if (cancelled) return;
       setRelationship(res?.relationshipStatus ?? null);
+      setSignals(
+        res
+          ? {
+              savedContactAt: res.savedContactAt,
+              relistedCount: res.relistedCount,
+              relistedAfterContactAt: res.relistedAfterContactAt,
+              portfolioEngagement: res.portfolioEngagement,
+            }
+          : null,
+      );
     });
     return () => {
       cancelled = true;
@@ -65,7 +76,12 @@ export function AgentRow({
         )}
       </div>
       {/* Right-aligned, matching ListingRow's status badge. */}
-      {relationship && <RelationshipBadge status={relationship} agentName={name} className="shrink-0" />}
+      {(relationship || signals) && (
+        <div className="flex flex-wrap items-center justify-end gap-1 shrink-0 max-w-[55%]">
+          <AgentSignalBadges agent={signals} />
+          {relationship && <RelationshipBadge status={relationship} agentName={name} className="shrink-0" />}
+        </div>
+      )}
     </>
   );
 

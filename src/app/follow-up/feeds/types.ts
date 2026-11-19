@@ -16,6 +16,7 @@ export type FollowUpFeedKey =
   | "near_shoot"
   | "unopened"
   | "opened_no_reply"
+  | "opened_bounced"
   | "saved_contact"
   | "drone_booking"
   | "congrats"

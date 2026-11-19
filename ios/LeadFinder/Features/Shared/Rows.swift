@@ -74,6 +74,7 @@ struct AgentRow: View {
     var phone: String?
     var subtitle: String?
     var relationshipStatus: String?
+    var signals = AgentSignals()
     var showsChevron = false
 
     var body: some View {
@@ -95,6 +96,9 @@ struct AgentRow: View {
                         .font(.caption)
                         .foregroundStyle(Theme.tertiaryText)
                         .lineLimit(1)
+                }
+                if signals.hasAny {
+                    AgentSignalBadges(signals: signals).padding(.top, 2)
                 }
             }
             Spacer(minLength: 0)
@@ -227,7 +231,11 @@ extension AgentsResponse.Row {
             lastContactedAt: agent.lastContactedAt,
             brokerage: brokerage,
             callerNumber: nil,
-            callerLabel: nil
+            callerLabel: nil,
+            savedContactAt: agent.savedContactAt,
+            relistedAfterContactAt: agent.relistedAfterContactAt,
+            relistedCount: agent.relistedCount,
+            portfolioEngagement: agent.portfolioEngagement
         )
     }
 }
@@ -265,7 +273,49 @@ struct TappableAgentRow: View {
             name: name ?? agent?.displayName,
             subtitle: subtitle,
             relationshipStatus: agent?.relationshipStatus.flatMap { hidesCold && $0 == "cold" ? nil : $0 },
+            signals: agent?.signals ?? AgentSignals(),
             showsChevron: showsChevron
         )
+    }
+}
+
+// MARK: - Agent signals
+
+/// Behavioural signals from the server's agent JSON, separate from the
+/// relationship status. Empty (the default) shows nothing.
+struct AgentSignals: Hashable, Sendable {
+    var savedContactAt: String?
+    var relistedAfterContactAt: String?
+    var relistedCount: Int?
+    var portfolioEngagement: String?
+
+    var savedContact: Bool { savedContactAt?.nilIfBlank != nil }
+    var listedWithoutYou: Bool { relistedAfterContactAt?.nilIfBlank != nil || (relistedCount ?? 0) > 0 }
+    var bounced: Bool { portfolioEngagement == "bounced" }
+    var hasAny: Bool { savedContact || listedWithoutYou || bounced }
+}
+
+/// "Saved your contact" (good), "Listed without you ×N" (warning), "Bounced"
+/// (muted). Each chip only when it applies; renders nothing otherwise.
+struct AgentSignalBadges: View {
+    let signals: AgentSignals
+
+    var body: some View {
+        if signals.hasAny {
+            HStack(spacing: 4) {
+                if signals.savedContact {
+                    BadgeChip(text: "Saved your contact", tint: Theme.emerald, icon: "person.crop.circle.badge.checkmark")
+                }
+                if signals.listedWithoutYou {
+                    let n = signals.relistedCount ?? 0
+                    BadgeChip(text: n > 1 ? "Listed without you ×\(n)" : "Listed without you",
+                              tint: Theme.amber, icon: "exclamationmark.triangle.fill")
+                }
+                if signals.bounced {
+                    BadgeChip(text: "Bounced", tint: Theme.tertiaryText)
+                }
+            }
+            .lineLimit(1)
+        }
     }
 }

@@ -304,6 +304,12 @@ export function registerAgentTools(server: McpServer): void {
         email: z.string().optional(),
         notes: z.string().optional(),
         relationshipStatus: z.enum(AGENT_RELATIONSHIP_STATUSES).optional(),
+        savedContact: z
+          .boolean()
+          .optional()
+          .describe(
+            "Whether the agent has saved Lukas's contact card; true stamps saved_contact_at (keeps an existing date), false clears it."
+          ),
         avgListingsPerYear: z.number().int().min(0).nullable().optional().describe("Listings this agent takes in a typical year"),
         avgListingPrice: z.number().int().min(0).nullable().optional().describe("Their typical listing price, whole dollars"),
         avgDaysBetweenListings: z
@@ -315,7 +321,7 @@ export function registerAgentTools(server: McpServer): void {
           .describe("Researched days between their listings; overrides the value computed from our own tracked listings"),
       },
     },
-    async ({ id, name, phone, email, notes, relationshipStatus, avgListingsPerYear, avgListingPrice, avgDaysBetweenListings }) => {
+    async ({ id, name, phone, email, notes, relationshipStatus, savedContact, avgListingsPerYear, avgListingPrice, avgDaysBetweenListings }) => {
       const [existing] = await db.select().from(agents).where(eq(agents.id, id));
       if (!existing) return errorText("No agent with that id");
 
@@ -325,6 +331,7 @@ export function registerAgentTools(server: McpServer): void {
       if (avgListingsPerYear !== undefined) patch.avgListingsPerYear = avgListingsPerYear;
       if (avgListingPrice !== undefined) patch.avgListingPrice = avgListingPrice;
       if (avgDaysBetweenListings !== undefined) patch.avgDaysBetweenListings = avgDaysBetweenListings;
+      if (savedContact === false) patch.savedContactAt = null;
       if (phone !== undefined || email !== undefined) {
         const parsed = normalizeContact(phone ?? existing.phone ?? undefined, email ?? existing.email ?? undefined);
         if (parsed.error) return errorText(parsed.error);
@@ -334,7 +341,7 @@ export function registerAgentTools(server: McpServer): void {
 
       // Drizzle rejects an empty set() outright, so a call that named only the
       // id is answered with the row as-is rather than an error.
-      if (Object.keys(patch).length === 0 && relationshipStatus === undefined) return text(existing);
+      if (Object.keys(patch).length === 0 && relationshipStatus === undefined && savedContact === undefined) return text(existing);
 
       // Applied after the patch rather than inside it, so the declinedAt
       // bookkeeping lives in exactly one place. Setting relationshipStatus here
@@ -342,6 +349,14 @@ export function registerAgentTools(server: McpServer): void {
       // invisible to declinedOnly and to the 30-day resurface.
       if (Object.keys(patch).length > 0) {
         await db.update(agents).set(patch).where(eq(agents.id, id));
+      }
+      // Saved keeps the first date it was stamped, like a hand-mark and a tap
+      // on the portfolio page both mean "they have his number".
+      if (savedContact === true) {
+        await db
+          .update(agents)
+          .set({ savedContactAt: sql`coalesce(${agents.savedContactAt}, now())` })
+          .where(eq(agents.id, id));
       }
       if (relationshipStatus !== undefined) {
         await setAgentRelationshipStatus(id, relationshipStatus as AgentRelationshipStatus);

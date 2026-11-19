@@ -5,7 +5,7 @@ import { LeadActions } from "./LeadActions";
 import { RefreshButton } from "./RefreshButton";
 import { ImportListingButton } from "./ImportListingButton";
 import { PassAllListingsButton } from "./PassAllListingsButton";
-import { NewBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, AgentIgnoredBadge, OfficeClientBadge, UnscoredBadge } from "./badges";
+import { NewBadge, PhotoScoreBadge, ComingSoonBadge, PriceCutBadge, FewPhotosBadge, AgentDeclinedBadge, AgentIgnoredBadge, AgentSignalBadges, OfficeClientBadge, UnscoredBadge } from "./badges";
 import { NearShootBadge } from "./NearShootBadge";
 import { milesLabel } from "@/lib/nearShoots";
 import { shortDate } from "@/app/follow-up/feeds/shared";
@@ -148,6 +148,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
                 }
               />
             )}
+            {agent && <AgentSignalBadges agent={agent} />}
           </Fragment>
         }
         actions={

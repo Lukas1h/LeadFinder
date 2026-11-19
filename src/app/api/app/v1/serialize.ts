@@ -134,10 +134,38 @@ badges: leadBadges(best, agent, agent?.lastContactedListingId ? addressById.get(
 
 /** The bare agent row, as the Agents tab shows it. */
 export function agentJson(agent: Agent) {
-  const { id, name, phone, email, relationshipStatus, lastContactedAt, notes, createdAt, brokerage } = agent;
+  const {
+    id,
+    name,
+    phone,
+    email,
+    relationshipStatus,
+    lastContactedAt,
+    notes,
+    createdAt,
+    brokerage,
+    savedContactAt,
+    relistedAfterContactAt,
+    relistedCount,
+    portfolioEngagement,
+  } = agent;
   // `brokerage` is the hand-entered one (the edit form's field); the derived
   // one from their listings travels separately as `brokerage` beside `agent`.
-  return { id, name, phone, email, relationshipStatus, lastContactedAt, notes, createdAt, brokerage };
+  return {
+    id,
+    name,
+    phone,
+    email,
+    relationshipStatus,
+    lastContactedAt,
+    notes,
+    createdAt,
+    brokerage,
+    savedContactAt,
+    relistedAfterContactAt,
+    relistedCount,
+    portfolioEngagement,
+  };
 }
 
 export function bookingJson(b: BookingWithDetails & { showcase?: boolean }) {

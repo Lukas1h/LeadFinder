@@ -82,6 +82,21 @@ export async function updateAgentNotes(id: string, notes: string) {
   revalidatePath("/agents");
 }
 
+/**
+ * Marks (or unmarks) that the agent saved Lukas's contact card — the same
+ * column the portfolio page stamps automatically on a "Save my contact" tap,
+ * for when it was saved some other way. Saving keeps the first date if one is
+ * already on file; clearing sets it back to unknown.
+ */
+export async function setAgentSavedContact(agentId: string, saved: boolean): Promise<void> {
+  await db
+    .update(agents)
+    .set({ savedContactAt: saved ? sql`coalesce(${agents.savedContactAt}, now())` : null })
+    .where(eq(agents.id, agentId));
+  revalidatePath("/agents");
+  revalidatePath("/follow-up");
+}
+
 interface ContactInfoResult {
   error?: string;
   phone?: string | null;
@@ -350,10 +365,22 @@ export async function linkAgentToListing(
 export async function getAgentRelationshipByPhone(
   phone: string,
   agentId?: string | null
-): Promise<{ relationshipStatus: AgentRelationshipStatus } | null> {
+): Promise<{
+  relationshipStatus: AgentRelationshipStatus;
+  savedContactAt: Date | null;
+  relistedCount: number;
+  relistedAfterContactAt: Date | null;
+  portfolioEngagement: "bounced" | "viewed" | null;
+} | null> {
   if (agentId) {
     const [byId] = await db
-      .select({ relationshipStatus: agents.relationshipStatus })
+      .select({
+        relationshipStatus: agents.relationshipStatus,
+        savedContactAt: agents.savedContactAt,
+        relistedCount: agents.relistedCount,
+        relistedAfterContactAt: agents.relistedAfterContactAt,
+        portfolioEngagement: agents.portfolioEngagement,
+      })
       .from(agents)
       .where(eq(agents.id, agentId));
     if (byId) return byId;
@@ -361,7 +388,13 @@ export async function getAgentRelationshipByPhone(
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone) return null;
   const [agent] = await db
-    .select({ relationshipStatus: agents.relationshipStatus })
+    .select({
+      relationshipStatus: agents.relationshipStatus,
+      savedContactAt: agents.savedContactAt,
+      relistedCount: agents.relistedCount,
+      relistedAfterContactAt: agents.relistedAfterContactAt,
+      portfolioEngagement: agents.portfolioEngagement,
+    })
     .from(agents)
     .where(eq(agents.phone, normalizedPhone));
   return agent ?? null;

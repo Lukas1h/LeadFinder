@@ -205,6 +205,8 @@ export interface PortfolioLinkSummary {
   slug: string;
   url: string;
   agentName: string | null;
+  /** The attached agent's agents.portfolioEngagement (across all their links). */
+  agentEngagement: "bounced" | "viewed" | null;
   createdAt: Date;
   viewCount: number;
   lastViewedAt: Date | null;
@@ -238,6 +240,7 @@ export async function listPortfolioLinks(): Promise<PortfolioLinkSummary[]> {
       id: portfolioLinks.id,
       slug: portfolioLinks.slug,
       agentName: agents.name,
+      agentEngagement: agents.portfolioEngagement,
       createdAt: portfolioLinks.createdAt,
       viewCount: portfolioLinks.viewCount,
       lastViewedAt: portfolioLinks.lastViewedAt,

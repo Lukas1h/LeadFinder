@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { passFollowUpAgent } from "@/app/agents/actions";
 import { AgentCard } from "@/app/agents/AgentCard";
 import { AgentDetailDialog } from "@/app/agents/AgentDetailDialog";
-import { RelationshipBadge } from "@/app/badges";
+import { AgentSignalBadges, RelationshipBadge } from "@/app/badges";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ListingRow } from "@/app/ListingRow";
@@ -174,6 +174,7 @@ export function FollowUpList({
                 }
               />
               <RelationshipBadge status={u.agent.relationshipStatus} agentName={u.agent.name} className="shrink-0" />
+              <AgentSignalBadges agent={u.agent} />
               <span className="text-xs text-muted-foreground">{u.note}</span>
             </div>
             <span className="text-sm text-muted-foreground shrink-0">

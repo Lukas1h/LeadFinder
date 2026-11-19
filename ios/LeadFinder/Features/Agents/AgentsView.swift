@@ -233,7 +233,8 @@ struct AgentDirectoryRow: View {
             name: agent.displayName,
             phone: agent.phone?.nilIfBlank,
             subtitle: agent.brokerage?.nilIfBlank,
-            relationshipStatus: agent.relationshipStatus
+            relationshipStatus: agent.relationshipStatus,
+            signals: agent.signals
         )
     }
 }
@@ -260,6 +261,10 @@ struct AgentDirectoryDetail: View {
         row.phone = fresh.phone
         row.email = fresh.email
         row.relationshipStatus = fresh.relationshipStatus
+        row.savedContactAt = fresh.savedContactAt
+        row.relistedAfterContactAt = fresh.relistedAfterContactAt
+        row.relistedCount = fresh.relistedCount
+        row.portfolioEngagement = fresh.portfolioEngagement
         row.brokerage = fresh.brokerage?.nilIfBlank ?? detail?.brokerage ?? initial.brokerage
         return row
     }
@@ -375,7 +380,8 @@ private var header: some View {
             name: agent.displayName,
             phone: agent.phone,
             subtitle: detail?.brokerage ?? agent.brokerage,
-            relationshipStatus: agent.relationshipStatus
+            relationshipStatus: agent.relationshipStatus,
+            signals: agent.signals
         )
 
         contactButtons

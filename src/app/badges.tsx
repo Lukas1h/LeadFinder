@@ -1,4 +1,4 @@
-import { Sparkles, Clock, Camera, TriangleAlert, Bell, TrendingDown, ListOrdered } from "lucide-react";
+import { Sparkles, Clock, Camera, TriangleAlert, Bell, TrendingDown, ListOrdered, BookUser, Repeat, LogOut } from "lucide-react";
 import type { Agent, AgentRelationshipStatus, LeadStatus, Listing } from "@/db/schema";
 import { formatDate, formatDateOnly, daysSince } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -299,6 +299,74 @@ export function RelationshipBadge({
 // what each status means.
 export function WarmAgentBadge({ agent }: { agent: Agent }) {
   return <RelationshipBadge status={agent.relationshipStatus} agentName={agent.name} />;
+}
+
+export type AgentSignalFields = Pick<
+  Agent,
+  "savedContactAt" | "relistedAfterContactAt" | "relistedCount" | "portfolioEngagement"
+>;
+
+/**
+ * The three behavioural signals on an agent, shown next to their
+ * RelationshipBadge: "Saved your contact" (good), "Listed without you" (a warm
+ * agent who listed again after being contacted and didn't book — warning) and
+ * "Bounced" (opened their portfolio page but barely looked). Renders only the
+ * ones that apply, and nothing at all when none do.
+ */
+export function AgentSignalBadges({
+  agent,
+  className,
+}: {
+  agent: Partial<AgentSignalFields> | null | undefined;
+  className?: string;
+}) {
+  if (!agent) return null;
+  const saved = agent.savedContactAt ? new Date(agent.savedContactAt) : null;
+  const relistedCount = agent.relistedCount ?? 0;
+  const relistedAt = agent.relistedAfterContactAt ? new Date(agent.relistedAfterContactAt) : null;
+  const bounced = agent.portfolioEngagement === "bounced";
+  if (!saved && relistedCount <= 0 && !bounced) return null;
+
+  return (
+    <span className={cn("inline-flex flex-wrap items-center gap-1", className)}>
+      {saved && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-900">
+              <BookUser />
+              Saved your contact
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>Saved your contact card {formatDate(saved)}</TooltipContent>
+        </Tooltip>
+      )}
+      {relistedCount > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-400 dark:border-orange-900">
+              <Repeat />
+              Listed without you{relistedCount > 1 ? ` ×${relistedCount}` : ""}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            Listed {relistedCount} {relistedCount === 1 ? "time" : "times"} since you first texted them, without booking
+            you.{relistedAt ? ` Last one ${formatDate(relistedAt)}.` : ""}
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {bounced && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge className="bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800">
+              <LogOut />
+              Bounced
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>Opened their portfolio page but barely looked</TooltipContent>
+        </Tooltip>
+      )}
+    </span>
+  );
 }
 
 export function OfficeClientBadge({ client }: { client: Parameters<typeof officeClientBadge>[0] }) {

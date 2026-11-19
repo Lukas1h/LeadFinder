@@ -12,18 +12,6 @@ import { getAllColdAgents, searchAllAgents } from "./actions";
 import { COLD_INITIAL_LIMIT } from "./constants";
 import { Input } from "@/components/ui/input";
 
-// Most-established relationship first — mirrors the natural progression
-// (see bumpAgentRelationshipOnMilestone in src/app/actions.ts).
-const RELATIONSHIP_ORDER: AgentRelationshipStatus[] = [
-  "regular",
-  "worked_once",
-  "interested",
-  "warm",
-  "declined",
-  "ignored",
-  "cold",
-];
-
 function byRecency(a: Agent, b: Agent) {
   const aTime = a.lastContactedAt?.getTime() ?? 0;
   const bTime = b.lastContactedAt?.getTime() ?? 0;
@@ -37,6 +25,39 @@ function byRecency(a: Agent, b: Agent) {
 // sorts by when the row was created instead.
 function byCreatedDesc(a: Agent, b: Agent) {
   return b.createdAt.getTime() - a.createdAt.getTime();
+}
+
+// Warm/interested agents who listed again after Lukas contacted them and
+// didn't book him (agents.relistedCount, recomputed nightly). They get their
+// own section, right after the warm ones, so they're handled apart from the
+// agents whose status still reads true. Otherwise most-established
+// relationship first — mirrors the natural progression (see
+// bumpAgentRelationshipOnMilestone in src/app/actions.ts).
+const LISTED_WITHOUT_YOU = "listed_without_you" as const;
+type SectionKey = AgentRelationshipStatus | typeof LISTED_WITHOUT_YOU;
+const SECTION_ORDER: SectionKey[] = [
+  "regular",
+  "worked_once",
+  "interested",
+  "warm",
+  LISTED_WITHOUT_YOU,
+  "declined",
+  "ignored",
+  "cold",
+];
+const SECTION_LABELS: Record<SectionKey, string> = {
+  ...RELATIONSHIP_LABELS,
+  [LISTED_WITHOUT_YOU]: "Listed without you",
+};
+
+function isListedWithoutYou(a: Agent): boolean {
+  return (a.relationshipStatus === "warm" || a.relationshipStatus === "interested") && a.relistedCount > 0;
+}
+
+function byRelistedRecency(a: Agent, b: Agent) {
+  const aTime = a.relistedAfterContactAt?.getTime() ?? 0;
+  const bTime = b.relistedAfterContactAt?.getTime() ?? 0;
+  return bTime - aTime || byRecency(a, b);
 }
 
 function isColdAndFresh(a: Agent): boolean {
@@ -131,7 +152,8 @@ export function AgentsList({
   }, [agents, coldFreshOverride]);
 
   const { byStatus } = useMemo(() => {
-    const groups: Record<AgentRelationshipStatus, Agent[]> = {
+    const groups: Record<SectionKey, Agent[]> = {
+      [LISTED_WITHOUT_YOU]: [],
       cold: [],
       warm: [],
       interested: [],
@@ -140,8 +162,12 @@ export function AgentsList({
       declined: [],
       ignored: [],
     };
-    for (const a of effectiveAgents) groups[a.relationshipStatus].push(a);
-    for (const status of RELATIONSHIP_ORDER) groups[status].sort(status === "cold" ? byCreatedDesc : byRecency);
+    for (const a of effectiveAgents) groups[isListedWithoutYou(a) ? LISTED_WITHOUT_YOU : a.relationshipStatus].push(a);
+    for (const status of SECTION_ORDER) {
+      groups[status].sort(
+        status === "cold" ? byCreatedDesc : status === LISTED_WITHOUT_YOU ? byRelistedRecency : byRecency,
+      );
+    }
 
     return {
       byStatus: groups,
@@ -209,11 +235,11 @@ export function AgentsList({
           )}
 
           <section>
-            {RELATIONSHIP_ORDER.every((status) => byStatus[status].length === 0) ? (
+            {SECTION_ORDER.every((status) => byStatus[status].length === 0) ? (
               <p className="text-muted-foreground/70 text-sm">No active agents right now.</p>
             ) : (
               <div className="flex flex-col gap-6">
-                {RELATIONSHIP_ORDER.map((status) => {
+                {SECTION_ORDER.map((status) => {
                   if (byStatus[status].length === 0) return null;
 
                   const isColdBucket = status === "cold";
@@ -223,7 +249,7 @@ export function AgentsList({
                   return (
                     <div key={status}>
                       <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                        {RELATIONSHIP_LABELS[status]} ({isColdBucket ? coldDisplayTotal.toLocaleString() : visible.length})
+                        {SECTION_LABELS[status]} ({isColdBucket ? coldDisplayTotal.toLocaleString() : visible.length})
                       </h2>
                       <div className="flex flex-col gap-4">{visible.map(card)}</div>
                       {showViewAll && (

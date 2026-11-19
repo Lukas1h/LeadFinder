@@ -1,17 +1,19 @@
 import { db } from "@/db";
-import { agents, portfolioEvents, portfolioLinks } from "@/db/schema";
-import { and, desc, eq, inArray, lte } from "drizzle-orm";
+import { agents } from "@/db/schema";
+import { and, isNotNull, lte } from "drizzle-orm";
 import { byPriority, loadContactHistory, shortDate, volumeLine } from "./shared";
 import type { FeedGroup, FeedItem } from "./types";
 
 /**
- * "Saved your contact, quiet 3 weeks": agents who tapped "Save my contact" on
- * their portfolio page and then went quiet — no text, call or reply either way
- * for 21+ days. They kept his number, so they meant to use it; a friendly
- * check-in is enough to be the one they think of for the next listing.
+ * "Saved your contact, quiet 3 weeks": agents known to have saved Lukas's
+ * contact card — automatically when they tapped "Save my contact" on their
+ * portfolio page, or marked by hand — and then went quiet: no text, call or
+ * reply either way for 21+ days. They kept his number, so they meant to use
+ * it; a friendly check-in is enough to be the one they think of for the next
+ * listing.
  *
  * Gone once either side gets in touch again (a text from here is that), and
- * never for declined or snoozed agents. One card per agent: their newest save.
+ * never for declined or snoozed agents. One card per agent.
  */
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -20,28 +22,17 @@ const MIN_DAYS = 21;
 export async function getSavedContactGroup(): Promise<FeedGroup> {
   const group: FeedGroup = { title: "Saved your contact, quiet 3 weeks", items: [], heldBack: 0 };
   const now = Date.now();
-  const saves = await db
-    .select({ agentId: portfolioLinks.agentId, at: portfolioEvents.at })
-    .from(portfolioEvents)
-    .innerJoin(portfolioLinks, eq(portfolioEvents.linkId, portfolioLinks.id))
-    .where(
-      and(
-        eq(portfolioEvents.event, "save_contact"),
-        lte(portfolioEvents.at, new Date(now - MIN_DAYS * DAY))
-      )
-    )
-    .orderBy(desc(portfolioEvents.at));
-  const savedAt = new Map<string, Date>();
-  for (const s of saves) if (s.agentId && !savedAt.has(s.agentId)) savedAt.set(s.agentId, s.at);
-  if (savedAt.size === 0) return group;
-  const ids = [...savedAt.keys()];
+  const people = await db
+    .select()
+    .from(agents)
+    .where(and(isNotNull(agents.savedContactAt), lte(agents.savedContactAt, new Date(now - MIN_DAYS * DAY))));
+  if (people.length === 0) return group;
 
-  const people = await db.select().from(agents).where(inArray(agents.id, ids));
   const history = await loadContactHistory(people);
 
   const items: FeedItem[] = [];
   for (const agent of people) {
-    const at = savedAt.get(agent.id)!.getTime();
+    const at = agent.savedContactAt!.getTime();
     if (
       agent.declinedAt ||
       agent.ignoredAt ||

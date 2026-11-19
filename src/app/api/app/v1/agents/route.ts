@@ -37,6 +37,10 @@ export async function GET(req: Request) {
       brokerage: a.id ? (brokerage.get(a.id) ?? null) : null,
       callerNumber: callerNumber(a.phone),
       callerLabel: callerLabel(a, brokerage.get(a.id)),
+      savedContactAt: a.savedContactAt,
+      relistedAfterContactAt: a.relistedAfterContactAt,
+      relistedCount: a.relistedCount,
+      portfolioEngagement: a.portfolioEngagement,
     })),
   });
 

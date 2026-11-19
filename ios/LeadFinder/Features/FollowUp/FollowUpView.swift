@@ -559,6 +559,7 @@ struct FollowUpView: View {
                     }
                     Spacer(minLength: 0)
                 }
+                AgentSignalBadges(signals: agent.signals)
 
                 if let phone = agent.phone?.nilIfBlank {
                     Text(phone)
@@ -1053,7 +1054,8 @@ private struct FollowUpAgentRow: View {
                 AgentRow(
                     name: agent.displayName,
                     subtitle: contactLine,
-                    relationshipStatus: agent.relationshipStatus?.nilIfBlank
+                    relationshipStatus: agent.relationshipStatus?.nilIfBlank,
+                    signals: agent.signals
                 )
                 if let onSnooze {
                     // Sized like the Leads card's pass button.

@@ -21,8 +21,19 @@ struct Agent: Codable, Sendable, Identifiable, Hashable {
     /// The hand-entered brokerage (the edit form's field), not the one derived
     /// from their listings.
     var brokerage: String?
+    /// Signals (all optional so older servers still decode): the agent saved
+    /// Lukas's contact card; "Listed without you" (listed again N times after
+    /// he contacted them, without booking him); portfolio "bounced"/"viewed".
+    var savedContactAt: String?
+    var relistedAfterContactAt: String?
+    var relistedCount: Int?
+    var portfolioEngagement: String?
 
     var displayName: String { name?.nilIfBlank ?? "Unknown agent" }
+    var signals: AgentSignals {
+        AgentSignals(savedContactAt: savedContactAt, relistedAfterContactAt: relistedAfterContactAt,
+                     relistedCount: relistedCount, portfolioEngagement: portfolioEngagement)
+    }
 }
 
 struct Listing: Codable, Sendable, Identifiable, Hashable {
@@ -576,8 +587,19 @@ struct AgentsResponse: Codable, Sendable {
         /// ten digits after stripping a leading 1.
         var callerNumber: Int?
         var callerLabel: String?
+        /// Signals (all optional so older servers still decode): the agent saved
+        /// Lukas's contact card; "Listed without you" (listed again N times after
+        /// he contacted them, without booking him); portfolio "bounced"/"viewed".
+        var savedContactAt: String?
+        var relistedAfterContactAt: String?
+        var relistedCount: Int?
+        var portfolioEngagement: String?
 
         var displayName: String { name?.nilIfBlank ?? "Unknown agent" }
+        var signals: AgentSignals {
+            AgentSignals(savedContactAt: savedContactAt, relistedAfterContactAt: relistedAfterContactAt,
+                         relistedCount: relistedCount, portfolioEngagement: portfolioEngagement)
+        }
     }
 
     var agents: [Row]

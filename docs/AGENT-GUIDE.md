@@ -302,6 +302,34 @@ listing photo score, half-life 90 days; >= 7 with 2+ scored listings =
 follow-up texts must not count toward the texting quota (`goal.ts`) and get
 their own stats row, since their value per text is unknown.
 
+**Agent signals (2026-11-18).** Three columns on `agents`, each shown as a
+badge next to the relationship badge wherever an agent appears (web
+`AgentSignalBadges` in `src/app/badges.tsx`, the iPhone app, `agentJson`):
+
+- `saved_contact_at` ("Saved your contact"): set the first time they tap Save
+  my contact on their portfolio page (`/api/portfolio/[slug]/track`, only
+  where null), or by hand (agent dialog checkbox, `setAgentSavedContact`;
+  MCP `update_agent` `savedContact`). Feeds the "Saved your contact, quiet 3
+  weeks" Follow Up tab. Backfilled from old `save_contact` events.
+- `relisted_after_contact_at`, `relisted_count`, `relisted_listing_id`
+  ("Listed without you"): a **warm or interested** agent with a listing whose
+  listed date (`listed_at`, else `found_at`) is more than
+  `RELISTED_GRACE_DAYS` (3) after his first real outbound contact, not coming
+  soon, and with no booking linked. They listed with someone else, so they're
+  less keen than their status says; the Agents page keeps them in their own
+  section. Recomputed for everyone nightly by `refreshRelistedAfterContact`
+  (`src/lib/relistedAfterContact.ts`, from the market-status cron), so it
+  clears itself once they book or change status. 35 agents on 2026-11-18.
+- `portfolio_engagement` (`bounced` | `viewed` | null = never opened): over
+  all of an agent's links and visits, a **bounce** is under 20 s of visible
+  time in total, or a deepest scroll under 30 % with under 60 s
+  (`isPortfolioBounce`, `src/lib/portfolioEngagement.ts`). Updated after
+  every tracker report (a later real look turns a bounce into `viewed`) and
+  nightly for everyone. Bounced agents leave "Opened, no reply" for their own
+  Follow Up tab, "Opened, bounced".
+
+`scripts/backfill-agent-signals.mts` fills all three (safe to re-run).
+
 Matching people: match on phone or email first. Names repeat (there are 60+
 Lisas), and one person can have a phone-only and an email-only record.
 
@@ -481,8 +509,12 @@ marked booked/declined),
 Samples, Link not opened (`feeds/unopened.ts`:
 Portfolio link sent 3–21 days ago, never opened, no contact since), Opened, no
 reply (`feeds/opened.ts`: same window, opened, nothing from them since; offers free
-drone shots on a first shoot), Saved your contact, quiet 3 weeks (`feeds/savedContact.ts`: tapped Save my
-contact on their portfolio page, a `save_contact` event, 21+ days ago and no
+drone shots on a first shoot; bounced agents excluded), Opened, bounced
+(`feeds/bounced.ts`, key `opened_bounced`: the same, but `portfolio_engagement`
+is `bounced`, so a lighter "did the link come through?" nudge with a couple of
+shoots), Saved your contact, quiet 3 weeks (`feeds/savedContact.ts`:
+`agents.saved_contact_at` (saved from their portfolio page or marked by hand)
+21+ days ago and no
 text, call or reply either way in 21 days; not declined or snoozed), Shot one near you (`feeds/nearShoot.ts`: warm and interested
 agents with a for-sale listing near a home he shot in the last 30 days, no
 contact in 10 days, not offered in 45; he texts a photo from that shoot),
