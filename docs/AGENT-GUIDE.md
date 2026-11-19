@@ -423,14 +423,15 @@ Email is plain text by choice: no HTML, no tracking pixels.
 `bookings`: `listing_id` (when linked, the listing's address wins over the
 booking's own), `contact_agent_id`, `job_date`, `date_tentative`,
 `lockbox_code`, `notes`, line items in `booking_line_items` (`description`,
-`amount` in dollars; the total is their sum), `dropbox_folder_link`,
+`amount` in whole dollars, negative for a deduction; the total is their sum), `dropbox_folder_link`,
 `dropbox_upload_link` (a shooter's raw-file folder), `gallery_token`,
 `invoice_number`, `square_invoice_id` / `square_invoice_url`,
 `paid_at`, and the hours columns.
 
 Invoices: the first open of `/api/bookings/[id]/invoice` ("Create invoice")
 assigns `invoice_number` (`src/lib/invoice.ts`) and makes its Square copy
-(`src/lib/squareInvoice.ts`): same number, line items and note, the property
+(`src/lib/squareInvoice.ts`): same number, line items (deductions become order-level fixed discounts,
+since Square rejects negative prices) and note, the property
 address as its title, delivered `SHARE_MANUALLY` so Square never emails or
 texts the client. Its `public_url` is the invoice's and gallery's "Pay
 Online". `square_invoice_sync` fingerprints what it was made from; when the

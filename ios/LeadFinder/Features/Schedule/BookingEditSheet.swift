@@ -105,7 +105,7 @@ struct BookingEditSheet: View {
                         HStack(spacing: 10) {
                             TextField("Description", text: $item.description)
                             TextField("$", text: $item.amount)
-                                .keyboard(.number)
+                                .keyboard(.signedNumber)
                                 .multilineTextAlignment(.trailing)
                                 .frame(width: 80)
                         }

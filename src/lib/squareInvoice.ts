@@ -198,11 +198,24 @@ async function create(details: InvoiceDetails, invoiceNumber: number, sync: stri
       location_id: locationId,
       customer_id: customerId,
       reference_id: booking.id,
-      line_items: details.lineItems.map((li) => ({
-        name: li.description.slice(0, 512),
-        quantity: "1",
-        base_price_money: { amount: Math.round(li.amount * 100), currency: "USD" },
-      })),
+      // Square won't take a negative price, so a deduction (negative line
+      // item) goes on as an order-level fixed discount under its own name.
+      line_items: details.lineItems
+        .filter((li) => li.amount >= 0)
+        .map((li) => ({
+          name: li.description.slice(0, 512),
+          quantity: "1",
+          base_price_money: { amount: Math.round(li.amount * 100), currency: "USD" },
+        })),
+      discounts: details.lineItems
+        .filter((li) => li.amount < 0)
+        .map((li, i) => ({
+          uid: `deduction-${i}`,
+          name: li.description.slice(0, 255),
+          type: "FIXED_AMOUNT",
+          amount_money: { amount: Math.round(-li.amount * 100), currency: "USD" },
+          scope: "ORDER",
+        })),
     },
   });
 

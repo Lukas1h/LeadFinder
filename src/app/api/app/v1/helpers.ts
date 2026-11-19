@@ -75,15 +75,15 @@ export function requiredString(value: unknown, field: string): string {
   return parsed;
 }
 
-/** A booking's line items: `[{ description, amount }]`, amount in whole dollars. */
+/** A booking's line items: `[{ description, amount }]`, amount in whole dollars (negative = a deduction). */
 export function lineItemList(value: unknown, field: string): { description: string; amount: number }[] {
   if (!Array.isArray(value)) throw new BadBody(`${field} must be an array`);
   return value.map((item, i) => {
     if (item == null || typeof item !== "object") throw new BadBody(`${field}[${i}] must be an object`);
     const { description, amount } = item as Record<string, unknown>;
     if (typeof description !== "string") throw new BadBody(`${field}[${i}].description must be a string`);
-    if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
-      throw new BadBody(`${field}[${i}].amount must be a number, 0 or more`);
+    if (typeof amount !== "number" || !Number.isFinite(amount)) {
+      throw new BadBody(`${field}[${i}].amount must be a number (negative for a deduction)`);
     }
     return { description, amount: Math.round(amount) };
   });

@@ -353,7 +353,6 @@ export function BookingForm({
                   />
                   <Input
                     type="number"
-                    min="0"
                     value={li.amount}
                     onChange={(e) => updateLineItem(i, { amount: e.target.value })}
                     placeholder="$"

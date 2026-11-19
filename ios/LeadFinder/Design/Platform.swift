@@ -31,6 +31,8 @@ enum KeyboardKind {
     case phone
     case email
     case number
+    /// Digits plus a minus sign (numberPad has none) — for amounts that may be negative.
+    case signedNumber
     case decimal
 }
 
@@ -58,6 +60,7 @@ extension KeyboardKind {
         case .phone: .phonePad
         case .email: .emailAddress
         case .number: .numberPad
+        case .signedNumber: .numbersAndPunctuation
         case .decimal: .decimalPad
         }
     }

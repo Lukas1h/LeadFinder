@@ -57,7 +57,7 @@ async function findOrCreateAgentByPhone(phone: string, name: string): Promise<st
   return row?.id ?? null;
 }
 
-const lineItemSchema = z.object({ description: z.string(), amount: z.number().int().nonnegative() });
+const lineItemSchema = z.object({ description: z.string(), amount: z.number().int().describe("Whole dollars; negative for a deduction or discount") });
 
 export function registerBookingTools(server: McpServer): void {
   server.registerTool(
