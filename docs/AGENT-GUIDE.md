@@ -223,8 +223,15 @@ owner first, backups marked, Elijah's estimated drive charge as "+$N"
 "~20 min Chris · ~30 min Elijah").
 
 A new region's data, besides the `SHOOTER_MARKETS` entry: a `search_sources`
-row over it with `coming_soon_only` false (Coast: "Central Coast
-(Lincoln County, all listings)" and "Coast (Tillamook County, all listings)", $375k+), market variants of the outreach
+row over it with `coming_soon_only` false to flood the new tab with agents
+at first, plus Zillow saved-search email alerts per county (the
+leadfinder-zillow AgentMail inbox ingests them; they trickle in only new
+listings). Once the tab is full, flip the source to `coming_soon_only` true,
+since refetching every listing burns Zillapi credits and the email alerts
+already catch ~90% (Lukas, 2026-11-19: Portland flipped then; "Coast
+(Tillamook County, all listings)" $260k+ left on all-listings for now;
+Zillow alerts "Tillamook County - New 260k", "Columbia County - New",
+"Clark County WA - New" added), market variants of the outreach
 templates (copies of the Portland wording ones, `{{area}}` does the rest),
 a portfolio template whose towns are the market's cities plus its
 `portfolioArea`, and the photographer on `shooters`. The iPhone app needs a
