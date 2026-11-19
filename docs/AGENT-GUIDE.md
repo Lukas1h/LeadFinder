@@ -229,7 +229,7 @@ leadfinder-zillow AgentMail inbox ingests them; they trickle in only new
 listings). Once the tab is full, flip the source to `coming_soon_only` true,
 since refetching every listing burns Zillapi credits and the email alerts
 already catch ~90% (Lukas, 2026-11-19: Portland flipped then; "Coast
-(Tillamook County, all listings)" $260k+ left on all-listings for now;
+(Tillamook County, all listings)" $260k+ went coming-soon the same day;
 Zillow alerts "Tillamook County - New 260k", "Columbia County - New",
 "Clark County WA - New" added), market variants of the outreach
 templates (copies of the Portland wording ones, `{{area}}` does the rest),
