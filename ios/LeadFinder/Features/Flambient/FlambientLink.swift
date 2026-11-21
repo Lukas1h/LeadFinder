@@ -126,12 +126,21 @@ final class FlambientLink: NSObject {
         }
     }
 
+    /// Which transport is carrying commands right now. Wi-Fi wins whenever it
+    /// is up; Multipeer is the fallback and the only transport that pairs.
+    enum Transport: Equatable, Sendable {
+        case none
+        case wifi
+        case peerToPeer
+    }
+
     /// The app has one Mac and one link; the Flambient screen uses this.
     static let shared = FlambientLink()
 
     /// Macs advertising the same protocol version, alphabetically.
     private(set) var nearbyMacs: [String] = []
     private(set) var connection: Connection = .idle
+    private(set) var transport: Transport = .none
     private(set) var status: RemoteStatus?
     private(set) var lastStatusAt: Date?
     /// Angles with thumbnails, by shoot path, filled by `.shootDetail`.
@@ -149,6 +158,9 @@ final class FlambientLink: NSObject {
     @ObservationIgnored private let peerID: MCPeerID
     @ObservationIgnored private let mcSession: MCSession
     @ObservationIgnored private let browser: MCNearbyServiceBrowser
+    /// The same-Wi-Fi link, run alongside Multipeer: faster on a shared network,
+    /// still just a transport to this object and the screens.
+    @ObservationIgnored private let wifi = FlambientWifiLink()
     /// Found peers by display name. Not observable: the UI reads `nearbyMacs`
     /// and the peer objects are only needed to invite.
     @ObservationIgnored private var peers: [String: MCPeerID] = [:]
@@ -190,6 +202,19 @@ final class FlambientLink: NSObject {
         mcSession.delegate = self
         browser.delegate = self
         pairedMac = UserDefaults.standard.string(forKey: Self.pairedMacDefaultsKey)
+        wifi.pairedMac = pairedMac
+        wifi.onFrame = { [weak self] frame, mac in
+            self?.receivedWifi(frame, from: mac)
+        }
+        wifi.onConnected = { [weak self] mac in
+            self?.wifiConnected(mac)
+        }
+        wifi.onDisconnected = { [weak self] mac in
+            self?.wifiDisconnected(mac)
+        }
+        wifi.onRejected = { [weak self] mac, reason in
+            self?.wifiRejected(mac, reason: reason)
+        }
     }
 
     // MARK: - Lifecycle
@@ -202,6 +227,8 @@ final class FlambientLink: NSObject {
             browser.startBrowsingForPeers()
             if connection == .idle { connection = .browsing }
         }
+        wifi.pairedMac = pairedMac
+        wifi.start()
         // Back from the background with the Mac still in our peer table: pick
         // up without waiting for the browser to find it again.
         if !connection.isConnected, pendingInvite == nil, let mac = preferredMac {
@@ -222,9 +249,11 @@ final class FlambientLink: NSObject {
         activeMac = nil
         browser.stopBrowsingForPeers()
         mcSession.disconnect()
+        wifi.stop()
         peers = [:]
         nearbyMacs = []
         connection = .idle
+        transport = .none
     }
 
     // MARK: - Pairing
@@ -255,6 +284,7 @@ final class FlambientLink: NSObject {
         mcSession.disconnect()
 
         declinedMacs.remove(mac)
+        wifi.allow(mac)
         invite(peer, mac: mac, token: nil, code: trimmed)
     }
 
@@ -262,7 +292,11 @@ final class FlambientLink: NSObject {
 
     /// Sends a command to the connected Mac. Failures land in `lastError`
     /// rather than being thrown: the UI shouldn't have to await every tap.
+    ///
+    /// Wi-Fi carries it whenever that link is up; Multipeer is the fallback,
+    /// including the moment a Wi-Fi link drops and hasn't reconnected.
     func send(_ command: RemoteCommand) {
+        if transport == .wifi, wifi.send(command) { return }
         guard let peer = activePeer else {
             lastError = "Not connected to your Mac."
             return
@@ -484,6 +518,9 @@ final class FlambientLink: NSObject {
                 inviteTimeout = nil
             }
             if connection != .connected(mac) { connection = .connected(mac) }
+            // Wi-Fi is the preferred transport; only claim Multipeer when the
+            // Wi-Fi link isn't already carrying this Mac.
+            if wifi.connectedMac == nil { transport = .peerToPeer }
             // Either the token was accepted or the code matched; ask for a
             // fresh status so the screen fills in immediately.
             send(.refresh)
@@ -502,6 +539,9 @@ final class FlambientLink: NSObject {
 
     private func peerDisconnected(_ mac: String) {
         guard activeMac == mac || connection.macName == mac else { return }
+        // Multipeer dropping is not the link dropping while Wi-Fi still carries
+        // the Mac; that link has its own reconnect and tells us when it goes.
+        if wifi.connectedMac == mac { return }
         // Requests in flight are lost with the link; let the screens ask again once it's back.
         previewsAsked = sessionPreviews.mapValues(\.frames.count)
 
@@ -556,9 +596,54 @@ final class FlambientLink: NSObject {
         inviteIfPossible(mac: mac)
     }
 
+    // MARK: - Wi-Fi transport
+
+    /// A whole frame from the Wi-Fi link: decode the header and pass the body
+    /// through untouched, so binary payloads can ride along later.
+    private func receivedWifi(_ frame: WireFrame, from mac: String) {
+        guard let event = try? RemoteProtocol.decode(RemoteEvent.self, from: frame.header) else { return }
+        handle(event, from: mac, body: frame.body)
+    }
+
+    private func wifiConnected(_ mac: String) {
+        // The handshake proved the token, so this Mac is the one to show and
+        // the one commands go to, even if Multipeer hasn't caught up yet.
+        retryAttempt = 0
+        retryTask?.cancel()
+        retryTask = nil
+        pendingInvite = nil
+        inviteTimeout?.cancel()
+        inviteTimeout = nil
+        activeMac = mac
+        transport = .wifi
+        lastError = nil
+        if connection != .connected(mac) { connection = .connected(mac) }
+        wifi.send(.refresh)
+    }
+
+    private func wifiDisconnected(_ mac: String) {
+        guard transport == .wifi else { return }
+        // Multipeer may still (or again) have the Mac; otherwise the normal
+        // browsing/reconnect path takes over from here.
+        if activePeer != nil {
+            transport = .peerToPeer
+        } else {
+            transport = .none
+            if connection.isConnected {
+                connection = isActive ? .browsing : .idle
+            }
+        }
+    }
+
+    private func wifiRejected(_ mac: String, reason: String) {
+        lastError = reason
+    }
+
     // MARK: - Incoming events
 
-    private func handle(_ event: RemoteEvent, from mac: String) {
+    /// `body` is the frame's binary payload: empty today, kept for the larger
+    /// culling and layer data that will travel as separate frames.
+    private func handle(_ event: RemoteEvent, from mac: String, body: Data = Data()) {
         switch event {
         case .paired(let token, let macName):
             didHandshake = true
@@ -569,6 +654,11 @@ final class FlambientLink: NSObject {
             if macName != mac { FlambientKeychain.setToken(token, for: mac) }
             UserDefaults.standard.set(mac, forKey: Self.pairedMacDefaultsKey)
             pairedMac = mac
+            // Pairing happened over Multipeer, but it also unlocks Wi-Fi: the
+            // link can now find this Mac by the token and by its TXT name.
+            wifi.pairedMac = mac
+            wifi.allow(mac)
+            wifi.allow(macName)
             declinedMacs.remove(mac)
             declinedMacs.remove(macName)
             if pendingInvite?.mac == mac {

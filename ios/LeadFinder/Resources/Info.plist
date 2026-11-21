@@ -35,11 +35,12 @@
 	<array>
 		<string>_flambient-link._tcp</string>
 		<string>_flambient-link._udp</string>
+		<string>_flambient-wifi._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>LeadFinder uses the camera to photograph receipts for your expenses.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>LeadFinder connects to Flambient on your Mac to import cards with no Wi-Fi.</string>
+	<string>LeadFinder connects to Flambient on your Mac to import cards and edit shoots from your phone on the same Wi-Fi.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
