@@ -1,3 +1,4 @@
+import FlambientCore
 import Foundation
 
 // The messages Flambient (Mac) and LeadFinder (iPhone) exchange over MultipeerConnectivity.
@@ -12,7 +13,7 @@ enum RemoteProtocol {
     /// Bonjour service type: ≤ 15 chars, lowercase letters, digits and hyphens.
     /// iOS needs `_flambient-link._tcp` and `_flambient-link._udp` in NSBonjourServices.
     static let serviceType = "flambient-link"
-    static let version = 1
+    static let version = 2
 
     static func encode<T: Encodable>(_ value: T) throws -> Data {
         let e = JSONEncoder()
@@ -65,6 +66,56 @@ enum RemoteCommand: Codable, Sendable {
     case setStayAwake(Bool)
     /// Turn automatic import of inserted cards on or off.
     case setAutoImport(Bool)
+
+    // MARK: v2: cull and edit a shoot from the phone (same Wi-Fi). `path` is `RemoteShoot.id`.
+    // Every change runs through the same ShootModel call the Mac UI makes, so undo, saving,
+    // learning and PSD builds behave exactly as on the Mac.
+
+    /// Start working on a shoot; answered with `.shootSession`, then `.cullList` / `.angleState`s
+    /// as asked. The Mac keeps the shoot open for the phone until `.closeShoot` or disconnect.
+    case openShoot(path: String)
+    case closeShoot(path: String)
+    /// Answered with `.cullList`.
+    case cullList(path: String)
+    /// Pass (true) or reject (false) one cull item (`RemoteCullItem.id`).
+    case cullDecide(path: String, item: String, passed: Bool)
+    /// Merge an item with the next one; split one before frame `at` (a file name). Answered with a
+    /// fresh `.cullList`.
+    case cullMerge(path: String, item: String)
+    case cullSplit(path: String, item: String, at: String)
+    /// One frame of a shoot at screen size (≈1600 px JPEG); answered with `.photo`, bytes in the body.
+    case photo(path: String, file: String)
+    case undo(path: String)
+    case redo(path: String)
+    /// The current state of one angle; answered with `.angleState`.
+    case angleState(path: String, angle: String)
+    /// The decoded layers of an angle for rendering on the phone; answered with `.angleInputs`,
+    /// payload in the body.
+    case angleInputs(path: String, angle: String)
+    /// A whole LayerEdit for one layer. `phase` nil is one discrete step (an eye tap, a blend pick);
+    /// a drag is begin, change… (≤ ~10 per second), end — one undo step. `seq` rises with every
+    /// command the phone sends, so it can tell its own echoes from other changes.
+    case setLayer(path: String, angle: String, layer: String, edit: LayerEdit, phase: RemoteGesture?, seq: Int)
+    /// Whole, Keep Left, Keep Right or a fresh gradient: as the Mac's mask buttons (gradient width
+    /// from the Mac's recipe).
+    case setMask(path: String, angle: String, layer: String, preset: RemoteMaskPreset, seq: Int)
+    /// A layer's polygons, the whole list each time (nil clears them). Adding or deleting a point is
+    /// `phase` nil; dragging a point is a gesture.
+    case setShapes(path: String, angle: String, layer: String, shapes: [[MaskPoint]]?, phase: RemoteGesture?, seq: Int)
+    /// The angle's own look (exposure, highlights…).
+    case setAngleLook(path: String, angle: String, look: Look, phase: RemoteGesture?, seq: Int)
+    /// Show or hide several layers in one step (all flashes, solo).
+    case setLayersVisible(path: String, angle: String, layers: [String], visible: Bool, seq: Int)
+    /// Reset one layer, or every layer of the angle when `layer` is nil.
+    case resetLayer(path: String, angle: String, layer: String?, seq: Int)
+}
+
+enum RemoteGesture: String, Codable, Sendable {
+    case begin, change, end
+}
+
+enum RemoteMaskPreset: String, Codable, Sendable, CaseIterable {
+    case whole, keepLeft, keepRight, gradient
 }
 
 // MARK: Mac → Phone
@@ -78,6 +129,20 @@ enum RemoteEvent: Codable, Sendable {
     case cardPhoto(RemoteCardPhoto)
     /// A command failed; `message` is for a person to read.
     case error(message: String)
+
+    // MARK: v2
+    case shootSession(RemoteShootSession)
+    case cullList(RemoteCullList)
+    /// A frame as JPEG; the bytes are the frame body (Wi-Fi only).
+    case photo(path: String, file: String)
+    /// Pushed after every change to the angle, from the phone or the Mac, and on request.
+    case angleState(RemoteAngleState)
+    /// The angle's decoded layers; the bytes (`RemoteInputs` format) are the frame body.
+    case angleInputs(path: String, angle: String, inputsKey: String)
+    /// Pushed after every undoable change, undo and redo.
+    case undoState(RemoteUndoState)
+    /// After an undo or redo in cull: the item that changed, to show it.
+    case cullFocus(path: String, item: String)
 }
 
 struct RemoteStatus: Codable, Sendable, Equatable {
@@ -189,4 +254,63 @@ struct RemoteCardPhoto: Codable, Sendable, Equatable {
     var path: String
     /// JPEG, about 1280 px on the long side; nil when the file has no readable preview.
     var image: Data?
+}
+
+// MARK: v2: cull and edit
+
+struct RemoteShootSession: Codable, Sendable {
+    var path: String
+    var name: String
+    /// ShootStage in words.
+    var stage: String
+    /// Angle ids in order (stable across merge and split).
+    var angles: [String]
+    /// What the engine needs besides the angle itself to compose exactly as the Mac does.
+    var recipe: Recipe
+    var calibration: ExposureCalibration?
+    var undo: RemoteUndoState
+}
+
+struct RemoteCullList: Codable, Sendable {
+    var path: String
+    var items: [RemoteCullItem]
+}
+
+struct RemoteCullItem: Codable, Sendable, Identifiable, Equatable {
+    /// The first frame's file name: stays the same when angles renumber.
+    var id: String
+    /// "angle" or "drone".
+    var kind: String
+    /// The AnglePlan id for an angle (what edit commands take), nil for a drone shot.
+    var angle: String?
+    var title: String
+    var detail: String
+    var passed: Bool
+    /// File names in judging order (the first is the one to judge); `.photo` loads each.
+    var frames: [String]
+    var warnings: [String]
+    /// JPEG, about 240 px on the long side, of the first frame.
+    var thumbnail: Data?
+}
+
+struct RemoteAngleState: Codable, Sendable {
+    var path: String
+    var angle: AnglePlan
+    var layers: ResolvedLayers
+    var look: Look.Resolved
+    /// Changes when the angle's decoded inputs change (frames, flash/window roles): fetch
+    /// `.angleInputs` again when it differs from the one the phone holds.
+    var inputsKey: String
+    /// The highest phone `seq` the Mac had applied when this was sent.
+    var appliedSeq: Int
+    /// Rises with every change to the shoot.
+    var revision: Int
+}
+
+struct RemoteUndoState: Codable, Sendable, Equatable {
+    var path: String
+    var canUndo: Bool
+    var canRedo: Bool
+    var undoName: String?
+    var redoName: String?
 }

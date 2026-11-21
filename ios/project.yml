@@ -15,6 +15,14 @@ configFiles:
   Debug: Config/Base.xcconfig
   Release: Config/Base.xcconfig
 
+# The engine the phone composes previews with, shared with the Mac app. Local
+# package from the Flambient repo's phone-link worktree; when Flambient's
+# phone-link merges to its main checkout, repoint this at
+# ../../RealEstate/FlambientApp/Packages/FlambientCore.
+packages:
+  FlambientCore:
+    path: ../../RealEstate/wt-phone-link/Packages/FlambientCore
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -38,6 +46,7 @@ targets:
       - path: LeadFinder
     dependencies:
       - target: CallerID
+      - package: FlambientCore
     info:
       path: LeadFinder/Resources/Info.plist
       properties:

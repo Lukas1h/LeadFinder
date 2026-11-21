@@ -151,6 +151,35 @@ final class FlambientLink: NSObject {
     private(set) var cardPhotos: [String: Data] = [:]
     @ObservationIgnored private var cardPhotoOrder: [String] = []
     @ObservationIgnored private var previewsAsked: [String: Int] = [:]
+
+    // MARK: v2: the open shoot, for cull and edit
+
+    /// The session of every shoot the Mac has opened for this phone, by path.
+    private(set) var shootSessions: [String: RemoteShootSession] = [:]
+    /// The cull items of a shoot, by path. Re-sent whole after a merge or split.
+    private(set) var cullLists: [String: RemoteCullList] = [:]
+    /// Screen-size frames of a shoot, by path then file name. Only the most
+    /// recent are kept: a shoot is hundreds of megabytes of JPEGs otherwise,
+    /// and `.photo` again is one small command, so an evicted frame reloads.
+    private(set) var photos: [String: [String: Data]] = [:]
+    @ObservationIgnored private var photoOrder: [PhotoKey] = []
+    /// The current state of an angle (manifest slice, resolved layers, look),
+    /// by angle id. The Mac pushes a fresh one after every change.
+    private(set) var angleStates: [String: RemoteAngleState] = [:]
+    /// An angle's decoded layers for rendering on the phone, by angle id, with
+    /// the `inputsKey` they belong to: `RemoteAngleState.inputsKey` moving means
+    /// this copy is stale and `.angleInputs` needs asking again.
+    private(set) var angleInputs: [String: (inputsKey: String, data: Data)] = [:]
+    /// What undo and redo can do, by shoot path.
+    private(set) var undoStates: [String: RemoteUndoState] = [:]
+    /// The cull item the Mac's last undo or redo touched, to jump the screen to.
+    private(set) var cullFocus: (path: String, item: String)?
+    /// Rises on every `.cullFocus`. The same item can be focused twice in a row
+    /// (undoing two decisions on it), so consumers watch this, not `cullFocus`.
+    private(set) var cullFocusTick = 0
+    /// The last `seq` handed out by `nextSeq()`.
+    @ObservationIgnored private var lastSeq = 0
+
     private(set) var lastError: String?
     /// The Mac paired last, so the app prefers it when several are around.
     private(set) var pairedMac: String?
@@ -183,6 +212,13 @@ final class FlambientLink: NSObject {
         /// True for an automatic re-invitation carrying the saved token;
         /// false for a first pairing with a code.
         let usedToken: Bool
+    }
+
+    /// One entry in `photoOrder`: the cache key of a frame, kept as its two
+    /// halves so eviction can drop the file from `photos` and tidy the shoot.
+    private struct PhotoKey {
+        let path: String
+        let file: String
     }
 
     private static let peerDefaultsKey = "flambient.peerID"
@@ -355,6 +391,86 @@ final class FlambientLink: NSObject {
     func requestCardPhoto(card cardID: String, path: String) {
         guard cardPhotos[path] == nil else { return }
         send(.cardPhoto(cardID: cardID, path: path))
+    }
+
+    // MARK: - v2: cull and edit
+    //
+    // These only work over Wi-Fi. The Mac answers a v2 command that needs a
+    // body (`.photo`, `.angleInputs`, and the edit commands' answers) over
+    // Multipeer with `.error("Needs Wi-Fi")`, because Multipeer's frames carry
+    // JSON and nothing else. Sending is not blocked: the link picks the
+    // transport as it always does, so the screens get the Mac's own message
+    // instead of a silence.
+    //
+    // The Mac answers each of these with an event (`shootSessions`,
+    // `cullLists`, `photos`, `angleStates`, `angleInputs`, `undoStates`) rather
+    // than returning it, so a command is fire-and-forget like `refresh()`.
+
+    /// Open a shoot for culling and editing; the answer lands in `shootSessions[path]`.
+    func openShoot(path: String) {
+        send(.openShoot(path: path))
+    }
+
+    /// Release the Mac's headless session for a shoot; call when the screen goes away.
+    func closeShoot(path: String) {
+        send(.closeShoot(path: path))
+    }
+
+    /// Ask for the cull items; the answer lands in `cullLists[path]`.
+    func requestCullList(path: String) {
+        send(.cullList(path: path))
+    }
+
+    /// Pass (true) or reject (false) one cull item (`RemoteCullItem.id`). The Mac
+    /// answers with a fresh `.cullList` only when the list itself changes.
+    func cullDecide(path: String, item: String, passed: Bool) {
+        send(.cullDecide(path: path, item: item, passed: passed))
+    }
+
+    /// Merge an item with the next one; the Mac re-sends the whole `.cullList`.
+    func cullMerge(path: String, item: String) {
+        send(.cullMerge(path: path, item: item))
+    }
+
+    /// Split an item before `at` (a frame file name); also a fresh `.cullList`.
+    func cullSplit(path: String, item: String, at: String) {
+        send(.cullSplit(path: path, item: item, at: at))
+    }
+
+    /// Ask for one frame at screen size (JPEG body); the answer lands in `photos[path]?[file]`.
+    func requestPhoto(path: String, file: String) {
+        send(.photo(path: path, file: file))
+    }
+
+    /// Undo the last change to the shoot; the Mac pushes `.undoState`, the events
+    /// the change touched, and a `.cullFocus` when it was a cull decision.
+    func undo(path: String) {
+        send(.undo(path: path))
+    }
+
+    func redo(path: String) {
+        send(.redo(path: path))
+    }
+
+    /// Ask for one angle's state; the answer lands in `angleStates[angle]`.
+    func requestAngleState(path: String, angle: String) {
+        send(.angleState(path: path, angle: angle))
+    }
+
+    /// Ask for one angle's decoded layers (payload in the body); the answer lands
+    /// in `angleInputs[angle]`.
+    func requestAngleInputs(path: String, angle: String) {
+        send(.angleInputs(path: path, angle: angle))
+    }
+
+    /// The `seq` to stamp on the next edit command (`setLayer`, `setMask`,
+    /// `setShapes`, `setAngleLook`, `setLayersVisible`, `resetLayer`). It rises
+    /// with every command the phone sends, so the Mac can say which of them its
+    /// `.angleState` already reflects (`appliedSeq`) and the phone can ignore
+    /// echoes of changes it has already drawn.
+    func nextSeq() -> Int {
+        lastSeq += 1
+        return lastSeq
     }
 
     func setStayAwake(_ stayAwake: Bool) {
@@ -641,8 +757,9 @@ final class FlambientLink: NSObject {
 
     // MARK: - Incoming events
 
-    /// `body` is the frame's binary payload: empty today, kept for the larger
-    /// culling and layer data that will travel as separate frames.
+    /// `body` is the frame's binary payload: v2's `.photo` (a JPEG) and
+    /// `.angleInputs` (the `RemoteInputs` payload) carry their bytes here rather
+    /// than inside the JSON. Empty for every other event.
     private func handle(_ event: RemoteEvent, from mac: String, body: Data = Data()) {
         switch event {
         case .paired(let token, let macName):
@@ -701,6 +818,48 @@ final class FlambientLink: NSObject {
             cardPhotoOrder.removeAll { $0 == photo.path }
             cardPhotoOrder.append(photo.path)
             while cardPhotoOrder.count > 30 { cardPhotos[cardPhotoOrder.removeFirst()] = nil }
+
+        // MARK: v2
+        //
+        // Stored whatever it is about, like the v1 events above: the Mac is the
+        // only writer and a stray shoot is cheaper to keep than to argue about.
+
+        case .shootSession(let session):
+            didHandshake = true
+            shootSessions[session.path] = session
+
+        case .cullList(let list):
+            didHandshake = true
+            cullLists[list.path] = list
+
+        case .photo(let path, let file):
+            didHandshake = true
+            let key = PhotoKey(path: path, file: file)
+            photos[path, default: [:]][file] = body
+            photoOrder.removeAll { $0.path == path && $0.file == file }
+            photoOrder.append(key)
+            while photoOrder.count > 30 {
+                let old = photoOrder.removeFirst()
+                photos[old.path]?[old.file] = nil
+                if photos[old.path]?.isEmpty == true { photos[old.path] = nil }
+            }
+
+        case .angleState(let state):
+            didHandshake = true
+            angleStates[state.angle.id] = state
+
+        case .angleInputs(_, let angle, let inputsKey):
+            didHandshake = true
+            angleInputs[angle] = (inputsKey, body)
+
+        case .undoState(let state):
+            didHandshake = true
+            undoStates[state.path] = state
+
+        case .cullFocus(let path, let item):
+            didHandshake = true
+            cullFocus = (path, item)
+            cullFocusTick += 1
 
         case .error(let message):
             lastError = message
