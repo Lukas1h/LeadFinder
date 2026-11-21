@@ -4,7 +4,6 @@ import { after } from "next/server";
 import type { Metadata } from "next";
 import { Noto_Serif, Outfit } from "next/font/google";
 import { bookingByUploadToken, recordUploadEvent, uploadRowAddress } from "@/lib/mediaUploads";
-import { firstName } from "@/lib/sms";
 import { UploadClient } from "./UploadClient";
 
 // Same reasoning as the gallery page: a fresh navigation from a texted link, nothing to prerender.
@@ -27,8 +26,8 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
 /**
  * A subcontracted shooter's upload page: <GALLERY_ORIGIN>/upload/<token>.
  * Files go straight into the job's Dropbox folder (src/lib/mediaUploads.ts,
- * uploadEngine.ts). Shows only the address, day and the shooter's first
- * name — nothing else about the job.
+ * uploadEngine.ts). Shows only the address and day — nothing else about
+ * the job.
  */
 export default async function UploadPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -48,7 +47,6 @@ export default async function UploadPage({ params }: { params: Promise<{ token: 
         token={token}
         address={uploadRowAddress(row)}
         jobDate={jobDate}
-        shooterFirstName={firstName(row.shooterName)}
       />
     </div>
   );

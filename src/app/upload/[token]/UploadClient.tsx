@@ -42,12 +42,10 @@ export function UploadClient({
   token,
   address,
   jobDate,
-  shooterFirstName,
 }: {
   token: string;
   address: string | null;
   jobDate: string | null;
-  shooterFirstName: string | null;
 }) {
   const [engine] = useState(() => new UploadEngine(token));
   useEffect(() => () => engine.destroy(), [engine]);
@@ -120,9 +118,7 @@ export function UploadClient({
       <div className="font-[family-name:var(--font-gallery-serif)] font-bold text-4xl sm:text-5xl tracking-tight">Hahn Media</div>
       <div className="text-xs uppercase tracking-[0.3em] text-[#181A1C]/70">Real Estate Photo &amp; Video</div>
       <div className="w-full h-px bg-[#181A1C]/10 my-6" />
-      <p className="italic text-sm text-[#181A1C]/70 text-center max-w-md mb-6">
-        Hi {shooterFirstName ?? "there"}! Drop the raw photos and video from the shoot here — they go straight to Lukas.
-      </p>
+      <div className="mb-2" />
 
       <h1 className="text-xl font-semibold text-center">{address ?? "Upload"}</h1>
       {jobDate && <p className="text-sm text-[#181A1C]/60">{jobDate}</p>}
