@@ -633,6 +633,7 @@ struct FlambientShootDetailView: View {
     let actions: FlambientActions
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 10)]
+    @State private var showWorkspace = false
 
     var body: some View {
         ScrollView {
@@ -658,6 +659,16 @@ struct FlambientShootDetailView: View {
                         .tint(Theme.accent)
                         .foregroundStyle(.black)
                     }
+                    Button {
+                        showWorkspace = true
+                    } label: {
+                        Label("Cull & Edit", systemImage: "slider.horizontal.below.rectangle")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Theme.accent)
                 }
                 if let detail {
                     if detail.angles.isEmpty {
@@ -679,6 +690,10 @@ struct FlambientShootDetailView: View {
         .refreshable { actions.requestShootDetail(route.path) }
         .onAppear { actions.requestShootDetail(route.path) }
         .onChange(of: shoot?.planned) { _, _ in actions.requestShootDetail(route.path) }
+        .fullScreenCover(isPresented: $showWorkspace) {
+            // TODO(wire): real store for shoot path
+            ShootWorkspace(store: .mock())
+        }
     }
 }
 
