@@ -12,7 +12,7 @@ import { notifyPortfolioView } from "@/lib/push";
 import { PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
 import { LUKAS_PHONE as PHONE } from "@/lib/agentVcard";
 import { parseUserAgent } from "@/lib/galleryViews";
-import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
+import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, PORTLAND_SHOOTER_PHOTOS, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { BeforeAfterSlider, ListingCard, LoopVideo, MutableVideo } from "./client";
 import { PageTracker } from "./tracker";
 import { FeaturedShootSection } from "./featured";
@@ -127,6 +127,9 @@ export default async function PortfolioPage({
 
   const area = c.area?.trim() || "Eugene";
   const firstName = c.agentFirstName?.trim() || "";
+  // A Portland-market page (shooterMarketForArea also picks its footer and
+  // vCard) closes the portfolio with a few of the local shooter's photos.
+  const isPortland = shooterMarketForArea(c.area)?.key === "portland";
   const brokerage = c.brokerage?.trim() || "";
   const video = AGENT_PAGE_VIDEOS[(c.video ?? "summit") as AgentPageVideoKey] ?? AGENT_PAGE_VIDEOS.summit;
   const showOffer = c.showOffer ?? true;
@@ -305,6 +308,7 @@ export default async function PortfolioPage({
                 className="mt-2 aspect-[3/2] w-full bg-[#F9F4F1] object-cover sm:mt-3"
               />
             )}
+            {isPortland && <ShooterPhotos name={PORTLAND_SHOOTER_PHOTOS.name} photos={PORTLAND_SHOOTER_PHOTOS.photos} />}
           </div>
         </section>
 
@@ -582,6 +586,31 @@ function FullGallery() {
       {wide(p[0])}
       {grid(p.slice(10, 18))}
       {wide(p[9])}
+    </div>
+  );
+}
+
+/**
+ * The last row of the portfolio on Portland pages: a few of the local
+ * shooter's own photos (Chris, see PORTLAND_SHOOTER_PHOTOS), every one small,
+ * his name tucked into the bottom-left corner of each — really small and
+ * slightly transparent, a credit that isn't noticeable unless you look
+ * (Lukas, 2026-11-20).
+ */
+function ShooterPhotos({ name, photos }: { name: string; photos: AgentPagePhoto[] }) {
+  return (
+    <div data-section="photos" className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:gap-3 lg:grid-cols-4">
+      {photos.map((p) => (
+        <span key={p.key} className="relative block">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static portfolio photo */}
+          <img src={p.src} alt={p.alt} loading="lazy" className="aspect-[3/2] w-full bg-[#F9F4F1] object-cover" />
+          <span
+            className={`pointer-events-none absolute bottom-1 left-1.5 ${serif} text-[10px] font-medium tracking-wide text-white/60 [text-shadow:0_1px_3px_rgba(0,0,0,0.45)]`}
+          >
+            {name}
+          </span>
+        </span>
+      ))}
     </div>
   );
 }

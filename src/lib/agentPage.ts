@@ -54,6 +54,25 @@ export const AGENT_PAGE_PHOTOS: AgentPagePhoto[] = [
   ["pf-17", "Aerial drone view of house and fenced acreage surrounded by autumn woods"],
 ].map(([key, alt]) => ({ key, src: `${PF}${key}.jpg`, alt }));
 
+// Samples of the Portland shooter's own work (Lukas, 2026-11-20): the last
+// small row of the portfolio on Portland-market pages, each photo carrying
+// his name tucked tiny and slightly see-through into its corner — a credit
+// that doesn't interrupt the page. Chris's full-size files from
+// longlightproductions.com (his site's /images/portfolio/…, not the -sm
+// thumbs), kept byte-for-byte as he published them, never re-encoded:
+// chris-01 = hawthorne-portland-classic-box-08, chris-02 =
+// vancouver-modern-craftsman-13, chris-03 = sellwood-craftsman-cottage-18,
+// chris-04 = sellwood-craftsman-cottage-04.
+export const PORTLAND_SHOOTER_PHOTOS: { name: string; photos: AgentPagePhoto[] } = {
+  name: "Chris",
+  photos: [
+    ["chris-01", "Living room with white brick fireplace and blue velvet chaise"],
+    ["chris-02", "Bedroom with whitewashed wood accent wall and windows onto trees"],
+    ["chris-03", "Kitchen with teal base cabinets, wood uppers and quartz counters"],
+    ["chris-04", "Cozy living room with neutral sofa and patterned rug"],
+  ].map(([key, alt]) => ({ key, src: `${PF}portland/${key}.jpg`, alt })),
+};
+
 // Douglas County towns; anything else counts as the Eugene side. Used to pick
 // which of Lukas's jobs count as "near" an agent when prefilling listings.
 const ROSEBURG_AREA = ["roseburg", "sutherlin", "winston", "myrtle creek", "oakland", "glide", "green", "canyonville", "douglas"];

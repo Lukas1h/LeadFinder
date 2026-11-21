@@ -718,6 +718,15 @@ next listing comes up (usually 1–4 weeks after first contact).
   (new style, `FullGallery`: video → 8-photo grid → pf-01 full width → 8-photo grid → the 10th photo full width (`AGENT_PAGE_PHOTOS` order), the last two unused; the original shows 6),
   Lukas's 2026-11-12 set in the main website's order. Card carousels preload
   every photo after the first loads, so the arrows flip instantly.
+- Portland shooter samples (2026-11-20): every Portland-market page
+  (`shooterMarketForArea(content.area)` = portland, both styles) closes its
+  portfolio with a small 4-photo row of Chris's own work
+  (`PORTLAND_SHOOTER_PHOTOS` in `src/lib/agentPage.ts`; files in
+  `public/agent-page/portland/chris-01…04.jpg`, his full-size originals from
+  longlightproductions.com, never re-encoded), each tile carrying "Chris"
+  tiny and slightly transparent in its bottom-left corner (`ShooterPhotos`
+  in the page) — a credit that doesn't interrupt the page. Same on old-style
+  Portland pages, after their closing full-width photo.
 
 ### Other verticals (roofing)
 
