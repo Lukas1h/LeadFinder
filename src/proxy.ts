@@ -57,6 +57,7 @@ function markGalleryView(headers: Headers): Headers {
 //   /login                  the sign-in page and its Server Action POST
 //   /gallery/…              client galleries opened on an admin domain
 //   /api/gallery/…          client downloads, gated by gallery token
+//   /upload/…, /api/upload/… a shooter's upload page, gated by upload token
 //   /api/site-listings…     the main website's "Recent listings": jobs
 //                           Lukas picked to show publicly, and their photos
 //   /api/unsubscribe        signed token in the URL, from an email footer
@@ -83,7 +84,7 @@ const PUBLIC_PATHS = new Set([
   "/api/compose/cold-outreach",
 ]);
 
-const PUBLIC_PREFIXES = ["/gallery/", "/portfolio/", "/api/gallery/", "/api/portfolio/", "/api/portfolio-image/", "/api/vertical/", "/api/site-listings", "/api/webhooks/", "/api/cron/", "/api/app/", "/.well-known/"];
+const PUBLIC_PREFIXES = ["/gallery/", "/upload/", "/api/upload/", "/portfolio/", "/api/gallery/", "/api/portfolio/", "/api/portfolio-image/", "/api/vertical/", "/api/site-listings", "/api/webhooks/", "/api/cron/", "/api/app/", "/.well-known/"];
 
 const HANDOFF_FILE_RE = /^\/api\/(agents|bookings)\/[^/]+\/(vcard|calendar)$/;
 
@@ -151,7 +152,7 @@ export async function proxy(req: NextRequest) {
     // domain (the admin app's own aliases, or someone who bookmarked an old
     // link) still needs to be chrome-less — same header, same single source
     // of truth in layout.tsx.
-    if (pathname.startsWith("/gallery/") || pathname.startsWith("/portfolio/") || VERTICAL_PREFIXES.some((p) => pathname.startsWith(p))) {
+    if (pathname.startsWith("/gallery/") || pathname.startsWith("/upload/") || pathname.startsWith("/portfolio/") || VERTICAL_PREFIXES.some((p) => pathname.startsWith(p))) {
       return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
     }
     return NextResponse.next();
@@ -176,7 +177,8 @@ export async function proxy(req: NextRequest) {
     }
     return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
   }
-  if (pathname.startsWith("/gallery/")) {
+  // A shooter's upload page (src/app/upload/[token]); the page checks the token.
+  if (pathname.startsWith("/gallery/") || pathname.startsWith("/upload/")) {
     return NextResponse.next({ request: { headers: markGalleryView(req.headers) } });
   }
   // A vertical's page (lukashahn.media/roofing/<word>, forwarded by the main

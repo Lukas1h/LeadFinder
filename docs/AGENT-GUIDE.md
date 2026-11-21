@@ -424,7 +424,7 @@ Email is plain text by choice: no HTML, no tracking pixels.
 booking's own), `contact_agent_id`, `job_date`, `date_tentative`,
 `lockbox_code`, `notes`, line items in `booking_line_items` (`description`,
 `amount` in whole dollars, negative for a deduction; the total is their sum), `dropbox_folder_link`,
-`dropbox_upload_link` (a shooter's raw-file folder), `gallery_token`,
+`dropbox_upload_link` / `dropbox_upload_path` / `upload_token` (a shooter's raw-file folder and upload page), `gallery_token`,
 `invoice_number`, `square_invoice_id` / `square_invoice_url`,
 `paid_at`, and the hours columns.
 
@@ -507,14 +507,37 @@ PATCH). `loadShooterSummary()` (Finances card; phone `GET finances/shooters`)
 lists pay owed on shot jobs and each shooter's year total, flagged at the
 1099-NEC threshold.
 
-Upload link: the first time a shooter is put on a booking,
-`getOrCreateBookingUploadLink` (`src/lib/mediaUploads.ts`) makes
-`<DROPBOX_UPLOAD_ROOT>/<address>` (default `/Media Uploads`), shares it
-"anyone with the link can edit" and saves the URL to
-`bookings.dropbox_upload_link`. **Copy upload link** and **Text upload link**
-in the booking dialog use it; it's never re-made, and clearing the shooter
-keeps it (the files are already there). Texting opens Messages with a drafted
-message — nothing is logged for shooters.
+Upload page (2026-11-21): the first time a shooter is put on a booking
+(`setBookingShooter`), it gets `bookings.upload_token` and the shooter's link
+is `gallery.lukashahn.media/upload/<upload_token>` (`src/app/upload/[token]`,
+gallery styling, public, token = access). Files go straight into the job's
+Dropbox folder `<DROPBOX_UPLOAD_ROOT>/<address>` (default `/Media Uploads`;
+made right after assigning, in `after()`, autorenamed " (1)" for a reshoot;
+path in `bookings.dropbox_upload_path`), so editing starts from Dropbox as
+before. `dropbox_upload_link` is now just a view link to that folder
+(Flambient import); older jobs' editor links are resolved back to their folder.
+The old "anyone can edit" Dropbox links made shooters sign in to Dropbox.
+Engine (`uploadEngine.ts`): files ≤150 MB upload browser → Dropbox through
+temporary upload links (`POST /api/upload/[token]` `action: links`), 4 at a
+time; bigger ones as a Dropbox concurrent upload session in 4 MiB chunks via
+`/api/upload/[token]/large`. Retries with backoff, pauses while offline,
+aborts a transfer with no progress for 60 s, keeps the screen awake, and
+skips files already in the folder with the same path and size (so reopening
+the link resumes). Nothing is ever overwritten (`add` + autorename).
+Tracking: `upload_batches` (one run: files/bytes total, done, failed,
+skipped, `last_activity_at`, `finished_at`) and `upload_events` (`view`,
+`start`, `finish`, `file_failed`). Push to Lukas on a batch's start
+("Chris started uploading 212 files (9.8 GB)") and finish (or "finished with
+errors"); more files added within 15 min of finishing reopen the same batch.
+The booking dialog shows the state live (`getBookingUploadStatus`: not
+opened / opened / uploading / stalled = no progress for 10 min / finished)
+and an Open in Dropbox link. **Copy upload link** / **Text upload link**
+give the page link (`getOrCreateBookingUploadLink`, `src/lib/mediaUploads.ts`);
+clearing the shooter keeps the token and folder.
+
+Dropbox calls go through `withDropboxRetry` (`src/lib/dropbox.ts`): 429 (with
+Retry-After), 5xx and network errors retry, so a big gallery's burst of
+thumbnail calls no longer shows broken photos.
 
 Booking credit: `attributeBookingToSend()` in `src/lib/agentIdentity.ts`
 links a booking to the outreach send that won it.
@@ -814,6 +837,10 @@ select b.id, coalesce(l.address, b.address) address, b.job_date, b.date_tentativ
 from bookings b left join listings l on l.id=b.listing_id
 where b.completed_at is null order by b.job_date nulls last;
 
+-- A shooter's uploads for a job
+select started_at, finished_at, files_done, files_total, files_failed, bytes_done from upload_batches where booking_id='<uuid>' order by started_at;
+select event, detail, at, city from upload_events where booking_id='<uuid>' order by at;
+
 -- Gallery activity for a job
 select event, detail, at, city, user_agent from gallery_views where booking_id='<uuid>' order by at;
 
@@ -839,6 +866,7 @@ from portfolio_links l left join agents a on a.id=l.agent_id order by l.created_
 | Sync and photo scoring | `src/lib/sync.ts`, `src/lib/photoScore.ts` |
 | Market status, booking↔listing matching | `src/lib/marketStatus.ts`, `src/lib/bookingListingMatch.ts` |
 | Messaging and stats | `src/app/messaging/`, `src/lib/messageTemplate.ts`, `src/lib/messageStats.ts` |
+| Shooter upload page | `src/app/upload/[token]/`, `src/app/api/upload/[token]/`, `src/lib/mediaUploads.ts`, `src/lib/dropbox.ts` |
 | Bookings, galleries, invoices | `src/app/booked/`, `src/app/gallery/[token]/`, `src/app/api/bookings/[id]/invoice/` |
 | Schedule | `src/lib/scheduleItems.ts`, `src/app/schedule/` |
 | Follow Up | `src/app/follow-up/` |

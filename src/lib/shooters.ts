@@ -18,7 +18,8 @@ import { bookings, expenses, listings, shooters } from "@/db/schema";
 import type { BookingStage } from "@/lib/bookingStages";
 import { pacificDate } from "@/lib/finance/math";
 import { writeExpense, type ExpenseInput } from "@/lib/finance/writes";
-import { getOrCreateBookingUploadLink } from "@/lib/mediaUploads";
+import { after } from "next/server";
+import { ensureUploadToken, prepareBookingUploadFolder } from "@/lib/mediaUploads";
 import { normalizePhone } from "@/lib/normalize";
 
 
@@ -34,7 +35,7 @@ async function loadBookingShooterRow(bookingId: string) {
       shooterId: bookings.shooterId,
       shooterPay: bookings.shooterPay,
       shooterExpenseId: bookings.shooterExpenseId,
-      dropboxUploadLink: bookings.dropboxUploadLink,
+      uploadToken: bookings.uploadToken,
       address: bookings.address,
       city: bookings.city,
       listingAddress: listings.address,
@@ -126,14 +127,18 @@ export async function setBookingShooter(
   const shooter = await findOrCreateShooter(name, input?.phone);
   await db.update(bookings).set({ shooterId: shooter.id, shooterPay: pay }).where(eq(bookings.id, bookingId));
 
-  // Somewhere to put the raw files: the first time a shooter is put on a job,
-  // make its Dropbox upload folder and share it (src/lib/mediaUploads.ts), so
-  // the link is ready to copy or text from the booking. Best-effort on
-  // purpose — a Dropbox hiccup must not lose the shooter or the pay, and the
-  // dialog's buttons make the link again on demand.
-  if (!booking.dropboxUploadLink) {
-    const link = await getOrCreateBookingUploadLink(bookingId);
-    if (link.error) console.error("setBookingShooter: upload link not made", link.error);
+  // Somewhere to put the raw files: the first time a shooter is put on a job
+  // it gets its upload page link (a DB-only token, so it can't fail), and its
+  // Dropbox folder is made after the response so saving never waits on
+  // Dropbox. The upload page makes the folder itself if this didn't.
+  if (!booking.uploadToken) {
+    await ensureUploadToken(bookingId);
+    try {
+      after(() => prepareBookingUploadFolder(bookingId));
+    } catch {
+      // Outside a request (a script): just wait for it.
+      await prepareBookingUploadFolder(bookingId);
+    }
   }
 
   // Already paid: keep the expense in step with the new name/amount.

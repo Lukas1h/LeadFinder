@@ -26,7 +26,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   // folder actually lists, so a valid galleryToken can't be used to probe
   // arbitrary paths elsewhere in the Dropbox account.
   // Videos too — their thumbnail is the player's poster frame.
-  const { photos, videos } = await listGalleryMedia(booking.dropboxFolderLink);
+  let media: Awaited<ReturnType<typeof listGalleryMedia>>;
+  try {
+    media = await listGalleryMedia(booking.dropboxFolderLink);
+  } catch (err) {
+    console.error("gallery: Dropbox folder listing failed", err);
+    return NextResponse.json({ error: "Couldn't reach Dropbox" }, { status: 502 });
+  }
+  const { photos, videos } = media;
   const photo = [...photos, ...videos].find((p) => p.name === name);
   if (!photo) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

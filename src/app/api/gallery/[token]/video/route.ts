@@ -23,7 +23,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   if (!booking?.dropboxFolderLink) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Same rule as the thumbnail route: only files this booking's own folder lists.
-  const { videos } = await listGalleryMedia(booking.dropboxFolderLink);
+  let media: Awaited<ReturnType<typeof listGalleryMedia>>;
+  try {
+    media = await listGalleryMedia(booking.dropboxFolderLink);
+  } catch (err) {
+    console.error("gallery: Dropbox folder listing failed", err);
+    return NextResponse.json({ error: "Couldn't reach Dropbox" }, { status: 502 });
+  }
+  const { videos } = media;
   const video = videos.find((v) => v.name === name);
   if (!video) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

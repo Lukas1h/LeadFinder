@@ -170,6 +170,11 @@ export async function notifyStagingRequest(address: string | null, count: number
   });
 }
 
+/** Any one-off notification (the upload page's started/finished pushes). */
+export function broadcastPush(payload: PushPayload): Promise<void> {
+  return broadcast(payload);
+}
+
 async function broadcast(payload: PushPayload): Promise<void> {
   if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
 

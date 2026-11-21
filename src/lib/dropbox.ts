@@ -22,6 +22,32 @@ function getClient(): Dropbox {
   return client;
 }
 
+/**
+ * Retries a Dropbox call that failed for a reason worth retrying: rate
+ * limiting (429, honoring its Retry-After), Dropbox's own 5xx hiccups, and
+ * network errors. A gallery fires dozens of thumbnail calls at once and an
+ * upload fires hundreds of link/append calls, so a 429 is routine, not an
+ * outage — before this, one surfaced as a broken photo or a failed upload.
+ * 4xx errors (bad path, conflict, missing scope) fail straight away.
+ */
+export async function withDropboxRetry<T>(fn: () => Promise<T>, attempts = 4): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const status = (err as { status?: number } | null)?.status;
+      const retryable = status === undefined || status === 429 || status >= 500;
+      if (!retryable || attempt >= attempts) throw err;
+      const retryAfter = Number(
+        (err as { headers?: { get?: (k: string) => string | null } }).headers?.get?.("retry-after") ??
+          (err as { error?: { error?: { retry_after?: number } } }).error?.error?.retry_after
+      );
+      const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 300 * 2 ** (attempt - 1);
+      await new Promise((r) => setTimeout(r, Math.min(wait, 8000) + Math.random() * 200));
+    }
+  }
+}
+
 const IMAGE_EXTENSION_RE = /\.(jpe?g|png|heic|heif|webp|gif|tiff?)$/i;
 const VIDEO_EXTENSION_RE = /\.(mp4|mov|m4v|webm)$/i;
 
@@ -64,7 +90,7 @@ export async function listGalleryMedia(sharedLink: string): Promise<GalleryMedia
   const photos: GalleryPhoto[] = [];
   const videos: GalleryPhoto[] = [];
 
-  let res = await dbx.filesListFolder({ path: "", shared_link: { url: sharedLink } });
+  let res = await withDropboxRetry(() => dbx.filesListFolder({ path: "", shared_link: { url: sharedLink } }));
   for (;;) {
     for (const entry of res.result.entries) {
       if (entry[".tag"] !== "file" || !entry.path_lower) continue;
@@ -72,11 +98,16 @@ export async function listGalleryMedia(sharedLink: string): Promise<GalleryMedia
       else if (VIDEO_EXTENSION_RE.test(entry.name)) videos.push({ name: entry.name, pathLower: entry.path_lower });
     }
     if (!res.result.has_more) break;
-    res = await dbx.filesListFolderContinue({ cursor: res.result.cursor });
+    const cursor = res.result.cursor;
+    res = await withDropboxRetry(() => dbx.filesListFolderContinue({ cursor }));
   }
 
   const byName = (a: GalleryPhoto, b: GalleryPhoto) => a.name.localeCompare(b.name, undefined, { numeric: true });
   const media = { photos: photos.sort(byName), videos: videos.sort(byName) };
+  // A long-lived instance would otherwise keep every gallery ever opened.
+  if (listCache.size > 200) {
+    for (const [key, entry] of listCache) if (entry.expiresAt <= Date.now()) listCache.delete(key);
+  }
   listCache.set(sharedLink, { media, expiresAt: Date.now() + LIST_CACHE_TTL_MS });
   return media;
 }
@@ -88,7 +119,7 @@ export async function listGalleryMedia(sharedLink: string): Promise<GalleryMedia
  * link, so tapping it never opens the app.
  */
 export async function getTemporaryLink(pathLower: string): Promise<string> {
-  const res = await getClient().filesGetTemporaryLink({ path: pathLower });
+  const res = await withDropboxRetry(() => getClient().filesGetTemporaryLink({ path: pathLower }));
   return res.result.link;
 }
 
@@ -107,12 +138,14 @@ export type GalleryThumbnailSize = "w256h256" | "w480h320" | "w640h480" | "w960h
  */
 export async function getGalleryThumbnail(pathLower: string, size: GalleryThumbnailSize): Promise<Buffer> {
   const dbx = getClient();
-  const res = await dbx.filesGetThumbnailV2({
-    resource: { ".tag": "path", path: pathLower },
-    format: { ".tag": "jpeg" },
-    size: { ".tag": size },
-    mode: { ".tag": "bestfit" },
-  });
+  const res = await withDropboxRetry(() =>
+    dbx.filesGetThumbnailV2({
+      resource: { ".tag": "path", path: pathLower },
+      format: { ".tag": "jpeg" },
+      size: { ".tag": size },
+      mode: { ".tag": "bestfit" },
+    })
+  );
   // The SDK's return type is a fileBinary/fileBlob union, and which branch
   // actually comes back depends on which fetch/Response implementation is
   // in play at runtime — confirmed by testing: a plain tsx script gets
@@ -182,7 +215,7 @@ function uploadRootPath(): string {
 async function ensureFolder(path: string): Promise<string> {
   const dbx = getClient();
   try {
-    const res = await dbx.filesCreateFolderV2({ path, autorename: false });
+    const res = await withDropboxRetry(() => dbx.filesCreateFolderV2({ path, autorename: false }));
     return res.result.metadata.path_display ?? res.result.metadata.path_lower ?? path;
   } catch (err) {
     // A "path" error is the boring case — it's already there. Ask what it is
@@ -193,63 +226,181 @@ async function ensureFolder(path: string): Promise<string> {
     if (dropboxErrorTag(err) !== "path") throw err;
     let existing: Awaited<ReturnType<typeof dbx.filesGetMetadata>>;
     try {
-      existing = await dbx.filesGetMetadata({ path });
+      existing = await withDropboxRetry(() => dbx.filesGetMetadata({ path }));
     } catch {
       throw err;
     }
     if (existing.result[".tag"] !== "folder") {
-      throw new Error(`Dropbox: \"${path}\" already exists as a file, so the upload folder can't be made`);
+      throw new Error(`Dropbox: "${path}" already exists as a file, so the upload folder can't be made`);
     }
     return existing.result.path_display ?? existing.result.path_lower ?? path;
   }
 }
 
 /**
- * Makes (or finds) `<DROPBOX_UPLOAD_ROOT>/<folderName>` and shares it with an
- * "anyone with the link can edit" link — no Dropbox account or sign-in, so a
- * subcontracted photographer can drag a shoot's raw photos and video straight
- * in. Downloads stay allowed so he can see what already uploaded.
- *
- * The settings are deliberately just `access: editor`: Dropbox rejects a
- * `settings_error/invalid_settings` when `audience: public` or
- * `allow_download` are sent alongside it, and the editor link it makes is
- * already public-audience with downloads allowed (verified against the live
- * app).
- *
- * Needs the `sharing.write` scope, unlike the read-only gallery calls above.
- * If the folder already has a view-only link (made by hand in Dropbox), that
- * one can't be upgraded through the API (Dropbox answers invalid_settings),
- * so this throws a message saying so rather than handing out a link nobody
- * can upload through.
+ * Makes a new `<DROPBOX_UPLOAD_ROOT>/<folderName>` for one job and returns its
+ * path. `autorename`, so a reshoot at an address that already has a folder
+ * gets "<address> (1)" instead of mixing its files into the old shoot's — the
+ * path is stored on the booking, so the name only has to be unique once.
  */
-export async function createUploadFolder(folderName: string): Promise<{ url: string; path: string }> {
+export async function createUploadFolder(folderName: string): Promise<string> {
   const dbx = getClient();
-  const root = uploadRootPath();
-  await ensureFolder(root);
-  const path = await ensureFolder(`${root}/${folderName}`);
+  await ensureFolder(uploadRootPath());
+  const res = await withDropboxRetry(() =>
+    dbx.filesCreateFolderV2({ path: `${uploadRootPath()}/${folderName}`, autorename: true })
+  );
+  return res.result.metadata.path_display ?? res.result.metadata.path_lower!;
+}
 
+/** Re-makes a stored upload folder if someone deleted or moved it in Dropbox. */
+export async function ensureUploadFolder(path: string): Promise<string> {
+  await ensureFolder(uploadRootPath());
+  return ensureFolder(path);
+}
+
+/**
+ * The folder behind one of the old "anyone can edit" upload links, for jobs
+ * whose shooter was sent one before the upload page existed — so their new
+ * page uploads into the same folder.
+ */
+export async function folderPathFromSharedLink(url: string): Promise<string | null> {
   try {
-    const res = await dbx.sharingCreateSharedLinkWithSettings({
-      path,
-      settings: { access: { ".tag": "editor" } },
-    });
-    return { url: res.result.url, path };
+    const res = await withDropboxRetry(() => getClient().sharingGetSharedLinkMetadata({ url }));
+    return res.result[".tag"] === "folder" ? (res.result.path_lower ?? null) : null;
+  } catch (err) {
+    console.error("folderPathFromSharedLink failed", err);
+    return null;
+  }
+}
+
+/**
+ * A plain view-only link to a folder (or the one it already has). The upload
+ * page is what shooters get; this is only for reading the folder elsewhere
+ * (Flambient's import, via bookings.dropbox_upload_link).
+ */
+export async function createViewLink(path: string): Promise<string> {
+  const dbx = getClient();
+  try {
+    const res = await withDropboxRetry(() => dbx.sharingCreateSharedLinkWithSettings({ path }));
+    return res.result.url;
   } catch (err) {
     if (dropboxErrorTag(err) !== "shared_link_already_exists") throw err;
+    const listed = await withDropboxRetry(() => dbx.sharingListSharedLinks({ path, direct_only: true }));
+    const existing = listed.result.links[0];
+    if (!existing) throw err;
+    return existing.url;
   }
+}
 
-  const listed = await dbx.sharingListSharedLinks({ path, direct_only: true });
-  const existing = listed.result.links[0];
-  if (!existing) throw new Error("Dropbox says a link already exists for this folder but didn't list one");  if (existing.link_permissions?.link_access_level?.[".tag"] === "editor") {
-    return { url: existing.url, path };
+/** The Dropbox web page for a folder in this account. */
+export function dropboxWebUrl(path: string): string {
+  return `https://www.dropbox.com/home${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+export interface FolderFile {
+  /** Relative to the folder, as it was uploaded ("Video/clip 1.mp4"). */
+  path: string;
+  size: number;
+}
+
+/** Every file under a folder (subfolders too), so the upload page can skip what's already there. */
+export async function listFolderFiles(folderPath: string): Promise<FolderFile[]> {
+  const dbx = getClient();
+  const prefix = folderPath.toLowerCase().replace(/\/+$/, "") + "/";
+  const files: FolderFile[] = [];
+  let res = await withDropboxRetry(() => dbx.filesListFolder({ path: folderPath, recursive: true, limit: 2000 }));
+  for (;;) {
+    for (const entry of res.result.entries) {
+      if (entry[".tag"] !== "file") continue;
+      const display = entry.path_display ?? entry.path_lower ?? "";
+      const rel = display.toLowerCase().startsWith(prefix) ? display.slice(prefix.length) : entry.name;
+      files.push({ path: rel, size: entry.size });
+    }
+    if (!res.result.has_more) break;
+    const cursor = res.result.cursor;
+    res = await withDropboxRetry(() => dbx.filesListFolderContinue({ cursor }));
   }
+  return files;
+}
 
-  // Dropbox won't raise a view-only link to editor through the API: both
-  // sharingModifySharedLinkSettings and a create retry answer
-  // settings_error/invalid_settings (checked against the live app, with and
-  // without audience / allow_download). So say what to do by hand instead of
-  // handing over a link the shooter can't upload through.
-  throw new Error(
-    "Dropbox: this folder's existing link is view-only — open it in Dropbox and change the link to \"can edit\", then try again"
+/**
+ * A one-file upload URL the browser POSTs the bytes to directly
+ * (content.dropboxapi.com/apitul/…, CORS open, no token needed, ≤150 MB,
+ * good for four hours). This is what keeps the upload page as fast as
+ * Dropbox's own: photos never pass through this app. `add` + autorename:
+ * re-sending identical bytes is a no-op, a different file with the same
+ * name becomes "name (1)" — nothing is ever overwritten.
+ */
+export async function temporaryUploadLink(path: string): Promise<string> {
+  const res = await withDropboxRetry(() =>
+    getClient().filesGetTemporaryUploadLink({
+      commit_info: { path, mode: { ".tag": "add" }, autorename: true, mute: true },
+      duration: 14400,
+    })
   );
+  return res.result.link;
+}
+
+/** Biggest file a temporary upload link takes; larger ones go through an upload session. */
+export const TEMP_LINK_MAX_BYTES = 150 * 1024 * 1024;
+/** Concurrent upload sessions take appends in multiples of 4 MiB (except the last). */
+export const SESSION_CHUNK_BYTES = 4 * 1024 * 1024;
+
+// Upload sessions (files over 150 MB: drone and video clips) need the
+// account's token, so they run here; the browser sends 4 MiB chunks, several
+// at once, to /api/upload/[token]/large. Raw fetch rather than the SDK, to
+// pass the chunk bytes straight through.
+async function contentCall(endpoint: string, arg: unknown, body?: ArrayBuffer): Promise<Response> {
+  const dbx = getClient();
+  return withDropboxRetry(async () => {
+    const auth = (dbx as unknown as { auth: { checkAndRefreshAccessToken(): Promise<void>; getAccessToken(): string } }).auth;
+    await auth.checkAndRefreshAccessToken();
+    const res = await fetch(`https://content.dropboxapi.com/2/files/${endpoint}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${auth.getAccessToken()}`,
+        "Content-Type": "application/octet-stream",
+        "Dropbox-API-Arg": JSON.stringify(arg).replace(/[\u007f-\uffff]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0")),
+      },
+      body: body ?? new ArrayBuffer(0),
+      cache: "no-store",
+    });
+    if (res.status === 429 || res.status >= 500) {
+      throw Object.assign(new Error(`Dropbox ${endpoint} ${res.status}: ${await res.text()}`), { status: res.status, headers: res.headers });
+    }
+    return res;
+  });
+}
+
+async function dropboxJson<T>(res: Response, endpoint: string): Promise<T> {
+  const text = await res.text();
+  if (!res.ok) throw Object.assign(new Error(`Dropbox ${endpoint} ${res.status}: ${text}`), { status: res.status, body: text });
+  return JSON.parse(text) as T;
+}
+
+export async function uploadSessionStart(): Promise<string> {
+  const res = await contentCall("upload_session/start", { close: false, session_type: "concurrent" });
+  return (await dropboxJson<{ session_id: string }>(res, "upload_session/start")).session_id;
+}
+
+/**
+ * One chunk. A retry of a chunk Dropbox already took answers
+ * incorrect_offset — that's success, not a failure.
+ */
+export async function uploadSessionAppend(sessionId: string, offset: number, close: boolean, body: ArrayBuffer): Promise<void> {
+  const res = await contentCall("upload_session/append_v2", { cursor: { session_id: sessionId, offset }, close }, body);
+  if (res.ok) return;
+  const text = await res.text();
+  if (res.status === 409 && text.includes("incorrect_offset")) return;
+  throw Object.assign(new Error(`Dropbox append ${res.status}: ${text}`), { status: res.status });
+}
+
+/** Commits the session as a file; returns where it landed (autorename may add " (1)"). */
+export async function uploadSessionFinish(sessionId: string, size: number, path: string): Promise<{ path: string; size: number }> {
+  const res = await contentCall("upload_session/finish", {
+    cursor: { session_id: sessionId, offset: size },
+    commit: { path, mode: "add", autorename: true, mute: true },
+  });
+  const meta = await dropboxJson<{ path_display: string; size: number }>(res, "upload_session/finish");
+  return { path: meta.path_display, size: meta.size };
 }

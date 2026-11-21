@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Users, Check, RotateCcw, Pencil, Plus, X, Copy, MessageSquare } from "lucide-react";
-import { saveBookingShooter, markShooterPaid, getShooters, getBookingUploadLink } from "./shooterActions";
+import { Users, Check, RotateCcw, Pencil, Plus, X, Copy, MessageSquare, ExternalLink } from "lucide-react";
+import { saveBookingShooter, markShooterPaid, getShooters, getBookingUploadLink, getBookingUploadStatus } from "./shooterActions";
+import type { BookingUploadStatus } from "@/lib/mediaUploads";
 import { stageIndex } from "@/lib/bookingStages";
 import { formatPhone, formatPrice } from "@/lib/format";
 import { smsUrl } from "@/lib/sms";
@@ -16,6 +17,91 @@ import type { BookingWithDetails } from "./BookedList";
 function shortDay(ymd: string) {
   const [y, m, d] = ymd.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function fmtBytes(n: number) {
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
+  if (n >= 1024 ** 2) return `${Math.round(n / 1024 ** 2)} MB`;
+  return `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+/** Short time: "3:42 PM" today, else "Nov 20, 3:42 PM". */
+function shortTime(iso: string | null) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === new Date().toDateString()) return `today ${time}`;
+  return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${time}`;
+}
+
+/** How far the shooter got with the upload page: opened, uploading, stalled, done. */
+function UploadStatusLine({ bookingId }: { bookingId: string }) {
+  const [data, setData] = useState<{ url: string | null; dropboxUrl: string | null; status: BookingUploadStatus } | null>(null);
+  const uploading = data?.status.state === "uploading";
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      getBookingUploadStatus(bookingId)
+        .then((d) => alive && setData(d))
+        .catch(() => {});
+    load();
+    const t = uploading ? setInterval(load, 15_000) : null;
+    return () => {
+      alive = false;
+      if (t) clearInterval(t);
+    };
+  }, [bookingId, uploading]);
+
+  if (!data) return null;
+  const { status: s, url, dropboxUrl } = data;
+  let line: React.ReactNode = null;
+  if (s.state === "never_opened") {
+    if (url) line = <span>Upload link not opened yet</span>;
+  } else if (s.state === "opened") {
+    line = <span>Opened upload link {shortTime(s.lastViewAt)}</span>;
+  } else if (s.state === "uploading") {
+    line = (
+      <span className="flex items-center gap-1.5 text-sky-700 dark:text-sky-400">
+        <span className="size-1.5 rounded-full bg-sky-500 animate-pulse" />
+        Uploading — {s.filesDone}/{s.filesTotal} files
+      </span>
+    );
+  } else if (s.state === "stalled") {
+    line = (
+      <span className="text-amber-700 dark:text-amber-400">
+        Upload stopped at {s.filesDone}/{s.filesTotal} files
+        {s.lastActivityAt ? ` (last activity ${shortTime(s.lastActivityAt)})` : ""}
+      </span>
+    );
+  } else if (s.state === "finished") {
+    line = (
+      <span>
+        <span className="text-emerald-700 dark:text-emerald-400">
+          Uploaded {s.filesDone} files · {fmtBytes(s.bytesDone)}
+        </span>
+        {s.filesFailed > 0 && <span className="text-red-600 dark:text-red-400"> · {s.filesFailed} failed</span>}
+        {s.finishedAt && <span> · {shortTime(s.finishedAt)}</span>}
+      </span>
+    );
+  }
+  if (!line && !dropboxUrl) return null;
+  return (
+    <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+      {line}
+      {dropboxUrl && (
+        <a
+          href={dropboxUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+        >
+          <ExternalLink className="size-3" />
+          Open in Dropbox
+        </a>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -264,6 +350,7 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
           )}
         </div>
       </div>
+      <UploadStatusLine bookingId={booking.id} />
     </div>
   );
 }

@@ -7,7 +7,11 @@
  */
 
 import { listShooters, setBookingShooter, setShooterPaid } from "@/lib/shooters";
-import { getOrCreateBookingUploadLink } from "@/lib/mediaUploads";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { bookings } from "@/db/schema";
+import { dropboxWebUrl } from "@/lib/dropbox";
+import { getOrCreateBookingUploadLink, loadUploadStatus, uploadPageUrl, type BookingUploadStatus } from "@/lib/mediaUploads";
 
 /** Attaches a shooter (and pay, and phone) to a booking; a null / blank name clears it. */
 export async function saveBookingShooter(
@@ -36,4 +40,25 @@ export async function getBookingUploadLink(
   bookingId: string
 ): Promise<{ url?: string; text?: string; error?: string }> {
   return getOrCreateBookingUploadLink(bookingId);
+}
+
+/**
+ * What the booking dialog shows under the shooter: the upload page link (if
+ * made), the Dropbox folder, and whether the shooter has opened it, is
+ * uploading, stalled or finished. Read live each time the dialog opens.
+ */
+export async function getBookingUploadStatus(bookingId: string): Promise<{
+  url: string | null;
+  dropboxUrl: string | null;
+  status: BookingUploadStatus;
+}> {
+  const [row] = await db
+    .select({ token: bookings.uploadToken, path: bookings.dropboxUploadPath })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId));
+  return {
+    url: row?.token ? uploadPageUrl(row.token) : null,
+    dropboxUrl: row?.path ? dropboxWebUrl(row.path) : null,
+    status: await loadUploadStatus(bookingId),
+  };
 }

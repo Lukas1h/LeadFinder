@@ -5,6 +5,7 @@ import {
   uuid,
   text,
   integer,
+  bigint,
   numeric,
   real,
   doublePrecision,
@@ -496,6 +497,14 @@ export const bookings = pgTable("bookings", {
   // booking dialog (src/lib/mediaUploads.ts). Kept when the shooter is
   // cleared: the files are already in it.
   dropboxUploadLink: text("dropbox_upload_link"),
+  // The shooter's upload page: <GALLERY_ORIGIN>/upload/<upload_token>
+  // (src/app/upload/[token]), which uploads straight into the job's Dropbox
+  // folder at dropbox_upload_path. Assigned when a shooter is first put on the
+  // job and never re-made. The page replaced texting dropbox_upload_link
+  // (an editor link Dropbox makes people sign in to use); older jobs' folder
+  // path is read back from that link (src/lib/mediaUploads.ts).
+  uploadToken: text("upload_token").unique(),
+  dropboxUploadPath: text("dropbox_upload_path"),
 
   // Assigned once, the first time "Get client gallery link" is clicked (see
   // getOrAssignGalleryToken in src/app/booked/actions.ts) — same
@@ -1482,6 +1491,52 @@ export const shooters = pgTable("shooters", {
 });
 
 export type Shooter = typeof shooters.$inferSelect;
+
+// One run of a shooter's upload page (src/app/upload/[token]): the files they
+// picked at once, plus any added while it was still going. started → the
+// "started uploading" push; finished_at → the "finished" one. A batch that
+// stops getting progress without finishing is a stalled upload (closed tab,
+// lost signal); the page skips what's already in Dropbox when reopened.
+export const uploadBatches = pgTable("upload_batches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bookingId: uuid("booking_id")
+    .notNull()
+    .references(() => bookings.id, { onDelete: "cascade" }),
+  shooterId: uuid("shooter_id").references(() => shooters.id, { onDelete: "set null" }),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  filesTotal: integer("files_total").notNull().default(0),
+  bytesTotal: bigint("bytes_total", { mode: "number" }).notNull().default(0),
+  filesDone: integer("files_done").notNull().default(0),
+  bytesDone: bigint("bytes_done", { mode: "number" }).notNull().default(0),
+  filesFailed: integer("files_failed").notNull().default(0),
+  // Already in the folder (same name and size), so not sent again.
+  filesSkipped: integer("files_skipped").notNull().default(0),
+  city: text("city"),
+  userAgent: text("user_agent"),
+});
+
+export type UploadBatch = typeof uploadBatches.$inferSelect;
+
+// The upload page's log: view (page opened), start / finish (a batch),
+// file_failed (detail: path — error), as gallery_views is for galleries.
+export const UPLOAD_EVENTS = ["view", "start", "finish", "file_failed"] as const;
+export type UploadEvent = (typeof UPLOAD_EVENTS)[number];
+
+export const uploadEvents = pgTable("upload_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bookingId: uuid("booking_id")
+    .notNull()
+    .references(() => bookings.id, { onDelete: "cascade" }),
+  batchId: uuid("batch_id").references(() => uploadBatches.id, { onDelete: "cascade" }),
+  event: text("event").$type<UploadEvent>().notNull(),
+  detail: text("detail"),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  ip: text("ip"),
+  city: text("city"),
+  userAgent: text("user_agent"),
+});
 
 export type Expense = typeof expenses.$inferSelect;
 export type NewExpense = typeof expenses.$inferInsert;
