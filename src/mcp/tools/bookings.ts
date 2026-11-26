@@ -12,7 +12,7 @@ import { after } from "next/server";
 import { text, errorText } from "./shared";
 import { applyDateTentative, initialStage, reopenBookingStage, setBookingStage } from "@/lib/bookingStage";
 import { BOOKING_STAGES } from "@/lib/bookingStages";
-import { setBookingEditorCost, setBookingShooter, setShooterPaid } from "@/lib/shooters";
+import { setBookingEditor, setBookingShooter, setEditorPaid, setShooterPaid } from "@/lib/shooters";
 
 async function joinedBooking(bookingId: string) {
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
@@ -246,9 +246,10 @@ export function registerBookingTools(server: McpServer): void {
           .nullable()
           .optional()
           .describe("What the photo editor cost for this contracted job, whole dollars (usually 15-18). null = back to the default ($18 for an HDR shooter, $0 flambient)."),
+        editorName: z.string().optional().describe("Who edited this contracted job (e.g. \"Pixlmob\"). \"\" clears it."),
       },
     },
-    async ({ id, contactName, contactPhone, address, city, state, jobDate, dateTentative, stage, shot, lockboxCode, notes, invoiceNote, lineItems, shooterName, shooterPay, editorCost }) => {
+    async ({ id, contactName, contactPhone, address, city, state, jobDate, dateTentative, stage, shot, lockboxCode, notes, invoiceNote, lineItems, shooterName, shooterPay, editorCost, editorName }) => {
       const [existing] = await db.select().from(bookings).where(eq(bookings.id, id));
       if (!existing) return errorText("No booking with that id");
 
@@ -309,8 +310,8 @@ export function registerBookingTools(server: McpServer): void {
         }
       }
 
-      if (editorCost !== undefined) {
-        const editorResult = await setBookingEditorCost(id, editorCost);
+      if (editorCost !== undefined || editorName !== undefined) {
+        const editorResult = await setBookingEditor(id, { cost: editorCost, name: editorName });
         if (editorResult.error) return errorText(editorResult.error);
       }
 
@@ -358,6 +359,24 @@ export function registerBookingTools(server: McpServer): void {
       if (result.error) return errorText(result.error);
       const joined = await joinedBooking(id);
       return text(joined);
+    }
+  );
+
+  server.registerTool(
+    "mark_editor_paid",
+    {
+      title: "Mark a booking's photo editor paid (or unpaid)",
+      description:
+        "Like mark_shooter_paid, for the photo editor on a contracted job: logs the editor's cost (recorded, else $18 for an HDR shooter) as a Subcontractors expense on that job, or removes it with paid: false.",
+      inputSchema: {
+        id: z.string().uuid(),
+        paid: z.boolean().describe("true = log the payment, false = remove it"),
+      },
+    },
+    async ({ id, paid }) => {
+      const result = await setEditorPaid(id, paid);
+      if (result.error) return errorText(result.error);
+      return text(await joinedBooking(id));
     }
   );
 

@@ -448,6 +448,12 @@ export const bookings = pgTable("bookings", {
   // whole dollars; null = the default (HDR_EDITOR_COST for an HDR shooter,
   // 0 for flambient). Usually $15-18, set once the edits are ordered.
   editorCost: integer("editor_cost"),
+  // Who edited it ("Pixlmob"); null = not named yet. Free text, suggestions
+  // come from past bookings.
+  editorName: text("editor_name"),
+  // Paid = set: the "Subcontractors" expense that paid the editor, like
+  // shooterExpenseId for the shooter.
+  editorExpenseId: uuid("editor_expense_id").references((): AnyPgColumn => expenses.id, { onDelete: "set null" }),
   shooterExpenseId: uuid("shooter_expense_id").references((): AnyPgColumn => expenses.id, { onDelete: "set null" }),
   // Internal notes — shown in the app and calendar, never on the invoice.
   notes: text("notes"),

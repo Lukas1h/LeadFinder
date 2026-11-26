@@ -100,6 +100,7 @@ export async function loadLedger(): Promise<Ledger> {
         shooterPay: bookings.shooterPay,
         shooterExpenseId: bookings.shooterExpenseId,
         editorCost: bookings.editorCost,
+        editorExpenseId: bookings.editorExpenseId,
         shooterStyle: shooters.style,
       })
       .from(bookings)
@@ -155,6 +156,7 @@ export async function loadLedger(): Promise<Ledger> {
         shooterPay: b.shooterId ? (b.shooterPay ?? 0) : 0,
         editorCost: b.shooterId ? editorCost(b.shooterStyle, b.editorCost) : 0,
         shooterExpenseId: b.shooterId ? b.shooterExpenseId : null,
+        editorExpenseId: b.shooterId ? b.editorExpenseId : null,
       })
     ),
   };

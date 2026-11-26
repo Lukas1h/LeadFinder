@@ -43,14 +43,15 @@ type ProfitInputs = Pick<BookingWithDetails, "lineItems" | "costs" | "shooter">;
 
 /**
  * Real revenue minus the job's gas and linked expenses (see
- * src/lib/finance/math.ts). A paid shooter's pay is already one of the linked
- * expenses (lib/shooters.ts writes it with the bookingId), so it is only
- * taken off separately while unpaid.
+ * src/lib/finance/math.ts). A paid shooter's or editor's cost is already one
+ * of the linked expenses (lib/shooters.ts writes it with the bookingId), so
+ * each is only taken off separately while unpaid.
  */
 export function bookingProfit(booking: ProfitInputs): number {
   const { pay, editor } = contractorCost(booking);
   const unpaidPay = booking.shooter && !booking.shooter.expenseId ? pay : 0;
-  return bookingRevenue(booking) - unpaidPay - editor - booking.costs.gas - booking.costs.expenses;
+  const unpaidEditor = booking.shooter && !booking.shooter.editorExpenseId ? editor : 0;
+  return bookingRevenue(booking) - unpaidPay - unpaidEditor - booking.costs.gas - booking.costs.expenses;
 }
 
 /**

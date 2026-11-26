@@ -21,6 +21,7 @@ import { writeExpense, type ExpenseInput } from "@/lib/finance/writes";
 import { after } from "next/server";
 import { ensureUploadToken, prepareBookingUploadFolder } from "@/lib/mediaUploads";
 import { normalizePhone } from "@/lib/normalize";
+import { editorCost } from "@/lib/markets";
 
 
 /** The address a "Shoot at ..." expense description uses: the linked listing's, else the booking's. */
@@ -154,9 +155,11 @@ export async function setBookingShooter(
   const name = input?.name.trim() ?? "";
   if (!name) {
     if (booking.shooterExpenseId) await db.delete(expenses).where(eq(expenses.id, booking.shooterExpenseId));
+    const [ed] = await db.select({ id: bookings.editorExpenseId }).from(bookings).where(eq(bookings.id, bookingId));
+    if (ed?.id) await db.delete(expenses).where(eq(expenses.id, ed.id));
     await db
       .update(bookings)
-      .set({ shooterId: null, shooterPay: null, shooterExpenseId: null, editorCost: null })
+      .set({ shooterId: null, shooterPay: null, shooterExpenseId: null, editorCost: null, editorName: null, editorExpenseId: null })
       .where(eq(bookings.id, bookingId));
     revalidateShooterPaths();
     return {};
@@ -238,28 +241,136 @@ function expenseInput(
 }
 
 /**
- * "Paid <name>": logs the agreed pay as a Subcontractors expense on the job
- * (one per booking, dated today) and remembers it, or removes it again when
- * un-marking. Paying needs a shooter and a positive amount first.
+ * The photo editor on a contracted job, the same shape as the shooter: who
+ * (free text, e.g. "Pixlmob") and what it cost (whole dollars, usually
+ * $15-18; null = the default, HDR_EDITOR_COST for an HDR shooter, $0
+ * flambient). Undefined fields are left alone. Once paid, the logged expense
+ * follows a new name or amount. Comes off the job's real revenue
+ * (app/booked/bookingMath.ts).
  */
-/**
- * Records what the photo editor cost on a contracted job (whole dollars,
- * usually $15-18). Null goes back to the default: HDR_EDITOR_COST for an HDR
- * shooter, 0 for flambient. Shows on the booking and comes off its real
- * revenue (app/booked/bookingMath.ts).
- */
-export async function setBookingEditorCost(bookingId: string, cost: number | null): Promise<{ error?: string }> {
+export async function setBookingEditor(
+  bookingId: string,
+  input: { name?: string | null; cost?: number | null }
+): Promise<{ error?: string }> {
+  const { cost } = input;
   if (cost != null && (!Number.isFinite(cost) || cost < 0)) return { error: "Enter the editor cost as a positive number" };
   const [row] = await db
-    .update(bookings)
-    .set({ editorCost: cost == null ? null : Math.round(cost) })
-    .where(eq(bookings.id, bookingId))
-    .returning({ id: bookings.id });
+    .select({ id: bookings.id, editorExpenseId: bookings.editorExpenseId })
+    .from(bookings)
+    .where(eq(bookings.id, bookingId));
   if (!row) return { error: "No booking with that id" };
+
+  const patch: Partial<typeof bookings.$inferInsert> = {};
+  if (input.name !== undefined) patch.editorName = input.name?.trim() || null;
+  if (cost !== undefined) patch.editorCost = cost == null ? null : Math.round(cost);
+  if (Object.keys(patch).length > 0) await db.update(bookings).set(patch).where(eq(bookings.id, bookingId));
+
+  if (row.editorExpenseId) {
+    const synced = await syncEditorExpense(bookingId, row.editorExpenseId);
+    if (synced.error) return synced;
+  }
   revalidateShooterPaths();
   return {};
 }
 
+/** Just the cost (older callers): null = back to the default. */
+export async function setBookingEditorCost(bookingId: string, cost: number | null): Promise<{ error?: string }> {
+  return setBookingEditor(bookingId, { cost });
+}
+
+/** The editor's cost and the expense fields for one booking: the recorded cost, else the shooter style's default. */
+async function loadEditorRow(bookingId: string) {
+  const booking = await loadBookingShooterRow(bookingId);
+  if (!booking) return null;
+  const [extra] = await db
+    .select({ editorName: bookings.editorName, editorCost: bookings.editorCost, editorExpenseId: bookings.editorExpenseId, style: shooters.style })
+    .from(bookings)
+    .leftJoin(shooters, eq(shooters.id, bookings.shooterId))
+    .where(eq(bookings.id, bookingId));
+  const cost = editorCost(extra?.style ?? null, extra?.editorCost ?? null);
+  return {
+    ...booking,
+    editorName: extra?.editorName ?? null,
+    editorExpenseId: extra?.editorExpenseId ?? null,
+    cost,
+    vendor: extra?.editorName?.trim() || "Photo editor",
+    description: `Editing for ${shootAddress(booking) || "booking"}`,
+  };
+}
+
+/** Keeps a paid editor's expense in step with the booking's editor name and cost. */
+async function syncEditorExpense(bookingId: string, expenseId: string): Promise<{ error?: string }> {
+  const row = await loadEditorRow(bookingId);
+  const [expense] = await db.select().from(expenses).where(eq(expenses.id, expenseId));
+  if (!row || !expense) return {};
+  if (row.cost <= 0) {
+    await db.delete(expenses).where(eq(expenses.id, expenseId));
+    await db.update(bookings).set({ editorExpenseId: null }).where(eq(bookings.id, bookingId));
+    return {};
+  }
+  if (expense.vendor === row.vendor && expense.amountCents === Math.round(row.cost * 100) && expense.description === row.description) return {};
+  const result = await writeExpense(expense.id, expenseInput(expense, { amount: row.cost, vendor: row.vendor, description: row.description }));
+  return result.error ? { error: result.error } : {};
+}
+
+/**
+ * "Paid" for the editor, exactly like the shooter's: logs the editor's cost
+ * as a Subcontractors expense on the job (dated today), or removes it again.
+ * Needs a cost above $0 (recorded, or the HDR default).
+ */
+export async function setEditorPaid(bookingId: string, paid: boolean): Promise<{ error?: string }> {
+  const row = await loadEditorRow(bookingId);
+  if (!row) return { error: "No booking with that id" };
+
+  if (!paid) {
+    if (!row.editorExpenseId) return {};
+    await db.delete(expenses).where(eq(expenses.id, row.editorExpenseId));
+    await db.update(bookings).set({ editorExpenseId: null }).where(eq(bookings.id, bookingId));
+    revalidateShooterPaths();
+    return {};
+  }
+  if (row.editorExpenseId) return {};
+  if (row.cost <= 0) return { error: "Set the editor's cost first" };
+
+  const result = await writeExpense(null, {
+    date: pacificDate(new Date()),
+    amount: row.cost,
+    vendor: row.vendor,
+    description: row.description,
+    category: "contract_labor",
+    deductiblePercent: 100,
+    gallons: null,
+    pricePerGallon: null,
+    paidPersonally: false,
+    spreadMonths: 1,
+    refunded: 0,
+    refundedOn: null,
+    bookingId,
+    tripId: null,
+    notes: null,
+  });
+  if (result.error || !result.id) return { error: result.error ?? "Couldn't log the payment" };
+  await db.update(bookings).set({ editorExpenseId: result.id }).where(eq(bookings.id, bookingId));
+  revalidateShooterPaths();
+  return {};
+}
+
+/** Editors named on past bookings, most used first, for the booking form's picker. */
+export async function listEditors(): Promise<string[]> {
+  const rows = await db
+    .select({ name: bookings.editorName, n: sql<number>`count(*)::int` })
+    .from(bookings)
+    .where(sql`${bookings.editorName} is not null`)
+    .groupBy(bookings.editorName)
+    .orderBy(sql`count(*) desc`);
+  return rows.map((r) => r.name!).filter(Boolean);
+}
+
+/**
+ * "Paid <name>": logs the agreed pay as a Subcontractors expense on the job
+ * (one per booking, dated today) and remembers it, or removes it again when
+ * un-marking. Paying needs a shooter and a positive amount first.
+ */
 export async function setShooterPaid(bookingId: string, paid: boolean): Promise<{ error?: string }> {
   const booking = await loadBookingShooterRow(bookingId);
   if (!booking) return { error: "No booking with that id" };

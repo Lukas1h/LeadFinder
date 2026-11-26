@@ -52,6 +52,8 @@ export interface LedgerBooking {
   editorCost?: number;
   /** The "Subcontractors" expense that paid the shooter, once paid: already off real revenue, so never a cost too. */
   shooterExpenseId?: string | null;
+  /** Same for the photo editor. */
+  editorExpenseId?: string | null;
 }
 
 /**
@@ -64,9 +66,11 @@ export function realRevenue(b: LedgerBooking): number {
   return b.revenue - (b.shooterPay ?? 0) - (b.editorCost ?? 0);
 }
 
-/** Ids of the expenses that paid a booking's shooter (counted in real revenue, so skipped as costs). */
+/** Ids of the expenses that paid a booking's shooter or editor (counted in real revenue, so skipped as costs). */
 function shooterPaymentIds(input: LedgerInput): Set<string> {
-  return new Set(input.bookings.map((b) => b.shooterExpenseId).filter((id): id is string => !!id));
+  return new Set(
+    input.bookings.flatMap((b) => [b.shooterExpenseId, b.editorExpenseId]).filter((id): id is string => !!id)
+  );
 }
 
 export interface LedgerInput {

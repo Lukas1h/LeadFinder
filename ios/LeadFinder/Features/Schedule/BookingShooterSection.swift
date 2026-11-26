@@ -12,8 +12,7 @@ struct BookingShooterSection: View {
     @State private var showSheet = false
     @State private var isWorking = false
     @State private var error: String?
-    @State private var editingEditor = false
-    @State private var editorDraft = ""
+    @State private var showEditorSheet = false
 
     var body: some View {
         Group {
@@ -26,19 +25,8 @@ struct BookingShooterSection: View {
         .sheet(isPresented: $showSheet) {
             ShooterSheet(booking: booking) { await onChange() }
         }
-        .alert("Editor cost", isPresented: $editingEditor) {
-            TextField("18", text: $editorDraft)
-                #if os(iOS)
-                .keyboardType(.decimalPad)
-                #endif
-            Button("Cancel", role: .cancel) {}
-            Button("Save") {
-                let trimmed = editorDraft.trimmingCharacters(in: .whitespaces)
-                let cost = trimmed.isEmpty ? nil : Double(trimmed.filter { $0.isNumber || $0 == "." })
-                Task { await run { try await APIClient.shared.setBookingEditorCost(id: booking.id, cost: cost) } }
-            }
-        } message: {
-            Text("What the editor charged for this job. Leave blank for the default.")
+        .sheet(isPresented: $showEditorSheet) {
+            EditorSheet(booking: booking) { await onChange() }
         }
     }
 
@@ -88,26 +76,6 @@ struct BookingShooterSection: View {
                 stateChip(shooter, shot: shot)
             }
 
-            if let editor = editorLabel(shooter) {
-                Button {
-                    editorDraft = shooter.editorCostIsDefault == true ? "" : Self.money(shooter.editorCost ?? 0)
-                    editingEditor = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "wand.and.stars")
-                            .font(.caption)
-                        Text(editor)
-                            .font(.subheadline)
-                        Image(systemName: "pencil")
-                            .font(.caption2)
-                        Spacer(minLength: 0)
-                    }
-                    .foregroundStyle(Theme.secondaryText)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-
             if shot && shooter.pay != nil {
                 if shooter.paid {
                     Button {
@@ -140,6 +108,24 @@ struct BookingShooterSection: View {
                 }
             }
 
+            Divider().overlay(Theme.cardRaised)
+
+            if showsEditor(shooter) {
+                editorBlock(shooter, shot: shot)
+            } else {
+                Button { showEditorSheet = true } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "person.badge.plus")
+                        Text("Add editor")
+                        Spacer(minLength: 0)
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.tertiaryText)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
             if let error {
                 Text(error).font(.caption).foregroundStyle(Theme.danger)
             }
@@ -154,16 +140,98 @@ struct BookingShooterSection: View {
         return shooter.name
     }
 
-    /// "Editor $18 · default" or "Editor $16"; nil for flambient at its $0 default.
-    private func editorLabel(_ shooter: BookingShooter) -> String? {
+    // MARK: - Photo editor
+
+    /// Hidden for flambient at its $0 default with nobody named; "Add editor" instead.
+    private func showsEditor(_ shooter: BookingShooter) -> Bool {
         let cost = shooter.editorCost ?? 0
         let isDefault = shooter.editorCostIsDefault ?? true
-        if shooter.editorCost == nil && shooter.style == nil { return nil }
-        if shooter.style == "flambient" && isDefault && cost == 0 { return nil }
-        return "Editor $\(Self.money(cost))" + (isDefault ? " · default" : "")
+        let named = !(shooter.editorName ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+        if named { return true }
+        if shooter.editorCost == nil && shooter.style == nil { return false }
+        return !(isDefault && cost == 0)
     }
 
-    private static func money(_ value: Double) -> String {
+    private func editorName(_ shooter: BookingShooter) -> String {
+        let name = (shooter.editorName ?? "").trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? "Photo editor" : name
+    }
+
+    private func editorBlock(_ shooter: BookingShooter, shot: Bool) -> some View {
+        let cost = shooter.editorCost ?? 0
+        let isDefault = shooter.editorCostIsDefault ?? true
+        let paid = shooter.editorPaid ?? false
+        let name = editorName(shooter)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("EDITOR")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Theme.tertiaryText)
+                    .kerning(0.6)
+                Spacer(minLength: 0)
+                Button("Change") { showEditorSheet = true }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.accent)
+                    .buttonStyle(.plain)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: "wand.and.stars")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.tertiaryText)
+                Text("\(name) · $\(Self.money(cost))")
+                    .font(.headline)
+                    .foregroundStyle(Theme.primaryText)
+                if isDefault {
+                    Text("default")
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiaryText)
+                }
+                Spacer(minLength: 8)
+                if paid {
+                    BadgeChip(text: "Paid \(ShooterFormat.day(shooter.editorPaidAt))", tint: Theme.emerald)
+                } else if !shot {
+                    BadgeChip(text: "Not shot yet", tint: Theme.secondaryText)
+                } else {
+                    BadgeChip(text: "Owed $\(Self.money(cost))", tint: Theme.amber, filled: true)
+                }
+            }
+
+            if shot && cost > 0 {
+                if paid {
+                    Button {
+                        Task { await run { try await APIClient.shared.setEditorPaid(bookingId: booking.id, paid: false) } }
+                    } label: {
+                        Label("Mark unpaid", systemImage: "arrow.uturn.backward")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                            .background(Theme.cardRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .foregroundStyle(Theme.primaryText)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        Task { await run { try await APIClient.shared.setEditorPaid(bookingId: booking.id, paid: true) } }
+                    } label: {
+                        Label("Paid \(name)", systemImage: "dollarsign.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .foregroundStyle(Theme.background)
+                    }
+                    .buttonStyle(.plain)
+                    Text("Logs $\(Self.money(cost)) as a Subcontractors expense on this job.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.tertiaryText)
+                }
+            }
+        }
+    }
+
+    fileprivate static func money(_ value: Double) -> String {
         value == value.rounded() ? String(Int(value)) : String(format: "%.2f", value)
     }
 
@@ -293,6 +361,125 @@ private struct ShooterSheet: View {
         defer { saving = false }
         do {
             try await APIClient.shared.setBookingShooter(id: booking.id, name: name, pay: pay)
+            await onSaved()
+            dismiss()
+        } catch {
+            self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Photo editor sheet
+
+/// Name (with past editors as quick picks) and cost; blank cost = the default.
+private struct EditorSheet: View {
+    let booking: Booking
+    var onSaved: () async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var cost: String
+    @State private var options: [String] = []
+    @State private var saving = false
+    @State private var error: String?
+
+    init(booking: Booking, onSaved: @escaping () async -> Void) {
+        self.booking = booking
+        self.onSaved = onSaved
+        _name = State(initialValue: booking.shooter?.editorName ?? "")
+        let s = booking.shooter
+        let initialCost = (s?.editorCostIsDefault ?? true) ? "" : (s?.editorCost).map(BookingShooterSection.money) ?? ""
+        _cost = State(initialValue: initialCost)
+    }
+
+    private var hasEditor: Bool {
+        let s = booking.shooter
+        return !(s?.editorName ?? "").isEmpty || !(s?.editorCostIsDefault ?? true)
+    }
+
+    private var defaultCost: String { booking.shooter?.style == "flambient" ? "0" : "18" }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Name", text: $name)
+                    if !options.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(options, id: \.self) { option in
+                                    let selected = option.caseInsensitiveCompare(trimmedName) == .orderedSame
+                                    Button { name = option } label: {
+                                        Text(option)
+                                            .font(.subheadline.weight(.medium))
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 6)
+                                            .background(selected ? Theme.accent : Theme.accent.opacity(0.15), in: Capsule())
+                                            .foregroundStyle(selected ? Theme.background : Theme.accent)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Editor")
+                }
+
+                Section {
+                    HStack {
+                        Text("$").foregroundStyle(Theme.secondaryText)
+                        TextField(defaultCost, text: $cost)
+                            #if os(iOS)
+                            .keyboardType(.decimalPad)
+                            #endif
+                    }
+                } header: {
+                    Text("Cost")
+                } footer: {
+                    Text("Leave blank for the default ($18 HDR, $0 flambient). Logged as an expense when you mark them paid.")
+                }
+
+                if hasEditor {
+                    Section {
+                        Button("Remove editor", role: .destructive) {
+                            Task { await save(name: "", cost: nil) }
+                        }
+                    }
+                }
+
+                if let error {
+                    Section { Text(error).foregroundStyle(Theme.danger) }
+                }
+            }
+            .navigationTitle(hasEditor ? "Editor" : "Add editor")
+            .titleDisplay(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let raw = cost.trimmingCharacters(in: .whitespaces)
+                        let value = raw.isEmpty ? nil : Double(raw.filter { $0.isNumber || $0 == "." })
+                        Task { await save(name: trimmedName, cost: value) }
+                    }
+                    .disabled(saving)
+                }
+            }
+            .disabled(saving)
+            .task { options = (try? await APIClient.shared.editors()) ?? [] }
+        }
+    }
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func save(name: String, cost: Double?) async {
+        saving = true
+        error = nil
+        defer { saving = false }
+        do {
+            try await APIClient.shared.setBookingEditor(id: booking.id, name: name, cost: cost)
             await onSaved()
             dismiss()
         } catch {

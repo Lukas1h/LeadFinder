@@ -21,6 +21,11 @@ export interface BookingShooter {
   editorCost: number;
   /** True while editorCost is the default (nothing recorded on the booking yet). */
   editorCostIsDefault: boolean;
+  /** Who edited it ("Pixlmob"); null = not named. */
+  editorName: string | null;
+  /** The editor's paid expense date ("YYYY-MM-DD"); null while unpaid. */
+  editorPaidAt: string | null;
+  editorExpenseId: string | null;
   /** Whole dollars agreed for this job; null until it's set. */
   pay: number | null;
   /** The linked expense's date ("YYYY-MM-DD") when paid; null while unpaid. */
@@ -45,10 +50,14 @@ export async function shootersByBookingId(
     shooterPay: number | null;
     shooterExpenseId: string | null;
     editorCost?: number | null;
+    editorName?: string | null;
+    editorExpenseId?: string | null;
   }[]
 ): Promise<Map<string, BookingShooter | null>> {
   const shooterIds = [...new Set(rows.map((r) => r.shooterId).filter((id): id is string => id != null))];
-  const expenseIds = [...new Set(rows.map((r) => r.shooterExpenseId).filter((id): id is string => id != null))];
+  const expenseIds = [
+    ...new Set(rows.flatMap((r) => [r.shooterExpenseId, r.editorExpenseId ?? null]).filter((id): id is string => id != null)),
+  ];
 
   const [shooterRows, expenseRows] = await Promise.all([
     shooterIds.length > 0
@@ -81,6 +90,9 @@ export async function shootersByBookingId(
             style: shooter.style === "flambient" ? "flambient" : "hdr",
             editorCost: editorCost(shooter.style, row.editorCost),
             editorCostIsDefault: row.editorCost == null,
+            editorName: row.editorName ?? null,
+            editorPaidAt: row.editorExpenseId ? (expenseDateById.get(row.editorExpenseId) ?? null) : null,
+            editorExpenseId: row.editorExpenseId ?? null,
             pay: row.shooterPay,
             paidAt: row.shooterExpenseId ? (expenseDateById.get(row.shooterExpenseId) ?? null) : null,
             expenseId: row.shooterExpenseId,

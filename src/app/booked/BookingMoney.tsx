@@ -44,6 +44,7 @@ export function BookingMoney({ booking, open }: { booking: BookingWithDetails; o
   const contract = contractorCost(booking);
   // A paid shooter's pay is already one of the linked expenses below.
   const unpaidPay = booking.shooter && !booking.shooter.expenseId ? contract.pay : 0;
+  const unpaidEditor = booking.shooter && !booking.shooter.editorExpenseId ? contract.editor : 0;
   const hasCosts = hasTrip || costs.expenseItems.length > 0 || contract.total > 0;
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ");
 
@@ -79,7 +80,9 @@ export function BookingMoney({ booking, open }: { booking: BookingWithDetails; o
         {unpaidPay > 0 && (
           <Row label={`${booking.shooter!.name} (not paid yet)`} value={`−${money(unpaidPay)}`} />
         )}
-        {contract.editor > 0 && <Row label="HDR editor" value={`−${money(contract.editor)}`} />}
+        {unpaidEditor > 0 && (
+          <Row label={`${booking.shooter!.editorName ?? "Editor"} (not paid yet)`} value={`−${money(unpaidEditor)}`} />
+        )}
         {hasTrip && <Row label="Gas" value={`−${money(costs.gas)}`} />}
         {costs.expenseItems.map((e) => (
           <Row key={e.id} label={e.description} value={`−${money(e.amount)}`} />

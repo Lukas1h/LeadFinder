@@ -6,7 +6,7 @@
  * log a payment exactly the way the web does.
  */
 
-import { listShooters, setBookingEditorCost, setBookingShooter, setShooterPaid } from "@/lib/shooters";
+import { listEditors, listShooters, setBookingEditor, setBookingShooter, setEditorPaid, setShooterPaid } from "@/lib/shooters";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings } from "@/db/schema";
@@ -21,9 +21,22 @@ export async function saveBookingShooter(
   return setBookingShooter(bookingId, input);
 }
 
-/** The photo editor's cost on this job; null = back to the default for the shooter's style. */
-export async function saveBookingEditorCost(bookingId: string, cost: number | null): Promise<{ error?: string }> {
-  return setBookingEditorCost(bookingId, cost);
+/** The photo editor on this job: name and cost (null cost = the default for the shooter's style). */
+export async function saveBookingEditor(
+  bookingId: string,
+  input: { name?: string | null; cost?: number | null }
+): Promise<{ error?: string }> {
+  return setBookingEditor(bookingId, input);
+}
+
+/** "Paid" for the editor: logs (or removes) their cost as a Subcontractors expense on the job. */
+export async function markEditorPaid(bookingId: string, paid: boolean): Promise<{ error?: string }> {
+  return setEditorPaid(bookingId, paid);
+}
+
+/** Editors named on past bookings, for the picker. */
+export async function getEditors(): Promise<string[]> {
+  return listEditors();
 }
 
 /** "Paid <name>": logs (or removes) the pay as a Subcontractors expense on the job. */

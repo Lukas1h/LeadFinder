@@ -148,17 +148,15 @@ function pfPeriod(
 
   let collected = 0;
   let jobs = 0;
-  // The photo editor on contracted jobs is a subcontractor too (bookings.editor_cost).
-  let editors = 0;
   for (const b of ledger.bookings) {
     if (b.paidDate && inRange(b.paidDate)) {
       collected += b.revenue;
-      editors += b.editorCost ?? 0;
       jobs += 1;
     }
   }
 
-  let subcontractors = editors;
+  // Cash basis: paid shooters and editors are both "Subcontractors" expenses.
+  let subcontractors = 0;
   for (const e of ledger.expenses) {
     if (e.category === SUBCONTRACTOR_CATEGORY && inRange(e.date)) subcontractors += dollars(e);
   }

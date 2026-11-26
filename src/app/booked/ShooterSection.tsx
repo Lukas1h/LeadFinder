@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Users, Check, RotateCcw, Pencil, Plus, X, Copy, MessageSquare, ExternalLink } from "lucide-react";
-import { saveBookingShooter, saveBookingEditorCost, markShooterPaid, getShooters, getBookingUploadLink, getBookingUploadStatus } from "./shooterActions";
+import { saveBookingShooter, markShooterPaid, getShooters, getBookingUploadLink, getBookingUploadStatus } from "./shooterActions";
 import type { BookingUploadStatus } from "@/lib/mediaUploads";
 import { stageIndex } from "@/lib/bookingStages";
 import { formatPhone, formatPrice } from "@/lib/format";
@@ -12,6 +12,7 @@ import { smsUrl } from "@/lib/sms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { BookingWithDetails } from "./BookedList";
+import { EditorSection } from "./EditorSection";
 
 /** "2026-11-20" → "Nov 20" without a timezone shift. */
 function shortDay(ymd: string) {
@@ -118,8 +119,6 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
   const [name, setName] = useState(shooter?.name ?? "");
   const [phone, setPhone] = useState(shooter?.phone ?? "");
   const [pay, setPay] = useState(shooter?.pay != null ? String(shooter.pay) : "");
-  const editorInit = shooter && !shooter.editorCostIsDefault ? String(shooter.editorCost) : "";
-  const [editor, setEditor] = useState(editorInit);
   const [suggestions, setSuggestions] = useState<{ id: string; name: string }[]>([]);
   const [uploadLink, setUploadLink] = useState(booking.dropboxUploadLink);
   const [copied, setCopied] = useState(false);
@@ -132,7 +131,6 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
     setName(shooter?.name ?? "");
     setPhone(shooter?.phone ?? "");
     setPay(shooter?.pay != null ? String(shooter.pay) : "");
-    setEditor(editorInit);
     setEditing(true);
     getShooters().then(setSuggestions).catch(() => {});
   };
@@ -155,15 +153,8 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
     if (!trimmed) return toast.error("Enter a name");
     const n = pay.trim() === "" ? null : Math.round(Number(pay));
     if (n != null && (!Number.isFinite(n) || n < 0)) return toast.error("Pay must be a dollar amount");
-    const ed = editor.trim() === "" ? null : Math.round(Number(editor));
-    if (ed != null && (!Number.isFinite(ed) || ed < 0)) return toast.error("Editor cost must be a dollar amount");
-    const edChanged = editor.trim() !== editorInit;
     act(
-      async () => {
-        const res = await saveBookingShooter(booking.id, { name: trimmed, pay: n, phone: phone.trim() || null });
-        if (res.error || !edChanged) return res;
-        return saveBookingEditorCost(booking.id, ed);
-      },
+      () => saveBookingShooter(booking.id, { name: trimmed, pay: n, phone: phone.trim() || null }),
       "Shooter saved",
       () => setEditing(false)
     );
@@ -212,20 +203,6 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
               onChange={(e) => setPay(e.target.value)}
               placeholder="Pay"
               className="h-8 w-24 pl-5"
-            />
-          </div>
-          <div className="relative">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1}
-              value={editor}
-              onChange={(e) => setEditor(e.target.value)}
-              placeholder={`Editor (${shooter?.editorCost ?? 0})`}
-              title="Photo editor cost — blank uses the default"
-              className="h-8 w-28 pl-5"
             />
           </div>
           <Button type="submit" size="sm" disabled={isPending}>
@@ -316,12 +293,6 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
           <span className="text-foreground">{shooter.name}</span>
           {shooter.phone && <span className="text-muted-foreground">· {formatPhone(shooter.phone)}</span>}
           {payLabel && <span className="text-muted-foreground">· {payLabel}</span>}
-          {!(shooter.style === "flambient" && shooter.editorCost === 0 && shooter.editorCostIsDefault) && (
-            <span className="text-muted-foreground">
-              · Editor {formatPrice(shooter.editorCost)}
-              {shooter.editorCostIsDefault ? " (default)" : ""}
-            </span>
-          )}
           {paid ? (
             <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
               Paid{shooter.paidAt ? ` ${shortDay(shooter.paidAt)}` : ""}
@@ -381,6 +352,9 @@ export function ShooterSection({ booking }: { booking: BookingWithDetails }) {
         </div>
       </div>
       <UploadStatusLine bookingId={booking.id} />
+      <div className="mt-3">
+        <EditorSection booking={booking} shot={shot} />
+      </div>
     </div>
   );
 }

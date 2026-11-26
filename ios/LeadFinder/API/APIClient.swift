@@ -556,19 +556,37 @@ actor APIClient {
         _ = try await send("PATCH", "api/app/v1/bookings/\(id)", body: Body(shooterName: name, shooterPay: pay), as: OK.self)
     }
 
-    /// Records the photo editor's cost on a contracted job; nil resets it to the
-    /// default ($18 HDR, $0 flambient). Sent as null so the PATCH clears it.
-    func setBookingEditorCost(id: String, cost: Double?) async throws {
+    /// Sets the photo editor on a contracted job: `name` ("" clears it) and
+    /// `cost` (nil resets to the default, $18 HDR / $0 flambient). Both are
+    /// always sent, cost as null when nil, so a PATCH can clear it.
+    func setBookingEditor(id: String, name: String, cost: Double?) async throws {
         struct Body: Encodable, Sendable {
+            var editorName: String
             var editorCost: Double?
-            private enum CodingKeys: String, CodingKey { case editorCost }
+            private enum CodingKeys: String, CodingKey { case editorName, editorCost }
             func encode(to encoder: Encoder) throws {
                 var c = encoder.container(keyedBy: CodingKeys.self)
+                try c.encode(editorName, forKey: .editorName)
                 try c.encode(editorCost, forKey: .editorCost)
             }
         }
         struct OK: Decodable, Sendable { let ok: Bool }
-        _ = try await send("PATCH", "api/app/v1/bookings/\(id)", body: Body(editorCost: cost), as: OK.self)
+        _ = try await send("PATCH", "api/app/v1/bookings/\(id)", body: Body(editorName: name, editorCost: cost), as: OK.self)
+    }
+
+    /// Marks the photo editor paid (or unpaid) on a job.
+    func setEditorPaid(bookingId: String, paid: Bool) async throws {
+        struct Body: Encodable, Sendable { let paid: Bool }
+        struct Response: Decodable, Sendable {
+            let ok: Bool
+            let booking: Booking
+        }
+        _ = try await send("POST", "api/app/v1/bookings/\(bookingId)/editor-paid", body: Body(paid: paid), as: Response.self)
+    }
+
+    /// Past photo editors' names, for the editor sheet's quick picks.
+    func editors() async throws -> [String] {
+        try await read("api/app/v1/editors")
     }
 
     /// Marks the shooter paid (or unpaid) on a job.

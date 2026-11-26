@@ -261,6 +261,10 @@ export function bookingJson(b: BookingWithDetails & { showcase?: boolean }, mk: 
           style: b.shooter.style,
           editorCost: b.shooter.editorCost,
           editorCostIsDefault: b.shooter.editorCostIsDefault,
+          // The editor, paid like the shooter (POST ../editor-paid).
+          editorName: b.shooter.editorName,
+          editorPaid: b.shooter.editorExpenseId != null,
+          editorPaidAt: b.shooter.editorPaidAt,
         }
       : null,
   };

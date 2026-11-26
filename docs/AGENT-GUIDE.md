@@ -244,9 +244,16 @@ contracted = total − the shooter's pay − the photo editor (e.g. $400 Chris j
 → 400 − 225 − 18). The editor cost is per booking, `bookings.editor_cost`
 (whole dollars, usually $15-18, recorded once Lukas sends the shooter's photos
 off; null = the default: `HDR_EDITOR_COST` for an HDR shooter, $0 flambient).
-Set it in the booking's shooter section, the phone API's PATCH `editorCost`
-(null resets), or MCP `update_booking` `editorCost`; clearing the shooter
-clears it. The Booked page's cards, rows and stats show it (the card
+The editor works like the shooter (Lukas, 2026-11-26): `bookings.editor_name`
+(free text, e.g. "Pixlmob"; picker = past names, `listEditors`) and
+`editor_expense_id` (paid = a "Subcontractors" expense on the job, vendor =
+the editor name, kept in step when the name/cost changes; `setEditorPaid`).
+Set it in the booking's Editor block under the shooter, the phone API's PATCH
+`editorName` / `editorCost` (null resets) and POST `bookings/{id}/editor-paid`
+(GET `editors` for the picker), or MCP `update_booking` `editorName` /
+`editorCost` and `mark_editor_paid`. Clearing the shooter clears the editor
+and deletes its expense. A paid editor's expense, like a paid shooter's, is
+skipped as a cost wherever real revenue already took it off. The Booked page's cards, rows and stats show it (the card
 adds "of $N billed"; Outstanding stays the billed total), the booking's Time &
 money lists the unpaid shooter pay and editor, and its profit subtracts them
 (a paid shooter's pay is already a linked expense, never counted twice). The
@@ -255,8 +262,8 @@ costs, and `shooter` carries `style`, `editorCost`, `editorCostIsDefault`.
 Finances (web and app, `src/lib/finance`) use it too: monthly and per-job
 revenue are real revenue (`realRevenue` in `math.ts`, by the job's earned
 date), the paid shooter's Subcontractors expense is then skipped as a cost so
-it never counts twice, and Profit First counts booking editor costs as
-subcontractors. The tax view keeps billed revenue and actual deductible
+it never counts twice, and Profit First (cash basis) counts paid shooters and editors as
+Subcontractors expenses. The tax view keeps billed revenue and actual deductible
 expenses. Putting a shooter on a booking with no pay given defaults the
 pay from their rates and the job's line items (`defaultShooterPay` in
 `src/lib/shooters.ts`); an explicit pay wins. Drive minutes = `startMinutes

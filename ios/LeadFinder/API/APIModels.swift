@@ -503,6 +503,11 @@ struct BookingShooter: Codable, Sendable, Hashable {
     /// The editor cost recorded for this job, else the default ($18 HDR, $0 flambient).
     var editorCost: Double?
     var editorCostIsDefault: Bool?
+    /// The photo editor on the job; nil = unnamed ("Photo editor").
+    var editorName: String?
+    var editorPaid: Bool?
+    /// "YYYY-MM-DD" Pacific, nil until the editor is paid.
+    var editorPaidAt: String?
 }
 
 /// One shooter to pick from the booking form (GET /shooters).

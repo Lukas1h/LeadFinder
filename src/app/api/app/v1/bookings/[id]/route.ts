@@ -3,7 +3,7 @@ import { requireAppAuth } from "@/lib/appApiAuth";
 import { deleteBooking, getBookingWithDetails, getGalleryActivity, setBookingShowcase, updateBooking } from "@/app/booked/actions";
 import { applyDateTentative, setBookingStage } from "@/lib/bookingStage";
 import { BOOKING_STAGES, isBookingStage } from "@/lib/bookingStages";
-import { setBookingEditorCost, setBookingShooter } from "@/lib/shooters";
+import { setBookingEditor, setBookingShooter } from "@/lib/shooters";
 import { getMarkets } from "@/lib/marketsData";
 import { bookingJson } from "../../serialize";
 import {
@@ -126,10 +126,14 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
     if (shooterResult.error) return badRequest(shooterResult.error);
   }
 
-  // The photo editor's cost on a contracted job: a number records it, null
-  // goes back to the default for the shooter's style (HDR $18, flambient $0).
-  if (body.editorCost !== undefined) {
-    const editorResult = await setBookingEditorCost(id, optionalNumber(body.editorCost, "editorCost"));
+  // The photo editor on a contracted job: editorName ("" clears it) and
+  // editorCost (a number records it, null goes back to the default for the
+  // shooter's style, HDR $18 / flambient $0). Left out = unchanged.
+  if (body.editorCost !== undefined || body.editorName !== undefined) {
+    const editorResult = await setBookingEditor(id, {
+      name: body.editorName === undefined ? undefined : (optionalString(body.editorName, "editorName") ?? null),
+      cost: body.editorCost === undefined ? undefined : optionalNumber(body.editorCost, "editorCost"),
+    });
     if (editorResult.error) return badRequest(editorResult.error);
   }
 
