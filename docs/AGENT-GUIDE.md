@@ -251,7 +251,7 @@ the editor name, kept in step when the name/cost changes; `setEditorPaid`).
 Set it in the booking's Editor block under the shooter, the phone API's PATCH
 `editorName` / `editorCost` (null resets) and POST `bookings/{id}/editor-paid`
 (GET `editors` for the picker), or MCP `update_booking` `editorName` /
-`editorCost` and `mark_editor_paid`. Clearing the shooter clears the editor
+`editorCost` and `mark_editor_paid`. Removing the editor saves $0 with no name (null would bring back the HDR default), which also deletes a paid editor's expense; a $0 unnamed editor shows as "Add editor". Clearing the shooter clears the editor
 and deletes its expense. A paid editor's expense, like a paid shooter's, is
 skipped as a cost wherever real revenue already took it off. The Booked page's cards, rows and stats show it (the card
 adds "of $N billed"; Outstanding stays the billed total), the booking's Time &

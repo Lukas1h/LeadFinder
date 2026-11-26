@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Wand2, Check, RotateCcw, Pencil, Plus } from "lucide-react";
+import { Wand2, Check, RotateCcw, Pencil, Plus, X } from "lucide-react";
 import { saveBookingEditor, markEditorPaid, getEditors } from "./shooterActions";
 import { formatPrice } from "@/lib/format";
 import { HDR_EDITOR_COST } from "@/lib/markets";
@@ -113,13 +113,27 @@ export function EditorSection({ booking, shot }: { booking: BookingWithDetails; 
           <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={() => setEditing(false)}>
             Cancel
           </Button>
+          {(shooter.editorCost > 0 || shooter.editorName) && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              disabled={isPending}
+              // No editor on this job: $0 and nobody named (a blank cost would bring back the HDR default).
+              onClick={() => act(() => saveBookingEditor(booking.id, { name: null, cost: 0 }), "Editor removed", () => setEditing(false))}
+            >
+              <X />
+              Remove
+            </Button>
+          )}
         </form>
       </div>
     );
   }
 
-  const hidden =
-    shooter.style === "flambient" && shooter.editorCost === 0 && shooter.editorCostIsDefault && !shooter.editorName;
+  // No editor on this job: $0 (flambient's default, or removed) and nobody named.
+  const hidden = shooter.editorCost === 0 && !shooter.editorName;
   if (hidden) {
     return (
       <div className="border-t pt-2">

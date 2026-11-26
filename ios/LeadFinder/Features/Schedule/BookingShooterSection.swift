@@ -142,14 +142,11 @@ struct BookingShooterSection: View {
 
     // MARK: - Photo editor
 
-    /// Hidden for flambient at its $0 default with nobody named; "Add editor" instead.
+    /// Hidden when the job has no editor: $0 (flambient's default, or removed)
+    /// and nobody named; "Add editor" instead.
     private func showsEditor(_ shooter: BookingShooter) -> Bool {
-        let cost = shooter.editorCost ?? 0
-        let isDefault = shooter.editorCostIsDefault ?? true
         let named = !(shooter.editorName ?? "").trimmingCharacters(in: .whitespaces).isEmpty
-        if named { return true }
-        if shooter.editorCost == nil && shooter.style == nil { return false }
-        return !(isDefault && cost == 0)
+        return named || (shooter.editorCost ?? 0) != 0
     }
 
     private func editorName(_ shooter: BookingShooter) -> String {
@@ -394,7 +391,7 @@ private struct EditorSheet: View {
 
     private var hasEditor: Bool {
         let s = booking.shooter
-        return !(s?.editorName ?? "").isEmpty || !(s?.editorCostIsDefault ?? true)
+        return !(s?.editorName ?? "").isEmpty || (s?.editorCost ?? 0) != 0
     }
 
     private var defaultCost: String { booking.shooter?.style == "flambient" ? "0" : "18" }
@@ -443,7 +440,8 @@ private struct EditorSheet: View {
                 if hasEditor {
                     Section {
                         Button("Remove editor", role: .destructive) {
-                            Task { await save(name: "", cost: nil) }
+                            // $0, not nil: nil is the default, which brings back $18 on HDR jobs.
+                            Task { await save(name: "", cost: 0) }
                         }
                     }
                 }
