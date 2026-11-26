@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { HDR_EDITOR_COST } from "@/lib/markets";
 import { saveShooter, type ShooterInput } from "./actions";
 import type { ShooterRow } from "./data";
 import { Field } from "./MarketDialog";
@@ -49,6 +50,7 @@ export function ShootersSection({ shooters, markets }: { shooters: ShooterRow[];
                   {label(s.marketKey)} · {s.role}
                 </span>
                 {!s.active && <Badge variant="secondary">Inactive</Badge>}
+                <Badge variant="outline">{s.style === "hdr" ? `HDR +$${HDR_EDITOR_COST} editor` : "Flambient"}</Badge>
                 {s.w9OnFile ? (
                   <Badge variant="outline">W-9</Badge>
                 ) : (
@@ -62,6 +64,16 @@ export function ShootersSection({ shooters, markets }: { shooters: ShooterRow[];
                 <span className="text-muted-foreground">
                   {s.freeMinutes} free min
                   {s.drivePerHour != null ? ` · $${s.drivePerHour}/h drive` : " · no drive charge"}
+                  {s.maxMinutes != null && ` · max ${s.maxMinutes} min`}
+                  {Object.keys(s.travelFees).length > 0 && (
+                    <>
+                      {" · "}
+                      <span className="underline decoration-dotted cursor-help" title={feesText(s.travelFees)}>
+                        travel fees: {Object.keys(s.travelFees).length}{" "}
+                        {Object.keys(s.travelFees).length === 1 ? "town" : "towns"}
+                      </span>
+                    </>
+                  )}
                   {s.phone && ` · ${s.phone}`}
                   {s.email && ` · ${s.email}`}
                 </span>
@@ -73,6 +85,29 @@ export function ShootersSection({ shooters, markets }: { shooters: ShooterRow[];
       )}
     </>
   );
+}
+
+const feesText = (fees: Record<string, number>) =>
+  Object.entries(fees)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([town, fee]) => `${town}: ${fee}`)
+    .join("\n");
+
+/** Parse "town: dollars" lines. Blank lines are skipped; bad lines are returned for an error. */
+function parseFees(text: string): { fees: Record<string, number>; bad: string[] } {
+  const fees: Record<string, number> = {};
+  const bad: string[] = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^(.+?)\s*[:=]\s*\$?\s*(\d+(?:\.\d+)?)$/);
+    if (!m || !m[1].trim()) {
+      bad.push(line);
+      continue;
+    }
+    fees[m[1].trim().toLowerCase()] = Math.round(Number(m[2]));
+  }
+  return { fees, bad };
 }
 
 const str = (v: number | null | undefined) => (v == null ? "" : String(v));
@@ -94,6 +129,9 @@ function ShooterDialog({ markets, shooter }: { markets: MarketOption[]; shooter?
     lng: str(shooter?.lng),
     freeMinutes: str(shooter?.freeMinutes ?? 60),
     drivePerHour: str(shooter?.drivePerHour),
+    style: shooter?.style ?? "hdr",
+    maxMinutes: str(shooter?.maxMinutes),
+    travelFees: shooter ? feesText(shooter.travelFees) : "",
     photo: str(shooter?.rates.photo),
     photoDrone: str(shooter?.rates.photoDrone),
     video: str(shooter?.rates.video),
@@ -113,6 +151,17 @@ function ShooterDialog({ markets, shooter }: { markets: MarketOption[]; shooter?
 
   const submit = () =>
     startTransition(async () => {
+      const { fees, bad } = parseFees(f.travelFees);
+      if (bad.length) {
+        toast.error(`Travel fees: can't read ${bad.map((l) => `"${l}"`).join(", ")} (use "town: dollars")`);
+        return;
+      }
+      const maxRaw = f.maxMinutes.trim();
+      const maxMinutes = maxRaw === "" ? null : Math.round(num(maxRaw) ?? 0);
+      if (maxMinutes != null && maxMinutes <= 0) {
+        toast.error("Max drive must be a positive number of minutes (or blank for no limit)");
+        return;
+      }
       const address = f.homeAddress.trim();
       const input: ShooterInput = {
         id: shooter?.id,
@@ -125,6 +174,9 @@ function ShooterDialog({ markets, shooter }: { markets: MarketOption[]; shooter?
         notes: f.notes,
         freeMinutes: Math.round(num(f.freeMinutes) ?? 0),
         drivePerHour: f.drivePerHour.trim() === "" ? null : Math.round(num(f.drivePerHour) ?? 0),
+        style: f.style,
+        maxMinutes,
+        travelFees: fees,
         rates: { photo: num(f.photo), photoDrone: num(f.photoDrone), video: num(f.video), drone: num(f.drone) },
         active: f.active,
         w9OnFile: f.w9OnFile,
@@ -234,6 +286,20 @@ function ShooterDialog({ markets, shooter }: { markets: MarketOption[]; shooter?
           <Field label="Drive $/h (blank = none)">
             <Input inputMode="numeric" value={f.drivePerHour} onChange={(e) => set("drivePerHour", e.target.value)} />
           </Field>
+          <Field label="Max drive (min, blank = no limit)">
+            <Input inputMode="numeric" value={f.maxMinutes} onChange={(e) => set("maxMinutes", e.target.value)} />
+          </Field>
+          <Field label="Style">
+            <Select value={f.style} onValueChange={(v) => set("style", v as "hdr" | "flambient")}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="hdr">HDR (+${HDR_EDITOR_COST} editor)</SelectItem>
+                <SelectItem value="flambient">Flambient</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
         </div>
 
         <div className="flex flex-wrap gap-6 text-sm">
@@ -244,6 +310,15 @@ function ShooterDialog({ markets, shooter }: { markets: MarketOption[]; shooter?
             <Switch checked={f.w9OnFile} onCheckedChange={(v) => set("w9OnFile", v)} /> W-9 on file
           </label>
         </div>
+
+        <Field label="Travel fees (one &quot;town: dollars&quot; per line; replaces drive $/h for those towns)">
+          <Textarea
+            rows={3}
+            value={f.travelFees}
+            onChange={(e) => set("travelFees", e.target.value)}
+            placeholder={"newport: 30\nlincoln city: 30"}
+          />
+        </Field>
 
         <Field label="Notes">
           <Textarea rows={2} value={f.notes} onChange={(e) => set("notes", e.target.value)} />

@@ -221,19 +221,28 @@ every key.
 **Shooters per market** (`shooters` table since 2026-11-25): `market_key`,
 `label` (card name), `role` main | backup, home `lat` / `lng`,
 `free_minutes` of drive with no charge, `drive_per_hour` (null = none),
+`travel_fees` (lowercase town → flat dollars; a listed town's fee replaces the
+drive-per-hour estimate), `max_minutes` (farthest one-way drive; past it the
+shooter is off the card and never owns the listing; null = no limit),
+`style` `hdr` | `flambient` (an HDR shoot also costs Lukas an editor,
+`HDR_EDITOR_COST` $15 in `src/lib/markets.ts`, counted in the Markets page's
+shooter cost; flambient he blends himself, Lukas 2026-11-26),
 `rates` (what Lukas pays per job: `photo`, `photoDrone`, `video`, `drone`),
 `active`, `w9_on_file`, `portfolio_photos` ({src, alt}[]: the closing photo
 row on that market's agent pages, first main shooter with photos).
 Portland = Chris (main, SE Woodstock, free to 60 min, $175 / $225 with
 drone) and Elijah (main, Oregon City, free within 20 min, then $50/h); Coast
-= Jenny Bocko (main, Netarts, $175 / $225) and Emily Castleberry (backup,
-Newport; too pricey to centre outreach on). Backups show on cards but never
+= Jenny Bocko (main, Netarts, HDR, $175 / $225, flat $30 travel fee in every
+Lincoln County town), Christian Flores (main, Newport, flambient, $200, drone
+$150, within 30 min of Newport) and Emily Castleberry (backup, Newport; too
+pricey to centre outreach on). Newport-area listings are Christian's, Jenny
+is their backup at +$30 (Lukas, 2026-11-26). Backups show on cards but never
 steer sorting. Putting a shooter on a booking with no pay given defaults the
 pay from their rates and the job's line items (`defaultShooterPay` in
 `src/lib/shooters.ts`); an explicit pay wins. Drive minutes = `startMinutes
 + straight-line miles × minutesPerMile` from the listing's geocode, else its
-town's coordinates. A listing's **owner** is its nearest main shooter
-(`ownerMinutes`). The Photo / Video / Backup sections of a shooter-market
+town's coordinates. A listing's **owner** is its nearest main shooter within their
+`max_minutes` (`ownerMinutes`). The Photo / Video / Backup sections of a shooter-market
 tab are ordered by `balanceByShooter`: each owner's queue sorted by owner
 minutes + 0.5 × the other mains' average minutes, then interleaved
 round-robin so every main shooter gets an even share of outreach; unknown

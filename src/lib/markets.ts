@@ -36,6 +36,14 @@ export type MarketKind = "local" | "regional" | "shooter";
 export type MarketStatus = "testing" | "active" | "paused" | "killed";
 
 export const UNASSIGNED = "unassigned";
+
+export type ShooterStyle = "hdr" | "flambient";
+/** What Lukas pays an editor per contracted HDR shoot (Lukas, 2026-11-26). Flambient shoots he blends himself. */
+export const HDR_EDITOR_COST = 15;
+/** A contracted job's extra editing cost for a shooter of this style (null = no shooter → 0). */
+export function editorCost(style: string | null | undefined): number {
+  return style === "hdr" ? HDR_EDITOR_COST : 0;
+}
 export const MARKET_STATUSES: MarketStatus[] = ["testing", "active", "paused", "killed"];
 
 /** One photographer who shoots part of a market. */
@@ -53,6 +61,12 @@ export interface MarketShooter {
   freeMinutes: number;
   /** Dollars per hour of drive past freeMinutes; null = they don't charge drive time. */
   drivePerHour: number | null;
+  /** Flat travel surcharge by town (lowercase), replacing the drive-per-hour estimate there. */
+  travelFees: Record<string, number>;
+  /** Farthest one-way drive they take, minutes; null = no limit. Past it they're off the card and own nothing. */
+  maxMinutes: number | null;
+  /** "hdr" jobs also cost Lukas an editor (HDR_EDITOR_COST); "flambient" he blends himself. */
+  style: ShooterStyle;
   /** What Lukas pays them per job. */
   rates: ShooterRates;
   portfolioPhotos: { src: string; alt: string }[];
@@ -119,7 +133,7 @@ export interface ShooterDrive {
   minutes: number;
   /** "~25 min". */
   duration: string;
-  /** Estimated drive charge in dollars (drivePerHour × minutes past freeMinutes / 60, rounded to $5); 0 if none. */
+  /** Drive charge in dollars: the town's flat travel fee if they have one, else drivePerHour × minutes past freeMinutes / 60, rounded to $5; 0 if none. */
   driveCost: number;
 }
 
@@ -174,6 +188,11 @@ function driveMinutes(
   drive: { startMinutes: number; minutesPerMile: number }
 ): number {
   return drive.startMinutes + milesBetween(at, shooterAt) * drive.minutesPerMile;
+}
+
+/** Whether a drive of `minutes` is within the shooter's range. */
+function inRange(s: Pick<MarketShooter, "maxMinutes">, minutes: number): boolean {
+  return s.maxMinutes == null || minutes <= s.maxMinutes;
 }
 
 function roundMinutes(minutes: number): number {
@@ -340,6 +359,7 @@ export class MarketIndex {
     m.shooters.forEach((s, i) => {
       if (s.role !== "main") return;
       const minutes = driveMinutes(at, s.at, m.drive);
+      if (!inRange(s, minutes)) return;
       if (minutes < best) {
         best = minutes;
         owner = i;
@@ -355,22 +375,30 @@ export class MarketIndex {
     const at = this.locationOf(place, m);
     if (!at) return null;
 
-    const drives: ShooterDrive[] = m.shooters.map((s) => {
-      const minutes = roundMinutes(driveMinutes(at, s.at, m.drive));
+    const town = normalizeCity(place.city);
+    const drives: (ShooterDrive | null)[] = m.shooters.map((s) => {
+      const exact = driveMinutes(at, s.at, m.drive);
+      if (!inRange(s, exact)) return null;
+      const minutes = roundMinutes(exact);
       const chargeable = Math.max(0, minutes - s.freeMinutes);
+      const flat = town ? s.travelFees[town] : undefined;
       return {
         name: s.name,
         label: s.label,
         role: s.role,
         minutes,
         duration: durationLabel(minutes),
-        driveCost: s.drivePerHour ? Math.round((s.drivePerHour * chargeable) / 60 / 5) * 5 : 0,
+        driveCost:
+          flat != null ? flat : s.drivePerHour ? Math.round((s.drivePerHour * chargeable) / 60 / 5) * 5 : 0,
       };
     });
 
     const owner = this.ownerIndex(m, at);
-    const rest = drives.filter((_, i) => i !== owner).sort((a, b) => a.minutes - b.minutes);
-    return owner >= 0 ? [drives[owner], ...rest] : rest;
+    const rest = drives
+      .filter((d, i): d is ShooterDrive => d != null && i !== owner)
+      .sort((a, b) => a.minutes - b.minutes);
+    const first = owner >= 0 ? drives[owner] : null;
+    return first ? [first, ...rest] : rest;
   }
 
   /** Minutes from the listing's owner (its nearest main shooter); null with no location or no shooter. */
@@ -408,8 +436,12 @@ export class MarketIndex {
         continue;
       }
       const minutes = mains.map((s) => driveMinutes(at, s.at, m.drive));
-      let owner = 0;
-      for (let i = 1; i < minutes.length; i++) if (minutes[i] < minutes[owner]) owner = i;
+      let owner = -1;
+      for (let i = 0; i < minutes.length; i++) {
+        if (inRange(mains[i], minutes[i]) && (owner < 0 || minutes[i] < minutes[owner])) owner = i;
+      }
+      // Out of every main's range: still sorted, by whoever is nearest.
+      if (owner < 0) for (let i = 0; i < minutes.length; i++) if (owner < 0 || minutes[i] < minutes[owner]) owner = i;
       const others = minutes.filter((_, i) => i !== owner);
       const otherAverage = others.length > 0 ? others.reduce((a, b) => a + b, 0) / others.length : 0;
       queues[owner].push({ item, score: minutes[owner] + 0.5 * otherAverage });

@@ -34,6 +34,9 @@ function toDef(row: MarketRow, people: (typeof shooters.$inferSelect)[]): Market
       at: { lat: s.lat!, lng: s.lng! },
       freeMinutes: s.freeMinutes,
       drivePerHour: s.drivePerHour,
+      travelFees: s.travelFees ?? {},
+      maxMinutes: s.maxMinutes,
+      style: (s.style === "flambient" ? "flambient" : "hdr") as MarketShooter["style"],
       rates: s.rates ?? {},
       portfolioPhotos: s.portfolioPhotos ?? [],
     }))

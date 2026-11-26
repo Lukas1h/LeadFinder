@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { bookingLineItems, bookings, listings, shooters } from "@/db/schema";
 import type { ShooterRates } from "@/db/schema";
 import { computeFunnelSplit } from "@/lib/funnelSplit";
-import { UNASSIGNED, type Market, type MarketDef, type MarketKind, type MarketStatus } from "@/lib/markets";
+import { UNASSIGNED, editorCost, type Market, type MarketDef, type MarketKind, type MarketStatus } from "@/lib/markets";
 import { getMarkets } from "@/lib/marketsData";
 
 /**
@@ -57,7 +57,7 @@ export interface MarketPerformance {
   bookings: number;
   /** Those bookings' line items, in dollars. */
   revenue: number;
-  /** Those bookings' shooter pay, in dollars. */
+  /** Those bookings' shooter pay plus the editor on HDR shooters' jobs (HDR_EDITOR_COST), in dollars. */
   shooterCost: number;
   /** revenue − shooterCost. */
   margin: number;
@@ -80,6 +80,12 @@ export interface ShooterRow {
   lng: number | null;
   freeMinutes: number;
   drivePerHour: number | null;
+  /** Flat travel fee by lowercase town, replacing the drive-per-hour estimate there. */
+  travelFees: Record<string, number>;
+  /** Farthest one-way drive, minutes; null = no limit. */
+  maxMinutes: number | null;
+  /** "hdr" (Lukas also pays an editor) or "flambient". */
+  style: "hdr" | "flambient";
   rates: ShooterRates;
   active: boolean;
   w9OnFile: boolean;
@@ -160,9 +166,11 @@ export async function loadMarketsOverview(): Promise<MarketsOverview> {
         lng: sql<number | null>`coalesce(${listings.lng}, ${bookings.lng})`,
         geocodeSource: sql<string | null>`coalesce(${listings.geocodeSource}, ${bookings.geocodeSource})`,
         shooterPay: sql<number>`coalesce(${bookings.shooterPay}, 0)::int`,
+        shooterStyle: shooters.style,
       })
       .from(bookings)
       .leftJoin(listings, eq(listings.id, bookings.listingId))
+      .leftJoin(shooters, eq(shooters.id, bookings.shooterId))
       .where(and(gte(bookings.jobDate, cutoff), lte(bookings.jobDate, now))),
   ]);
 
@@ -188,7 +196,8 @@ export async function loadMarketsOverview(): Promise<MarketsOverview> {
     const entry = tally.get(mk.marketFor(row))!;
     entry.bookings++;
     entry.revenue += revenueByBooking.get(row.id) ?? 0;
-    entry.shooterCost += Number(row.shooterPay);
+    // A contracted HDR shoot also pays an editor; flambient Lukas blends himself.
+    entry.shooterCost += Number(row.shooterPay) + editorCost(row.shooterStyle);
   }
 
   const toPerformance = (
@@ -244,6 +253,9 @@ export async function loadMarketsOverview(): Promise<MarketsOverview> {
       lng: shooters.lng,
       freeMinutes: shooters.freeMinutes,
       drivePerHour: shooters.drivePerHour,
+      travelFees: shooters.travelFees,
+      maxMinutes: shooters.maxMinutes,
+      style: shooters.style,
       rates: shooters.rates,
       active: shooters.active,
       w9OnFile: shooters.w9OnFile,
@@ -260,6 +272,8 @@ export async function loadMarketsOverview(): Promise<MarketsOverview> {
     shooters: shooterRows.map((s) => ({
       ...s,
       role: s.role === "backup" ? "backup" : "main",
+      style: s.style === "flambient" ? "flambient" : "hdr",
+      travelFees: s.travelFees ?? {},
       rates: s.rates ?? {},
       portfolioPhotos: s.portfolioPhotos ?? [],
       createdAt: s.createdAt.toISOString(),

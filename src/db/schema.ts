@@ -1529,6 +1529,16 @@ export const shooters = pgTable("shooters", {
   // Drive minutes (one way) with no drive charge, and dollars per hour past it (null = no charge).
   freeMinutes: integer("free_minutes").notNull().default(60),
   drivePerHour: integer("drive_per_hour"),
+  // Flat travel surcharge by town (lowercase town -> dollars), e.g. Jenny's
+  // $30 for Lincoln County towns. A listed town's fee replaces the
+  // drive-per-hour estimate; unlisted towns fall back to it.
+  travelFees: jsonb("travel_fees").$type<Record<string, number>>().notNull().default({}),
+  // The farthest they'll drive one way, minutes; null = no limit. Past it
+  // they're off the card and never own the listing.
+  maxMinutes: integer("max_minutes"),
+  // How they shoot: "hdr" (Lukas also pays an editor, HDR_EDITOR_COST, per
+  // job) or "flambient" (Lukas blends it himself in the Flambient app).
+  style: text("style").notNull().default("hdr"),
   // What Lukas pays them per job, dollars (lib/markets.ts ShooterRates).
   rates: jsonb("rates").$type<ShooterRates>().notNull().default({}),
   // Off = kept for history and pay, gone from cards and sorting.

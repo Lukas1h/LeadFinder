@@ -345,6 +345,11 @@ const shooterInputSchema = z.object({
   homeAddress: z.string().trim().nullish(),
   freeMinutes: z.number().int().nonnegative().optional(),
   drivePerHour: z.number().int().nonnegative().nullish(),
+  /** Flat travel fee by town; keys are lowercased on save. */
+  travelFees: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  /** Farthest one-way drive in minutes; null = no limit. */
+  maxMinutes: z.number().int().positive().nullish(),
+  style: z.enum(["hdr", "flambient"]).optional(),
   rates: ratesSchema.optional(),
   active: z.boolean().optional(),
   w9OnFile: z.boolean().optional(),
@@ -423,6 +428,16 @@ export async function saveShooter(input: ShooterInput): Promise<{ error?: string
     lng,
     freeMinutes: s.freeMinutes,
     drivePerHour: s.drivePerHour,
+    travelFees:
+      s.travelFees === undefined
+        ? undefined
+        : Object.fromEntries(
+            Object.entries(s.travelFees)
+              .map(([town, fee]) => [town.trim().toLowerCase(), fee] as const)
+              .filter(([town]) => town)
+          ),
+    maxMinutes: s.maxMinutes,
+    style: s.style,
     rates: s.rates === undefined ? undefined : cleanRates(s.rates),
     active: s.active,
     w9OnFile: s.w9OnFile,
