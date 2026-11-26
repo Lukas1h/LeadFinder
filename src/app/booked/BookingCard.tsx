@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CalendarDays, KeyRound, StickyNote, Phone, Car, TriangleAlert, Users } from "lucide-react";
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import { airspaceBadgeLabel } from "./AirspaceSection";
-import { bookingRevenue } from "./bookingMath";
+import { bookingRevenue, realRevenue } from "./bookingMath";
 import { isUpcomingStage, stageIndex } from "@/lib/bookingStages";
 import { formatPrice, formatDate, formatDateTime, formatPhone } from "@/lib/format";
 import { Card } from "@/components/ui/card";
@@ -19,7 +19,9 @@ import type { BookingWithDetails } from "./BookedList";
 export function BookingCard({ booking }: { booking: BookingWithDetails }) {
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const revenue = bookingRevenue(booking);
+  // Real revenue: after the shooter and editor on a contracted job.
+  const billed = bookingRevenue(booking);
+  const revenue = realRevenue(booking);
   const tentative = booking.stage === "tentative";
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ") || "No address on file";
   // Needs ATC authorization to fly the drone there. Only while it's still to shoot.
@@ -70,7 +72,12 @@ export function BookingCard({ booking }: { booking: BookingWithDetails }) {
               </div>
             )}
           </div>
-          {revenue !== 0 && <div className="text-lg font-semibold text-foreground">{formatPrice(revenue)}</div>}
+          {billed !== 0 && (
+            <div className="text-right">
+              <div className="text-lg font-semibold text-foreground">{formatPrice(revenue)}</div>
+              {revenue !== billed && <div className="text-xs text-muted-foreground">of {formatPrice(billed)} billed</div>}
+            </div>
+          )}
         </div>
 
         {(booking.contactName || booking.contactPhone) && (

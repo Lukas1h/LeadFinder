@@ -14,6 +14,8 @@ export interface BookingShooter {
   name: string;
   /** Their number, for texting them the shoot's upload link; null until it's entered. */
   phone: string | null;
+  /** "hdr" jobs also cost an editor (HDR_EDITOR_COST); "flambient" don't. */
+  style: "hdr" | "flambient";
   /** Whole dollars agreed for this job; null until it's set. */
   pay: number | null;
   /** The linked expense's date ("YYYY-MM-DD") when paid; null while unpaid. */
@@ -45,7 +47,7 @@ export async function shootersByBookingId(
   const [shooterRows, expenseRows] = await Promise.all([
     shooterIds.length > 0
       ? db
-          .select({ id: shooters.id, name: shooters.name, phone: shooters.phone })
+          .select({ id: shooters.id, name: shooters.name, phone: shooters.phone, style: shooters.style })
           .from(shooters)
           .where(inArray(shooters.id, shooterIds))
       : Promise.resolve([]),
@@ -70,6 +72,7 @@ export async function shootersByBookingId(
             id: shooter.id,
             name: shooter.name,
             phone: shooter.phone,
+            style: shooter.style === "flambient" ? "flambient" : "hdr",
             pay: row.shooterPay,
             paidAt: row.shooterExpenseId ? (expenseDateById.get(row.shooterExpenseId) ?? null) : null,
             expenseId: row.shooterExpenseId,

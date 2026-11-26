@@ -10,7 +10,7 @@ import { ExpenseDialog, blankExpense } from "@/app/finances/ExpenseDialog";
 import { pacificDate } from "@/lib/finance/math";
 import { formatPrice } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { COMPLETION_FIELDS, bookingProfit, profitPerHour } from "./bookingMath";
+import { COMPLETION_FIELDS, bookingProfit, contractorCost, profitPerHour } from "./bookingMath";
 import type { BookingWithDetails } from "./BookedList";
 
 const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -41,7 +41,10 @@ export function BookingMoney({ booking, open }: { booking: BookingWithDetails; o
   const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
   const hourlyRate = profitPerHour(booking);
   const recorded = COMPLETION_FIELDS.filter(({ key }) => booking[key] != null);
-  const hasCosts = hasTrip || costs.expenseItems.length > 0;
+  const contract = contractorCost(booking);
+  // A paid shooter's pay is already one of the linked expenses below.
+  const unpaidPay = booking.shooter && !booking.shooter.expenseId ? contract.pay : 0;
+  const hasCosts = hasTrip || costs.expenseItems.length > 0 || contract.total > 0;
   const location = [booking.address, booking.city, booking.state].filter(Boolean).join(", ");
 
   const joinTrip = async (tripId: string) => {
@@ -73,6 +76,10 @@ export function BookingMoney({ booking, open }: { booking: BookingWithDetails; o
             muted
           />
         ))}
+        {unpaidPay > 0 && (
+          <Row label={`${booking.shooter!.name} (not paid yet)`} value={`−${money(unpaidPay)}`} />
+        )}
+        {contract.editor > 0 && <Row label="HDR editor" value={`−${money(contract.editor)}`} />}
         {hasTrip && <Row label="Gas" value={`−${money(costs.gas)}`} />}
         {costs.expenseItems.map((e) => (
           <Row key={e.id} label={e.description} value={`−${money(e.amount)}`} />

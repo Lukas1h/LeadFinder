@@ -1,3 +1,4 @@
+import { bookingProfit, bookingRevenue, realRevenue } from "@/app/booked/bookingMath";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
 import { FEW_PHOTOS_THRESHOLD, isUnscored } from "@/lib/pipeline";
 import { isBuilderListing } from "@/lib/leadSections";
@@ -209,7 +210,12 @@ export function bookingJson(b: BookingWithDetails & { showcase?: boolean }, mk: 
     editingHours: b.editingHours,
     shootingHours: b.shootingHours,
     logisticsHours: b.logisticsHours,
-    additionalCosts: b.costs.gas + b.costs.expenses > 0 ? Math.round(b.costs.gas + b.costs.expenses) : null,
+    // Plus a contracted job's unpaid shooter pay and HDR editor, so the app's
+    // profit is real profit (a paid shooter is already in costs.expenses).
+    additionalCosts: (() => {
+      const extra = bookingRevenue(b) - bookingProfit(b);
+      return extra > 0 ? Math.round(extra) : null;
+    })(),
     // The full breakdown behind those two, for the booking's "Time & money"
     // section: miles, gas, mileageDeduction, its trips and its expenses.
     costs: b.costs,
@@ -218,6 +224,8 @@ export function bookingJson(b: BookingWithDetails & { showcase?: boolean }, mk: 
     contactPhone: b.contactPhone,
     lineItems: b.lineItems,
     total: b.lineItems.reduce((sum, item) => sum + item.amount, 0),
+    // Line items minus the shooter's pay and HDR editor on contracted jobs (Lukas, 2026-11-26).
+    realRevenue: realRevenue(b),
     driveTime: b.driveTime,
     invoiceNumber: b.invoiceNumber,
     invoicedAt: b.invoicedAt,

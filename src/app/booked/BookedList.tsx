@@ -11,7 +11,7 @@ import { BookingForm } from "./BookingForm";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatPrice } from "@/lib/format";
-import { sumRevenue } from "./bookingMath";
+import { sumBilled, sumRevenue } from "./bookingMath";
 import { groupBookings } from "./data";
 import { Stat, Sub } from "../Stat";
 
@@ -203,7 +203,8 @@ function BookingSection({
 const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`;
 
 /**
- * Revenue only (line-item totals); profit lives on Finances. Earned counts
+ * Real revenue (line items minus contractor costs, bookingMath.realRevenue);
+ * Outstanding is billed totals. Profit lives on Finances. Earned counts
  * completed (paid) jobs. "Last 30 days" goes by the job date, not when it was
  * paid — older jobs entered after the fact were all completed the day they
  * were backfilled. Outstanding is what's invoiced but not paid yet.
@@ -220,7 +221,8 @@ function BookingStats({ completed, waiting }: { completed: BookingWithDetails[];
       allTimeCount: completed.length,
       allTime,
       average: completed.length > 0 ? allTime / completed.length : null,
-      outstanding: sumRevenue(waiting),
+      // What clients still owe: the billed total, not real revenue.
+      outstanding: sumBilled(waiting),
       outstandingCount: waiting.length,
     };
   }, [completed, waiting]);

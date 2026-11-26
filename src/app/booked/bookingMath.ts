@@ -1,20 +1,56 @@
 import type { BookingWithDetails } from "./BookedList";
+import { editorCost } from "@/lib/markets";
 
 /** What the client is billed: the line items' total. This is the number the Booked page shows. */
 export function bookingRevenue(booking: Pick<BookingWithDetails, "lineItems">): number {
   return booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
 }
 
-export function sumRevenue(bookings: Pick<BookingWithDetails, "lineItems">[]): number {
+type ContractInputs = Pick<BookingWithDetails, "shooter">;
+
+/**
+ * What a contracted job costs on top of Lukas's own: the shooter's agreed pay
+ * plus, for an HDR shooter, the editor (HDR_EDITOR_COST). 0 with no shooter.
+ */
+export function contractorCost(booking: ContractInputs): { pay: number; editor: number; total: number } {
+  const s = booking.shooter;
+  if (!s) return { pay: 0, editor: 0, total: 0 };
+  const pay = s.pay ?? 0;
+  const editor = editorCost(s.style);
+  return { pay, editor, total: pay + editor };
+}
+
+/**
+ * Real revenue (Lukas, 2026-11-26): what the job brings in after the people
+ * it was contracted to. Own shoots: the line-item total. Contracted: the
+ * total minus the shooter's pay and, for HDR shooters, the editor.
+ */
+export function realRevenue(booking: Pick<BookingWithDetails, "lineItems" | "shooter">): number {
+  return bookingRevenue(booking) - contractorCost(booking).total;
+}
+
+/** What clients were billed (line items), for what's still owed: Outstanding. */
+export function sumBilled(bookings: Pick<BookingWithDetails, "lineItems">[]): number {
   return bookings.reduce((sum, b) => sum + bookingRevenue(b), 0);
 }
 
-type ProfitInputs = Pick<BookingWithDetails, "lineItems" | "costs">;
+/** Real revenue summed (realRevenue). */
+export function sumRevenue(bookings: Pick<BookingWithDetails, "lineItems" | "shooter">[]): number {
+  return bookings.reduce((sum, b) => sum + realRevenue(b), 0);
+}
 
-/** Line-item total minus the job's gas and linked expenses (see src/lib/finance/math.ts). */
+type ProfitInputs = Pick<BookingWithDetails, "lineItems" | "costs" | "shooter">;
+
+/**
+ * Real revenue minus the job's gas and linked expenses (see
+ * src/lib/finance/math.ts). A paid shooter's pay is already one of the linked
+ * expenses (lib/shooters.ts writes it with the bookingId), so it is only
+ * taken off separately while unpaid.
+ */
 export function bookingProfit(booking: ProfitInputs): number {
-  const total = booking.lineItems.reduce((sum, li) => sum + li.amount, 0);
-  return total - booking.costs.gas - booking.costs.expenses;
+  const { pay, editor } = contractorCost(booking);
+  const unpaidPay = booking.shooter && !booking.shooter.expenseId ? pay : 0;
+  return bookingRevenue(booking) - unpaidPay - editor - booking.costs.gas - booking.costs.expenses;
 }
 
 /**

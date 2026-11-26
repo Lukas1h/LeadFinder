@@ -225,8 +225,9 @@ every key.
 drive-per-hour estimate), `max_minutes` (farthest one-way drive; past it the
 shooter is off the card and never owns the listing; null = no limit),
 `style` `hdr` | `flambient` (an HDR shoot also costs Lukas an editor,
-`HDR_EDITOR_COST` $15 in `src/lib/markets.ts`, counted in the Markets page's
-shooter cost; flambient he blends himself, Lukas 2026-11-26),
+`HDR_EDITOR_COST` $18 in `src/lib/markets.ts`, counted in the Markets page's
+shooter cost and in a booking's real revenue; flambient he blends himself,
+Lukas 2026-11-26),
 `rates` (what Lukas pays per job: `photo`, `photoDrone`, `video`, `drone`),
 `active`, `w9_on_file`, `portfolio_photos` ({src, alt}[]: the closing photo
 row on that market's agent pages, first main shooter with photos).
@@ -237,7 +238,15 @@ Lincoln County town), Christian Flores (main, Newport, flambient, $200, drone
 $150, within 30 min of Newport) and Emily Castleberry (backup, Newport; too
 pricey to centre outreach on). Newport-area listings are Christian's, Jenny
 is their backup at +$30 (Lukas, 2026-11-26). Backups show on cards but never
-steer sorting. Putting a shooter on a booking with no pay given defaults the
+steer sorting. **Real revenue** (Lukas, 2026-11-26; `realRevenue` in
+`src/app/booked/bookingMath.ts`): own shoots = the line-item total;
+contracted = total − the shooter's pay − the HDR editor (e.g. $400 Chris job
+→ 400 − 225 − 18). The Booked page's cards, rows and stats show it (the card
+adds "of $N billed"; Outstanding stays the billed total), the booking's Time &
+money lists the unpaid shooter pay and editor, and its profit subtracts them
+(a paid shooter's pay is already a linked expense, never counted twice). The
+phone API's booking has `realRevenue`, and `additionalCosts` includes those
+costs. Putting a shooter on a booking with no pay given defaults the
 pay from their rates and the job's line items (`defaultShooterPay` in
 `src/lib/shooters.ts`); an explicit pay wins. Drive minutes = `startMinutes
 + straight-line miles × minutesPerMile` from the listing's geocode, else its
