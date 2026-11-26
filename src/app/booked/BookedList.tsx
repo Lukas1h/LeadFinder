@@ -5,6 +5,7 @@ import { ChevronRight, Plus, CalendarCheck } from "lucide-react";
 import type { AirspaceCheck, Listing } from "@/db/schema";
 import type { BookingStage } from "@/lib/bookingStages";
 import type { BookingShooter } from "@/lib/shooterReads";
+import type { WithDriveLines } from "@/lib/driveLines";
 import { BookingCard } from "./BookingCard";
 import { BookingForm } from "./BookingForm";
 import { Button } from "@/components/ui/button";
@@ -24,9 +25,10 @@ export interface BookingWithDetails {
   address: string | null;
   city: string | null;
   state: string | null;
-  // Full row of the linked listing (for the ListingRow reference card),
-  // null for a manual booking with no tracked listing at all.
-  listing: Listing | null;
+  // Full row of the linked listing (for the ListingRow reference card), with
+  // the drive lines that card's modal shows, computed on the server
+  // (lib/driveLines.ts). Null for a manual booking with no tracked listing.
+  listing: WithDriveLines<Listing> | null;
   jobDate: Date | null;
   // Booked, but the day isn't settled: jobDate is a placeholder or empty.
   dateTentative: boolean;

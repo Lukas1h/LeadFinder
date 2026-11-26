@@ -5,7 +5,8 @@ import { LEAD_SECTION_LABELS, LEAD_SECTION_ORDER } from "@/lib/leadSections";
 import { leadGroupJson } from "../serialize";
 import { milesLabel } from "@/lib/nearShoots";
 import { shortDate } from "@/app/follow-up/feeds/shared";
-import { MARKET_LABELS, MARKET_ORDER, parseMarket } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import { UNASSIGNED, type Market } from "@/lib/markets";
 
 /**
  * The Leads board, in the page's display order. Sections and groups that are
@@ -18,11 +19,16 @@ export async function GET(req: Request) {
 
   // ?market=portland picks a tab. Left out (older app builds), the board is
   // every market at once, exactly as before the tabs existed.
-  const market = parseMarket(new URL(req.url).searchParams.get("market"));
+  const mk = await getMarkets();
+  const market = mk.parse(new URL(req.url).searchParams.get("market"));
 
   const board = await getLeadsBoard({ cardPhotosOnly: true, market });
 
-  const known = board.known.map((g) => leadGroupJson(g, board.addressById));
+  // One tab per live market, with "Other" appended only when some lead is out
+  // of state and in none of them.
+  const tabs: Market[] = [...mk.order, ...(board.marketCounts[UNASSIGNED] > 0 ? [UNASSIGNED] : [])];
+
+  const known = board.known.map((g) => leadGroupJson(g, board.addressById, mk));
   // "Near your shoots" (leads-data.ts LeadsBoard.near): cold leads near a
   // recent shoot, pulled out of their sections into their own, right below
   // Agents you know, most recently shot first, each with the shoot as a badge.
@@ -35,7 +41,7 @@ export async function GET(req: Request) {
     })
     .map((g) => {
       const { near } = board.near.get(g.key)!;
-      const json = leadGroupJson(g, board.addressById);
+      const json = leadGroupJson(g, board.addressById, mk);
       const label = `Shot ${near.shoot.address} nearby · ${milesLabel(near.miles)} · ${shortDate(near.shoot.shotAt)}`;
       return { ...json, badges: [...json.badges, { kind: "nearShoot", label }] };
     });
@@ -48,7 +54,7 @@ export async function GET(req: Request) {
     key: "far" as const,
     label: FAR_SECTION_LABEL,
     collapsed: false,
-    groups: board.far.map((g) => leadGroupJson(g, board.addressById)),
+    groups: board.far.map((g) => leadGroupJson(g, board.addressById, mk)),
   };
   const sections = LEAD_SECTION_ORDER.flatMap((key) => [
     ...(key === "texted" ? [farSection] : []),
@@ -60,7 +66,7 @@ export async function GET(req: Request) {
       collapsed: key === "unlikely",
       groups: board.sections[key]
         .filter((g) => !board.near.has(g.key) && !farKeys.has(g.key))
-        .map((g) => leadGroupJson(g, board.addressById)),
+        .map((g) => leadGroupJson(g, board.addressById, mk)),
     },
   ]);
 
@@ -70,9 +76,10 @@ export async function GET(req: Request) {
     // the others while the board itself is one market's.
     marketCounts: board.marketCounts,
     // newAgents: brand-new agents today in that market (the tab's "+N new").
-    markets: MARKET_ORDER.map((key) => ({
+    // The shape here is what the iPhone app reads: key, label, count, newAgents.
+    markets: tabs.map((key) => ({
       key,
-      label: MARKET_LABELS[key],
+      label: mk.label(key),
       count: board.marketCounts[key],
       newAgents: board.newAgentCounts[key],
     })),

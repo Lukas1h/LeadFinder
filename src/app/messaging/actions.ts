@@ -1,6 +1,6 @@
 "use server";
 
-import { parseMarket } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
 import { db } from "@/db";
 import {
   messagePresets,
@@ -144,7 +144,7 @@ export async function createVariant(
     .where(eq(messagePresets.id, presetId));
   if (preset?.channel === "email" && !subject) return { error: "Subject is required for email" };
 
-  await db.insert(messagePresetVariants).values({ presetId, label, body, subject, market: parseMarket(input.market) });
+  await db.insert(messagePresetVariants).values({ presetId, label, body, subject, market: (await getMarkets()).parse(input.market) });
   revalidatePath("/messaging");
   return { error: null };
 }
@@ -171,10 +171,13 @@ export async function updateVariant(
     if (preset?.channel === "email" && !subject) return { error: "Subject is required for email" };
   }
 
+  // Left out (the phone's editor) keeps the variant's market as it is. A value
+  // is checked against the markets table's keys, so a stale key becomes "all".
+  const market = input.market !== undefined ? (await getMarkets()).parse(input.market) : undefined;
+
   await db
     .update(messagePresetVariants)
-    // Left out (the phone's editor) keeps the variant's market as it is.
-    .set({ label, body, subject, ...(input.market !== undefined ? { market: parseMarket(input.market) } : {}) })
+    .set({ label, body, subject, ...(market !== undefined ? { market } : {}) })
     .where(eq(messagePresetVariants.id, id));
   revalidatePath("/messaging");
   return { error: null };

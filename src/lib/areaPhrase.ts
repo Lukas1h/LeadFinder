@@ -1,4 +1,4 @@
-import { SHOOTER_MARKETS, shooterMarketTowns } from "@/lib/markets";
+import { stateName, UNASSIGNED, type Market, type MarketIndex, type MarketMessageContext } from "@/lib/markets";
 
 // Shared by the AI drafts (draftMessage.ts) and the {{area}} template
 // placeholder (messageTemplate.ts), so a template and an AI draft always
@@ -50,20 +50,18 @@ const HAND_WRITTEN_PHRASES: [string, string[]][] = [
   ]],
 ];
 
-// Shooter markets' towns come from markets.ts and win over the list above
-// (Portland keeps its hand-written list, which reaches into Vancouver WA).
-const AREA_PHRASES: [string, string[]][] = [
-  ...SHOOTER_MARKETS.filter((m) => m.key !== "portland").map(
-    (m) => [m.areaPhrase, shooterMarketTowns(m.key)] as [string, string[]],
-  ),
-  ...HAND_WRITTEN_PHRASES,
-];
+// Shooter markets' own wording (the markets table, via a MarketIndex) wins
+// over this list when one is passed; without one (client previews) this list
+// is all there is, which is why Portland keeps its hand-written towns.
+const AREA_PHRASES = HAND_WRITTEN_PHRASES;
 
 /** "in the Portland area", "here in Roseburg", "in the Bend area", … — null only with no city at all. */
-export function areaPhrase(city: string | null | undefined): string | null {
+export function areaPhrase(city: string | null | undefined, mk?: MarketIndex | null, state?: string | null): string | null {
   const name = city?.trim();
   if (!name) return null;
   const key = name.toLowerCase();
+  const own = mk?.shooterAreaPhrase(key, state);
+  if (own) return own;
   return AREA_PHRASES.find(([, cities]) => cities.includes(key))?.[0] ?? `in the ${name} area`;
 }
 
@@ -73,9 +71,33 @@ export function areaPhrase(city: string | null | undefined): string | null {
  * no group of its own (most small towns) is just itself, so an exact-city
  * match still works.
  */
-export function citiesNear(city: string | null | undefined): string[] {
+export function citiesNear(city: string | null | undefined, mk?: MarketIndex | null): string[] {
   const name = city?.trim().toLowerCase();
   if (!name) return [];
+  const own = mk?.shooterCitiesNear(name);
+  if (own) return own;
   const group = AREA_PHRASES.find(([, cities]) => cities.includes(name));
   return group ? group[1] : [name];
+}
+
+/**
+ * What a message sent about a place needs from its market: the {{area}}
+ * wording, the prices for {{photoPrice}} and friends, and whether "most of
+ * the state" is true there. `market` overrides the place's own market (a
+ * quick action's market is its send's listing's, else the agent's).
+ */
+export function marketMessageContext(
+  mk: MarketIndex,
+  place: { city: string | null; state?: string | null },
+  market?: Market | null
+): MarketMessageContext {
+  const key = market ?? mk.marketFor(place);
+  const m = mk.get(key);
+  const state = m?.state ?? (place.state?.trim() || "OR");
+  return {
+    areaPhrase: areaPhrase(place.city, mk, place.state),
+    prices: mk.prices(key),
+    stateName: stateName(state),
+    coversState: key !== UNASSIGNED && state.toUpperCase() === "OR",
+  };
 }

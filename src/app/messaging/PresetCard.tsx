@@ -13,7 +13,6 @@ import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MARKET_LABELS, type Market } from "@/lib/markets";
 import { presetSections } from "@/lib/presetSections";
 import {
   AlertDialog,
@@ -136,10 +135,12 @@ function StatsSummary({ stats }: { stats: VariantStats }) {
 function VariantRow({
   variant,
   channel,
+  markets,
   stats,
 }: {
   variant: MessagePresetVariant;
   channel: MessageChannel;
+  markets: { key: string; label: string }[];
   stats: VariantStats;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -174,7 +175,7 @@ function VariantRow({
             <span className="text-sm font-medium text-foreground">{variant.label}</span>
             {variant.market && (
               <Badge variant="outline" title="Only sent to listings in this market">
-                {MARKET_LABELS[variant.market as Market] ?? variant.market} only
+                {markets.find((m) => m.key === variant.market)?.label ?? variant.market} only
               </Badge>
             )}
             {!variant.enabled && (
@@ -193,6 +194,7 @@ function VariantRow({
             presetId={variant.presetId}
             variant={variant}
             channel={channel}
+            markets={markets}
             trigger={
               <Button variant="ghost" size="icon">
                 <Pencil />
@@ -259,11 +261,14 @@ function VariantRow({
 export function PresetCard({
   preset,
   variants,
+  markets,
   statsByVariant,
   quickActionChoices = [],
 }: {
   preset: MessagePreset;
   variants: MessagePresetVariant[];
+  /** Every market (any status), for the variant "Market" dropdown and badges. */
+  markets: { key: string; label: string }[];
   statsByVariant: Record<string, VariantStats>;
   quickActionChoices?: { id: string; name: string; channel: MessagePreset["channel"] }[];
 }) {
@@ -423,6 +428,7 @@ export function PresetCard({
                     key={variant.id}
                     variant={variant}
                     channel={preset.channel}
+                    markets={markets}
                     stats={statsByVariant[variant.id] ?? emptyStats}
                   />
                 ))}
@@ -435,6 +441,7 @@ export function PresetCard({
               key={variant.id}
               variant={variant}
               channel={preset.channel}
+              markets={markets}
               stats={statsByVariant[variant.id] ?? emptyStats}
             />
           ))
@@ -445,6 +452,7 @@ export function PresetCard({
         <VariantForm
           presetId={preset.id}
           channel={preset.channel}
+          markets={markets}
           trigger={
             <Button variant="outline" size="sm" className="self-start">
               <Plus />

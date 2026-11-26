@@ -6,6 +6,8 @@ import { and, ne, inArray, or } from "drizzle-orm";
 import { getQueuedListingIds } from "@/lib/queueMessages";
 import { getFollowUpAfterDays } from "@/lib/settings";
 import { buildAgentLookups } from "@/lib/pipeline";
+import { getMarkets } from "@/lib/marketsData";
+import { addDriveLines } from "@/lib/driveLines";
 import { PipelineList } from "./PipelineList";
 import { PipelineSkeleton } from "./loading";
 
@@ -29,7 +31,7 @@ async function PipelineContent() {
 
   // Independent of each other, so run them concurrently instead of paying
   // for sequential round trips to Neon.
-  const queuedIds = await getQueuedListingIds();
+  const [mk, queuedIds] = await Promise.all([getMarkets(), getQueuedListingIds()]);
   const [all, allAgents, followUpAfterDays] = await Promise.all([
     // "new" listings only appear here once a message is queued for them —
     // see getQueuedListingIds.
@@ -82,7 +84,7 @@ async function PipelineContent() {
       </header>
 
       <PipelineList
-        listings={all}
+        listings={addDriveLines(all, mk)}
         agentByPhone={agentByPhone}
         agentByName={agentByName}
         agentById={agentById}

@@ -20,19 +20,21 @@
 //   it.
 //
 // The goal is the HOME goal: Local and Regional work only (2026-11-13).
-// Shooter-market jobs (Portland first, then the Central Coast; see
-// SHOOTER_MARKETS in lib/markets.ts) are subcontracted and pay him less, so
-// their outreach sits on top of home outreach, never instead of it. Each
-// shooter market gets a quota of its own, worked back from its config's
-// `jobsPerWeek` (Portland: a couple of bookings a week by the new year).
+// Shooter-market jobs (the markets table's kind "shooter": Portland first, then
+// the Central Coast) are subcontracted and pay him less, so their outreach sits
+// on top of home outreach, never instead of it. Each live shooter market gets a
+// quota of its own, worked back from its `jobsPerWeek` (Portland: a couple of
+// bookings a week by the new year). Paused and killed markets, and
+// "unassigned" (out of state), are neither home nor quota: nothing of theirs
+// counts toward home.
 //
 // All quotas split outreach by market the way the Home funnel does
 // (lib/funnelSplit.ts): the listing on the send, else the agent's own market
 // (lib/agentMarket.ts), else regional. Bookings are placed by their listing, or
-// by their own address when they have none; shooter-market ones are left out of
-// every home figure — booked work, jobs, repeat and first-job values, new
-// clients — so a shooter market can never make the home goal look closer than
-// it is.
+// by their own address when they have none; anything outside Local and
+// Regional — shooter markets and "unassigned" — is left out of every home
+// figure (booked work, jobs, repeat and first-job values, new clients), so it
+// can never make the home goal look closer than it is.
 //
 // Cold follow-up texts (agents who never answered the first text, recorded only
 // as outbound interactions on a `cold_*` Follow up feed) are in neither quota:
@@ -44,7 +46,8 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { getFollowUpBoard } from "@/app/follow-up/data";
 import { agentMarkets } from "@/lib/agentMarket";
-import { isShooterMarket, marketFor, SHOOTER_MARKETS, type Market, type MarketPlace } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import type { Market, MarketPlace } from "@/lib/markets";
 
 /** Dollars of booked work a month. Change it here. Raised from $3,000 on 2026-10-15, after October passed it mid-month. */
 export const MONTHLY_GOAL = 4000;
@@ -91,6 +94,12 @@ function todayTarget(textsPerWeek: number, weekTexts: number, todayTexts: number
 }
 
 const TZ = "America/Los_Angeles";
+
+/**
+ * The markets whose work the home goal covers: everything else — shooter
+ * markets, paused or killed ones and "unassigned" — is outreach on top of it.
+ */
+const HOME_MARKETS = new Set<Market>(["local", "regional"]);
 
 /**
  * One market's texting quota. The home one's numbers are the same as the
@@ -168,8 +177,8 @@ export interface GoalProgress {
     textsTarget: number;
   };
   /**
-   * The same week and today once for home, then once per shooter market (in
-   * SHOOTER_MARKETS order), each on top of home. `portland` repeats the
+   * The same week and today once for home, then once per live shooter market
+   * (in market sort order), each on top of home. `portland` repeats the
    * Portland entry of `markets` for older iPhone builds that only read it.
    */
   quotas: { home: MarketQuota; portland: MarketQuota; markets: MarketQuota[] };
@@ -213,7 +222,8 @@ interface JobRow {
 }
 
 export async function computeGoalProgress(): Promise<GoalProgress> {
-  const [board, totals, jobResult, sendResult] = await Promise.all([
+  const [mk, board, totals, jobResult, sendResult] = await Promise.all([
+    getMarkets(),
     getFollowUpBoard(),
     // The rates that don't split by market, and the bounds (Pacific) that the
     // send and job queries below repeat, so all three run in one round trip.
@@ -356,7 +366,7 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
   const placed = sends.map((send) => {
     const market: Market =
       send.listing_id != null
-        ? marketFor({
+        ? mk.marketFor({
             city: send.listing_city,
             state: send.listing_state,
             lat: send.listing_lat,
@@ -366,7 +376,9 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
         : fallback.get(send.agent_id ?? "") ?? "regional";
     return { send, market };
   });
-  const homeSends = placed.filter((p) => !isShooterMarket(p.market)).map((p) => p.send);
+  // Home is Local + Regional only: a shooter market (live or not) and
+  // "unassigned" never count toward the home pace.
+  const homeSends = placed.filter((p) => HOME_MARKETS.has(p.market)).map((p) => p.send);
 
   const tally = (rows: SendRow[]) => ({
     sent28: rows.filter((s) => s.in_28).length,
@@ -378,7 +390,7 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
   const allTexts = tally(sends);
   const homeTexts = tally(homeSends);
 
-  // --- Bookings, shooter markets left out of the home plan ------------------
+  // --- Bookings, home only (Local + Regional) -------------------------------
 
   const jobs = (jobResult.rows as unknown as JobRow[]).filter((row) => {
     const place: MarketPlace =
@@ -391,7 +403,7 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
             geocodeSource: row.listing_geocode_source,
           }
         : { city: row.city, state: row.state, lat: row.lat, lng: row.lng, geocodeSource: row.geocode_source };
-    return !isShooterMarket(marketFor(place));
+    return HOME_MARKETS.has(mk.marketFor(place));
   });
 
   const monthJobs = jobs.filter((j) => j.in_month);
@@ -478,7 +490,7 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
       note,
     };
   };
-  const marketQuotas = SHOOTER_MARKETS.map((m) => shooterQuota(m.key, m.label, m.jobsPerWeek));
+  const marketQuotas = mk.liveShooterMarkets.map((m) => shooterQuota(m.key, m.label, m.jobsPerWeek));
   const note =
     `Local + Regional: repeat clients cover ${dollars(MONTHLY_GOAL - newRevenue)} of a month, so new ones need to bring ` +
     `${dollars(newRevenue)}, about ${plural(clients, "client")} at ${dollars(firstJob)} a first job. ` +
@@ -549,8 +561,21 @@ export async function computeGoalProgress(): Promise<GoalProgress> {
         },
         note: homeQuotaNote,
       },
-      // Older iPhone builds read only this; newer clients use `markets`.
-      portland: marketQuotas.find((q) => q.key === "portland") ?? marketQuotas[0],
+      // Older iPhone builds read only this; newer clients use `markets`. With
+      // no live shooter markets it's a zero quota rather than nothing, so the
+      // old client shows "0 of 0" instead of crashing.
+      portland: marketQuotas.find((q) => q.key === "portland") ??
+        marketQuotas[0] ?? {
+          key: "portland",
+          label: "Portland",
+          textsPerWeek: 0,
+          repliesPerWeek: 0,
+          replyRate: 0,
+          replyRateMeasured: false,
+          week: { texts: 0, textsToGo: 0, replies: 0 },
+          today: { texts: 0, textsTarget: 0 },
+          note: "No shooter markets are live.",
+        },
       markets: marketQuotas,
     },
   };

@@ -1,6 +1,8 @@
 import { db } from "@/db";
 import { messagePresets, messagePresetVariants } from "@/db/schema";
+import { marketMessageContext } from "@/lib/areaPhrase";
 import { renderMessageBody } from "@/lib/messageTemplate";
+import type { MarketIndex } from "@/lib/markets";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { AgentSegment } from "./segment";
 import type { ColdFeedKey, ColdTrigger } from "./pool";
@@ -174,15 +176,22 @@ export async function loadColdTemplates(): Promise<Map<string, string>> {
 export function renderColdTexts(
   c: ColdCandidate,
   seg: AgentSegment | undefined,
-  templates: Map<string, string>
+  templates: Map<string, string>,
+  /** The markets, on the server: {{area}} and the prices come from the listing's market. */
+  mk?: MarketIndex | null
 ): { text1: string; text2: string; pitch: ColdPitch } {
   const pitch = pickPitch(c, seg);
   const text1Name = COLD_TEXT1_PRESETS[c.trigger];
   const text2Name = COLD_PITCH_PRESETS[pitch];
   const body = (name: string) => templates.get(name) ?? COLD_FALLBACKS[name] ?? "";
+  // Without mk (a preview) it's the home wording and the default prices, as
+  // renderMessageBody does on the client.
+  const market = mk
+    ? marketMessageContext(mk, { city: c.listing.city, state: c.listing.state }, c.market)
+    : null;
   return {
-    text1: renderMessageBody(body(text1Name), c.agent.name, c.listing.address, c.listing.city),
-    text2: renderMessageBody(body(text2Name), c.agent.name, c.listing.address, c.listing.city),
+    text1: renderMessageBody(body(text1Name), c.agent.name, c.listing.address, c.listing.city, null, market),
+    text2: renderMessageBody(body(text2Name), c.agent.name, c.listing.address, c.listing.city, null, market),
     pitch,
   };
 }

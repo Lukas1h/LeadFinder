@@ -1,5 +1,6 @@
 import { requireAppAuth } from "@/lib/appApiAuth";
 import { getSendDetail } from "@/app/messaging/replyActions";
+import { getMarkets } from "@/lib/marketsData";
 import { agentJson, listingJson } from "../../serialize";
 import { isUuid, notFound } from "../../helpers";
 
@@ -19,6 +20,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const detail = await getSendDetail(id);
   if (!detail) return notFound();
+  const mk = await getMarkets();
 
   const firstEmail = detail.quickActions.find((a) => a.channel === "email");
 
@@ -37,7 +39,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // A send can have no agent or no listing attached (a cold email goes out
     // with neither), so both are nullable rather than a 404.
     agent: detail.agent ? agentJson(detail.agent) : null,
-    listing: detail.listing ? listingJson(detail.listing, "first") : null,
+    listing: detail.listing ? listingJson(detail.listing, "first", mk) : null,
     // The buttons for this message, in order: other templates, rendered for
     // this agent. An email one is sent by POST ./quick-actions/:presetId; a
     // text one is built in the app's composer (the files come from

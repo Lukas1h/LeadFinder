@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAppAuth } from "@/lib/appApiAuth";
 import { getBookingWithDetails } from "@/app/booked/actions";
 import { setShooterPaid } from "@/lib/shooters";
+import { getMarkets } from "@/lib/marketsData";
 import { bookingJson } from "../../../serialize";
 import { badRequest, isUuid, notFound, readJson, withErrors } from "../../../helpers";
 
@@ -23,6 +24,6 @@ export const POST = withErrors(async (req: Request, { params }: { params: Promis
   const result = await setShooterPaid(id, body.paid);
   if (result.error) return badRequest(result.error);
 
-  const fresh = await getBookingWithDetails(id);
-  return NextResponse.json({ ok: true, booking: fresh ? bookingJson(fresh) : null });
+  const [fresh, mk] = await Promise.all([getBookingWithDetails(id), getMarkets()]);
+  return NextResponse.json({ ok: true, booking: fresh ? bookingJson(fresh, mk) : null });
 });

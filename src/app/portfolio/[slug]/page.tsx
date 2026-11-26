@@ -12,14 +12,15 @@ import { notifyPortfolioView } from "@/lib/push";
 import { PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
 import { LUKAS_PHONE as PHONE } from "@/lib/agentVcard";
 import { parseUserAgent } from "@/lib/galleryViews";
-import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, PORTLAND_SHOOTER_PHOTOS, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
+import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { BeforeAfterSlider, ListingCard, LoopVideo, MutableVideo } from "./client";
 import { PageTracker } from "./tracker";
 import { FeaturedShootSection } from "./featured";
 import { getFeaturedShoot } from "@/lib/portfolioFeatured";
 import { formatPrice, resolvePortfolioPrices, type PortfolioPrices } from "@/lib/portfolioPrices";
 import { templateForArea } from "@/app/portfolio-links/actions";
-import { inArea, shooterMarketForArea, shooterMarketTowns } from "@/lib/markets";
+import { inArea, type MarketIndex, type ShooterMarket } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
 
 // Same reasoning as the gallery route: a fresh navigation from outside the
 // app, not an in-app tab switch, so there's no "instant" shell to preserve.
@@ -86,10 +87,10 @@ const serif = "font-[family-name:var(--font-portfolio-serif)]";
 /**
  * A personalized agent page — Lukas's "Hahn Media Agent Page" design — sent
  * in place of the samples email's attachment (mainly for cold outreach).
- * The portfolio photos, videos and pricing are fixed (lib/agentPage.ts); the
- * link's content picks the area, video, lead photo, before/after, a first
- * name for the sign-off, and which of Lukas's own jobs show as listings
- * (src/app/portfolio-links).
+ * The portfolio photos and videos are fixed (lib/agentPage.ts), the pricing
+ * comes from the link's market (lib/markets.ts); the link's content picks the
+ * area, video, lead photo, before/after, a first name for the sign-off, and
+ * which of Lukas's own jobs show as listings (src/app/portfolio-links).
  *
  * Public, no login — the slug is the only access control, same spirit as
  * the client gallery's token.
@@ -127,17 +128,27 @@ export default async function PortfolioPage({
 
   const area = c.area?.trim() || "Eugene";
   const firstName = c.agentFirstName?.trim() || "";
-  // A Portland-market page (shooterMarketForArea also picks its footer and
-  // vCard) closes the portfolio with a few of the local shooter's photos.
-  const isPortland = shooterMarketForArea(c.area)?.key === "portland";
+  // The markets (database rows, lib/marketsData.ts) answer every "which
+  // market / what price / what footer / whose photos" question on the page.
+  const mk = await getMarkets();
+  // A shooter-market page (shooterMarketForArea also picks its prices, footer
+  // and vCard) closes the portfolio with a few of its shooter's own photos.
+  const shooter = mk.shooterMarketForArea(area);
+  const shooterPhotos = shooterPhotoRow(shooter);
   const brokerage = c.brokerage?.trim() || "";
   const video = AGENT_PAGE_VIDEOS[(c.video ?? "summit") as AgentPageVideoKey] ?? AGENT_PAGE_VIDEOS.summit;
   const showOffer = c.showOffer ?? true;
   const showTour = c.showTourOfHomes ?? true;
   // Off for every link made before 2026-11-12: those pages stay exactly as they were sent.
   const newStyle = c.newStyle ?? false;
-  // A page's own locked prices win over its area template's (see PortfolioContent.prices).
-  const prices = resolvePortfolioPrices(c.prices ?? (await templateForLinkArea(area))?.content.prices);
+  // Prices: the market wins over the area template. Its `prices` override the
+  // template's content.prices, which override the defaults in
+  // lib/portfolioPrices.ts. For Lukas's own areas (no shooter market) that is
+  // the market the town falls in (local / regional). A page's own locked
+  // prices still sit on top, so an agent who has seen a price keeps it.
+  const template = await templateForLinkArea(area, mk);
+  const market = shooter ?? mk.get(mk.marketFor({ city: area }));
+  const prices = resolvePortfolioPrices({ ...template?.content.prices, ...market?.prices, ...c.prices });
 
   // The closing full-width photo stays put; the lead photo jumps to the front of the rest.
   const closing = AGENT_PAGE_PHOTOS[AGENT_PAGE_PHOTOS.length - 1];
@@ -308,7 +319,7 @@ export default async function PortfolioPage({
                 className="mt-2 aspect-[3/2] w-full bg-[#F9F4F1] object-cover sm:mt-3"
               />
             )}
-            {isPortland && <ShooterPhotos name={PORTLAND_SHOOTER_PHOTOS.name} photos={PORTLAND_SHOOTER_PHOTOS.photos} />}
+            {shooterPhotos && <ShooterPhotos name={shooterPhotos.name} photos={shooterPhotos.photos} />}
           </div>
         </section>
 
@@ -372,7 +383,7 @@ export default async function PortfolioPage({
       <footer className="border-t border-[#181A1C]/10 px-4 py-7">
         <div className="mx-auto flex max-w-[1152px] flex-wrap justify-between gap-x-6 gap-y-2 text-[13px] text-[#181A1C]/62">
           <span>Hahn Media · Lukas Hahn</span>
-          <span>{shooterMarketForArea(c.area)?.pageLocation ?? "Eugene & Roseburg, Oregon"}</span>
+          <span>{shooter?.pageLocation ?? "Eugene & Roseburg, Oregon"}</span>
         </div>
       </footer>
     </div>
@@ -506,12 +517,12 @@ const NEW_TILES = [
  * ("the Portland area"), not a town, so it falls back to the template covering
  * the market's base town, else its first town.
  */
-async function templateForLinkArea(area: string) {
-  const m = shooterMarketForArea(area);
+async function templateForLinkArea(area: string, mk: MarketIndex) {
+  const m = mk.shooterMarketForArea(area);
   return (
     (await templateForArea(area)) ??
     (m
-      ? (await templateForArea(m.base.name.toLowerCase())) ?? (await templateForArea(shooterMarketTowns(m.key)[0]))
+      ? (await templateForArea(m.base.name.toLowerCase())) ?? (await templateForArea(mk.shooterMarketTowns(m.key)[0]))
       : null)
   );
 }
@@ -591,11 +602,32 @@ function FullGallery() {
 }
 
 /**
- * The last row of the portfolio on Portland pages: a few of the local
- * shooter's own photos (Chris, see PORTLAND_SHOOTER_PHOTOS), every one small,
- * his name tucked into the bottom-left corner of each — really small and
- * slightly transparent, a credit that isn't noticeable unless you look
- * (Lukas, 2026-11-20).
+ * The photos for the closing row: the shooters a market's `shooters` list has
+ * photos from, main shooters first (the market's outreach is centred on them),
+ * first one wins. Null when the page has no shooter market or none has photos.
+ */
+function shooterPhotoRow(m: ShooterMarket | null): { name: string; photos: AgentPagePhoto[] } | null {
+  if (!m) return null;
+  const ordered = [...m.shooters].sort((a, b) => (a.role === "main" ? 0 : 1) - (b.role === "main" ? 0 : 1));
+  const shooter = ordered.find((s) => s.portfolioPhotos.length > 0);
+  if (!shooter) return null;
+  return {
+    name: shooter.label,
+    // The row's keys only need to be unique: the file name without its extension.
+    photos: shooter.portfolioPhotos.map((p) => ({
+      src: p.src,
+      alt: p.alt,
+      key: p.src.split("/").pop()?.replace(/\.[a-z0-9]+$/i, "") || p.src,
+    })),
+  };
+}
+
+/**
+ * The last row of the portfolio on a shooter-market page: a few of the
+ * shooter's own photos (the market's first shooter with a portfolio, see
+ * shooterPhotoRow), every one small, their name tucked into the bottom-left
+ * corner of each — really small and slightly transparent, a credit that isn't
+ * noticeable unless you look (Lukas, 2026-11-20).
  */
 function ShooterPhotos({ name, photos }: { name: string; photos: AgentPagePhoto[] }) {
   return (

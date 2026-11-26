@@ -1,7 +1,8 @@
 import { db } from "@/db";
 import { agentInteractions, agentStatusChanges, agents, messageSends } from "@/db/schema";
 import { agentMarkets } from "@/lib/agentMarket";
-import { emptyMarketRecord, type Market } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import type { Market } from "@/lib/markets";
 import { and, gt, inArray, isNotNull } from "drizzle-orm";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -24,9 +25,6 @@ export interface FeedStats {
 }
 
 const empty = (): FeedStats => ({ reached: 0, replied: 0, warm: 0, converted: 0 });
-
-/** `empty()`, one entry per market — the shape the Home funnel's market tabs want. */
-const emptyByMarket = (): Record<Market, FeedStats> => emptyMarketRecord(empty);
 
 /** The cold follow-up tabs' feeds (COLD_FEED_KEYS in lib/coldFollowUp/pool.ts). */
 const COLD_PREFIX = "cold_";
@@ -75,20 +73,25 @@ export async function getFeedStatsWithTotal(): Promise<{
   allColdByMarket: Record<Market, FeedStats>;
 }> {
   const since = new Date(Date.now() - FEED_STATS_DAYS * DAY);
-  const starts = await db
-    .select({
-      agentId: agentInteractions.agentId,
-      feed: agentInteractions.followUpFeed,
-      at: agentInteractions.occurredAt,
-      outcome: agentInteractions.outcome,
-    })
-    .from(agentInteractions)
-    .where(and(isNotNull(agentInteractions.followUpFeed), gt(agentInteractions.occurredAt, since)));
+  const [mk, starts] = await Promise.all([
+    getMarkets(),
+    db
+      .select({
+        agentId: agentInteractions.agentId,
+        feed: agentInteractions.followUpFeed,
+        at: agentInteractions.occurredAt,
+        outcome: agentInteractions.outcome,
+      })
+      .from(agentInteractions)
+      .where(and(isNotNull(agentInteractions.followUpFeed), gt(agentInteractions.occurredAt, since))),
+  ]);
   const byFeed = new Map<string, FeedStats>();
   const all = empty();
-  const allByMarket = emptyByMarket();
+  // `empty()`, one entry per market key (paused and killed markets and
+  // "unassigned" included): the shape the Home funnel's market tabs want.
+  const allByMarket: Record<Market, FeedStats> = mk.emptyRecord(empty);
   const allCold = empty();
-  const allColdByMarket = emptyByMarket();
+  const allColdByMarket: Record<Market, FeedStats> = mk.emptyRecord(empty);
   const reachedStarts = starts.filter((s) => s.outcome !== "not_sent");
   if (reachedStarts.length === 0) return { byFeed, all, allByMarket, allCold, allColdByMarket };
 

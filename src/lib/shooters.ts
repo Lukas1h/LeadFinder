@@ -14,7 +14,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 export { shootersByBookingId, listShooters, type BookingShooter } from "./shooterReads";
 import { db } from "@/db";
-import { bookings, expenses, listings, shooters } from "@/db/schema";
+import { bookingLineItems, bookings, expenses, listings, shooters, type ShooterRates } from "@/db/schema";
 import type { BookingStage } from "@/lib/bookingStages";
 import { pacificDate } from "@/lib/finance/math";
 import { writeExpense, type ExpenseInput } from "@/lib/finance/writes";
@@ -51,13 +51,19 @@ async function loadBookingShooterRow(bookingId: string) {
  * Finds a shooter by name (case-insensitive, trimmed), or adds a new one. The
  * phone is only touched when the caller sends one (undefined = leave it): the
  * name + pay callers (MCP, the phone app) don't know it.
+ *
+ * Their rate card comes back too, so a job with no pay given can default to it
+ * (defaultShooterPay below).
  */
-async function findOrCreateShooter(name: string, phone?: string | null): Promise<{ id: string; name: string }> {
+async function findOrCreateShooter(
+  name: string,
+  phone?: string | null
+): Promise<{ id: string; name: string; rates: ShooterRates }> {
   const clean = name.trim();
   const nextPhone = phone === undefined ? undefined : phone?.trim() ? normalizePhone(phone) : null;
 
   const [existing] = await db
-    .select({ id: shooters.id, name: shooters.name, phone: shooters.phone })
+    .select({ id: shooters.id, name: shooters.name, phone: shooters.phone, rates: shooters.rates })
     .from(shooters)
     .where(sql`lower(${shooters.name}) = ${clean.toLowerCase()}`)
     .limit(1);
@@ -74,15 +80,52 @@ async function findOrCreateShooter(name: string, phone?: string | null): Promise
     .insert(shooters)
     .values({ name: clean, phone: nextPhone ?? null })
     .onConflictDoNothing()
-    .returning({ id: shooters.id, name: shooters.name });
+    .returning({ id: shooters.id, name: shooters.name, rates: shooters.rates });
   if (created) return created;
 
   const [row] = await db
-    .select({ id: shooters.id, name: shooters.name })
+    .select({ id: shooters.id, name: shooters.name, rates: shooters.rates })
     .from(shooters)
     .where(sql`lower(${shooters.name}) = ${clean.toLowerCase()}`)
     .limit(1);
   return row;
+}
+
+/**
+ * What a job's line items say a shooter should be paid off their rate card,
+ * in whole dollars; null when the card can't answer it.
+ *
+ * Shooter-market jobs are priced per kind of work, so the booking's line items
+ * pick the rate: a video job pays `video` (plus `photo` when there are photo
+ * items too, since that's extra work), photos + drone/aerial pays the
+ * `photoDrone` bundle (or `photo` + `drone` when both are set separately),
+ * photos alone pay `photo`, and a drone-only job pays `drone`. Anything the
+ * card has no number for is skipped; if that leaves nothing, the pay stays
+ * empty for Lukas to fill in, exactly as it did before rate cards existed.
+ * Descriptions are matched case-insensitively.
+ */
+export function defaultShooterPay(
+  rates: ShooterRates | null | undefined,
+  lineItemDescriptions: readonly string[]
+): number | null {
+  const descriptions = lineItemDescriptions.map((d) => d.toLowerCase());
+  const has = (pattern: RegExp) => descriptions.some((d) => pattern.test(d));
+  const photo = has(/photo/);
+  const video = has(/video/);
+  const drone = has(/drone|aerial/);
+  if (!photo && !video && !drone) return null;
+
+  if (video) {
+    if (rates?.video == null) return null;
+    // Photos alongside the video are extra work on the same visit.
+    return rates.video + (photo ? (rates.photo ?? 0) : 0);
+  }
+  if (photo && drone) {
+    if (rates?.photoDrone != null) return rates.photoDrone;
+    return rates?.photo != null && rates.drone != null ? rates.photo + rates.drone : null;
+  }
+  if (photo) return rates?.photo ?? null;
+  return rates?.drone ?? null;
 }
 
 /** The Booked page and Finances both show shooter money, so both refresh. */
@@ -121,10 +164,22 @@ export async function setBookingShooter(
 
   const rawPay = input?.pay ?? null;
   if (rawPay != null && !Number.isFinite(rawPay)) return { error: "Enter the shooter's pay as a number" };
-  const pay = rawPay == null ? null : Math.round(rawPay);
+  let pay = rawPay == null ? null : Math.round(rawPay);
   if (pay != null && pay < 0) return { error: "The shooter's pay can't be negative" };
 
   const shooter = await findOrCreateShooter(name, input?.phone);
+
+  // Pay: an explicit amount (even 0) always wins. The first time a shooter is
+  // put on a job with no amount given, the rate card and the job's line items
+  // fill it in — the same default Lukas would have typed.
+  if (pay == null && booking.shooterPay == null) {
+    const items = await db
+      .select({ description: bookingLineItems.description })
+      .from(bookingLineItems)
+      .where(eq(bookingLineItems.bookingId, bookingId));
+    pay = defaultShooterPay(shooter.rates, items.map((i) => i.description));
+  }
+
   await db.update(bookings).set({ shooterId: shooter.id, shooterPay: pay }).where(eq(bookings.id, bookingId));
 
   // Somewhere to put the raw files: the first time a shooter is put on a job

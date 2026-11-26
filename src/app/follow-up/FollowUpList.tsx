@@ -12,6 +12,7 @@ import { AgentSignalBadges, RelationshipBadge } from "@/app/badges";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ListingRow } from "@/app/ListingRow";
+import type { LeadListing } from "@/app/leads-data";
 import type { FollowUpStats, FollowUpUpcoming } from "./data";
 import type { FeedItem, FollowUpFeed } from "./feeds";
 
@@ -114,7 +115,9 @@ export function FollowUpList({
         {e.secondText && <p className="text-xs text-muted-foreground mt-1">Then: &ldquo;{e.secondText}&rdquo;</p>}
       </div>
       {e.listing ? (
-        <ListingRow listing={e.listing} />
+        // follow-up/page.tsx attaches the drive lines on the server; feeds/types.ts
+        // (Lukas's file) still types a feed's listing as a plain row.
+        <ListingRow listing={e.listing as LeadListing} />
       ) : (
         e.address && <p className="text-sm text-foreground px-2">{[e.address, e.city].filter(Boolean).join(", ")}</p>
       )}

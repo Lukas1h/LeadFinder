@@ -4,6 +4,8 @@ import { inArray } from "drizzle-orm";
 import { estimateDriveTime } from "@/lib/driveTime";
 import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import { shootersByBookingId } from "@/lib/shooterReads";
+import { getMarkets } from "@/lib/marketsData";
+import { withDriveLines } from "@/lib/driveLines";
 import type { BookingWithDetails } from "./BookedList";
 
 /**
@@ -30,7 +32,9 @@ export async function loadBookingsWithDetails(): Promise<BookingRow[]> {
   const agentIds = [...new Set(rows.map((b) => b.contactAgentId).filter((id): id is string => id != null))];
   const bookingIds = rows.map((b) => b.id);
 
-  const [linkedListings, contacts, lineItems, costsFor, shooterByBookingId] = await Promise.all([
+  const [mk, linkedListings, contacts, lineItems, costsFor, shooterByBookingId] = await Promise.all([
+    // Drive lines for each booking's linked listing (the ListingRow card).
+    getMarkets(),
     // Full rows, not a curated projection — the "view linked listing"
     // reference card (ListingRow) needs the whole thing: photo, price,
     // status, everything ListingModal shows when it's opened from there.
@@ -83,7 +87,7 @@ export async function loadBookingsWithDetails(): Promise<BookingRow[]> {
       address: linkedListing?.address ?? b.address,
       city,
       state,
-      listing: linkedListing ?? null,
+      listing: linkedListing ? withDriveLines(linkedListing, mk) : null,
       jobDate: b.jobDate,
       dateTentative: b.dateTentative,
       // The one source of truth for where the booking is (see lib/bookingStages).

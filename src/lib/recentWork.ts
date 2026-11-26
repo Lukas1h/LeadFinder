@@ -2,6 +2,7 @@ import { and, desc, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings } from "@/db/schema";
 import { citiesNear } from "@/lib/areaPhrase";
+import type { MarketIndex } from "@/lib/markets";
 import { naturalStreetName } from "@/lib/sms";
 import { GALLERY_ORIGIN, MAIN_SITE_URL } from "@/lib/siteUrls";
 
@@ -16,10 +17,11 @@ const LOOKBACK = 80;
  * wording, 2026-10-22): a job he just delivered near the agent's town, linked
  * to its public gallery — or, with nothing recent enough nearby, a nudge to
  * the site instead. Matches the same city grouping {{area}} uses, so "near"
- * means the same thing in both places.
+ * means the same thing in both places. `mk` brings a shooter market's own
+ * towns (lib/markets.ts); without it only the hand-written groups apply.
  */
-export async function recentWorkLine(city: string | null): Promise<string> {
-  const cities = new Set(citiesNear(city));
+export async function recentWorkLine(city: string | null, mk?: MarketIndex | null): Promise<string> {
+  const cities = new Set(citiesNear(city, mk));
   if (cities.size > 0) {
     const rows = await db
       .select({ address: bookings.address, city: bookings.city, galleryToken: bookings.galleryToken, completedAt: bookings.completedAt })

@@ -4,6 +4,7 @@ import { loadBookingsWithDetails, groupBookings } from "@/app/booked/data";
 import { createBooking } from "@/app/booked/actions";
 import { bookingJson } from "../serialize";
 import { badRequest, lineItemList, optionalDate, optionalString, readJson, withErrors } from "../helpers";
+import { getMarkets } from "@/lib/marketsData";
 
 /**
  * Every booking, already split the way the Booked page splits them.
@@ -15,17 +16,18 @@ export async function GET(req: Request) {
   if (denied) return denied;
 
   const { upcoming, tentative, scheduled, editing, waiting, completed } = groupBookings(await loadBookingsWithDetails());
+  const mk = await getMarkets();
 
   return NextResponse.json({
-    upcoming: upcoming.map(bookingJson),
+    upcoming: upcoming.map((b) => bookingJson(b, mk)),
     // The part of `upcoming` with no settled date (stage tentative), longest since last contact first.
-    tentative: tentative.map(bookingJson),
+    tentative: tentative.map((b) => bookingJson(b, mk)),
     // The part of `upcoming` whose day is set, soonest job first.
-    scheduled: scheduled.map(bookingJson),
+    scheduled: scheduled.map((b) => bookingJson(b, mk)),
     // Shot, no invoice out yet: the photos are still being edited.
-    editing: editing.map(bookingJson),
-    waitingForPayment: waiting.map(bookingJson),
-    completed: completed.map(bookingJson),
+    editing: editing.map((b) => bookingJson(b, mk)),
+    waitingForPayment: waiting.map((b) => bookingJson(b, mk)),
+    completed: completed.map((b) => bookingJson(b, mk)),
   });
 }
 

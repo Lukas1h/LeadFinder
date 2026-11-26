@@ -1,5 +1,7 @@
 import { firstName, naturalStreetName } from "@/lib/sms";
 import { areaPhrase } from "@/lib/areaPhrase";
+import type { MarketMessageContext } from "@/lib/markets";
+import { DEFAULT_PORTFOLIO_PRICES, formatPrice } from "@/lib/portfolioPrices";
 
 // sendMessage's variantId sentinel for an AI-drafted send — that variant
 // doesn't exist yet (each AI draft is one-off), so sendMessage creates it
@@ -24,23 +26,43 @@ export const PORTFOLIO_LINK_MARKER = "{{portfolioLink}}";
  * coast"; see areaPhrase). With no city it's "around Oregon" — and the
  * "{{area}} as well as most of the state" line becomes "around most of
  * Oregon" rather than naming the state twice.
+ *
+ * `market` (lib/areaPhrase.ts marketMessageContext, server side) brings the
+ * market's own {{area}} wording and prices: {{photoPrice}}, {{videoPrice}},
+ * {{dronePrice}}, {{bundlePrice}} ("$324"). Out of state, "{{area}} as well
+ * as most of the state" drops the "most of the state" claim. Without it
+ * (client previews) it's the home wording and the default prices.
  */
 export function renderMessageBody(
   body: string,
   agentName: string | null,
   address: string | null,
   city: string | null = null,
-  officeClient: string | null = null
+  officeClient: string | null = null,
+  market: MarketMessageContext | null = null
 ): string {
   const name = firstName(agentName);
   const street = naturalStreetName(address) ?? "your property";
   const cityName = city?.trim() ? city.trim() : "your area";
+  const area = market ? market.areaPhrase : areaPhrase(city);
+  const state = market?.stateName ?? "Oregon";
+  const prices = market?.prices ?? DEFAULT_PORTFOLIO_PRICES;
+  const wholeState =
+    market && !market.coversState
+      ? area ?? `around ${state}`
+      : area
+        ? `${area} as well as most of the state`
+        : `around most of ${state}`;
   return body
     .replaceAll("{{firstName}}", name ?? "there")
     .replaceAll("{{street}}", street)
     .replaceAll("{{city}}", cityName)
-    .replaceAll("{{area}} as well as most of the state", areaPhrase(city) ? "{{area}} as well as most of the state" : "around most of Oregon")
-    .replaceAll("{{area}}", areaPhrase(city) ?? "around Oregon")
+    .replaceAll("{{area}} as well as most of the state", wholeState)
+    .replaceAll("{{area}}", area ?? `around ${state}`)
+    .replaceAll("{{photoPrice}}", formatPrice(prices.photo))
+    .replaceAll("{{videoPrice}}", formatPrice(prices.video))
+    .replaceAll("{{dronePrice}}", formatPrice(prices.drone))
+    .replaceAll("{{bundlePrice}}", formatPrice(prices.bundle))
     .replaceAll("{{officeClient}}", firstName(officeClient) ?? "someone in your office");
 }
 

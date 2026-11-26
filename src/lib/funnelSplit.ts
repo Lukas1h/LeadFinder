@@ -1,7 +1,8 @@
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 import { agentMarkets } from "@/lib/agentMarket";
-import { MARKET_ORDER, marketFor, type Market } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import type { Market } from "@/lib/markets";
 import { FEED_STATS_DAYS, getFeedStatsWithTotal, type FeedStats } from "@/app/follow-up/feeds/stats";
 
 /** The Cold row: agents texted, how many answered, how many are interested or better. */
@@ -31,7 +32,9 @@ export interface ColdStats {
  * the listing on their first outreach text, or — when that send has no listing
  * — by their agent market (lib/agentMarket.ts), and the follow-up rows are
  * feeds.allByMarket / feeds.allColdByMarket, so the markets always add
- * back up to `followUp`, to `coldFollowUp` and to `cold`.
+ * back up to `followUp`, to `coldFollowUp` and to `cold`. It has an entry for
+ * every market key (paused and killed ones included, plus "unassigned"), not
+ * just the tabs, so no agent is dropped from the split.
  */
 export interface FunnelSplit {
   days: number;
@@ -42,6 +45,7 @@ export interface FunnelSplit {
 }
 
 const emptyCold = (): ColdStats => ({ reached: 0, replied: 0, interested: 0 });
+const emptyFeed = (): FeedStats => ({ reached: 0, replied: 0, warm: 0, converted: 0 });
 
 /** Statuses that count as "turned interested" (a booking skips straight past it). */
 const INTERESTED_OR_BETTER = new Set(["interested", "worked_once", "regular"]);
@@ -61,7 +65,8 @@ interface ColdRow {
 }
 
 export async function computeFunnelSplit(): Promise<FunnelSplit> {
-  const [coldRows, feeds] = await Promise.all([
+  const [mk, coldRows, feeds] = await Promise.all([
+    getMarkets(),
     db.execute(sql`
       with texted as (
         select
@@ -100,18 +105,23 @@ export async function computeFunnelSplit(): Promise<FunnelSplit> {
   const fallback = await agentMarkets(rows.filter((r) => r.listing_id == null).map((r) => r.agent_id));
 
   const cold = emptyCold();
-  const byMarket = Object.fromEntries(
-    MARKET_ORDER.map((m) => [
-      m,
-      { cold: emptyCold(), followUp: feeds.allByMarket[m], coldFollowUp: feeds.allColdByMarket[m] },
-    ]),
-  ) as FunnelSplit["byMarket"];
+  // Every key, paused/killed markets and "unassigned" included: a cold agent
+  // can be in any of them, and the buckets must add back up to `cold`.
+  const byMarket = mk.emptyRecord(() => ({
+    cold: emptyCold(),
+    followUp: emptyFeed(),
+    coldFollowUp: emptyFeed(),
+  }));
+  for (const market of mk.keys) {
+    byMarket[market].followUp = feeds.allByMarket[market] ?? byMarket[market].followUp;
+    byMarket[market].coldFollowUp = feeds.allColdByMarket[market] ?? byMarket[market].coldFollowUp;
+  }
 
   for (const row of rows) {
     const market =
       row.listing_id == null
         ? fallback.get(row.agent_id) ?? "regional"
-        : marketFor({
+        : mk.marketFor({
             city: row.city,
             state: row.state,
             lat: row.lat,

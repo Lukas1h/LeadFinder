@@ -170,7 +170,7 @@ whose nearest listing is more than `FAR_DRIVE_MINUTES` (120) from Winston
 before, nearest first (`LeadsBoard.far` in `src/app/leads-data.ts`; the
 iPhone API sends it as section `far`). It's a display grouping only: the
 stored `lead_section` and template targeting are unchanged. Shooter markets
-(Portland, Central Coast), cities missing from the drive table, Agents you know and Near your shoots never
+(any shooter market), cities missing from the drive table, Agents you know and Near your shoots never
 move there, and Texted before / Unlikely stay put (hard rule 5). Eugene and
 Medford are 90 min, Ashland and Corvallis 120, so those stay in place.
 Texted before is sorted nearest first (the group's closest listing: drive
@@ -178,73 +178,125 @@ minutes from Winston, minutes from its nearest main shooter on a
 shooter-market tab), then by
 who has waited longest since the last text (Lukas, 2026-11-14).
 
-**Markets** (`src/lib/markets.ts`, since 2026-11-12). Every listing is in one
-market, computed from its city/state (never stored):
-`local` (within 45 min of Winston: Roseburg, Sutherlin, Glide, Myrtle Creek…),
-`regional` (everything else he drives to himself, Eugene to Salem, Medford,
-Ashland, the rest of the coast, Bend, plus any city missing from the drive
-table), and the **shooter markets**, areas shot by a subcontracted
-photographer while Lukas edits. Each is one entry in `SHOOTER_MARKETS`
-(key, label, its shooters, a base town for wording and the point box, its
-towns with coordinates in `src/lib/marketCities.ts`, optional states and area
-codes, point fallback box, drive-time formula, `{{area}}` phrase, portfolio
-area, page footer, vCard, `jobsPerWeek`); adding a region is one more entry
-there plus its data (below). Today: `portland` (Multnomah, Washington,
-Clackamas, Yamhill and Columbia counties plus Clark County WA) and
-`central_coast`, labelled **Coast** since 2026-11-19 (Tillamook and Lincoln
-counties, Manzanita to Yachats and inland to Siletz/Eddyville; the key stays
-`central_coast` because stored variants and the iPhone app use it; Clatsop
-County and Florence stay regional). Salem and the rest of Marion County are
-regional. The Leads page has a tab per market
-(`/?market=local|regional|portland|central_coast`, Local by default);
-`getLeadsBoard({ market })` filters the board and always returns
-`marketCounts` for every market.
+**Markets** (the `markets` table since 2026-11-25; hardcoded in
+`src/lib/markets.ts` from 2026-11-12). One row per area Lukas works, edited
+on the **Markets** page (`/markets`): `key`, `label`, `kind` (`local` |
+`regional` | `shooter`), `status` (`testing` | `active` | `paused` |
+`killed`), `sort_order`, `state` plus other `states` its towns may be in,
+`time_zone`, `base` town {name, lat, lng}, `cities` (lowercase town → [lat,
+lng]), `point_area` (radius miles around the base, optional lat/lng
+bounds), `area_codes`, `drive` {startMinutes, minutesPerMile},
+`area_phrase` ({{area}}), `portfolio_area`, `page_location`, `vcard_city` /
+`vcard_note`, `jobs_per_week`, `prices`, `launched_at`, `killed_at`,
+`notes`. `src/lib/markets.ts` is the pure logic: `MarketIndex`, built once
+per request by `getMarkets()` (`src/lib/marketsData.ts`; scripts use
+`loadMarketDefs()` + `new MarketIndex(defs)`), answers every question:
+`marketFor(place)`, `order` (tabs), `keys` (every key for tallies), `labels`,
+`shooterMarket`, `liveShooterMarkets`, `shooterDrives`, `listingDriveTime`,
+`ownerMinutes`, `balanceByShooter`, `shooterMarketForArea`, `prices(key)`.
+Client components never build one: the server sends them computed strings
+(lead cards get `driveTime` / `shooterDrives`, pickers get `{key, label}`
+lists).
 
-**Shooters per market** (2026-11-19). Each market lists its shooters
-(`MarketShooter`: DB `name`, card `label`, `role` main | backup, home
-point, `freeMinutes` of drive with no charge, optional `drivePerHour`):
-Portland = Chris (main, SE Woodstock & 52nd, free to ~60 min, no drive
-charge) and Elijah (main, Spyglass Ln Oregon City, free within 20 min, then
-$50/h); Coast = Jenny Bocko (main, Netarts) and Emily Castleberry (backup,
+Every listing is in one market, computed (never stored) in this order: a
+shooter market whose `cities` has its town (and whose states include the
+listing's state); else `local` if the Winston drive table has the town
+within 45 min; else, for a town **not** in the drive table, a shooter
+market whose point area holds its geocode; else `regional` for Oregon (or
+no state); else **`unassigned`** (label "Other": out of state and in no
+market, so it never counts toward the home funnel; its Leads tab only shows
+when it has listings). Today: `local`, `regional`, `portland` (Multnomah,
+Washington, Clackamas, Yamhill, Columbia counties plus Clark County WA's
+towns; WA listings outside those towns and the 30-mile radius are no longer
+Portland) and `central_coast`, labelled **Coast** (Tillamook and Lincoln
+counties; Clatsop County and Florence stay regional). Salem and the rest of
+Marion County are regional. Status: `testing` / `active` = a Leads tab, a
+texting quota and a funnel row; `paused` / `killed` = listings still land
+there (they don't fall into regional) but no tab or quota, and their
+`search_sources` (each source has a `market`) stop syncing. The Leads page
+has a tab per live market (`/?market=<key>`, Local by default);
+`getLeadsBoard({ market })` filters the board and returns `marketCounts` for
+every key.
+
+**Shooters per market** (`shooters` table since 2026-11-25): `market_key`,
+`label` (card name), `role` main | backup, home `lat` / `lng`,
+`free_minutes` of drive with no charge, `drive_per_hour` (null = none),
+`rates` (what Lukas pays per job: `photo`, `photoDrone`, `video`, `drone`),
+`active`, `w9_on_file`, `portfolio_photos` ({src, alt}[]: the closing photo
+row on that market's agent pages, first main shooter with photos).
+Portland = Chris (main, SE Woodstock, free to 60 min, $175 / $225 with
+drone) and Elijah (main, Oregon City, free within 20 min, then $50/h); Coast
+= Jenny Bocko (main, Netarts, $175 / $225) and Emily Castleberry (backup,
 Newport; too pricey to centre outreach on). Backups show on cards but never
-steer sorting. Coast wording (Lukas, 2026-11-19, sound local): `{{area}}` is "here
-on the coast" and the portfolio area is "the coast" (page reads "Real estate
-photo & video on the coast", `inArea()`); the "Coast (Tillamook + Lincoln
-County)" portfolio template covers every Coast town. Drive minutes = `startMinutes + straight-line miles ×
-minutesPerMile` from the listing's geocode, else its town's coordinates.
-A listing's **owner** is its nearest main shooter (`ownerMinutes`). The
-Photo / Video / Backup sections of a shooter-market tab are ordered by
-`balanceByShooter`: each owner's queue sorted by owner minutes + 0.5 × the
-other mains' average minutes (close to both beats close to one), then the
-queues interleaved round-robin so every main shooter gets an even share of
-outreach (Lukas didn't want Chris favoured over Elijah); unknown location
-last; Video still puts never-texted first. Texted before goes by owner
-minutes, and so does Agents you know within each of its groups. The iPhone's
-market picker is a native segmented control; the board refetches when the app
-returns to the foreground. Cards' drive time: `listingDriveTime()` from Winston for
-local/regional; for shooter markets `shooterDrives()` lists every shooter,
-owner first, backups marked, Elijah's estimated drive charge as "+$N"
-(web `ShooterDrives` component; the iPhone gets the joined string, e.g.
-"~20 min Chris · ~30 min Elijah").
+steer sorting. Putting a shooter on a booking with no pay given defaults the
+pay from their rates and the job's line items (`defaultShooterPay` in
+`src/lib/shooters.ts`); an explicit pay wins. Drive minutes = `startMinutes
++ straight-line miles × minutesPerMile` from the listing's geocode, else its
+town's coordinates. A listing's **owner** is its nearest main shooter
+(`ownerMinutes`). The Photo / Video / Backup sections of a shooter-market
+tab are ordered by `balanceByShooter`: each owner's queue sorted by owner
+minutes + 0.5 × the other mains' average minutes, then interleaved
+round-robin so every main shooter gets an even share of outreach; unknown
+location last; Video still puts never-texted first. Texted before goes by
+owner minutes, and so does Agents you know within each of its groups.
+Cards' drive time: from Winston for local/regional; for shooter markets
+every shooter, owner first, backups marked, drive charge as "+$N" (web
+`ShooterDrives`; the iPhone gets the joined string, e.g. "~20 min Chris ·
+~30 min Elijah"). Coast wording (Lukas, 2026-11-19, sound local): `{{area}}`
+is "here on the coast", portfolio area "the coast" (`inArea()` → "on the
+coast").
 
-A new region's data, besides the `SHOOTER_MARKETS` entry: a `search_sources`
-row over it with `coming_soon_only` false to flood the new tab with agents
-at first, plus Zillow saved-search email alerts per county (the
-leadfinder-zillow AgentMail inbox ingests them; they trickle in only new
-listings). Once the tab is full, flip the source to `coming_soon_only` true,
-since refetching every listing burns Zillapi credits and the email alerts
-already catch ~90% (Lukas, 2026-11-19: Portland flipped then; "Coast
-(Tillamook County, all listings)" $260k+ went coming-soon the same day;
-Zillow alerts "Tillamook County - New 260k", "Columbia County - New",
-"Clark County WA - New" added), market variants of the outreach
-templates (copies of the Portland wording ones, `{{area}}` does the rest),
-a portfolio template whose towns are the market's cities plus its
-`portfolioArea`, and the photographer on `shooters`. The iPhone app needs a
-`CacheKey` + `Resource` per market (`AppState.swift`) for its tab to load.
-Sections, templates and hard rule 5 are the same in every market. The iPhone
-API takes `?market=` too (left out = all markets, for older builds) and
-returns `markets` (key, label, count, `newAgents`). Each tab shows a small "+N" when brand-new agents came in today (`newAgentCounts`: agents whose `created_at` is today, Pacific, placed by the market of their first listing). Shooter-market jobs pay Lukas less, so
-their outreach is on top of the home markets, never instead of them.
+**Prices per market.** `markets.prices` (keys of `PortfolioPrices` in
+`src/lib/portfolioPrices.ts`: photo, drone, floorPlans, staging, twilight,
+video, bundle, plus the pricing-sheet-only socialEdit and fullPackage; a
+missing key = the default $300 / $400 / …) is the one source of truth:
+- agent pages resolve link-locked `content.prices` → the market's prices →
+  the area template's `content.prices` → defaults (the market of the page's
+  area: `shooterMarketForArea`, else the area's town);
+- texts and emails: `{{photoPrice}}`, `{{videoPrice}}`, `{{dronePrice}}`,
+  `{{bundlePrice}}` ("$324") are filled from the send's market on every
+  server send path (`marketMessageContext` in `src/lib/areaPhrase.ts`, the
+  6th argument of `renderMessageBody`), together with the market's
+  `{{area}}`. Out of state, "{{area}} as well as most of the state" drops
+  the "most of the state" claim and the no-city fallback names the
+  market's state;
+- the pricing sheet PDF: `npx tsx scripts/market-pricing-sheets.mts
+  --write` renders each shooter market's sheet from its prices
+  (`src/lib/pricingSheet.ts`, puppeteer, run locally) and puts it on every
+  template carrying the regular "Hahn Media Pricing Sheet.pdf", tagged with
+  the market (`attachmentsForMarket` swaps it in for that market's agents);
+  a market on default prices gets none and falls back to the regular file.
+  Re-run it after changing a market's prices.
+Portland: photos $324, video $424 (since 2026-11-14).
+
+**Markets page** (`/markets`, `src/app/markets/`): a performance table per
+market (listings found and open, cold texts sent → replied → interested
+with reply rate from `computeFunnelSplit` over 30 days, bookings, revenue,
+shooter cost and margin over 28 days; `killFlag` at `KILL_MIN_SENDS` 50+
+sends under `KILL_REPLY_RATE` 5%, a placeholder for Lukas to tune), a card
+per market (edit, status, add a town by geocoding it), New market, and the
+shooters list with rate cards. Actions in `src/app/markets/actions.ts`
+(`saveMarket`, `setMarketStatus`, `addMarketTown`, `saveShooter`); nothing
+deletes a market or a shooter.
+
+**Adding a market** (no code change, no app update): New market on
+`/markets` (label, key, state, base town, radius; the base is geocoded and
+wording defaults to "in the <base> area"), add or place its shooter(s) with
+home and rates, set its prices (then run the pricing-sheet script), add a
+`search_sources` row with `market` set and `coming_soon_only` false to fill
+the tab at first, plus Zillow saved-search email alerts per county (the
+leadfinder-zillow AgentMail inbox ingests them). Once the tab is full, flip
+the source to `coming_soon_only` true (refetching every listing burns
+Zillapi credits; the alerts catch ~90%). Market variants of templates are
+only needed for truly local wording: `{{area}}` and the price placeholders
+already change per market. A portfolio template whose towns are the
+market's cities helps the builder prefill. Killing a market: set its status
+to Killed (its history stays). The iPhone app reads the tabs from the
+leads API's `markets` (key, label, count, `newAgents`; per-market caches
+are made on demand), so new markets show without an app update. Each tab
+shows a small "+N" when brand-new agents came in today (`newAgentCounts`).
+Shooter-market jobs pay Lukas less, so their outreach is on top of the home
+markets, never instead of them.
 
 ### Agents
 
@@ -366,21 +418,25 @@ Lisas), and one person can have a phone-only and an email-only record.
 ### Messages and contact history
 
 - `message_presets` / `message_preset_variants`: text and email templates,
-  A/B variants with `enabled`. A variant's `market` (any `MARKET_ORDER` key:
+  A/B variants with `enabled`. A variant's `market` (any `markets.key`, e.g.
   `local` / `regional` / `portland` / `central_coast`, null = regular wording) limits it to that market's listings: a
   listing in a market whose template has enabled variants of its own rotates
   through only those (`variantsForMarket`, `src/lib/markets.ts`), everyone else
   gets the regular ones. Email (with a listing) and reply quick actions do the
   same since 2026-11-14: a quick action's market is its send's listing's, else
-  the agent's (`agentMarkets`). A template attachment can carry `market`
+  the agent's (`agentMarkets`); an agent-only queue (no listing) uses the
+  agent's market too. A template attachment can carry `market`
   (`PresetAttachment.market`): it goes out only with that market's variants,
   replacing the untagged file of the same name (`attachmentsForMarket` in
-  `src/lib/attachments.ts`, applied on every send path). Portland pricing
+  `src/lib/attachments.ts`, applied on every send path, the MCP email tools
+  included). Portland pricing
   (photos $324, video $424, rest unchanged): "Send pricing sheet" text and
   "Response to Text Message" email have "Portland A" variants quoting $324,
   and both carry a Portland "Hahn Media Pricing Sheet.pdf" ($324 / $424;
   drone, social edit and the $700 Full Package unchanged). Everyone else keeps
-  $300 / $400.
+  $300 / $400. The market-tagged sheets are generated from `markets.prices`
+  by `scripts/market-pricing-sheets.mts` (see Prices per market), which also
+  puts them on every other template carrying the regular sheet.
   Portland variants (2026-11-12): Backup Option "Portland A–D" and Bad Photos
   "Portland A" ("I do real estate photography", no "some"; Bad Photos ends
   "I'd love to get it shot as soon as possible for you!"). Set on the variant
@@ -388,7 +444,8 @@ Lisas), and one person can have a phone-only and an email-only record.
   as "Central Coast A–D" / "Central Coast A" on Backup Option, Bad Photos and
   Coming Soon; no Central Coast pricing variants or sheet, so its agents get
   the regular $300 / $400 prices. Placeholders include `{{firstName}}`,
-  `{{area}}`, `{{city}}`, `{{recentWork}}`, `{{portfolioLink}}` (`src/lib/messageTemplate.ts`;
+  `{{area}}`, `{{city}}`, `{{photoPrice}}`, `{{videoPrice}}`, `{{dronePrice}}`,
+  `{{bundlePrice}}` (the send's market's prices), `{{recentWork}}`, `{{portfolioLink}}` (`src/lib/messageTemplate.ts`;
   only in the "Portfolio link" template's second text). `{{area}}` uses the
   listing's city, else the agent's `home_city` in reply quick actions; with
   neither it's "around Oregon" ("{{area}} as well as most of the state"
@@ -492,8 +549,8 @@ The folder must be in the same Dropbox account as `DROPBOX_REFRESH_TOKEN` (thumb
 
 Shooters (subcontracted photographers for the shooter markets: Chris and
 Elijah in Portland, Jenny Bocko and backup Emily Castleberry on the Coast;
-Christian was dropped 2026-11-19; where each is based and their role is in
-`SHOOTER_MARKETS`, see Markets; Lukas still edits): `shooters` (`name` unique, `phone`, `email`, `notes`) and on the
+Christian was dropped 2026-11-19; where each is based, their role and rates are
+on the `shooters` row, see Markets; Lukas still edits): `shooters` (`name` unique, `phone`, `email`, `notes`, plus the market columns) and on the
 booking `shooter_id`, `shooter_pay` (whole dollars) and `shooter_expense_id`.
 The shooter's `phone` is entered in the booking dialog's shooter form (the
 MCP/phone callers only send name + pay, which leave it alone).
@@ -613,12 +670,14 @@ market's `areaCodes`: 503/971/360 = Portland; the Central Coast has none,
 
 The texting quota (`src/lib/goal.ts`, the Messages goal card and Home's goal
 section; `goal` on `GET /api/app/v1/messages`) is `quotas.home` plus one
-quota per shooter market in `quotas.markets` (each with `key`;
-`quotas.portland` is kept for older iPhone builds). Home (Local + Regional)
+quota per live shooter market in `quotas.markets` (each with `key`;
+`quotas.portland` is kept for older iPhone builds: the Portland quota, else
+the first, else a zero one). Home (exactly Local + Regional; shooter markets,
+paused or not, and Other never count)
 works the $ `MONTHLY_GOAL` back into texts using only home bookings and home
 outreach texts; the top-level `thisWeek` / `today` / `plan` are the home
 numbers. Each shooter market is on top of it, worked back from its
-`jobsPerWeek` (Portland 2, Central Coast 1 to start) with its own reply rate
+`jobs_per_week` (Portland 2, Coast 1 to start) with its own reply rate
 once it has 50+ sends in 28 days. Sends are placed by market the same way as
 the funnel split, so shooter-market texts never count toward home.
 

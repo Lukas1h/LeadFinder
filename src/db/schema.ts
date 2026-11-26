@@ -873,6 +873,8 @@ export const searchSources = pgTable("search_sources", {
   // each its own search (e.g. "photos coming; more photos"); within a phrase
   // every word must appear, anywhere in the description.
   keywords: text("keywords"),
+  // The market it searches (markets.key); a paused or killed market's sources are skipped by the sync.
+  market: text("market"),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -1487,8 +1489,77 @@ export const shooters = pgTable("shooters", {
   phone: text("phone"),
   email: text("email"),
   notes: text("notes"),
+  // The market they shoot (markets.key); null = not placed in one yet.
+  marketKey: text("market_key").references((): AnyPgColumn => markets.key, { onDelete: "set null", onUpdate: "cascade" }),
+  // Short name on cards ("Chris"); null = name.
+  label: text("label"),
+  // "main": outreach is centred on them; "backup": on cards, never steers sorting.
+  role: text("role").notNull().default("main"),
+  // Where they're based, for drive times and who owns a listing.
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
+  // Drive minutes (one way) with no drive charge, and dollars per hour past it (null = no charge).
+  freeMinutes: integer("free_minutes").notNull().default(60),
+  drivePerHour: integer("drive_per_hour"),
+  // What Lukas pays them per job, dollars (lib/markets.ts ShooterRates).
+  rates: jsonb("rates").$type<ShooterRates>().notNull().default({}),
+  // Off = kept for history and pay, gone from cards and sorting.
+  active: boolean("active").notNull().default(true),
+  w9OnFile: boolean("w9_on_file").notNull().default(false),
+  // Their photos for the portfolio pages of their market (public paths or URLs).
+  portfolioPhotos: jsonb("portfolio_photos").$type<{ src: string; alt: string }[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** What Lukas pays a shooter per job (whole dollars); a missing key = not agreed yet. */
+export interface ShooterRates {
+  photo?: number;
+  photoDrone?: number;
+  video?: number;
+  drone?: number;
+}
+
+// The areas Lukas works, one row each (lib/markets.ts reads them; since
+// 2026-11-25, before that a hardcoded list). kind "local" (around Winston,
+// by the drive table) and "regional" (the rest of Oregon he drives to) are
+// his own; "shooter" markets are shot by subcontracted photographers
+// (shooters.market_key). A listing lands in a shooter market by its town
+// (`cities`) or, failing that, its geocode inside `point_area` around
+// `base`. status: testing / active show as tabs, quotas and funnel rows;
+// paused / killed keep their listings and history but drop off the tabs
+// and quotas, and their search sources stop syncing.
+export const markets = pgTable("markets", {
+  key: text("key").primaryKey(),
+  label: text("label").notNull(),
+  kind: text("kind").notNull().default("shooter"),
+  status: text("status").notNull().default("testing"),
+  sortOrder: integer("sort_order").notNull().default(100),
+  // Two-letter state it's in; `states` = other states its towns may be in (Portland: WA).
+  state: text("state").notNull().default("OR"),
+  states: text("states").array().notNull().default(sql`'{}'::text[]`),
+  timeZone: text("time_zone").notNull().default("America/Los_Angeles"),
+  base: jsonb("base").$type<{ name: string; lat: number; lng: number }>(),
+  // Lowercase town → [lat, lng] centre.
+  cities: jsonb("cities").$type<Record<string, [number, number]>>().notNull().default({}),
+  pointArea: jsonb("point_area").$type<{ minLat?: number; maxLat?: number; minLng?: number; maxLng?: number; radiusMiles: number }>(),
+  areaCodes: text("area_codes").array().notNull().default(sql`'{}'::text[]`),
+  drive: jsonb("drive").$type<{ startMinutes: number; minutesPerMile: number }>(),
+  areaPhrase: text("area_phrase"),
+  portfolioArea: text("portfolio_area"),
+  pageLocation: text("page_location"),
+  vcardCity: text("vcard_city"),
+  vcardNote: text("vcard_note"),
+  jobsPerWeek: real("jobs_per_week").notNull().default(0),
+  // What agents here pay (lib/portfolioPrices.ts keys); a missing key = the default.
+  prices: jsonb("prices").$type<Partial<PortfolioPrices>>().notNull().default({}),
+  launchedAt: timestamp("launched_at", { withTimezone: true }),
+  killedAt: timestamp("killed_at", { withTimezone: true }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type MarketRow = typeof markets.$inferSelect;
 
 export type Shooter = typeof shooters.$inferSelect;
 

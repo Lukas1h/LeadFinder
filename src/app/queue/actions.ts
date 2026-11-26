@@ -19,6 +19,8 @@ import { contactByChannel } from "@/lib/agentLastContact";
 import { AI_DRAFT_VARIANT_SENTINEL } from "@/lib/messageTemplate";
 import { nextSendTime } from "@/lib/queue";
 import { generatePendingDrafts } from "@/lib/queueMessages";
+import { getMarkets } from "@/lib/marketsData";
+import { withDriveLines, type WithDriveLines } from "@/lib/driveLines";
 import { sendMessage, ensureBlankSmsPreset } from "../messageActions";
 import { sendListingEmail, sendComposeEmail, ensureBlankEmailPreset } from "../composeEmailActions";
 import { startPendingInteraction } from "../agents/interactionActions";
@@ -43,8 +45,8 @@ export interface QueueItem {
   secondMessage: string | null;
   /** Drafted by AI for this listing (shown in full) rather than filled from a template. */
   aiDraft: boolean;
-  /** The full listing row, for the ListingRow on the card. */
-  listing: Listing | null;
+  /** The full listing row, with its server-computed drive lines, for the ListingRow on the card. */
+  listing: WithDriveLines<Listing> | null;
   agentId: string;
   agentName: string | null;
   agentPhone: string | null;
@@ -90,7 +92,8 @@ export async function getQueue(agentId?: string): Promise<QueueItem[]> {
   );
   const agentIds = [...new Set(visible.map((r) => r.q.agentId))];
 
-  const [inbound, contacts] = await Promise.all([
+  const [mk, inbound, contacts] = await Promise.all([
+    getMarkets(),
     agentIds.length === 0
       ? []
       : db
@@ -124,7 +127,7 @@ export async function getQueue(agentId?: string): Promise<QueueItem[]> {
         presetName: r.presetName,
         secondMessage: r.secondMessage,
         aiDraft: r.presetAi === true || q.draftStatus != null,
-        listing: r.listing,
+        listing: r.listing ? withDriveLines(r.listing, mk) : null,
         agentId: q.agentId,
         agentName: r.agentName,
         agentPhone: r.agentPhone,

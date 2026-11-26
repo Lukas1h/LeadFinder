@@ -9,7 +9,6 @@ import { renderMessageBody, renderSubject } from "@/lib/messageTemplate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MARKET_LABELS, MARKET_ORDER } from "@/lib/markets";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -25,11 +24,14 @@ export function VariantForm({
   presetId,
   variant,
   channel,
+  markets,
   trigger,
 }: {
   presetId: string;
   variant?: MessagePresetVariant;
   channel: MessageChannel;
+  /** Every market (any status), as plain labels — the server's MarketIndex can't cross to a client component. */
+  markets: { key: string; label: string }[];
   trigger: React.ReactNode;
 }) {
   const router = useRouter();
@@ -79,6 +81,8 @@ export function VariantForm({
                   {" "}
                   , <code className="font-mono">{"{{street}}"}</code> and{" "}
                   <code className="font-mono">{"{{area}}"}</code> (&ldquo;in the Portland area&rdquo;, &ldquo;here in Roseburg&rdquo;…)
+                  {" "}— plus <code className="font-mono">{"{{photoPrice}}"}</code>, <code className="font-mono">{"{{videoPrice}}"}</code>,{" "}
+                  <code className="font-mono">{"{{dronePrice}}"}</code> and <code className="font-mono">{"{{bundlePrice}}"}</code> for the market&rsquo;s prices
                 </>
               )}{" "}
               to personalize — {isEmail ? "filled in from the name you enter when composing" : "they're filled in from the listing when a message is sent"}.
@@ -107,9 +111,9 @@ export function VariantForm({
                   className="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm"
                 >
                   <option value="">All markets (regular wording)</option>
-                  {MARKET_ORDER.map((m) => (
-                    <option key={m} value={m}>
-                      {MARKET_LABELS[m]} only
+                  {markets.map((m) => (
+                    <option key={m.key} value={m.key}>
+                      {m.label} only
                     </option>
                   ))}
                 </select>

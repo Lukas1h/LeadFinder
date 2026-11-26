@@ -1,6 +1,7 @@
 import type { AgentRelationshipStatus, PresetType, LeadStatus, Listing, Agent } from "@/db/schema";
 import { naturalStreetName } from "@/lib/sms";
 import { areaPhrase } from "@/lib/areaPhrase";
+import type { MarketIndex } from "@/lib/markets";
 import { leadSectionForListing, LEAD_SECTION_LABELS, LEAD_SECTION_BRIEFS, type LeadSection } from "@/lib/leadSections";
 import { fetchImagePart, callGemini } from "@/lib/gemini";
 
@@ -51,6 +52,12 @@ export interface DraftMessageInput {
   agent?: Agent | null;
   /** Lukas's own steering for this specific draft — see buildPrompt. Set when re-drafting after "I don't like this, try again with X." */
   instruction?: string | null;
+  /**
+   * The markets (lib/marketsData.ts getMarkets), so {{area}} uses a shooter
+   * market's own wording instead of only the hand-written list. Server callers
+   * pass it; without it (client previews) the wording is the home one.
+   */
+  mk?: MarketIndex | null;
 }
 
 export interface DraftEmailOutput {
@@ -76,7 +83,7 @@ const SKIP_INTRO_STATUSES: AgentRelationshipStatus[] = ["warm", "interested", "w
 
 /** Shared by the SMS and email prompts — how to say where he works, honestly. */
 function localityNudge(input: DraftMessageInput): string {
-  const phrase = areaPhrase(input.city);
+  const phrase = areaPhrase(input.city, input.mk, input.state);
   const where = phrase
     ? `Say where he works with exactly this phrase: "I do some real estate photography ${phrase}." Don't swap in a different area or the town's own name.`
     : `The city is unknown, so just say "I do some real estate photography" with no area.`;
@@ -259,7 +266,7 @@ Do not automatically criticize the photography — if it's already good, acknowl
 Listing — street (use this for {{street}}): ${street}
 ${formatListingFacts(input)}
 
-Where he works (use this for {{area}}): ${areaPhrase(input.city) ?? "unknown, leave it out"}
+Where he works (use this for {{area}}): ${areaPhrase(input.city, input.mk, input.state) ?? "unknown, leave it out"}
 
 Agent (use first name for {{firstName}}):
 - Name: ${input.agentName ?? "unknown"}

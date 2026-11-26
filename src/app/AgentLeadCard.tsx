@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { ChevronRight, StickyNote } from "lucide-react";
-import type { Agent, Listing } from "@/db/schema";
+import type { Agent } from "@/db/schema";
 import { formatPrice, formatDate } from "@/lib/format";
 import { AgentDetailDialog } from "./agents/AgentDetailDialog";
 import { AgentSignalBadges, RelationshipBadge } from "./badges";
@@ -11,8 +11,8 @@ import { ListingRow } from "./ListingRow";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { Card } from "@/components/ui/card";
 import { sampleCardPhotos } from "@/lib/cardPhotos";
-import { listingDriveTime, shooterDrives } from "@/lib/markets";
 import { ShooterDrives } from "./ShooterDrives";
+import type { LeadListing } from "./leads-data";
 
 /**
  * One agent on the Leads page. Outreach is about the person now — most texts
@@ -36,15 +36,16 @@ export function AgentLeadCard({
   /** "Texted Oct 5", "Emailed Sep 14, never texted", "Never contacted". */
   contactLine: string | null;
   /** The best of their open listings — what a text would be about. */
-  lead: Listing;
+  lead: LeadListing;
   /** Their other open listings. */
-  others: Listing[];
+  others: LeadListing[];
   badges?: ReactNode;
   actions: ReactNode;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
-  const driveTime = listingDriveTime(lead);
-  const drives = shooterDrives(lead);
+  // Computed on the server (leads-data.ts): the markets index isn't available here.
+  const driveTime = lead.driveTime;
+  const drives = lead.shooterDrives;
   const [showOthers, setShowOthers] = useState(false);
   const name = agent?.name ?? agentName ?? "No agent listed";
   const total = others.length + 1;

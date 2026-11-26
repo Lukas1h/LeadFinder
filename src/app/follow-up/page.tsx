@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { listingCountsByAgent, listingDatesByAgent } from "@/app/agents/actions";
 import { AgentsSkeleton } from "@/app/agents/loading";
+import { getMarkets } from "@/lib/marketsData";
+import { withDriveLines } from "@/lib/driveLines";
 import { getFollowUpBoard } from "./data";
 import { buildFeeds, getOfferFeeds } from "./feeds";
 import { FollowUpList } from "./FollowUpList";
@@ -22,13 +24,25 @@ export default function FollowUpPage() {
 }
 
 async function FollowUpContent() {
-  const [board, offers, counts, dates] = await Promise.all([
+  const [board, offers, counts, dates, mk] = await Promise.all([
     getFollowUpBoard(),
     getOfferFeeds(),
     listingCountsByAgent(),
     listingDatesByAgent(),
+    getMarkets(),
   ]);
-  const feeds = buildFeeds(board, offers);
+  // Every feed listing gets its drive lines here, on the server, so the
+  // ListingRow cards and their modals show the same line as the Leads page.
+  const feeds = buildFeeds(board, offers).map((feed) => ({
+    ...feed,
+    groups: feed.groups.map((group) => ({
+      ...group,
+      items: group.items.map((item) => ({
+        ...item,
+        listing: item.listing ? withDriveLines(item.listing, mk) : null,
+      })),
+    })),
+  }));
 
   return (
     <>

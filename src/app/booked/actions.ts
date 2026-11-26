@@ -21,6 +21,8 @@ import { refreshBookingAirspace } from "@/lib/airspace";
 import { geocodeBooking } from "@/lib/geocode";
 import { loadBookingCosts } from "@/lib/finance/bookingCosts";
 import { shootersByBookingId } from "@/lib/shooterReads";
+import { getMarkets } from "@/lib/marketsData";
+import { withDriveLines } from "@/lib/driveLines";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { getOrAssignInvoiceNumber } from "@/lib/invoice";
 import { cancelSquareInvoice, syncSquareInvoice } from "@/lib/squareInvoice";
@@ -268,7 +270,8 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingR
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
   if (!booking) return null;
 
-  const [linkedListing, contact, lineItems, costsFor, shooter] = await Promise.all([
+  const [mk, linkedListing, contact, lineItems, costsFor, shooter] = await Promise.all([
+    getMarkets(),
     booking.listingId
       ? db.select().from(listings).where(eq(listings.id, booking.listingId)).then((r) => r[0] ?? null)
       : Promise.resolve(null),
@@ -299,7 +302,7 @@ export async function getBookingWithDetails(bookingId: string): Promise<BookingR
     address: linkedListing?.address ?? booking.address,
     city,
     state,
-    listing: linkedListing,
+    listing: linkedListing ? withDriveLines(linkedListing, mk) : null,
     jobDate: booking.jobDate,
     dateTentative: booking.dateTentative,
     stage: booking.stage,
@@ -354,7 +357,8 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
   const listingIds = [...new Set(rows.map((b) => b.listingId).filter((id): id is string => id != null))];
   const bookingIds = rows.map((b) => b.id);
 
-  const [linkedListings, lineItems, [agent], costsFor, shooterByBookingId] = await Promise.all([
+  const [mk, linkedListings, lineItems, [agent], costsFor, shooterByBookingId] = await Promise.all([
+    getMarkets(),
     listingIds.length > 0
       ? db.select().from(listings).where(inArray(listings.id, listingIds))
       : Promise.resolve([]),
@@ -393,7 +397,7 @@ export async function getAgentBookings(agentId: string): Promise<BookingWithDeta
       address: linkedListing?.address ?? b.address,
       city,
       state,
-      listing: linkedListing ?? null,
+      listing: linkedListing ? withDriveLines(linkedListing, mk) : null,
       jobDate: b.jobDate,
       dateTentative: b.dateTentative,
       stage: b.stage,

@@ -6,6 +6,10 @@ import { db } from "@/db";
 import { agents, listings, messagePresets, messagePresetVariants, messageSends } from "@/db/schema";
 import { sendEmail } from "@/lib/mailer";
 import { renderMessageBody, renderSubject } from "@/lib/messageTemplate";
+import { getMarkets } from "@/lib/marketsData";
+import { marketMessageContext } from "@/lib/areaPhrase";
+import { agentMarkets } from "@/lib/agentMarket";
+import type { MarketIndex } from "@/lib/markets";
 import { getFollowUpAfterDays } from "@/lib/settings";
 import { text, errorText, EMAIL_RE } from "./shared";
 import { normalizeEmail, normalizeName, normalizePhone } from "@/lib/normalize";
@@ -23,6 +27,8 @@ interface BulkSendVariant {
   body: string;
   type: (typeof messagePresets.$inferSelect)["type"];
   attachments: (typeof messagePresets.$inferSelect)["attachments"];
+  /** The market this variant is written for (null = regular wording/prices). */
+  market: string | null;
 }
 
 /**
@@ -34,6 +40,7 @@ interface BulkSendVariant {
  * data for two agents at the same brokerage to share one office line.
  */
 async function sendBulkTemplateEmail(
+  mk: MarketIndex,
   contact: { name: string; email: string; phone?: string },
   variant: BulkSendVariant,
   presetId: string,
@@ -52,10 +59,19 @@ async function sendBulkTemplateEmail(
   }
 
   const subject = renderSubject(variant.subject ?? "", name);
-  const body = renderMessageBody(variant.body, name, null);
+  // No listing here, so the variant's own market is the only market hint —
+  // a Portland variant brings Portland prices, a regular one the defaults.
+  const body = renderMessageBody(
+    variant.body,
+    name,
+    null,
+    null,
+    null,
+    marketMessageContext(mk, { city: null }, variant.market)
+  );
 
   try {
-    await sendEmail({ to: email, toName: name, subject, text: body, attachments: attachmentsForMarket(variant.attachments, null) });
+    await sendEmail({ to: email, toName: name, subject, text: body, attachments: attachmentsForMarket(variant.attachments, variant.market) });
   } catch (err) {
     return { name, email, status: "failed", reason: `SMTP send failed: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -107,7 +123,7 @@ export function registerMessagingTools(server: McpServer): void {
     {
       title: "List email templates",
       description:
-        "Lists every enabled email preset and its variants (subject/body, with {{firstName}} placeholders) plus any file attachments — pick one of these before calling send_agent_email.",
+        "Lists every enabled email preset and its variants (subject/body, with {{firstName}} and {{area}} placeholders plus the market's {{photoPrice}}/{{videoPrice}}/{{dronePrice}}/{{bundlePrice}} filled at send time) plus any file attachments — pick one of these before calling send_agent_email.",
       inputSchema: {},
     },
     async () => {
@@ -202,6 +218,7 @@ export function registerMessagingTools(server: McpServer): void {
           body: messagePresetVariants.body,
           type: messagePresets.type,
           attachments: messagePresets.attachments,
+          market: messagePresetVariants.market,
         })
         .from(messagePresetVariants)
         .innerJoin(messagePresets, eq(messagePresetVariants.presetId, messagePresets.id))
@@ -231,12 +248,27 @@ export function registerMessagingTools(server: McpServer): void {
       }
 
       const subject = subjectOverride ?? renderSubject(variant.subject ?? "", name);
-      const body = bodyOverride ?? renderMessageBody(variant.body, name, null);
+      // No listing: an agent on file brings their market's prices; otherwise
+      // the variant's own market is the only hint, else the defaults.
+      const mk = await getMarkets();
+      const market = existingAgent
+        ? (await agentMarkets([existingAgent.id])).get(existingAgent.id) ?? variant.market
+        : variant.market;
+      const body =
+        bodyOverride ??
+        renderMessageBody(
+          variant.body,
+          name,
+          null,
+          null,
+          null,
+          marketMessageContext(mk, { city: null }, market)
+        );
       if (!subject.trim()) return errorText("Subject is empty — pass subjectOverride or use a preset with a subject");
       if (!body.trim()) return errorText("Body is empty");
 
       try {
-        await sendEmail({ to: email, toName: name, subject, text: body, attachments: attachmentsForMarket(variant.attachments, null) });
+        await sendEmail({ to: email, toName: name, subject, text: body, attachments: attachmentsForMarket(variant.attachments, market) });
       } catch (err) {
         return errorText(`SMTP send failed: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -293,15 +325,17 @@ export function registerMessagingTools(server: McpServer): void {
           body: messagePresetVariants.body,
           type: messagePresets.type,
           attachments: messagePresets.attachments,
+          market: messagePresetVariants.market,
         })
         .from(messagePresetVariants)
         .innerJoin(messagePresets, eq(messagePresetVariants.presetId, messagePresets.id))
         .where(and(eq(messagePresetVariants.id, variantId), eq(messagePresetVariants.presetId, presetId)));
       if (!variant) return errorText("No such presetId/variantId pair");
 
+      const mk = await getMarkets();
       const results: BulkSendResult[] = [];
       for (const contact of contacts) {
-        results.push(await sendBulkTemplateEmail(contact, variant, presetId, variantId, skipAlreadyContacted));
+        results.push(await sendBulkTemplateEmail(mk, contact, variant, presetId, variantId, skipAlreadyContacted));
       }
 
       const sent = results.filter((r) => r.status === "sent").length;

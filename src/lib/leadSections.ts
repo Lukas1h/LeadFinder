@@ -13,7 +13,8 @@
 
 import { and, eq, inArray, max } from "drizzle-orm";
 import { db } from "@/db";
-import { marketFor } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import type { Market, MarketIndex } from "@/lib/markets";
 import { agentInteractions, agents, listings, messageSends, type Listing } from "@/db/schema";
 
 export type LeadSection = "photo" | "video" | "backup" | "texted" | "unlikely";
@@ -71,6 +72,13 @@ export interface LeadSectionInput {
   /** Where the listing is, for rules that apply in one market only (lib/markets.ts). */
   city?: string | null;
   state?: string | null;
+  /**
+   * The market key mk.marketFor() placed it in. Markets live in the database
+   * now, so this is handed in by whoever has the index; rules that apply in
+   * one market only (hasAssignedMediaInMarket) read it and are skipped when
+   * it's missing.
+   */
+  market?: Market | null;
   /** The attached agent's relationship status, when one is resolved. */
   relationshipStatus?: string | null;
   listedAt?: Date | null;
@@ -141,14 +149,21 @@ export function hasInHouseMedia(brokerName: string | null | undefined): boolean 
  * the Portland market: the same company's coast office (Netarts) and other
  * Berkshire Hathaway franchises aren't known to work that way. Unlike
  * hasInHouseMedia, these still sync in; they just aren't pitched.
+ *
+ * The market key comes from mk.marketFor() on the caller's side (the markets
+ * table is the source now); a fresh section decision without one skips the
+ * rule rather than guessing.
  */
 const PORTLAND_ASSIGNED_MEDIA_BROKER = /\bberkshire hathaway home\s?services (nw|northwest)\b/i;
 
-export function hasAssignedMediaInMarket(listing: Pick<LeadSectionInput, "brokerName" | "city" | "state">): boolean {
+export function hasAssignedMediaInMarket(
+  listing: Pick<LeadSectionInput, "brokerName">,
+  market: Market | null | undefined
+): boolean {
   return (
     !!listing.brokerName &&
     PORTLAND_ASSIGNED_MEDIA_BROKER.test(listing.brokerName) &&
-    marketFor({ city: listing.city ?? null, state: listing.state }) === "portland"
+    market === "portland"
   );
 }
 
@@ -166,7 +181,7 @@ export function isLeadUnlikely(listing: LeadSectionInput): boolean {
   if (hasNoAgent(listing)) return true;
   if (isBuilderListing(listing.brokerName)) return true;
   if (hasInHouseMedia(listing.brokerName)) return true;
-  if (hasAssignedMediaInMarket(listing)) return true;
+  if (hasAssignedMediaInMarket(listing, listing.market)) return true;
   // "ignored" is a dead end for outreach exactly like "declined" (they never
   // answered either text), but it is not a no: a reply still warms them up.
   return listing.relationshipStatus === "declined" || listing.relationshipStatus === "ignored";
@@ -218,9 +233,10 @@ export function leadSection(listing: LeadSectionInput): LeadSection {
 /** Convenience for a full listings row plus its resolved agent. */
 export function leadSectionForListing(
   listing: Listing,
-  relationshipStatus?: string | null
+  relationshipStatus?: string | null,
+  market?: Market | null
 ): LeadSection {
-  return leadSection({ ...listing, relationshipStatus });
+  return leadSection({ ...listing, relationshipStatus, market });
 }
 
 /** Display order on the Leads page, most actionable first. */
@@ -238,8 +254,12 @@ export const LEAD_SECTION_ORDER: LeadSection[] = ["photo", "video", "backup", "t
  * leads page, so callers hand over every id they just touched. Returns every
  * listing's settled section, so the Leads page can bucket straight from it.
  */
-export async function refreshLeadSections(ids: string[]): Promise<Map<string, LeadSection>> {
+export async function refreshLeadSections(ids: string[], mk?: MarketIndex): Promise<Map<string, LeadSection>> {
   if (ids.length === 0) return new Map();
+  // The index is passed in when the caller already has one (the Leads page);
+  // otherwise read it here. getMarkets() is React-cached, so this is one read
+  // per request however many callers ask.
+  const index = mk ?? (await getMarkets());
   const rows = await db
     .select({
       id: listings.id,
@@ -272,6 +292,7 @@ export async function refreshLeadSections(ids: string[]): Promise<Map<string, Le
     id: r.id,
     section: leadSection({
       ...r,
+      market: index.marketFor({ city: r.city, state: r.state }),
       relationshipStatus: r.relationshipStatus,
       lastContactedAt: r.agentId ? lastContact.get(r.agentId) ?? null : null,
     }),

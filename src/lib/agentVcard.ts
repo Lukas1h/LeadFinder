@@ -1,4 +1,4 @@
-import type { ShooterMarket } from "@/lib/markets";
+import type { MarketDef } from "@/lib/markets";
 import { MAIN_SITE_URL } from "@/lib/siteUrls";
 
 export const LUKAS_PHONE = "+15414303372";
@@ -6,10 +6,12 @@ export const LUKAS_PHONE = "+15414303372";
 /**
  * Lukas's own contact card, as the agent page's "Save contact" hands it out.
  * `market` picks the market line and address: a shooter-market agent gets a
- * card that says so (markets.ts `vcard`), everyone else (null) gets the
- * Eugene & Roseburg one.
+ * card that says so (the market row's `vcard`, lib/markets.ts), everyone else
+ * (null) gets the Eugene & Roseburg one. A market with no vcard yet falls back
+ * to that same card rather than half a note.
  */
-export function lukasVcard(market: ShooterMarket | null): string {
+export function lukasVcard(market: MarketDef | null): string {
+  const card = market?.vcard ?? null;
   return [
     "BEGIN:VCARD",
     "VERSION:3.0",
@@ -22,9 +24,9 @@ export function lukasVcard(market: ShooterMarket | null): string {
     `TEL;TYPE=CELL:${LUKAS_PHONE}`,
     "EMAIL;TYPE=WORK:lukas@lukashahn.media",
     `URL:${MAIN_SITE_URL}`,
-    market ? `ADR;TYPE=WORK:;;;${market.vcard.city};OR;;USA` : "ADR;TYPE=WORK:;;;Eugene;OR;;USA",
-    market
-      ? `NOTE:Real estate photography\\, walkthrough video & drone. ${market.vcard.note}`
+    card ? `ADR;TYPE=WORK:;;;${card.city};${market?.state ?? "OR"};;USA` : "ADR;TYPE=WORK:;;;Eugene;OR;;USA",
+    card
+      ? `NOTE:Real estate photography\\, walkthrough video & drone. ${card.note}`
       : "NOTE:Real estate photography\\, walkthrough video & drone. Eugene & Roseburg.",
     "END:VCARD",
   ].join("\r\n");

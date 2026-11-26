@@ -17,7 +17,8 @@ import { LeadsSkeleton } from "./loading";
 import Link from "next/link";
 import { KnownAgentLeads } from "./KnownAgentLeads";
 import { FAR_SECTION_LABEL, getLeadsBoard, type LeadGroup } from "./leads-data";
-import { MARKET_LABELS, MARKET_ORDER, parseMarket } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import { UNASSIGNED } from "@/lib/markets";
 
 // Server Action timeouts are controlled by the maxDuration of the page
 // they're invoked from — triggerManualSync (RefreshButton's action, in
@@ -69,9 +70,12 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
   const { show, market: marketParam } = await searchParams;
   // Sections asked for in full: ?show=backup, ?show=backup,unlikely.
   const shown = new Set(([] as string[]).concat(show ?? []).flatMap((s) => s.split(",")).filter(Boolean));
+  // Markets come from the database now, so the tabs and the ?market= value
+  // are read off one index built for this request.
+  const mk = await getMarkets();
   // Local is the default tab: most of his work is there, and it keeps the
   // bare "/" he has bookmarked behaving as it always has.
-  const market = parseMarket(marketParam) ?? "local";
+  const market = mk.parse(marketParam) ?? "local";
 
   // Cards show a handful of each listing's photos; the listing dialog fetches
   // the whole gallery when it opens (see ListingModal).
@@ -80,6 +84,10 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
       cardPhotosOnly: true,
       market,
     });
+
+  // One tab per live market, plus "Other" only when some lead is out of state
+  // and in none of them (the count is what tells it apart from a quiet tab).
+  const tabs = [...mk.order, ...(marketCounts[UNASSIGNED] > 0 ? [UNASSIGNED] : [])];
 
   // "Near your shoots" pulls cards out of their normal sections (they stay in
   // `sections` for the iPhone API) and puts the most recently shot first.
@@ -195,7 +203,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
       {/* One tab per market. The counts are over every market, so a quiet tab
           still shows where the work is. */}
       <nav aria-label="Market" className="mb-6 flex rounded-lg border bg-muted p-1 text-sm">
-        {MARKET_ORDER.map((m) => (
+        {tabs.map((m) => (
           <Link
             key={m}
             href={`/?market=${m}`}
@@ -206,7 +214,7 @@ async function LeadsContent({ searchParams }: { searchParams: LeadsSearchParams 
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {MARKET_LABELS[m]} ({marketCounts[m]})
+            {mk.label(m)} ({marketCounts[m]})
             {newAgentCounts[m] > 0 && (
               <span
                 title={`${newAgentCounts[m]} brand-new agent${newAgentCounts[m] === 1 ? "" : "s"} today`}

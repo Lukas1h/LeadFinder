@@ -8,6 +8,7 @@ import { UserPlus, Phone, PhoneIncoming, MessageCircle, MessagesSquare, Mail, Se
 import { getAgentTimeline, startPendingInteraction, type TimelineItem } from "./interactionActions";
 import { AddInteractionDialog } from "./AddInteractionDialog";
 import type { Agent, AgentRelationshipStatus, Listing } from "@/db/schema";
+import type { WithDriveLines } from "@/lib/driveLines";
 import { formatDate, formatPrice } from "@/lib/format";
 import { telUrl, smsUrl } from "@/lib/sms";
 import { ListingRow } from "@/app/ListingRow";
@@ -326,7 +327,7 @@ export function AgentDetailDialog({
   // Keyed by agent rather than paired with a separate loading flag: the flag
   // version needed a synchronous reset on every open, and a slow response for a
   // previously-opened agent could land after this one's and overwrite it.
-  const [loaded, setLoaded] = useState<{ agentId: string; items: Listing[] } | null>(null);
+  const [loaded, setLoaded] = useState<{ agentId: string; items: WithDriveLines<Listing>[] } | null>(null);
 
   useEffect(() => {
     if (!open) return;

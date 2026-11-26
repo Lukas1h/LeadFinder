@@ -4,6 +4,7 @@ import { deleteBooking, getBookingWithDetails, getGalleryActivity, setBookingSho
 import { applyDateTentative, setBookingStage } from "@/lib/bookingStage";
 import { BOOKING_STAGES, isBookingStage } from "@/lib/bookingStages";
 import { setBookingShooter } from "@/lib/shooters";
+import { getMarkets } from "@/lib/marketsData";
 import { bookingJson } from "../../serialize";
 import {
   BadBody,
@@ -28,8 +29,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const booking = await getBookingWithDetails(id);
   if (!booking) return notFound();
+  const mk = await getMarkets();
 
-  return NextResponse.json({ booking: bookingJson(booking), galleryActivity: await getGalleryActivity(id) });
+  return NextResponse.json({ booking: bookingJson(booking, mk), galleryActivity: await getGalleryActivity(id) });
 }
 
 /**
@@ -55,6 +57,7 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
 
   const current = await getBookingWithDetails(id);
   if (!current) return notFound();
+  const mk = await getMarkets();
 
   const body = await readJson(req);
   if (body.stage !== undefined && !isBookingStage(body.stage)) {
@@ -68,13 +71,13 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
   if (typeof body.showcase === "boolean" && Object.keys(body).length === 1) {
     await setBookingShowcase(id, body.showcase);
     const toggled = await getBookingWithDetails(id);
-    return NextResponse.json({ ok: true, booking: toggled ? bookingJson(toggled) : null });
+    return NextResponse.json({ ok: true, booking: toggled ? bookingJson(toggled, mk) : null });
   }
   // A bare stage move (the app's "Confirm date") skips the full rewrite.
   if (isBookingStage(body.stage) && Object.keys(body).length === 1) {
     await setBookingStage(id, body.stage);
     const moved = await getBookingWithDetails(id);
-    return NextResponse.json({ ok: true, booking: moved ? bookingJson(moved) : null });
+    return NextResponse.json({ ok: true, booking: moved ? bookingJson(moved, mk) : null });
   }
   const text = (field: string, existing: string | null | undefined) =>
     body[field] === undefined ? (existing ?? "") : (optionalString(body[field], field) ?? "");
@@ -124,7 +127,7 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
   }
 
   const fresh = await getBookingWithDetails(id);
-  return NextResponse.json({ ok: true, booking: fresh ? bookingJson(fresh) : null });
+  return NextResponse.json({ ok: true, booking: fresh ? bookingJson(fresh, mk) : null });
 });
 
 /**

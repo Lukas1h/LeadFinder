@@ -1,7 +1,8 @@
 import { db } from "@/db";
 import { agents } from "@/db/schema";
 import { inArray, sql } from "drizzle-orm";
-import { marketFor, SHOOTER_MARKETS, type Market } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import type { Market } from "@/lib/markets";
 
 /** The area code of a phone number as stored (any formatting, optional leading 1). */
 function areaCode(phone: string | null): string | null {
@@ -23,18 +24,20 @@ function areaCode(phone: string | null): string | null {
  * 2. agents.homeCity, the city most of their tracked listings are in (see
  *    lib/agentHomeCity.ts). Agents carry no state — everyone on file is in
  *    Oregon or Washington, and the WA cases have a listing anyway.
- * 3. The phone's area code: the first shooter market listing it in its
- *    `areaCodes` (503/971/360 is Portland), anything else (including no
- *    phone) is regional. Never local — without an address,
- *    claiming someone is in the home ring is the guess most likely to be
- *    wrong.
+ * 3. The phone's area code: the first shooter market (any status) listing it
+ *    in its `areaCodes` (503/971/360 is Portland), anything else (including
+ *    no phone) is regional. Never local — without an address, claiming
+ *    someone is in the home ring is the guess most likely to be wrong.
  *
- * Two queries (one DISTINCT ON over listings, one over agents). Server-only.
+ * Two queries (one DISTINCT ON over listings, one over agents), plus the
+ * markets (getMarkets, cached per request). Server-only.
  */
 export async function agentMarkets(ids: string[]): Promise<Map<string, Market>> {
   const unique = [...new Set(ids)];
   const byAgent = new Map<string, Market>();
   if (unique.length === 0) return byAgent;
+
+  const mk = await getMarkets();
 
   const [latest, known] = await Promise.all([
     // DISTINCT ON needs its expressions to match the leftmost ORDER BY, which
@@ -72,7 +75,7 @@ export async function agentMarkets(ids: string[]): Promise<Map<string, Market>> 
     if (listing) {
       byAgent.set(
         id,
-        marketFor({
+        mk.marketFor({
           city: listing.city,
           state: listing.state,
           lat: listing.lat,
@@ -84,11 +87,13 @@ export async function agentMarkets(ids: string[]): Promise<Map<string, Market>> 
     }
     const agent = agentById.get(id);
     if (agent?.homeCity) {
-      byAgent.set(id, marketFor({ city: agent.homeCity }));
+      byAgent.set(id, mk.marketFor({ city: agent.homeCity }));
       continue;
     }
     const code = areaCode(agent?.phone ?? null);
-    const byCode = code ? SHOOTER_MARKETS.find((m) => m.areaCodes?.includes(code)) : undefined;
+    // Any status: a paused market's agents still belong to it, so the funnel
+    // keeps its history (lib/markets.ts status).
+    const byCode = code ? mk.shooterMarkets.find((m) => m.areaCodes.includes(code)) : undefined;
     byAgent.set(id, byCode?.key ?? "regional");
   }
   return byAgent;

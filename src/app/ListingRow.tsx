@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { Listing } from "@/db/schema";
 import { formatPrice, formatDate } from "@/lib/format";
 import { StatusBadge } from "./badges";
 import { ListingModal } from "./ListingModal";
+import type { LeadListing } from "./leads-data";
 
 /**
  * Compact clickable row for referencing a listing from elsewhere (an
@@ -13,7 +13,7 @@ import { ListingModal } from "./ListingModal";
  * so every "here's the listing this thing is about" reference looks and
  * behaves the same.
  */
-export function ListingRow({ listing }: { listing: Listing }) {
+export function ListingRow({ listing }: { listing: LeadListing }) {
   const [open, setOpen] = useState(false);
 
   return (

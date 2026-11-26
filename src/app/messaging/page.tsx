@@ -5,6 +5,7 @@ import { isNull } from "drizzle-orm";
 import { messagePresets, messagePresetVariants, PRESET_TYPES, type PresetType, type MessageChannel } from "@/db/schema";
 import { ensureDefaultPresets, ensureAiDraftPresets } from "@/app/messageActions";
 import { ensureDefaultEmailPreset } from "@/app/composeEmailActions";
+import { getMarkets } from "@/lib/marketsData";
 import { computeVariantStats, computeMessagingStats, getRecentMessageSends } from "@/lib/messageStats";
 import { PresetCard } from "./PresetCard";
 import { PresetForm } from "./PresetForm";
@@ -39,13 +40,14 @@ async function MessagingContent() {
   await Promise.all(PRESET_TYPES.map((type) => ensureAiDraftPresets(type)));
   await ensureDefaultEmailPreset();
 
-  const [storedPresets, variants, statsByVariant, messagingStats, recentSends, goal] = await Promise.all([
+  const [storedPresets, variants, statsByVariant, messagingStats, recentSends, goal, mk] = await Promise.all([
     db.select().from(messagePresets).where(isNull(messagePresets.archivedAt)).orderBy(messagePresets.createdAt),
     db.select().from(messagePresetVariants).orderBy(messagePresetVariants.createdAt),
     computeVariantStats(),
     computeMessagingStats(),
     getRecentMessageSends(),
     computeGoalProgress(),
+    getMarkets(),
   ]);
 
   // The cards only name the attachments; the bytes (megabytes of photos and
@@ -67,6 +69,9 @@ async function MessagingContent() {
   const quickActionChoices = presets
     .filter((p) => !p.aiGenerated && !p.protected && p.enabled && (p.type === "follow_up" || p.quickActionOnly))
     .map((p) => ({ id: p.id, name: p.name, channel: p.channel }));
+  // Every market, any status: a paused market's variants still show their
+  // label, and the dropdown still lets a variant keep its market.
+  const markets = mk.all.map((m) => ({ key: m.key, label: m.label }));
 
   return (
     <>
@@ -102,6 +107,7 @@ async function MessagingContent() {
         variantsByPreset={variantsByPreset}
         statsByVariant={statsByVariant}
         quickActionChoices={quickActionChoices}
+        markets={markets}
       />
 
       <Separator className="my-8" />
@@ -112,6 +118,7 @@ async function MessagingContent() {
         presets={emailPresets}
         variantsByPreset={variantsByPreset}
         statsByVariant={statsByVariant}
+        markets={markets}
       />
     </>
   );
@@ -124,6 +131,7 @@ function TemplateSection({
   variantsByPreset,
   statsByVariant,
   quickActionChoices,
+  markets,
 }: {
   title: string;
   channel: MessageChannel;
@@ -132,6 +140,8 @@ function TemplateSection({
   statsByVariant: Awaited<ReturnType<typeof computeVariantStats>>;
   /** For SMS presets' quick actions. */
   quickActionChoices?: { id: string; name: string; channel: MessageChannel }[];
+  /** Every market (any status), for the variant "Market" dropdown and badges. */
+  markets: { key: string; label: string }[];
 }) {
   return (
     <div>
@@ -172,6 +182,7 @@ function TemplateSection({
                     key={preset.id}
                     preset={preset}
                     variants={variantsByPreset[preset.id] ?? []}
+                    markets={markets}
                     statsByVariant={statsByVariant}
                     quickActionChoices={quickActionChoices}
                   />

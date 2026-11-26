@@ -334,14 +334,10 @@ struct HomeView: View {
                 if let split = appState.messages.value?.funnel {
                     Divider()
                     if split.byMarket != nil {
-                        Picker("Market", selection: $funnelMarket) {
-                            Text("All").tag("all")
-                            Text("Local").tag("local")
-                            Text("Regional").tag("regional")
-                            Text("Portland").tag("portland")
-                            Text("Coast").tag("central_coast")
-                        }
-                        .pickerStyle(.segmented)
+                        funnelMarketPicker(Self.funnelMarketOptions(
+                            keys: split.byMarket.map { Array($0.keys) } ?? [],
+                            markets: appState.leadMarkets
+                        ))
                     }
                     let market = split.byMarket?[funnelMarket]
                     let cold = market?.cold ?? split.cold
@@ -382,6 +378,54 @@ struct HomeView: View {
     }
 
     /// Whole percents read faster at a glance: "17%".
+    /// The funnel split's markets, in the Leads tab's order (labels from
+    /// the last leads response; unknown keys capitalised, appended sorted).
+    private static func funnelMarketOptions(keys: [String], markets: [LeadsResponse.Market]) -> [(key: String, label: String)] {
+        let known = ["local": "Local", "regional": "Regional", "portland": "Portland", "central_coast": "Coast"]
+        let order = markets.map(\.key) + ["local", "regional", "portland", "central_coast"]
+        let keySet = Set(keys).subtracting(["all"])
+        let sorted = keySet.sorted { a, b in
+            let ia = order.firstIndex(of: a) ?? Int.max, ib = order.firstIndex(of: b) ?? Int.max
+            return ia != ib ? ia < ib : a < b
+        }
+        return sorted.map { key in
+            let label = markets.first(where: { $0.key == key })?.label
+                ?? known[key]
+                ?? key.replacingOccurrences(of: "_", with: " ").capitalized
+            return (key, label)
+        }
+    }
+
+    /// All + each market: segmented up to four markets, a menu beyond.
+    @ViewBuilder
+    private func funnelMarketPicker(_ options: [(key: String, label: String)]) -> some View {
+        let selection = Binding(
+            get: { funnelMarket == "all" || options.contains(where: { $0.key == funnelMarket }) ? funnelMarket : "all" },
+            set: { funnelMarket = $0 }
+        )
+        if options.count <= 4 {
+            Picker("Market", selection: selection) {
+                Text("All").tag("all")
+                ForEach(options, id: \.key) { Text($0.label).tag($0.key) }
+            }
+            .pickerStyle(.segmented)
+        } else {
+            HStack {
+                Text("Market")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+                Spacer()
+                Picker("Market", selection: selection) {
+                    Text("All").tag("all")
+                    Divider()
+                    ForEach(options, id: \.key) { Text($0.label).tag($0.key) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+            }
+        }
+    }
+
     private static func percent(_ rate: Double) -> String {
         "\(Int((rate * 100).rounded()))%"
     }

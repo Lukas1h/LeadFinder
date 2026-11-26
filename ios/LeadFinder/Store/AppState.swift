@@ -19,6 +19,11 @@ final class Resource<Value: Decodable & Sendable> {
     private let key: CacheKey
     private var hasLoaded = false
 
+    /// Fired every time a load sets `value`, cached copy or network answer, so
+    /// whoever owns the resource can follow what the server sent without
+    /// polling. AppState uses it to keep the market list current.
+    var onValueLoaded: ((Value) -> Void)?
+
     init(client: APIClient = .shared, path: String, key: CacheKey) {
         self.client = client
         self.path = path
@@ -40,6 +45,7 @@ final class Resource<Value: Decodable & Sendable> {
         if let cached = try? await client.cached(path, key: key, as: Value.self) {
             value = cached.value
             fetchedAt = cached.fetchedAt
+            onValueLoaded?(cached.value)
         }
 
         isRefreshing = true
@@ -49,6 +55,7 @@ final class Resource<Value: Decodable & Sendable> {
             value = fetched.value
             fetchedAt = fetched.fetchedAt
             error = nil
+            onValueLoaded?(fetched.value)
         } catch let apiError as APIError {
             error = apiError.errorDescription
         } catch is CancellationError {
@@ -67,32 +74,55 @@ final class Resource<Value: Decodable & Sendable> {
 @MainActor
 @Observable
 final class AppState {
-    /// The Leads tab, one board per market (server's lib/markets.ts), each
-    /// cached on its own so switching markets is instant. `leads` is whichever
-    /// one is picked; the pick survives relaunches.
-    let leadsLocal = Resource<LeadsResponse>(path: "api/app/v1/leads?market=local", key: .leads)
-    let leadsRegional = Resource<LeadsResponse>(path: "api/app/v1/leads?market=regional", key: .leadsRegional)
-    let leadsPortland = Resource<LeadsResponse>(path: "api/app/v1/leads?market=portland", key: .leadsPortland)
-    let leadsCentralCoast = Resource<LeadsResponse>(path: "api/app/v1/leads?market=central_coast", key: .leadsCentralCoast)
+    /// The Leads tab, one board per market, each cached on its own so switching
+    /// markets is instant. Markets live in the server's database now, so the
+    /// boards aren't a fixed list: one is made the first time its market is
+    /// asked for. `leads` is whichever one is picked; the pick survives
+    /// relaunches.
+    private var leadResources: [String: Resource<LeadsResponse>] = [:]
+
+    /// The market list the server last sent, from whichever board loaded last,
+    /// so views can draw the picker's tabs without knowing the markets in code.
+    private(set) var leadMarkets: [LeadsResponse.Market] = []
+
     var leadsMarket: String = UserDefaults.standard.string(forKey: "leadsMarket") ?? "local" {
         didSet { UserDefaults.standard.set(leadsMarket, forKey: "leadsMarket") }
     }
+
+    /// The board for one market, created on first use. The key is the server's
+    /// slug ("central_coast"), so it's percent-encoded into the query.
+    func leadsResource(for marketKey: String) -> Resource<LeadsResponse> {
+        if let existing = leadResources[marketKey] { return existing }
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-_.~")
+        let encoded = marketKey.addingPercentEncoding(withAllowedCharacters: allowed) ?? marketKey
+        let resource = Resource<LeadsResponse>(
+            path: "api/app/v1/leads?market=\(encoded)",
+            key: .leadsMarket(marketKey)
+        )
+        // Every market's response carries the whole market list, so the last
+        // board to land keeps `leadMarkets` current as markets are added or
+        // paused on the web.
+        resource.onValueLoaded = { [weak self] response in
+            guard let markets = response.markets, !markets.isEmpty else { return }
+            self?.leadMarkets = markets
+        }
+        leadResources[marketKey] = resource
+        return resource
+    }
+
     /// Loads the markets not on screen (cached first, then the network), so a
     /// tab switch has cards to show immediately.
     func preloadLeadMarkets() async {
-        for resource in [leadsLocal, leadsRegional, leadsPortland, leadsCentralCoast] where resource !== leads {
-            await resource.load()
+        // The server's list once any board has loaded one; before that, the two
+        // markets every server has had.
+        let keys = leadMarkets.isEmpty ? ["local", "regional"] : leadMarkets.map(\.key)
+        for key in keys where key != leadsMarket {
+            await leadsResource(for: key).load()
         }
     }
 
-    var leads: Resource<LeadsResponse> {
-        switch leadsMarket {
-        case "regional": leadsRegional
-        case "portland": leadsPortland
-        case "central_coast": leadsCentralCoast
-        default: leadsLocal
-        }
-    }
+    var leads: Resource<LeadsResponse> { leadsResource(for: leadsMarket) }
     let followUp = Resource<FollowUpResponse>(path: "api/app/v1/follow-up", key: .followUp)
     let schedule = Resource<ScheduleResponse>(path: "api/app/v1/schedule", key: .schedule)
     let bookings = Resource<BookingsResponse>(path: "api/app/v1/bookings", key: .bookings)

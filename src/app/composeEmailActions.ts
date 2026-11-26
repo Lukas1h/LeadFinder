@@ -1,7 +1,9 @@
 "use server";
 
 import { attachmentsForMarket } from "@/lib/attachments";
-import { marketFor, variantsForMarket } from "@/lib/markets";
+import { variantsForMarket, type MarketIndex } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import { marketMessageContext } from "@/lib/areaPhrase";
 import { db } from "@/db";
 import {
   agents,
@@ -196,7 +198,8 @@ export async function getComposeEmailOptions(listingContext?: {
 
   // A listing in a market whose template has variants of its own gets those
   // (the Portland prices and pricing sheet); Compose, with no listing, the regular ones.
-  const listingMarket = listing ? marketFor(listing) : null;
+  const mk = await getMarkets();
+  const listingMarket = listing ? mk.marketFor(listing) : null;
   const presets: PresetOption[] = Array.from(rowsByPreset.values()).flatMap((all) => {
     const group = variantsForMarket(all, listingMarket);
     if (group.length === 0) return [];
@@ -219,7 +222,20 @@ export async function getComposeEmailOptions(listingContext?: {
       // changes instead. With listingContext, render against the actual
       // agent/listing now, same as getMessageOptions' SMS path.
       text: listingContext
-        ? renderMessageBody(picked.body, listingContext.agentName, listingContext.address, listingContext.city)
+        ? renderMessageBody(
+            picked.body,
+            listingContext.agentName,
+            listingContext.address,
+            listingContext.city,
+            null,
+            // Same market the variant was picked for (the listing's, else the
+            // city's), so wording and prices agree.
+            marketMessageContext(
+              mk,
+              { city: listingContext.city, state: listing?.state ?? null },
+              listingMarket
+            )
+          )
         : picked.body,
       subject: listingContext ? renderSubject(picked.subject ?? "", listingContext.agentName) : picked.subject ?? "",
       attachments: attachmentsForMarket(picked.attachments, picked.market),
@@ -289,7 +305,7 @@ export async function draftAiEmailPresetOption(
   const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
   if (!listing) return null;
   const ageDays = listingAgeDays(listing.listedAt, listing.foundAt);
-  return buildAiEmailDraftOption(listingId, type, listing, ageDays, instruction);
+  return buildAiEmailDraftOption(listingId, type, listing, ageDays, await getMarkets(), instruction);
 }
 
 /**
@@ -302,6 +318,7 @@ async function buildAiEmailDraftOption(
   type: PresetType,
   listing: Listing,
   ageDays: number,
+  mk: MarketIndex,
   instruction?: string
 ): Promise<PresetOption | null> {
   const [preset] = await db
@@ -371,6 +388,7 @@ async function buildAiEmailDraftOption(
     listing,
     agent,
     instruction,
+    mk,
   });
 
   if (!draftOutput) return null;

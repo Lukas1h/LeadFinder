@@ -14,6 +14,7 @@ import {
   ListOrdered,
 } from "lucide-react";
 import type { Agent, Listing } from "@/db/schema";
+import type { LeadListing } from "../leads-data";
 import { LeadCard } from "../LeadCard";
 import { PipelineActions } from "../PipelineActions";
 import {
@@ -59,7 +60,8 @@ export function PipelineList({
   followUpAfterDays,
   queuedListingIds,
 }: {
-  listings: Listing[];
+  /** Full rows plus the drive lines their cards show, computed on the server (lib/driveLines.ts). */
+  listings: LeadListing[];
   agentByPhone: Record<string, Agent>;
   agentByName: Record<string, Agent>;
   agentById: Record<string, Agent>;
@@ -141,7 +143,7 @@ export function PipelineList({
   const nothingFound = filtered.length === 0 && listings.length > 0;
 
   function card(
-    lead: Listing,
+    lead: LeadListing,
     options?: {
       showDaysSinceContact?: boolean;
       showStatusBadge?: boolean;

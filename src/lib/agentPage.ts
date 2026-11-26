@@ -54,10 +54,13 @@ export const AGENT_PAGE_PHOTOS: AgentPagePhoto[] = [
   ["pf-17", "Aerial drone view of house and fenced acreage surrounded by autumn woods"],
 ].map(([key, alt]) => ({ key, src: `${PF}${key}.jpg`, alt }));
 
-// Samples of the Portland shooter's own work (Lukas, 2026-11-20): the last
-// small row of the portfolio on Portland-market pages, each photo carrying
-// his name tucked tiny and slightly see-through into its corner — a credit
-// that doesn't interrupt the page. Chris's full-size files from
+// SEED DATA ONLY: scripts/seed-markets.mts copies these into the Portland
+// shooter's shooters.portfolio_photos, and the agent page now reads the photos
+// from the market's shooters (lib/markets.ts) instead of this constant. Kept
+// so re-running the seed keeps Chris's samples.
+// Samples of the Portland shooter's own work (Lukas, 2026-11-20), each photo
+// carrying his name tucked tiny and slightly see-through into its corner — a
+// credit that doesn't interrupt the page. Chris's full-size files from
 // longlightproductions.com (his site's /images/portfolio/…, not the -sm
 // thumbs), kept byte-for-byte as he published them, never re-encoded:
 // chris-01 = hawthorne-portland-classic-box-08, chris-02 =

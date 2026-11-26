@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAppAuth } from "@/lib/appApiAuth";
 import { loadScheduleItems } from "@/lib/scheduleItems";
 import { todayScheduleDate } from "@/lib/schedule";
+import { getMarkets } from "@/lib/marketsData";
 import { listingJson } from "../serialize";
 
 /**
@@ -15,13 +16,13 @@ export async function GET(req: Request) {
   if (denied) return denied;
 
   const today = todayScheduleDate();
-  const items = await loadScheduleItems(today);
+  const [items, mk] = await Promise.all([loadScheduleItems(today), getMarkets()]);
 
   return NextResponse.json({
     today,
     items: items.map((item) => ({
       ...item,
-      listing: item.listing ? listingJson(item.listing, "first") : null,
+      listing: item.listing ? listingJson(item.listing, "first", mk) : null,
     })),
   });
 }

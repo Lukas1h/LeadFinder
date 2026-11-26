@@ -2,7 +2,9 @@ import { db } from "@/db";
 import { agentInteractions, agents, messagePresets, messagePresetVariants, messageSends } from "@/db/schema";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { scoreAgent } from "@/lib/agentBadge";
+import { marketMessageContext } from "@/lib/areaPhrase";
 import { renderMessageBody } from "@/lib/messageTemplate";
+import { getMarkets } from "@/lib/marketsData";
 import { loadContactHistory, shortDate, volumeLine } from "./shared";
 import type { FeedGroup, FeedItem } from "./types";
 
@@ -39,7 +41,8 @@ export async function getDroneBookingGroup(): Promise<FeedGroup> {
   const ids = known.map((a) => a.id);
   const now = Date.now();
 
-  const [texts, smsSends, [template], history] = await Promise.all([
+  const [mk, texts, smsSends, [template], history] = await Promise.all([
+    getMarkets(),
     db
       .select({ agentId: agentInteractions.agentId, outcome: agentInteractions.outcome, feed: agentInteractions.followUpFeed })
       .from(agentInteractions)
@@ -80,11 +83,14 @@ export async function getDroneBookingGroup(): Promise<FeedGroup> {
       continue;
     }
     const lastIn = history.lastIn.get(agent.id) ?? 0;
+    // No listing on this feed, so the agent's own town places the text: its
+    // market's {{area}} wording and prices (lib/areaPhrase.ts).
+    const place = { city: agent.homeCity ?? null };
     items.push({
       agent,
       lastReplyAt: lastIn ? new Date(lastIn) : null,
       label: [last ? `Last in touch ${shortDate(new Date(last))}` : null, volumeLine(agent)].filter(Boolean).join(" · "),
-      suggestion: renderMessageBody(body, agent.name, null),
+      suggestion: renderMessageBody(body, agent.name, null, place.city, null, marketMessageContext(mk, place)),
       secondText: template?.secondMessage ?? null,
       listing: null,
       editorHref: null,

@@ -21,6 +21,8 @@ import { getFollowUpBoard } from "@/app/follow-up/data";
 import { FOLLOW_UP_SNOOZE_DAYS } from "@/app/follow-up/snooze";
 import { normalizePhone, normalizeEmail, normalizeName, EMAIL_RE, hasValidPhoneDigitCount } from "@/lib/normalize";
 import { resolveAgentId, setAgentRelationshipStatus } from "@/lib/agentIdentity";
+import { getMarkets } from "@/lib/marketsData";
+import { addDriveLines, type WithDriveLines } from "@/lib/driveLines";
 
 /**
  * Idempotent self-heal: gives every listing that has agent details but no
@@ -568,13 +570,20 @@ export async function getAgentSendHistory(agentId: string): Promise<AgentSendHis
  * load, to render a list that shows only an address and a price, and only for
  * the one agent whose dialog is actually open. Same shape of unbounded fetch
  * that ran this app's database transfer quota out once already.
+ *
+ * The drive lines are attached here, on the server: the dialog's ListingRow
+ * opens ListingModal, which can't build the markets index itself.
  */
-export async function getAgentListings(agentId: string): Promise<Listing[]> {
-  return db
-    .select()
-    .from(listings)
-    .where(eq(listings.agentId, agentId))
-    .orderBy(desc(sql`coalesce(${listings.listedAt}, ${listings.foundAt})`));
+export async function getAgentListings(agentId: string): Promise<WithDriveLines<Listing>[]> {
+  const [mk, rows] = await Promise.all([
+    getMarkets(),
+    db
+      .select()
+      .from(listings)
+      .where(eq(listings.agentId, agentId))
+      .orderBy(desc(sql`coalesce(${listings.listedAt}, ${listings.foundAt})`)),
+  ]);
+  return addDriveLines(rows, mk);
 }
 
 /**

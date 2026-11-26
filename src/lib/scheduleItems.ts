@@ -1,6 +1,8 @@
 import { db } from "@/db";
 import { agents, bookings, listings, reminders } from "@/db/schema";
 import { and, eq, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { getMarkets } from "@/lib/marketsData";
+import { withDriveLines } from "@/lib/driveLines";
 import {
   compareScheduleItems,
   hoursAgo,
@@ -22,7 +24,9 @@ export async function loadScheduleItems(today: string): Promise<ScheduleItem[]> 
   // lower bound: a day back) is filtered precisely by Pacific date below.
   const bookingCutoff = hoursAgo(36);
 
-  const [reminderRows, bookingRows, followUpRows] = await Promise.all([
+  const [mk, reminderRows, bookingRows, followUpRows] = await Promise.all([
+    // The markets index, for the drive lines a follow-up's ListingModal shows.
+    getMarkets(),
     // Open reminders on any date (past ones show as overdue), plus done ones
     // from today on so checking one off doesn't make it vanish mid-day.
     db
@@ -140,7 +144,7 @@ export async function loadScheduleItems(today: string): Promise<ScheduleItem[]> 
       done: false,
       reminderId: null,
       listingId: l.id,
-      listing: l,
+      listing: withDriveLines(l, mk),
     });
   }
 

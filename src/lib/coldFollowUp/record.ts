@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import { getMarkets } from "@/lib/marketsData";
 import { messageSends } from "@/db/schema";
 import { ENABLED_COLD_TRIGGERS } from "./pool";
 import { getColdFollowUpCandidates } from "./triggers";
@@ -37,12 +38,13 @@ export async function recordColdFollowUpSend(agentId: string, feedKey: string): 
   const candidate = candidates.find((c) => c.agent.id === agentId);
   if (!candidate) return null;
 
-  const [segments, templates, presets] = await Promise.all([
+  const [segments, templates, presets, mk] = await Promise.all([
     loadAgentSegments([agentId]),
     loadColdTemplates(),
     loadColdPresetIds(),
+    getMarkets(),
   ]);
-  const { text1, text2, pitch } = renderColdTexts(candidate, segments.get(agentId), templates);
+  const { text1, text2, pitch } = renderColdTexts(candidate, segments.get(agentId), templates, mk);
   // The tab it was tapped on is the pitch it claims to send: no card, no send.
   if (pitchFeedKey(pitch) !== feedKey) return null;
 

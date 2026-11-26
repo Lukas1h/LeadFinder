@@ -5,6 +5,9 @@ import { agents, messagePresets, messagePresetVariants, messageSends } from "@/d
 import { eq, and } from "drizzle-orm";
 import { sendEmail } from "@/lib/mailer";
 import { renderSubject, renderMessageBody } from "@/lib/messageTemplate";
+import { getMarkets } from "@/lib/marketsData";
+import { marketMessageContext } from "@/lib/areaPhrase";
+import { agentMarkets } from "@/lib/agentMarket";
 import { getComposeEmailOptions } from "@/app/composeEmailActions";
 import { normalizeEmail, normalizeName, normalizePhone } from "@/lib/normalize";
 
@@ -80,7 +83,18 @@ export async function POST(request: NextRequest) {
   }
 
   const subject = renderSubject(variant.subject ?? "", name);
-  const text = renderMessageBody(variant.body, name, null);
+  // No listing in this flow: an agent already on file brings their market's
+  // prices; otherwise the default (regional) wording and prices apply.
+  const mk = await getMarkets();
+  const market = existing ? (await agentMarkets([existing.id])).get(existing.id) ?? null : null;
+  const text = renderMessageBody(
+    variant.body,
+    name,
+    null,
+    null,
+    null,
+    marketMessageContext(mk, { city: null }, market)
+  );
 
   try {
     await sendEmail({ to: email, toName: name, subject, text, attachments: attachmentsForMarket(preset.attachments, null) });

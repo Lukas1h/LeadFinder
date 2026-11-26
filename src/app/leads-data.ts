@@ -11,15 +11,9 @@ import { estimateDriveMinutes } from "@/lib/driveTime";
 import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
 import { getRecentShoots, nearestShoot, type NearShoot } from "@/lib/nearShoots";
 import { shotAddresses } from "@/app/follow-up/feeds/shared";
-import {
-  balanceByShooter,
-  emptyMarketRecord,
-  isShooterMarket,
-  marketFor,
-  ownerMinutes,
-  type Market,
-  type ShooterMarketKey,
-} from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import type { Market, MarketIndex } from "@/lib/markets";
+import { withDriveLines, type WithDriveLines } from "@/lib/driveLines";
 
 /**
  * Everything the Leads page shows, as data.
@@ -45,9 +39,9 @@ const KNOWN_AGENT_GROUP_ORDER: KnownAgentGroup[] = ["clients", "interested", "wa
 export interface LeadGroup {
   key: string;
   agent: Agent | null;
-  entries: { lead: Listing; section: LeadSection }[];
+  entries: { lead: LeadListing; section: LeadSection }[];
   textedAt: Date | undefined;
-  best: Listing;
+  best: LeadListing;
   /** The market of the best listing — the tab this card lives under. */
   market: Market;
   section: LeadSection;
@@ -57,6 +51,17 @@ export interface LeadGroup {
   /** "Texted Oct 5" / "Never contacted" — null only for a listing with no agent at all. */
   contactLine: string | null;
 }
+
+/**
+ * A lead listing with its drive lines already worked out on the server.
+ *
+ * The cards show whom a shooter-market listing belongs to and how far each
+ * shooter drives, which needs the markets table — and client components can't
+ * build a MarketIndex (it comes from the database). So getLeadsBoard computes
+ * both once per listing (lib/driveLines.ts) and hands the plain values to the
+ * cards.
+ */
+export type LeadListing = WithDriveLines<Listing>;
 
 export interface LeadsBoard {
   known: LeadGroup[];
@@ -88,8 +93,9 @@ export interface LeadsBoard {
   /** The market the board was filtered to, or null for all of them (the iPhone app's default). */
   market: Market | null;
   /**
-   * Open (non-queued) listings per market, always over all three markets — the
-   * Leads page's tabs, and a way to see what waits in the other tabs.
+   * Open (non-queued) listings per market key — every key mk.emptyRecord covers,
+   * including paused/killed markets and "unassigned" — so the Leads page's tabs
+   * and the app's tab bar always show what waits elsewhere.
    */
   marketCounts: Record<Market, number>;
   /**
@@ -130,6 +136,7 @@ export const FAR_DRIVE_MINUTES = 120;
 export const FAR_SECTION_LABEL = "Farther than 2 hours";
 
 export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market?: Market | null }): Promise<LeadsBoard> {
+  const mk = await getMarkets();
   // foundAt is transaction-time, so a batch insert gives every row in it
   // the exact same value — listings.id as a tiebreaker keeps order stable
   // across renders instead of reshuffling ties arbitrarily.
@@ -161,7 +168,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     // your listing"; one at the latter is his own work, not a lead.
     getRecentShoots(),
     shotAddresses(),
-    countNewAgentsToday(),
+    countNewAgentsToday(mk),
   ]);
   // A listing with a message waiting in the Queue has been handled — it lives
   // in the Pipeline's Queued section until that message is sent (see
@@ -172,8 +179,8 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   // Each open listing's market, computed once. The tab counts always cover every
   // market, even when the board below is narrowed to one, so the tabs
   // still show what waits in the others.
-  const marketByLead = new Map(openLeads.map((l) => [l.id, marketFor(l)] as const));
-  const marketCounts = emptyMarketRecord(() => 0);
+  const marketByLead = new Map(openLeads.map((l) => [l.id, mk.marketFor(l)] as const));
+  const marketCounts = mk.emptyRecord(() => 0);
   for (const leadMarket of marketByLead.values()) marketCounts[leadMarket]++;
 
   // From here on the board is one market's worth of leads. Everything the tab
@@ -181,6 +188,8 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   // filtered list; only queuedCount and unscoredCount above/below look at every
   // market.
   const market = options?.market ?? null;
+  /** The tab's key when it is a shooter market (its sections split by photographer). */
+  const shooterTab = market != null && mk.isShooterMarket(market) ? market : null;
   const marketLeads = market ? openLeads.filter((l) => marketByLead.get(l.id) === market) : openLeads;
 
   const lookups = buildAgentLookups(applyLastContact(agentKeys, lastContact));
@@ -200,7 +209,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   // never-texted agents first.
   const [attachedRows, sectionById, lastTexted] = await Promise.all([
     attachedIds.length > 0 ? db.select().from(agents).where(inArray(agents.id, attachedIds)) : Promise.resolve([]),
-    refreshLeadSections(leads.map((l) => l.id)),
+    refreshLeadSections(leads.map((l) => l.id), mk),
     lastTextByAgent(attachedIds),
   ]);
   const agentById = new Map(applyLastContact(attachedRows, lastContact).map((a) => [a.id, a] as const));
@@ -234,7 +243,9 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     const fallback = lead.agentPhone || lead.agentName;
     const key = attached ? attached.id : fallback ? `contact:${fallback}` : `listing:${lead.id}`;
     const group = byKey.get(key) ?? { agent: attached, entries: [], textedAt };
-    group.entries.push({ lead, section });
+    // The drive lines the cards render, computed here where the markets table
+    // is available (client components can't build a MarketIndex).
+    group.entries.push({ lead: withDriveLines(lead, mk), section });
     byKey.set(key, group);
   }
 
@@ -267,7 +278,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
       key,
       ...g,
       best: g.entries[0].lead,
-      market: marketFor(g.entries[0].lead),
+      market: marketByLead.get(g.entries[0].lead.id) ?? mk.marketFor(g.entries[0].lead),
       section: g.entries[0].section,
       // Someone he already knows comes first — unless he texted them this
       // week, in which case they wait in Unlikely like everyone else.
@@ -317,7 +328,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     if (g.section !== "photo" && g.section !== "video" && g.section !== "backup") continue;
     let nearest = Infinity;
     for (const { lead } of g.entries) {
-      const minutes = isShooterMarket(marketFor(lead)) ? 0 : lead.city ? estimateDriveMinutes(lead.city) : null;
+      const minutes = mk.isShooterMarket(marketByLead.get(lead.id)) ? 0 : lead.city ? estimateDriveMinutes(lead.city) : null;
       if (minutes != null) nearest = Math.min(nearest, minutes);
     }
     if (nearest !== Infinity && nearest > FAR_DRIVE_MINUTES) farMinutes.set(g.key, nearest);
@@ -346,33 +357,33 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
   // is what keeps them all working. Each section is pre-sorted by the
   // tie-breakers below so they only order cards inside one shooter's queue.
   for (const key of LEAD_SECTION_ORDER) {
-    if (isShooterMarket(market) && (key === "photo" || key === "video" || key === "backup")) continue;
+    if (shooterTab && (key === "photo" || key === "video" || key === "backup")) continue;
     sections[key].sort((a, b) =>
       key === "backup"
-        ? outreachRank(a, b, market) || (b.best.price ?? 0) - (a.best.price ?? 0)
+        ? outreachRank(a, b, market, mk) || (b.best.price ?? 0) - (a.best.price ?? 0)
         : key === "video"
         ? (a.textedAt ? 1 : 0) - (b.textedAt ? 1 : 0) ||
-          outreachRank(a, b, market) ||
+          outreachRank(a, b, market, mk) ||
           (b.best.price ?? 0) - (a.best.price ?? 0)
         : key === "photo"
-          ? outreachRank(a, b, market) || byLeadPriority(a.best, b.best)
+          ? outreachRank(a, b, market, mk) || byLeadPriority(a.best, b.best)
           : key === "texted"
             ? // Nearest first (Lukas, 2026-11-14: second touches start close to
               // home), then whoever has waited longest since his last text.
-              compareDistance(nearestDistance(a, market), nearestDistance(b, market)) ||
+              compareDistance(nearestDistance(a, market, mk), nearestDistance(b, market, mk)) ||
               (a.textedAt?.getTime() ?? 0) - (b.textedAt?.getTime() ?? 0) ||
               byLeadPriority(a.best, b.best)
             : byLeadPriority(a.best, b.best)
     );
   }
-  if (isShooterMarket(market)) {
+  if (shooterTab) {
     const placeOf = (g: LeadGroup) => g.best;
     // Photo: the pipeline's priority score breaks ties.
     sections.photo.sort((a, b) => byLeadPriority(a.best, b.best));
-    sections.photo = balanceByShooter(sections.photo, placeOf, market);
+    sections.photo = mk.balanceByShooter(sections.photo, placeOf, shooterTab);
     // Backup: the priciest first.
     sections.backup.sort((a, b) => (b.best.price ?? 0) - (a.best.price ?? 0));
-    sections.backup = balanceByShooter(sections.backup, placeOf, market);
+    sections.backup = mk.balanceByShooter(sections.backup, placeOf, shooterTab);
     // Video: never-texted agents before texted ones, each group priciest
     // first, and each balanced separately so a texted card never jumps ahead
     // of a never-texted one.
@@ -381,8 +392,8 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
     neverTexted.sort((a, b) => (b.best.price ?? 0) - (a.best.price ?? 0));
     texted.sort((a, b) => (b.best.price ?? 0) - (a.best.price ?? 0));
     sections.video = [
-      ...balanceByShooter(neverTexted, placeOf, market),
-      ...balanceByShooter(texted, placeOf, market),
+      ...mk.balanceByShooter(neverTexted, placeOf, shooterTab),
+      ...mk.balanceByShooter(texted, placeOf, shooterTab),
     ];
   }
   known.sort(
@@ -390,7 +401,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
       KNOWN_AGENT_GROUP_ORDER.indexOf(a.known!) - KNOWN_AGENT_GROUP_ORDER.indexOf(b.known!) ||
       // On a shooter-market tab, nearest to its shooters first within a group
       // (Lukas, 2026-11-19: the Coast tab opened on Lincoln County agents).
-      (isShooterMarket(market) ? compareDistance(nearestDistance(a, market), nearestDistance(b, market)) : 0) ||
+      (shooterTab ? compareDistance(nearestDistance(a, market, mk), nearestDistance(b, market, mk)) : 0) ||
       byLeadPriority(a.best, b.best)
   );
   const far = LEAD_SECTION_ORDER.flatMap((key) => sections[key].filter((g) => farMinutes.has(g.key)));
@@ -417,7 +428,7 @@ export async function getLeadsBoard(options?: { cardPhotosOnly?: boolean; market
 }
 
 /** Agents first added today (Pacific), by the market of their first listing; agents with no listing aren't counted. */
-async function countNewAgentsToday(): Promise<Record<Market, number>> {
+async function countNewAgentsToday(mk: MarketIndex): Promise<Record<Market, number>> {
   const result = await db.execute<{ city: string | null; state: string | null }>(sql`
     select l.city, l.state
     from agents a
@@ -425,41 +436,42 @@ async function countNewAgentsToday(): Promise<Record<Market, number>> {
       select city, state from listings where listings.agent_id = a.id order by found_at asc limit 1
     ) l on true
     where a.created_at >= (date_trunc('day', now() at time zone 'America/Los_Angeles') at time zone 'America/Los_Angeles')`);
-  const counts = emptyMarketRecord(() => 0);
-  for (const r of result.rows) counts[marketFor({ city: r.city, state: r.state })]++;
+  const counts = mk.emptyRecord(() => 0);
+  for (const r of result.rows) counts[mk.marketFor({ city: r.city, state: r.state })]++;
   return counts;
 }
 
 /**
  * Who to text first: listed before coming soon, then nearer, then a local
  * number (see the sort above). Shooter-market photo/video/backup sections are
- * balanced across the market's shooters instead (balanceByShooter), so this
- * only ranks the other sections there — texted before, by nearest owner.
+ * balanced across the market's shooters instead (mk.balanceByShooter), so
+ * this only ranks the other sections there — texted before, by nearest owner.
  */
-function outreachRank(a: LeadGroup, b: LeadGroup, market: Market | null): number {
-  if (isShooterMarket(market)) return compareDistance(shooterDistance(a, market), shooterDistance(b, market));
+function outreachRank(a: LeadGroup, b: LeadGroup, market: Market | null, mk: MarketIndex): number {
+  const key = market != null && mk.isShooterMarket(market) ? market : null;
+  if (key) return compareDistance(shooterDistance(a, key, mk), shooterDistance(b, key, mk));
   const listed = Number(a.best.isComingSoon) - Number(b.best.isComingSoon);
   if (listed) return listed;
   return (
     driveBand(a.best.city) - driveBand(b.best.city) ||
-    areaBand(a.agent?.phone ?? a.best.agentPhone) - areaBand(b.agent?.phone ?? b.best.agentPhone)
+    areaBand(a.agent?.phone ?? a.best.agentPhone, mk) - areaBand(b.agent?.phone ?? b.best.agentPhone, mk)
   );
 }
 
 /** Minutes from the shooter market's owner (nearest main shooter) to the group's best listing; unknown is Infinity. */
-function shooterDistance(g: LeadGroup, market: ShooterMarketKey): number {
-  return ownerMinutes(g.best, market) ?? Infinity;
+function shooterDistance(g: LeadGroup, market: Market, mk: MarketIndex): number {
+  return mk.ownerMinutes(g.best, market) ?? Infinity;
 }
 
 /**
  * How far the group's nearest listing is: drive minutes from Winston, or
  * minutes from its owner shooter on a shooter-market tab. Unknown is Infinity.
  */
-function nearestDistance(g: LeadGroup, market: Market | null): number {
+function nearestDistance(g: LeadGroup, market: Market | null, mk: MarketIndex): number {
+  const key = market != null && mk.isShooterMarket(market) ? market : null;
   let nearest = Infinity;
   for (const { lead } of g.entries) {
-    const d =
-      isShooterMarket(market) ? ownerMinutes(lead, market) : lead.city ? estimateDriveMinutes(lead.city) : null;
+    const d = key ? mk.ownerMinutes(lead, key) : lead.city ? estimateDriveMinutes(lead.city) : null;
     if (d != null) nearest = Math.min(nearest, d);
   }
   return nearest;
@@ -470,11 +482,17 @@ function compareDistance(a: number, b: number): number {
   return a === b ? 0 : a < b ? -1 : 1;
 }
 
-/** 541/458 (southern and central Oregon) first, Portland and Vancouver numbers last. */
-function areaBand(phone: string | null | undefined): number {
+/**
+ * 541/458 (southern and central Oregon) first, a shooter market's own numbers
+ * next, everything else last. The shooter markets' area codes used to be
+ * hardcoded here (503/971/360 for Portland); now they live on the markets rows
+ * (mk.shooterMarkets), so a new market's patch sorts as near without a code
+ * change.
+ */
+function areaBand(phone: string | null | undefined, mk: MarketIndex): number {
   const code = (phone ?? "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "").slice(0, 3);
   if (code === "541" || code === "458") return 0;
-  if (code === "503" || code === "971" || code === "360") return 2;
+  if (mk.shooterMarkets.some((m) => m.areaCodes.includes(code))) return 2;
   return 1;
 }
 

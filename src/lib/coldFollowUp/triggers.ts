@@ -1,7 +1,8 @@
 import { db } from "@/db";
 import { bookings, followUpPasses, listings, type Booking, type Listing } from "@/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { marketFor, type Market } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import type { Market } from "@/lib/markets";
 import { getRecentShoots, milesBetween, nearestShoot, type NearShoot, type RecentShoot } from "@/lib/nearShoots";
 import { shotAddresses, shotByHim, stillActive } from "@/app/follow-up/feeds/shared";
 import { COLD_TRIGGERS, loadColdPool, type ColdPoolAgent, type ColdTrigger } from "./pool";
@@ -153,7 +154,8 @@ export async function getColdFollowUpCandidates(
   if (pool.length === 0) return [];
   const ids = pool.map((p) => p.agent.id);
 
-  const [agentListings, shoots, shot, passes, areaJobs] = await Promise.all([
+  const [mk, agentListings, shoots, shot, passes, areaJobs] = await Promise.all([
+    getMarkets(),
     db.select().from(listings).where(inArray(listings.agentId, ids)),
     getRecentShoots(now),
     shotAddresses(),
@@ -193,7 +195,7 @@ export async function getColdFollowUpCandidates(
     listing: Listing,
     shoot: ColdCandidate["shoot"]
   ) => {
-    candidates.push({ ...entry, trigger, listing, shoot, market: marketFor(listing) });
+    candidates.push({ ...entry, trigger, listing, shoot, market: mk.marketFor(listing) });
   };
 
   for (const entry of pool) {
@@ -242,7 +244,8 @@ export async function getColdFollowUpCandidates(
       const bestPair = (onlyShowcase: boolean): { listing: Listing; job: AreaJob; miles: number } | null => {
         let best: { listing: Listing; job: AreaJob; miles: number } | null = null;
         for (const listing of usable) {
-          if (marketFor(listing) === "local") continue;
+          // Never the local market: around Roseburg he is always "in the area".
+          if (mk.marketFor(listing) === "local") continue;
           const point = usablePoint(listing);
           if (!point) continue;
           for (const job of areaJobs) {

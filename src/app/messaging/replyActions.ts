@@ -24,7 +24,10 @@ import {
 } from "@/db/schema";
 import { and, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { attachmentMetaSql, attachmentsForMarket, withContentTypes, type AttachmentMeta } from "@/lib/attachments";
-import { marketFor, variantsForMarket, type Market } from "@/lib/markets";
+import { variantsForMarket, type Market, type MarketIndex } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import { withDriveLines, type WithDriveLines } from "@/lib/driveLines";
+import { marketMessageContext } from "@/lib/areaPhrase";
 import { agentMarkets } from "@/lib/agentMarket";
 import { resolvePendingInteraction, startPendingInteraction } from "@/app/agents/interactionActions";
 import { revalidatePath } from "next/cache";
@@ -48,7 +51,8 @@ export interface SendDetail {
   /** The name the message greeted, which can differ from agent.name when two people share a number. */
   recipientName: string | null;
   agent: Agent | null;
-  listing: Listing | null;
+  /** With the drive lines its ListingRow modal shows, computed on the server. */
+  listing: WithDriveLines<Listing> | null;
   /** The template's quick actions, in order (see messagePresets.quickActionPresetIds). */
   quickActions: QuickAction[];
 }
@@ -125,8 +129,9 @@ async function nextVariants(presetIds: string[], market: Market | null = null) {
  * as a button that can't work.
  */
 async function loadQuickActions(
+  mk: MarketIndex,
   presetIds: string[],
-  who: { agentId: string | null; agentName: string | null; address: string | null; city: string | null },
+  who: { agentId: string | null; agentName: string | null; address: string | null; city: string | null; state: string | null },
   market: Market | null = null
 ): Promise<QuickAction[]> {
   if (presetIds.length === 0) return [];
@@ -145,7 +150,7 @@ async function loadQuickActions(
   const byId = new Map(presets.map((p) => [p.id, p]));
   // {{recentWork}} needs a DB lookup, shared by every quick action since it
   // only depends on the agent's city, not the preset.
-  const recentWork = await recentWorkLine(who.city);
+  const recentWork = await recentWorkLine(who.city, mk);
   return (
     await Promise.all(
       presetIds.map(async (id) => {
@@ -163,7 +168,14 @@ async function loadQuickActions(
             channel: preset.channel,
             variantId: variant.id,
             // A preview: the email itself shows the photos where the marker is.
-            text: renderMessageBody(variant.body, who.agentName, who.address, who.city)
+            text: renderMessageBody(
+              variant.body,
+              who.agentName,
+              who.address,
+              who.city,
+              null,
+              marketMessageContext(mk, { city: who.city, state: who.state }, market)
+            )
               .replaceAll(PHOTOS_MARKER, files.inlinePhotos.length > 0 ? `[${files.inlinePhotos.length} photos shown here]` : "")
               .replaceAll(RECENT_WORK_MARKER, recentWork),
             subject: variant.subject ? renderSubject(variant.subject, who.agentName) : null,
@@ -199,9 +211,11 @@ export async function getSendDetail(sendId: string): Promise<SendDetail | null> 
     agentName: greetingName(row.send, row.agent?.name, row.listing?.agentName),
     address: row.listing?.address ?? null,
     city: row.listing?.city ?? row.agent?.homeCity ?? null,
+    state: row.listing?.state ?? null,
   };
-  const market = row.listing ? marketFor(row.listing) : row.agent ? await agentMarket(row.agent.id) : null;
-  const quickActions = await loadQuickActions(row.quickActionPresetIds, who, market);
+  const mk = await getMarkets();
+  const market = row.listing ? mk.marketFor(row.listing) : row.agent ? await agentMarket(row.agent.id) : null;
+  const quickActions = await loadQuickActions(mk, row.quickActionPresetIds, who, market);
 
   return {
     id: row.send.id,
@@ -211,10 +225,19 @@ export async function getSendDetail(sendId: string): Promise<SendDetail | null> 
     respondedAt: row.send.respondedAt,
     result: row.send.result,
     presetName: row.presetName,
-    text: row.send.body ?? renderMessageBody(row.body, who.agentName, who.address, who.city),
+    text:
+      row.send.body ??
+      renderMessageBody(
+        row.body,
+        who.agentName,
+        who.address,
+        who.city,
+        null,
+        marketMessageContext(mk, { city: who.city, state: who.state }, market)
+      ),
     recipientName: who.agentName,
     agent: row.agent,
-    listing: row.listing,
+    listing: row.listing ? withDriveLines(row.listing, mk) : null,
     quickActions,
   };
 }
@@ -317,8 +340,13 @@ async function agentMarket(agentId: string): Promise<Market | null> {
 }
 
 /** The market a conversation is in: its listing's, else the agent's. Matches getSendDetail's quick actions. */
-async function sendMarket(row: NonNullable<Awaited<ReturnType<typeof loadSend>>>): Promise<Market | null> {
-  if (row.listingCity != null || row.listingState != null) return marketFor({ city: row.listingCity, state: row.listingState });
+async function sendMarket(
+  mk: MarketIndex,
+  row: NonNullable<Awaited<ReturnType<typeof loadSend>>>
+): Promise<Market | null> {
+  if (row.listingCity != null || row.listingState != null) {
+    return mk.marketFor({ city: row.listingCity, state: row.listingState });
+  }
   return row.agent ? agentMarket(row.agent.id) : null;
 }
 
@@ -422,14 +450,20 @@ export async function sendQuickActionEmail(
   if (!preset || !preset.enabled) return { error: "That template is gone or switched off" };
   if (preset.channel !== "email") return { error: `"${preset.name}" is a text, not an email` };
 
-  const variant = (await nextVariants([preset.id], await sendMarket(row))).get(preset.id);
+  const mk = await getMarkets();
+  const market = await sendMarket(mk, row);
+  const variant = (await nextVariants([preset.id], market)).get(preset.id);
   if (!variant) return { error: `"${preset.name}" has no enabled variant` };
 
   const name = greetingName(row.send, agent.name, row.listingAgentName);
-  const body = renderMessageBody(variant.body, name, row.address, row.city).replaceAll(
-    RECENT_WORK_MARKER,
-    await recentWorkLine(row.city)
-  );
+  const body = renderMessageBody(
+    variant.body,
+    name,
+    row.address,
+    row.city,
+    null,
+    marketMessageContext(mk, { city: row.city, state: row.listingState }, market)
+  ).replaceAll(RECENT_WORK_MARKER, await recentWorkLine(row.city, mk));
 
   try {
     await sendEmail({
@@ -498,6 +532,8 @@ export async function recordQuickActionText(
 
   // The same text the quick action handed to Messages (see loadQuickActions).
   const name = greetingName(row.send, agent.name, row.listingAgentName);
+  const mk = await getMarkets();
+  const market = await sendMarket(mk, row);
   const now = new Date();
   await db.update(agents).set({ lastContactedAt: now }).where(eq(agents.id, agent.id));
   const [sent] = await db
@@ -510,7 +546,14 @@ export async function recordQuickActionText(
       type: preset.type,
       channel: "sms",
       sentAt: now,
-      body: renderMessageBody(variant.body, name, row.address, row.city),
+      body: renderMessageBody(
+        variant.body,
+        name,
+        row.address,
+        row.city,
+        null,
+        marketMessageContext(mk, { city: row.city, state: row.listingState }, market)
+      ),
       recipientName: name,
     })
     .returning({ id: messageSends.id });
@@ -568,8 +611,22 @@ async function portfolioLinkContext(agentId: string, url: string) {
     .limit(1);
   const name = latest?.recipientName ?? agent.name;
   // The link goes in the second text; an older single-text body carries it itself.
-  const secondTemplate = preset.secondMessage?.trim() ? renderMessageBody(preset.secondMessage, name, null, null) : "";
-  return { agent, preset, variant, latest, name, first: renderMessageBody(variant.body, name, null, null), secondTemplate };
+  // The agent's market brings its prices; {{area}} still falls back to the
+  // Oregon wording because a portfolio link has no listing town.
+  const mk = await getMarkets();
+  const marketContext = marketMessageContext(mk, { city: null }, await agentMarket(agent.id));
+  const secondTemplate = preset.secondMessage?.trim()
+    ? renderMessageBody(preset.secondMessage, name, null, null, null, marketContext)
+    : "";
+  return {
+    agent,
+    preset,
+    variant,
+    latest,
+    name,
+    first: renderMessageBody(variant.body, name, null, null, null, marketContext),
+    secondTemplate,
+  };
 }
 
 /**

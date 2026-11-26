@@ -9,6 +9,8 @@ import { linkListingToAgent } from "@/lib/agentIdentity";
 import { isUnderPriceFloor, hasInHouseMedia, isBuilderListing, refreshLeadSections } from "@/lib/leadSections";
 import { dropDuplicateListings } from "@/lib/listingDedupe";
 import { geocodeListings } from "@/lib/geocode";
+import { isLive } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
 import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -101,10 +103,24 @@ export interface SyncResult {
  * (1 Zillapi credit per listing *returned* per source, even ones we
  * already have and skip inserting). Each source is its own bbox/filters
  * and its own Zillapi call, run in parallel — see the Settings page for
- * managing sources.
+ * managing sources. Sources tied to a paused or killed market are skipped
+ * before any of that, so a market Lukas isn't working costs nothing.
  */
 export async function runSync(): Promise<SyncResult> {
-  const sources = await db.select().from(searchSources).where(eq(searchSources.enabled, true));
+  const [allSources, mk] = await Promise.all([
+    db.select().from(searchSources).where(eq(searchSources.enabled, true)),
+    getMarkets(),
+  ]);
+  // A paused or killed market's sources are skipped: its listings still land
+  // in it (lib/markets.ts), but Lukas isn't working it, so the Zillapi credits
+  // would buy leads with no outreach behind them. A source with no market
+  // still syncs.
+  const sources = allSources.filter((source) => {
+    const market = source.market ? mk.get(source.market) : null;
+    if (!market || isLive(market)) return true;
+    console.warn(`runSync: source "${source.name}" skipped: its market "${market.key}" is ${market.status}.`);
+    return false;
+  });
 
   // allSettled, not all: with ~10 sources, one bad call (a Zillapi 5xx, a
   // malformed filter, running out of credits mid-run) used to reject the

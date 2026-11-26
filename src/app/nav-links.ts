@@ -13,6 +13,7 @@ import {
   Wand2,
   Link2,
   Layers,
+  Map as MapIcon,
 } from "lucide-react";
 
 // The desktop sidebar shows every link. Mobile shows MOBILE_TABS instead.
@@ -23,6 +24,7 @@ export const NAV_LINKS = [
   { href: "/follow-up", label: "Follow up", icon: HeartHandshake },
   { href: "/agents", label: "Agents", icon: Users },
   { href: "/messaging", label: "Messaging", icon: Send },
+  { href: "/markets", label: "Markets", icon: MapIcon },
   { href: "/queue", label: "Queue", icon: ListOrdered },
   { href: "/booked", label: "Booked", icon: CalendarCheck },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },

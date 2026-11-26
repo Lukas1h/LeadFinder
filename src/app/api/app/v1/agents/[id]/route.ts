@@ -10,6 +10,7 @@ import { getAgentBookings } from "@/app/booked/actions";
 import { deleteAgent, updateAgentContactInfo, updateAgentNotes, updateAgentStats } from "@/app/agents/actions";
 import { agentJson, bookingJson, listingJson } from "../../serialize";
 import { badRequest, isUuid, notFound, optionalString, oneOf, readJson, withErrors } from "../../helpers";
+import { getMarkets } from "@/lib/marketsData";
 import { AGENT_RELATIONSHIP_STATUSES } from "@/db/schema";
 
 /**
@@ -27,19 +28,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const [agent] = await db.select().from(agents).where(eq(agents.id, id));
   if (!agent) return notFound();
 
-  const [brokerage, timeline, listings, bookings] = await Promise.all([
+  const [brokerage, timeline, listings, bookings, mk] = await Promise.all([
     brokerageByAgent(),
     getAgentTimeline(id),
     getAgentListings(id),
     getAgentBookings(id),
+    getMarkets(),
   ]);
 
   return NextResponse.json({
     agent: agentJson(agent),
     brokerage: brokerage.get(id) ?? null,
     timeline,
-    listings: listings.map((l) => listingJson(l, "all")),
-    bookings: bookings.map(bookingJson),
+    listings: listings.map((l) => listingJson(l, "all", mk)),
+    bookings: bookings.map((b) => bookingJson(b, mk)),
   });
 }
 

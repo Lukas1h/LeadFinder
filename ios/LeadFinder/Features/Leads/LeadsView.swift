@@ -189,39 +189,94 @@ struct LeadsView: View {
     /// web (lib/markets.ts; the server's `markets` list drives the segments).
     /// A plain segmented control, like Home's funnel picker. Switching shows
     /// the market's cached board at once and refreshes it behind.
+    @ViewBuilder
     private var marketTabs: some View {
-        Picker("Market", selection: Binding(
-            get: { appState.leadsMarket },
-            set: { key in
-                guard key != appState.leadsMarket else { return }
-                appState.leadsMarket = key
-                Task { await appState.leads.load() }
-            }
-        )) {
-            ForEach(marketList) { market in
-                Text(market.label).tag(market.key)
+        Group {
+            if marketList.count <= 4 {
+                Picker("Market", selection: marketBinding) {
+                    ForEach(marketList) { market in
+                        Text(market.label).tag(market.key)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 16)
+            } else {
+                // Many markets: a scrolling row of capsule chips (label + count).
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(marketList) { market in
+                                marketChip(market).id(market.key)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .onAppear { proxy.scrollTo(appState.leadsMarket, anchor: .center) }
+                }
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .padding(.horizontal, 16)
         .sensoryFeedback(.selection, trigger: appState.leadsMarket)
+        .onAppear(perform: dropPausedMarket)
+        .onChange(of: appState.leadMarkets.map(\.key)) { dropPausedMarket() }
+    }
+
+    private var marketBinding: Binding<String> {
+        Binding(
+            get: { appState.leadsMarket },
+            set: { selectMarket($0) }
+        )
+    }
+
+    private func selectMarket(_ key: String) {
+        guard key != appState.leadsMarket else { return }
+        appState.leadsMarket = key
+        Task { await appState.leads.load() }
+    }
+
+    /// A paused market drops out of the server's list: fall back to Local.
+    private func dropPausedMarket() {
+        guard !appState.leadMarkets.isEmpty,
+              !appState.leadMarkets.contains(where: { $0.key == appState.leadsMarket })
+        else { return }
+        selectMarket("local")
+    }
+
+    private func marketChip(_ market: LeadsResponse.Market) -> some View {
+        let selected = market.key == appState.leadsMarket
+        return Button {
+            withAnimation(.snappy(duration: 0.2)) { selectMarket(market.key) }
+        } label: {
+            HStack(spacing: 5) {
+                Text(market.label)
+                if market.count > 0 {
+                    Text("\(market.count)")
+                        .foregroundStyle(selected ? Theme.primaryText.opacity(0.7) : Theme.tertiaryText)
+                }
+            }
+            .font(.subheadline.weight(selected ? .semibold : .medium))
+            .foregroundStyle(selected ? Theme.primaryText : Theme.secondaryText)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(selected ? Theme.cardRaised : Color.clear, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.cardRaised, lineWidth: selected ? 0 : 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     /// The server's markets (labels and counts are the same on every
-    /// market's response, so use whichever is loaded), else the known four.
+    /// market's response, so use whichever is loaded), else the known four
+    /// until the first board lands.
     private var marketList: [LeadsResponse.Market] {
-        appState.leads.value?.markets
-            ?? appState.leadsLocal.value?.markets
-            ?? appState.leadsRegional.value?.markets
-            ?? appState.leadsPortland.value?.markets
-            ?? appState.leadsCentralCoast.value?.markets
-            ?? [
+        appState.leadMarkets.isEmpty
+            ? [
                 .init(key: "local", label: "Local", count: 0),
                 .init(key: "regional", label: "Regional", count: 0),
                 .init(key: "portland", label: "Portland", count: 0),
                 .init(key: "central_coast", label: "Coast", count: 0),
             ]
+            : appState.leadMarkets
     }
 
     private func header(_ counts: LeadsResponse.Counts) -> some View {

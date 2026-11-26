@@ -3,9 +3,9 @@ import { FEW_PHOTOS_THRESHOLD, isUnscored } from "@/lib/pipeline";
 import { isBuilderListing } from "@/lib/leadSections";
 import { officeClientBadge, agentDeclinedBadge, agentIgnoredBadge, fewPhotosBadge, photoScoreTier, priceCutBadge, unscoredBadge, type BadgeText } from "@/lib/leadBadges";
 import { sampleCardPhotos } from "@/lib/cardPhotos";
-import { listingDriveTime } from "@/lib/markets";
+import type { MarketIndex } from "@/lib/markets";
 import type { BookingWithDetails } from "@/app/booked/BookedList";
-import type { LeadGroup } from "@/app/leads-data";
+import type { LeadGroup, LeadListing } from "@/app/leads-data";
 import { GALLERY_ORIGIN } from "@/lib/siteUrls";
 
 /**
@@ -45,10 +45,20 @@ function numericToNumber(value: string | number | null): number | null {
  *
  * altZpids is the one column left out: it's Zillow's bookkeeping for
  * deduplication (see lib/listingDedupe.ts), which means nothing to the app.
+ *
+ * A lead listing also carries the trade's server-computed drive lines
+ * (LeadListing); they're dropped here because the JSON gets its own driveTime
+ * from the market index instead, and shooterDrives has no app UI.
  */
-export function listingJson(l: Listing, photos: "first" | "card" | "all") {
-  const { altZpids, bedrooms, bathrooms, photos: allPhotos, ...rest } = l;
+export function listingJson(
+  l: Listing & Partial<Pick<LeadListing, "driveTime" | "shooterDrives">>,
+  photos: "first" | "card" | "all",
+  mk: MarketIndex
+) {
+  const { altZpids, bedrooms, bathrooms, photos: allPhotos, driveTime: leadDriveTime, shooterDrives, ...rest } = l;
   void altZpids;
+  void leadDriveTime;
+  void shooterDrives;
 
   const photosOut =
     photos === "all" ? allPhotos : photos === "card" ? sampleCardPhotos(allPhotos ?? []) : allPhotos?.slice(0, 1) ?? [];
@@ -57,7 +67,7 @@ export function listingJson(l: Listing, photos: "first" | "card" | "all") {
     ...rest,
     bedrooms: numericToNumber(bedrooms),
     bathrooms: numericToNumber(bathrooms),
-    driveTime: listingDriveTime(l),
+    driveTime: mk.listingDriveTime(l),
     photos: photosOut,
   };
 }
@@ -104,7 +114,7 @@ export function leadBadges(
 }
 
 /** One lead card: the agent, the listing that leads the card, and the rest. */
-export function leadGroupJson(g: LeadGroup, addressById: Map<string, string | null>) {
+export function leadGroupJson(g: LeadGroup, addressById: Map<string, string | null>, mk: MarketIndex) {
   const best = g.best;
   const agent = g.agent;
 
@@ -123,9 +133,9 @@ export function leadGroupJson(g: LeadGroup, addressById: Map<string, string | nu
     textedAt: g.textedAt ?? null,
     knownGroup: g.known ?? null,
     section: g.section,
-    best: listingJson(best, "card"),
+    best: listingJson(best, "card", mk),
 badges: leadBadges(best, agent, agent?.lastContactedListingId ? addressById.get(agent.lastContactedListingId) : null, g.officeClient),
-    others: g.entries.slice(1).map((e) => listingJson(e.lead, "first")),
+    others: g.entries.slice(1).map((e) => listingJson(e.lead, "first", mk)),
     // Every listing in the card, so the app's Pass can drop the whole group the
     // way the web's "Pass all N" does.
     listingIds: g.entries.map((e) => e.lead.id),
@@ -168,7 +178,7 @@ export function agentJson(agent: Agent) {
   };
 }
 
-export function bookingJson(b: BookingWithDetails & { showcase?: boolean }) {
+export function bookingJson(b: BookingWithDetails & { showcase?: boolean }, mk: MarketIndex) {
   return {
     id: b.id,
     listingId: b.listingId,
@@ -176,7 +186,7 @@ export function bookingJson(b: BookingWithDetails & { showcase?: boolean }) {
     address: b.address,
     city: b.city,
     state: b.state,
-    listing: b.listing ? listingJson(b.listing, "first") : null,
+    listing: b.listing ? listingJson(b.listing, "first", mk) : null,
     jobDate: b.jobDate,
     // Booked, but the day isn't settled: jobDate is a placeholder or null.
     dateTentative: b.dateTentative,

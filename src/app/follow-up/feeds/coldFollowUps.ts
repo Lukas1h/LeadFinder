@@ -5,6 +5,7 @@ import {
   type ColdFeedKey,
   type ColdTrigger,
 } from "@/lib/coldFollowUp/pool";
+import { getMarkets } from "@/lib/marketsData";
 import { loadAgentSegments, type AgentSegment } from "@/lib/coldFollowUp/segment";
 import { getColdFollowUpCandidates, type ColdCandidate } from "@/lib/coldFollowUp/triggers";
 import { loadColdTemplates, pitchFeedKey, renderColdTexts } from "@/lib/coldFollowUp/messages";
@@ -113,15 +114,16 @@ export async function getColdFollowUpGroups(): Promise<Record<ColdFeedKey, FeedG
 
   const candidates = await getColdFollowUpCandidates(Date.now(), ENABLED_COLD_TRIGGERS);
   if (candidates.length > 0) {
-    const [segments, templates] = await Promise.all([
+    const [segments, templates, mk] = await Promise.all([
       loadAgentSegments(candidates.map((c) => c.agent.id)),
       loadColdTemplates(),
+      getMarkets(),
     ]);
 
     // The candidates arrive strongest trigger first, then longest silence: kept as-is.
     for (const c of candidates) {
       const seg = segments.get(c.agent.id);
-      const { text1, text2, pitch } = renderColdTexts(c, seg, templates);
+      const { text1, text2, pitch } = renderColdTexts(c, seg, templates, mk);
       items[pitchFeedKey(pitch)][c.trigger].push({
         agent: c.agent,
         lastReplyAt: null,

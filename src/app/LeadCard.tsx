@@ -2,19 +2,19 @@
 
 import { useState, type ReactNode } from "react";
 import { StickyNote } from "lucide-react";
-import type { Listing } from "@/db/schema";
 import { formatPrice, formatDate } from "@/lib/format";
 import { ListingModal } from "./ListingModal";
 import { PhotoCarousel } from "./PhotoCarousel";
 import { Card } from "@/components/ui/card";
 import { sampleCardPhotos } from "@/lib/cardPhotos";
+import type { LeadListing } from "./leads-data";
 
 export function LeadCard({
   lead,
   badges,
   actions,
 }: {
-  lead: Listing;
+  lead: LeadListing;
   badges?: ReactNode;
   actions: ReactNode;
 }) {

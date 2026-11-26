@@ -5,6 +5,7 @@ import { buildFeeds, getOfferFeeds, type FeedItem } from "@/app/follow-up/feeds"
 import { FOLLOW_UP_GROUPS } from "@/app/follow-up/groups";
 import { listingCountsByAgent, listingDatesByAgent } from "@/app/agents/actions";
 import { resolveAvgDaysBetweenListings } from "@/app/agents/stats";
+import { getMarkets } from "@/lib/marketsData";
 import { agentJson, listingJson } from "../serialize";
 
 /**
@@ -19,11 +20,12 @@ export async function GET(req: Request) {
   const denied = requireAppAuth(req);
   if (denied) return denied;
 
-  const [board, offers, counts, dates] = await Promise.all([
+  const [board, offers, counts, dates, mk] = await Promise.all([
     getFollowUpBoard(),
     getOfferFeeds(),
     listingCountsByAgent(),
     listingDatesByAgent(),
+    getMarkets(),
   ]);
   const { today, later, doneToday, dailyTarget, upcoming } = board;
   const feeds = buildFeeds(board, offers);
@@ -34,7 +36,7 @@ export async function GET(req: Request) {
   const item = (e: FollowUpItem) => ({
     agent: agentJson(e.agent),
     lastReplyAt: e.lastReplyAt,
-    listing: e.listing ? listingJson(e.listing, "first") : null,
+    listing: e.listing ? listingJson(e.listing, "first", mk) : null,
     headline: [e.listing ? null : e.address, e.label].filter(Boolean).join(" · "),
     reason: e.reason,
     suggestion: e.suggestion,
@@ -46,7 +48,7 @@ export async function GET(req: Request) {
   const feedItem = (key: string) => (e: FeedItem) => ({
     agent: agentJson(e.agent),
     lastReplyAt: e.lastReplyAt,
-    listing: e.listing ? listingJson(e.listing, "first") : null,
+    listing: e.listing ? listingJson(e.listing, "first", mk) : null,
     headline: e.label,
     reason: key,
     suggestion: e.suggestion,

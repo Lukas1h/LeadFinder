@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { agents, listings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAppAuth } from "@/lib/appApiAuth";
+import { getMarkets } from "@/lib/marketsData";
 import { agentJson, listingJson } from "../../serialize";
 import { isUuid, notFound } from "../../helpers";
 
@@ -22,12 +23,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const [listing] = await db.select().from(listings).where(eq(listings.id, id));
   if (!listing) return notFound();
 
-  const [agent] = listing.agentId
-    ? await db.select().from(agents).where(eq(agents.id, listing.agentId))
-    : [null];
+  const [agentRows, mk] = await Promise.all([
+    listing.agentId ? db.select().from(agents).where(eq(agents.id, listing.agentId)) : Promise.resolve([]),
+    getMarkets(),
+  ]);
+  const [agent] = agentRows;
 
   return NextResponse.json({
-    listing: listingJson(listing, "all"),
+    listing: listingJson(listing, "all", mk),
     agent: agent ? agentJson(agent) : null,
   });
 }

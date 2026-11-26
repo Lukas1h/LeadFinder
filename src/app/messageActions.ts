@@ -1,6 +1,8 @@
 "use server";
 
-import { marketFor, variantsForMarket } from "@/lib/markets";
+import { variantsForMarket, type MarketIndex } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import { marketMessageContext } from "@/lib/areaPhrase";
 import { clientOffices, officeClientFor, officeKey, sameArea } from "@/lib/clientOffices";
 import { db } from "@/db";
 import {
@@ -228,7 +230,8 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
   // Each template rotates through the variants written for this listing's
   // market (Portland's "I do real estate photography…"), else its regular
   // ones; a template with neither isn't offered (lib/markets.ts).
-  const listingMarket = marketFor(listing);
+  const mk = await getMarkets();
+  const listingMarket = mk.marketFor(listing);
   const groups = Array.from(rowsByPreset.values())
     .map((group) => variantsForMarket(group, listingMarket))
     .filter((group) => group.length > 0);
@@ -271,7 +274,15 @@ export async function getMessageOptions(listingId: string, type: PresetType): Pr
       presetName: picked.presetName,
       variantId: picked.variantId,
       variantLabel: picked.label,
-      text: renderMessageBody(picked.body, listing.agentName, listing.address, listing.city, officeClient?.name ?? null),
+      text: renderMessageBody(
+        picked.body,
+        listing.agentName,
+        listing.address,
+        listing.city,
+        officeClient?.name ?? null,
+        // Same market the variant was picked for, so wording and prices agree.
+        marketMessageContext(mk, { city: listing.city, state: listing.state }, listingMarket)
+      ),
       recommended: picked.presetId === recommendedPresetId || (blankForTexted && picked.protected),
       blank: picked.protected,
       secondMessage: picked.secondMessage,
@@ -349,7 +360,7 @@ export async function draftAiPresetOption(
   const [listing] = await db.select().from(listings).where(eq(listings.id, listingId));
   if (!listing) return null;
   const ageDays = listingAgeDays(listing.listedAt, listing.foundAt);
-  return buildAiDraftOption(listingId, type, listing, ageDays, instruction);
+  return buildAiDraftOption(listingId, type, listing, ageDays, await getMarkets(), instruction);
 }
 
 /**
@@ -364,6 +375,7 @@ async function buildAiDraftOption(
   type: PresetType,
   listing: Listing,
   ageDays: number,
+  mk: MarketIndex,
   instruction?: string
 ): Promise<PresetOption | null> {
   const [preset] = await db
@@ -437,6 +449,7 @@ async function buildAiDraftOption(
     listing,
     agent,
     instruction,
+    mk,
   });
   if (!text) return null;
 

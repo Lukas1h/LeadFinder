@@ -8,7 +8,10 @@
 // 50 Gemini calls is too slow to hold a request open for, and a pending row
 // can't be sent until its draft lands.
 
-import { marketFor, variantsForMarket } from "@/lib/markets";
+import { variantsForMarket, type Market } from "@/lib/markets";
+import { getMarkets } from "@/lib/marketsData";
+import { marketMessageContext } from "@/lib/areaPhrase";
+import { agentMarkets } from "@/lib/agentMarket";
 import { and, eq, inArray, isNotNull, lt, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -151,7 +154,7 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
   const agentRows = agentIds.length ? await db.select().from(agents).where(inArray(agents.id, agentIds)) : [];
   const agentById = new Map(agentRows.map((a) => [a.id, a]));
 
-  const [contacts, openQueued] = await Promise.all([
+  const [contacts, openQueued, agentMarketByAgent, mk] = await Promise.all([
     contactByChannel(agentIds),
     agentIds.length
       ? db
@@ -159,6 +162,11 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
           .from(queuedMessages)
           .where(and(inArray(queuedMessages.agentId, agentIds), eq(queuedMessages.status, "queued")))
       : [],
+    // For a message with no listing (an agent-only queue), the agent's market
+    // is the one its wording and prices should follow. A listing-only batch
+    // (the common case) doesn't need the lookup.
+    input.targets.some((t) => !t.listingId) ? agentMarkets(agentIds) : new Map<string, Market>(),
+    getMarkets(),
   ]);
   const sameChannel = input.channel === "email" ? "emailed" : "texted";
   const otherChannel = input.channel === "email" ? "texted" : "emailed";
@@ -201,7 +209,9 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
 
     // A pinned variant goes out as picked; otherwise the rotation uses this
     // listing's market variants when the template has them (lib/markets.ts).
-    const pool = input.variantId ? variants : variantsForMarket(variants, listing ? marketFor(listing) : null);
+    // With no listing, the agent's market is the one that decides.
+    const market = listing ? mk.marketFor(listing) : agentMarketByAgent.get(agent.id) ?? null;
+    const pool = input.variantId ? variants : variantsForMarket(variants, market);
     const variant = pool.length ? pool[index % pool.length] : null;
     const rawBody = variant?.body ?? input.body ?? "";
     const rawSubject = variant?.subject ?? input.subject ?? null;
@@ -217,7 +227,16 @@ export async function queueMessages(input: QueueMessagesInput): Promise<QueueMes
         presetId: preset?.id ?? null,
         variantId: variant?.id ?? null,
         subject: ai ? null : rawSubject != null ? renderSubject(rawSubject, agent.name) : null,
-        body: ai ? "" : renderMessageBody(rawBody, agent.name, listing?.address ?? null, listing?.city ?? null),
+        body: ai
+          ? ""
+          : renderMessageBody(
+              rawBody,
+              agent.name,
+              listing?.address ?? null,
+              listing?.city ?? null,
+              null,
+              marketMessageContext(mk, { city: listing?.city ?? null, state: listing?.state ?? null }, market)
+            ),
         draftStatus: ai ? "pending" : null,
         draftInstruction: ai ? input.aiInstruction?.trim() || null : null,
         sendAfter,

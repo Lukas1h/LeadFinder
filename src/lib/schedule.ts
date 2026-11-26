@@ -5,6 +5,7 @@
 // anything derived from a Date's local fields would disagree between the two.
 
 import type { Listing } from "@/db/schema";
+import type { WithDriveLines } from "@/lib/driveLines";
 
 export const SCHEDULE_TIMEZONE = "America/Los_Angeles";
 
@@ -39,9 +40,10 @@ export interface ScheduleItem {
   done: boolean;
   reminderId: string | null;
   // Follow-ups only — the listing whose followUpAt a dismiss clears, and the
-  // full row so tapping the item opens its ListingModal right here.
+  // full row (plus its server-computed drive lines) so tapping the item opens
+  // its ListingModal right here.
   listingId: string | null;
-  listing: Listing | null;
+  listing: WithDriveLines<Listing> | null;
 }
 
 /** An instant's calendar day and time in Lukas's timezone. */

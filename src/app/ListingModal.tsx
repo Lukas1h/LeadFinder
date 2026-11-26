@@ -15,8 +15,8 @@ import { AgentRow } from "./AgentRow";
 import { LinkAgentForm } from "./LinkAgentForm";
 import { FindLinkButton } from "./FindLinkButton";
 import { formatPrice, formatDate } from "@/lib/format";
-import { listingDriveTime, shooterDrives } from "@/lib/markets";
 import { ShooterDrives } from "./ShooterDrives";
+import type { LeadListing } from "./leads-data";
 import { CARD_MAX_PHOTOS } from "@/lib/cardPhotos";
 import { Dialog, DialogContent, DialogClose, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,8 @@ export function ListingModal({
   open,
   onOpenChange,
 }: {
-  lead: Listing;
+  /** Computed on the server: the modal runs on the client and can't build a MarketIndex. */
+  lead: LeadListing;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -141,16 +142,16 @@ export function ListingModal({
             </h2>
             <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
               {[lead.city, lead.state, lead.zipcode].filter(Boolean).join(", ")}
-              {shooterDrives(lead) ? (
+              {lead.shooterDrives ? (
                 <span className="flex items-center gap-1">
                   <Car className="size-3.5 shrink-0" />
-                  <ShooterDrives drives={shooterDrives(lead)!} />
+                  <ShooterDrives drives={lead.shooterDrives} />
                 </span>
               ) : (
-                listingDriveTime(lead) && (
+                lead.driveTime && (
                   <span className="flex items-center gap-1">
                     <Car className="size-3.5" />
-                    {listingDriveTime(lead)}
+                    {lead.driveTime}
                   </span>
                 )
               )}

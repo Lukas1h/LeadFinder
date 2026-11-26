@@ -18,7 +18,11 @@ config({ path: ".env.local", quiet: true });
 
 const { COLD_TRIGGERS, MAX_COLD_FOLLOW_UPS, MIN_GAP_DAYS, loadColdPool } = await import("@/lib/coldFollowUp/pool");
 const { getColdFollowUpCandidates } = await import("@/lib/coldFollowUp/triggers");
-const { MARKET_ORDER } = await import("@/lib/markets");
+// Outside Next there's no request to cache the markets in, so build the index
+// straight from the table (lib/marketsData.ts).
+const { loadMarketDefs } = await import("@/lib/marketsData");
+const { MarketIndex } = await import("@/lib/markets");
+const mk = new MarketIndex(await loadMarketDefs());
 
 const DAY = 24 * 60 * 60 * 1000;
 const SAMPLES_PER_TRIGGER = 10;
@@ -66,12 +70,16 @@ for (const key of COLD_TRIGGERS) {
 }
 
 // By trigger x market ---------------------------------------------------------
-console.log("\n" + pad("by trigger x market", 24) + MARKET_ORDER.map((m) => padLeft(m, 10)).join(""));
-console.log("  " + "-".repeat(24 + MARKET_ORDER.length * 10));
+// Every market key, so a candidate in a paused market or "unassigned" is still
+// counted in a column.
+const MARKET_COLUMNS = mk.keys;
+const MARKET_WIDTH = Math.max(10, ...MARKET_COLUMNS.map((m) => m.length + 2));
+console.log("\n" + pad("by trigger x market", 24) + MARKET_COLUMNS.map((m) => padLeft(m, MARKET_WIDTH)).join(""));
+console.log("  " + "-".repeat(24 + MARKET_COLUMNS.length * MARKET_WIDTH));
 const byMarket = tally(candidates, (c) => `${c.trigger}|${c.market}`);
 for (const key of COLD_TRIGGERS) {
-  const counts = MARKET_ORDER.map((m) => byMarket.get(`${key}|${m}`) ?? 0);
-  console.log("  " + pad(key, 22) + counts.map((n) => padLeft(n, 10)).join(""));
+  const counts = MARKET_COLUMNS.map((m) => byMarket.get(`${key}|${m}`) ?? 0);
+  console.log("  " + pad(key, 22) + counts.map((n) => padLeft(n, MARKET_WIDTH)).join(""));
 }
 
 // By trigger x samples eligibility -------------------------------------------
