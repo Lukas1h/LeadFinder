@@ -62,6 +62,8 @@ export interface MarketCheckResult {
 interface Tracked {
   address: string | null;
   city: string | null;
+  /** The listing's state, so Compass can't answer with a same-named town in another state. */
+  state: string | null;
   /** When this listing or job began: a contract or closing from before it is an earlier sale of the same house. */
   since: Date;
   marketStatus: string | null;
@@ -116,6 +118,7 @@ export async function refreshMarketStatuses(limit = 200): Promise<MarketCheckRes
         id: listings.id,
         address: listings.address,
         city: listings.city,
+        state: listings.state,
         listedAt: listings.listedAt,
         foundAt: listings.foundAt,
         marketStatus: listings.marketStatus,
@@ -141,6 +144,7 @@ export async function refreshMarketStatuses(limit = 200): Promise<MarketCheckRes
         id: bookings.id,
         address: sql<string | null>`coalesce(${listings.address}, ${bookings.address})`,
         city: sql<string | null>`coalesce(${listings.city}, ${bookings.city})`,
+        state: sql<string | null>`coalesce(${listings.state}, ${bookings.state})`,
         jobDate: bookings.jobDate,
         createdAt: bookings.createdAt,
         marketStatus: bookings.marketStatus,

@@ -279,15 +279,37 @@ shooters list with rate cards. Actions in `src/app/markets/actions.ts`
 (`saveMarket`, `setMarketStatus`, `addMarketTown`, `saveShooter`); nothing
 deletes a market or a shooter.
 
-**Adding a market** (no code change, no app update): New market on
+**Adding a market** (no code change, no app update): follow the `new-market`
+skill (`.claude/skills/new-market/SKILL.md`). In short: New market on
 `/markets` (label, key, state, base town, radius; the base is geocoded and
-wording defaults to "in the <base> area"), add or place its shooter(s) with
-home and rates, set its prices (then run the pricing-sheet script), add a
-`search_sources` row with `market` set and `coming_soon_only` false to fill
-the tab at first, plus Zillow saved-search email alerts per county (the
-leadfinder-zillow AgentMail inbox ingests them). Once the tab is full, flip
-the source to `coming_soon_only` true (refetching every listing burns
-Zillapi credits; the alerts catch ~90%). Market variants of templates are
+wording defaults to "in the <base> area"), its shooter(s) with home and
+rates, prices (then the pricing-sheet script), a Zillapi start-up source
+(`search_sources` with `market`, `coming_soon_only` true and `full_until`
+= now + 2 days: until then the sync pulls every listing, after it only
+coming-soon ones), and Zillow saved-search email alerts set up in the Paseo
+browser on Lukas's Zillow account.
+
+**Zillow email alerts** (the long-term ingest; leadfinder-zillow AgentMail
+inbox → `src/app/api/webhooks/agentmail/route.ts`). Each saved search sends
+one daily digest showing at most **10 items**, and price cuts and open
+houses on old listings count against them: until 2026-11-25 the big
+counties (Lane, Multnomah, Marion, Clackamas, Washington, Clark) lost
+70–80% of their new listings that way. Since then each county has
+**"<County> - Just listed [price band]"** searches with Zillow's Days on
+Zillow = 1 day filter (`filterState.doz`), split by price so each sees ≤ ~5
+new listings a day, plus the older "<County> - New" (price cuts, for the
+price-cut feed) and "- Land" searches. Every alert email is logged in
+`alert_emails` (search name, new listings, items, cards shown,
+`truncated`); `npx tsx scripts/zillow-alert-health.mts [--days N]` lists
+which searches keep getting truncated and need splitting. Alert listings get
+their details from Compass first (free) and Zillapi only as a fallback.
+Compass broke on ~2026-11-03 (its autocomplete started requiring
+`coordinatesForRanking`, and listing pages went behind AWS WAF, so the page
+is read from the 301's own body) and was fixed 2026-11-25; lookups take the
+state too. Compass covers Oregon and SW Washington (RMLS) well, Seattle and
+Boise in tests; its "First Look" private listings are skipped.
+
+Market variants of templates are
 only needed for truly local wording: `{{area}}` and the price placeholders
 already change per market. A portfolio template whose towns are the
 market's cities helps the builder prefill. Killing a market: set its status

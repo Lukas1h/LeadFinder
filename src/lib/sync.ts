@@ -71,7 +71,7 @@ type AgentLookup = AgentInfo & { agentEmail: string | null };
  * top-ups had reached about $10 a month.)
  */
 async function lookUpAgent(
-  row: { zpid: string; address: string | null; city: string | null; price: number | null },
+  row: { zpid: string; address: string | null; city: string | null; state?: string | null; price: number | null },
   zillapi: "first" | "last" | "never"
 ): Promise<AgentLookup> {
   let result: AgentLookup = { agentName: null, agentPhone: null, brokerName: null, agentEmail: null };
@@ -127,12 +127,27 @@ export async function runSync(): Promise<SyncResult> {
   // whole Promise.all and throw away every other source's results too.
   const settled = await Promise.allSettled(
     sources.map(async (source) => {
+      // A new market's source fills its tab during the start-up window: while
+      // fullUntil is in the future it pulls every listing (not just coming
+      // soon), then falls back to comingSoonOnly on its own once the window
+      // closes — the Zillow email alerts have warmed up by then (see
+      // searchSources.fullUntil in src/db/schema.ts).
+      const now = new Date();
+      const fullUntil = source.fullUntil;
+      const inStartupWindow = fullUntil != null && now < fullUntil;
+      if (inStartupWindow) {
+        console.info(
+          `runSync: source ${source.name} in start-up window until ${fullUntil.toISOString()}: fetching every listing`
+        );
+      }
+      const comingSoonOnly = source.comingSoonOnly && !inStartupWindow;
+
       const results = await fetchNewListings({
         bbox: source.bbox,
         priceMin: source.priceMin,
         priceMax: source.priceMax,
         homeTypes: source.homeTypes,
-        comingSoonOnly: source.comingSoonOnly,
+        comingSoonOnly,
         keywords: source.keywords,
         maxItems: MAX_ITEMS_PER_SOURCE,
       });
@@ -167,6 +182,7 @@ async function retryMissingAgentInfo(): Promise<number> {
       zpid: listings.zpid,
       address: listings.address,
       city: listings.city,
+      state: listings.state,
       price: listings.price,
       homeType: listings.homeType,
       brokerName: listings.brokerName,
@@ -308,6 +324,7 @@ export async function insertAndEnrichListings(
       agentName: listings.agentName,
       address: listings.address,
       city: listings.city,
+      state: listings.state,
       price: listings.price,
     });
 

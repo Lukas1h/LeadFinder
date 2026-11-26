@@ -875,11 +875,39 @@ export const searchSources = pgTable("search_sources", {
   keywords: text("keywords"),
   // The market it searches (markets.key); a paused or killed market's sources are skipped by the sync.
   market: text("market"),
+  // Start-up window for a new market: until this moment the source pulls every
+  // listing (not just coming soon) so the tab fills while the Zillow email
+  // alerts warm up; after it, the sync treats it as coming_soon_only.
+  fullUntil: timestamp("full_until", { withTimezone: true }),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type SearchSource = typeof searchSources.$inferSelect;
+
+// One Zillow saved-search email as it arrived (the AgentMail webhook), for
+// watching the alerts' health: Zillow's daily digest shows at most 10 items
+// (new listings, price cuts and open houses mixed) and hides the rest behind
+// "View all updates", so a search whose digests keep coming back truncated
+// is losing new listings and needs splitting (2026-11-25: Lane, Multnomah,
+// Clackamas, Washington and Clark were losing 70–80% of theirs).
+export const alertEmails = pgTable("alert_emails", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  // The saved search's name, as the email gives it; null when it doesn't.
+  searchName: text("search_name"),
+  // Zillow's X-CID header: instantsearchdigest, instantsavedsearch, …
+  kind: text("kind"),
+  subject: text("subject"),
+  // From the digest's summary line ("3 New listings | 2 Price cuts | 5 Open houses").
+  newListings: integer("new_listings"),
+  itemsTotal: integer("items_total"),
+  // Listing cards actually in the email (before the recommendations).
+  cardsShown: integer("cards_shown"),
+  truncated: boolean("truncated").notNull().default(false),
+  zpidsFound: integer("zpids_found").notNull().default(0),
+  inserted: integer("inserted").notNull().default(0),
+});
 export type NewSearchSource = typeof searchSources.$inferInsert;
 
 // Single-row table of user-editable app settings — always read/written

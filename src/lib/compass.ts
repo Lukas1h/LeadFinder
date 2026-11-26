@@ -38,7 +38,9 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Re
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, { ...init, headers: { "user-agent": UA, ...init.headers }, signal: controller.signal });
-    return res.ok ? res : null;
+    // 3xx allowed, not just ok: the listing page's 301 carries the page in
+    // its own body (see fetchListingPage).
+    return res.status < 400 ? res : null;
   } catch {
     return null;
   } finally {
@@ -64,17 +66,35 @@ function findOffer(node: unknown): { offeredBy: LdPerson | LdPerson[]; price?: n
   return null;
 }
 
-/** The Compass listing page for an address, from the address autocomplete. Null unless street and city both match. */
-async function findListingPath(address: string, city: string): Promise<string | null> {
+/**
+ * The Compass listing page for an address, from the address autocomplete.
+ * Null unless street and city both match — and, when the caller knows the
+ * state and Compass names one, the state too (LeadFinder is expanding beyond
+ * Oregon, and "Springfield, OR" must not answer a "Springfield" query meant
+ * for Missouri's).
+ */
+async function findListingPath(address: string, city: string, state?: string | null): Promise<string | null> {
+  const wantStreet = streetKey(address);
+  const wantCity = city.toLowerCase();
+  const wantState = state?.trim().toUpperCase() ?? null;
   const suggest = await fetchWithTimeout("https://www.compass.com/api/v3/omnisuggest/autocomplete", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      q: `${address} ${city}`,
+      q: [address, city, wantState].filter(Boolean).join(" "),
       sources: [0, 1, 7, 8, 2, 6, 5, 9, 11, 25, 4, 3, 18, 36],
-      preferredUcGeoIdForRanking: "portland_or",
+      preferredUcGeoIdForRanking: null,
       urlStrategy: 2,
       listingTypes: [2],
+      // Required since Compass moved the suggest ranker to v5 (around
+      // 2026-11-03): without it the API answers 200 with just
+      // {"rankerCorrelationId":"-1","success":true} and no categories, so
+      // every lookup came back null. The site's omnibox now sends the
+      // visitor's own coordinates; the value only has to be present —
+      // verified 2026-11-25 that a Boise query sent Manhattan's still
+      // returns the Boise listing — so a fixed middle-of-the-country point
+      // stands in for the caller, which runs serverless and has none.
+      coordinatesForRanking: { latitude: 39.8283, longitude: -98.5795 },
     }),
   });
   if (!suggest) return null;
@@ -83,16 +103,29 @@ async function findListingPath(address: string, city: string): Promise<string | 
     categories?: { items?: { text?: string; subText?: string; redirectUrl?: string }[] }[];
   } | null;
   const items = data?.categories?.flatMap((c) => c.items ?? []) ?? [];
-  const wantStreet = streetKey(address);
-  const wantCity = city.toLowerCase();
-  const match = items.find(
-    (i) =>
-      i.redirectUrl &&
-      i.text &&
-      streetKey(i.text) === wantStreet &&
-      (i.subText ?? "").toLowerCase().startsWith(wantCity)
-  );
+  const match = items.find((i) => {
+    if (!i.redirectUrl || !i.text || streetKey(i.text) !== wantStreet) return false;
+    // subText is "Portland, OR" — the city part must match from the front,
+    // and a state part (when either side has one) must match exactly.
+    const [subCity = "", subState = ""] = (i.subText ?? "").toLowerCase().split(",").map((s) => s.trim());
+    return subCity.startsWith(wantCity) && (!wantState || !subState || subState === wantState.toLowerCase());
+  });
   return match?.redirectUrl ?? null;
+}
+
+/**
+ * A listing page's HTML. The suggest returns /listing/<id>/view, which
+ * Compass now answers 301 with the page's full HTML in the redirect's own
+ * body while pointing its Location at the canonical /homedetails/… URL —
+ * and /homedetails (since ~2026-11-03) sits behind AWS WAF's JavaScript
+ * challenge (202, a challenge.js interstitial a plain server-side fetch
+ * cannot solve). So the redirect is deliberately NOT followed: the 301's
+ * own body is the page (verified in Node fetch 2026-11-25: status 301,
+ * ~900KB, with window.__INITIAL_DATA__, the JSON-LD and "localizedStatus").
+ */
+async function fetchListingPage(path: string): Promise<string | null> {
+  const res = await fetchWithTimeout(`https://www.compass.com${path}`, { redirect: "manual" });
+  return res?.text().catch(() => null) ?? null;
 }
 
 export interface CompassStatus {
@@ -114,14 +147,14 @@ export interface CompassStatus {
 export async function fetchCompassStatus(listing: {
   address: string | null;
   city: string | null;
+  state?: string | null;
 }): Promise<CompassStatus | null> {
   if (!listing.address || !listing.city) return null;
-  const path = await findListingPath(listing.address, listing.city);
+  const path = await findListingPath(listing.address, listing.city, listing.state);
   if (!path) return null;
 
-  const page = await fetchWithTimeout(`https://www.compass.com${path}`, { redirect: "follow" });
-  if (!page) return null;
-  const html = await page.text();
+  const html = await fetchListingPage(path);
+  if (!html) return null;
 
   const marker = '"localizedStatus":"';
   const at = html.indexOf(marker);
@@ -147,16 +180,16 @@ export async function fetchCompassStatus(listing: {
 export async function fetchCompassAgent(listing: {
   address: string | null;
   city: string | null;
+  state?: string | null;
   price: number | null;
 }): Promise<CompassAgent | null> {
   if (!listing.address || !listing.city) return null;
 
-  const path = await findListingPath(listing.address, listing.city);
+  const path = await findListingPath(listing.address, listing.city, listing.state);
   if (!path) return null;
 
-  const page = await fetchWithTimeout(`https://www.compass.com${path}`, { redirect: "follow" });
-  if (!page) return null;
-  const html = await page.text();
+  const html = await fetchListingPage(path);
+  if (!html) return null;
 
   for (const [, json] of html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)) {
     let parsed: unknown;
@@ -259,13 +292,13 @@ function compassPriceCuts(history: CompassInitialListing["history"]) {
 export async function fetchCompassListing(listing: {
   address: string;
   city: string;
+  state?: string | null;
   price: number | null;
 }): Promise<CompassListing | null> {
-  const path = await findListingPath(listing.address, listing.city);
+  const path = await findListingPath(listing.address, listing.city, listing.state);
   if (!path) return null;
-  const page = await fetchWithTimeout(`https://www.compass.com${path}`, { redirect: "follow" });
-  if (!page) return null;
-  const html = await page.text();
+  const html = await fetchListingPage(path);
+  if (!html) return null;
 
   const marker = "window.__INITIAL_DATA__ = ";
   const start = html.indexOf(marker);
@@ -307,7 +340,7 @@ export async function fetchCompassListing(listing: {
     listing: {
       address: listing.address,
       city: data.location?.city ?? listing.city,
-      state: data.location?.state ?? "OR",
+      state: data.location?.state ?? listing.state ?? "OR",
       zipcode: data.location?.zipCode ?? null,
       price,
       bedrooms: data.size?.bedrooms != null ? String(data.size.bedrooms) : null,

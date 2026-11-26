@@ -1,6 +1,6 @@
 import { Webhook } from "svix";
 import { db } from "@/db";
-import { listings } from "@/db/schema";
+import { alertEmails, listings } from "@/db/schema";
 import { inArray } from "drizzle-orm";
 import { fetchFullListing, zillowLinkFromZpid } from "@/lib/zillapi";
 import { fetchCompassListing } from "@/lib/compass";
@@ -9,6 +9,7 @@ import { isUnderPriceFloor, hasInHouseMedia, isBuilderListing } from "@/lib/lead
 import { insertAndEnrichListings, retryMissingPhotoScores } from "@/lib/sync";
 import { fetchAgentMailMessage } from "@/lib/agentmail";
 import { applyPriceCutsToExisting, parseEmailPriceCuts } from "@/lib/priceCuts";
+import { alertKindFromStats, parseAlertEmailStats } from "@/lib/alertEmailStats";
 import type { NewListing } from "@/db/schema";
 
 // See matching comment in src/app/page.tsx — Hobby plan's real ceiling is
@@ -41,6 +42,11 @@ interface AgentMailMessageReceived {
     subject?: string;
     html?: string;
     text?: string;
+    // AgentMail's Message object carries the raw headers map, X-CID included
+    // (docs.agentmail.to/api-reference/inboxes/messages/get). The inline copy
+    // in a webhook event doesn't always include them, hence the fallback to
+    // the refetched message and then to the email's own shape.
+    headers?: Record<string, string>;
   };
 }
 
@@ -115,6 +121,60 @@ function splitLeadZpids(body: string): { trusted: string[]; recommended: string[
   return { trusted, recommended };
 }
 
+/**
+ * Zillow's alert kind lives in the X-CID header ("instantsearchdigest",
+ * "instantsavedsearch", …), but header case depends on the sender. Null when
+ * the message doesn't expose headers at all.
+ */
+function headerValue(headers: Record<string, string> | undefined, name: string): string | null {
+  if (!headers) return null;
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === name && typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+/**
+ * fetchAgentMailMessage types only the body parts it was written for, but it
+ * returns AgentMail's whole Message object, headers included.
+ */
+function agentMailHeaders(message: { html?: string; text?: string }): Record<string, string> | undefined {
+  const headers = (message as unknown as { headers?: unknown }).headers;
+  return headers != null && typeof headers === "object" ? (headers as Record<string, string>) : undefined;
+}
+
+/**
+ * One health row per alert email (see alertEmails in src/db/schema.ts), for
+ * spotting saved searches Zillow's 10-item digest cap is truncating. Logged
+ * for ignored/rental/excluded emails too — cheap, and those still say what
+ * their search looks like. Never throws: the email's own handling must not
+ * depend on this row landing, so a failure is only console.error'd.
+ */
+async function recordAlertEmail(opts: {
+  subject: string;
+  text: string;
+  kind: string | null;
+  zpidsFound: number;
+  inserted: number;
+}): Promise<void> {
+  try {
+    const stats = parseAlertEmailStats(opts.subject, opts.text);
+    await db.insert(alertEmails).values({
+      searchName: stats.searchName,
+      kind: opts.kind ?? alertKindFromStats(stats),
+      subject: opts.subject || null,
+      newListings: stats.newListings,
+      itemsTotal: stats.itemsTotal,
+      cardsShown: stats.cardsShown,
+      truncated: stats.truncated,
+      zpidsFound: opts.zpidsFound,
+      inserted: opts.inserted,
+    });
+  } catch (error) {
+    console.error("agentmail webhook: alert email log failed", opts.subject, error);
+  }
+}
+
 export async function POST(req: Request) {
   try {
     return await handle(req);
@@ -163,8 +223,10 @@ async function handle(req: Request): Promise<Response> {
   }
 
   const subject = event.message?.subject ?? "";
+  let xcid = headerValue(event.message?.headers, "x-cid");
   if (EXCLUDED_ALERT_RE.test(subject)) {
     console.log("agentmail webhook: excluded alert type:", subject);
+    await recordAlertEmail({ subject, text: event.message?.text ?? "", kind: xcid, zpidsFound: 0, inserted: 0 });
     return new Response("Ignored: not an outreach opportunity", { status: 200 });
   }
 
@@ -184,17 +246,20 @@ async function handle(req: Request): Promise<Response> {
       text = full.text ?? "";
       body = html + " " + text;
       ({ trusted, recommended } = splitLeadZpids(body));
+      xcid = xcid ?? headerValue(agentMailHeaders(full), "x-cid");
     }
   }
 
   if (RENTAL_SUBJECT_RE.test(subject) || RENTAL_PRICE_RE.test(body)) {
     console.log("agentmail webhook: rental alert, not a lead:", subject);
+    await recordAlertEmail({ subject, text, kind: xcid, zpidsFound: 0, inserted: 0 });
     return new Response("Ignored: rental alert", { status: 200 });
   }
 
   const zpids = [...trusted, ...recommended];
   if (zpids.length === 0) {
     console.log("agentmail webhook: no zpid found, subject:", subject);
+    await recordAlertEmail({ subject, text, kind: xcid, zpidsFound: 0, inserted: 0 });
     return new Response("No zpid found", { status: 200 });
   }
 
@@ -250,6 +315,7 @@ async function handle(req: Request): Promise<Response> {
 
   // fetchFullListing already asked Zillapi about the agent.
   const inserted = await insertAndEnrichListings(candidates, { agentAlreadyFetched: true, agentEmails });
+  await recordAlertEmail({ subject, text, kind: xcid, zpidsFound: zpids.length, inserted });
 
   // Listings arrive here all day and the sync cron runs once, so this is where
   // a backlog of unscored listings (scoring was down, then came back) gets
@@ -303,7 +369,7 @@ function unlikelyFromCard(card: AlertCard): boolean {
  */
 async function lookUpAlertListing(zpid: string, card: AlertCard | undefined, trusted: boolean): Promise<AlertLookup> {
   if (card?.address && card.city) {
-    const compass = await fetchCompassListing({ address: card.address, city: card.city, price: card.price }).catch(
+    const compass = await fetchCompassListing({ address: card.address, city: card.city, price: card.price, state: card.state }).catch(
       (error) => {
         console.error("agentmail webhook: compass lookup failed", zpid, error);
         return null;
