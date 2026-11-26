@@ -42,9 +42,31 @@ export interface LedgerBooking {
   id: string;
   /** The day the work happened ("YYYY-MM-DD"), or null if it hasn't been shot. */
   earnedDate: string | null;
+  /** What the client was billed: the line items. The tax view uses this. */
   revenue: number;
   /** Shooting + editing + logistics hours; drive time comes from trips. */
   workHours: number;
+  /** A contracted job's agreed shooter pay (0 when Lukas shot it). */
+  shooterPay?: number;
+  /** A contracted job's photo editor cost (bookings.editor_cost, else the shooter style's default). */
+  editorCost?: number;
+  /** The "Subcontractors" expense that paid the shooter, once paid: already off real revenue, so never a cost too. */
+  shooterExpenseId?: string | null;
+}
+
+/**
+ * Real revenue (Lukas, 2026-11-26): the line items minus a contracted job's
+ * shooter pay and photo editor, the same number the Booked page shows
+ * (app/booked/bookingMath.ts). The reports and job rows use it; the tax view
+ * keeps the billed revenue and the actual deductible expenses.
+ */
+export function realRevenue(b: LedgerBooking): number {
+  return b.revenue - (b.shooterPay ?? 0) - (b.editorCost ?? 0);
+}
+
+/** Ids of the expenses that paid a booking's shooter (counted in real revenue, so skipped as costs). */
+function shooterPaymentIds(input: LedgerInput): Set<string> {
+  return new Set(input.bookings.map((b) => b.shooterExpenseId).filter((id): id is string => !!id));
 }
 
 export interface LedgerInput {
@@ -164,9 +186,12 @@ export function jobCosts(input: LedgerInput): Map<string, JobCosts> {
   }
 
   const tripsById = new Map(input.trips.map((t) => [t.id, t]));
+  const shooterPayments = shooterPaymentIds(input);
   for (const e of input.expenses) {
     // Gas receipts price the trips; counting them on the job too would pay for the drive twice.
     if (e.category === "gas" || !isBusinessExpense(e.category)) continue;
+    // The shooter's pay already came off the job's real revenue.
+    if (shooterPayments.has(e.id)) continue;
     // Charged to a job, or to a trip and so split across its jobs like the gas (lunch on a two-job day).
     const trip = !e.bookingId && e.tripId ? tripsById.get(e.tripId) : undefined;
     const shares = e.bookingId ? new Map([[e.bookingId, 1]]) : trip ? tripShares(trip, bookingsById) : new Map<string, number>();
@@ -193,14 +218,15 @@ export interface JobEconomics extends JobCosts {
 export function jobEconomics(booking: LedgerBooking, costs: JobCosts | undefined): JobEconomics {
   const c = costs ?? emptyJobCosts();
   const hours = booking.workHours + c.driveHours;
-  const profit = booking.revenue - c.gas - c.expenses;
+  const revenue = realRevenue(booking);
+  const profit = revenue - c.gas - c.expenses;
   return {
     ...c,
-    revenue: booking.revenue,
+    revenue,
     hours,
     profit,
     perHour: hours > 0 ? profit / hours : null,
-    profitAfterCarWear: booking.revenue - c.mileageDeduction - c.expenses,
+    profitAfterCarWear: revenue - c.mileageDeduction - c.expenses,
   };
 }
 
@@ -254,7 +280,7 @@ export function monthlySummary(input: LedgerInput, through: string): MonthSummar
   for (const b of input.bookings) {
     if (!b.earnedDate) continue;
     const m = get(monthOf(b.earnedDate));
-    m.revenue += b.revenue;
+    m.revenue += realRevenue(b);
     m.jobs += 1;
     m.hours += b.workHours;
   }
@@ -268,9 +294,12 @@ export function monthlySummary(input: LedgerInput, through: string): MonthSummar
     m.hours += (trip.driveMinutes ?? 0) / 60;
   }
 
+  const shooterPayments = shooterPaymentIds(input);
   for (const e of input.expenses) {
     const m = get(monthOf(e.date));
     m.deductibleExpenses += deductibleAmount(e);
+    // Paying a booking's shooter already came off that job's real revenue.
+    if (shooterPayments.has(e.id)) continue;
     if (e.category === "gas") {
       m.gasBought += dollars(e);
       continue;

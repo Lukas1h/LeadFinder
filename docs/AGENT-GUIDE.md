@@ -251,7 +251,13 @@ adds "of $N billed"; Outstanding stays the billed total), the booking's Time &
 money lists the unpaid shooter pay and editor, and its profit subtracts them
 (a paid shooter's pay is already a linked expense, never counted twice). The
 phone API's booking has `realRevenue`, `additionalCosts` includes those
-costs, and `shooter` carries `style`, `editorCost`, `editorCostIsDefault`. Putting a shooter on a booking with no pay given defaults the
+costs, and `shooter` carries `style`, `editorCost`, `editorCostIsDefault`.
+Finances (web and app, `src/lib/finance`) use it too: monthly and per-job
+revenue are real revenue (`realRevenue` in `math.ts`, by the job's earned
+date), the paid shooter's Subcontractors expense is then skipped as a cost so
+it never counts twice, and Profit First counts booking editor costs as
+subcontractors. The tax view keeps billed revenue and actual deductible
+expenses. Putting a shooter on a booking with no pay given defaults the
 pay from their rates and the job's line items (`defaultShooterPay` in
 `src/lib/shooters.ts`); an explicit pay wins. Drive minutes = `startMinutes
 + straight-line miles × minutesPerMile` from the listing's geocode, else its

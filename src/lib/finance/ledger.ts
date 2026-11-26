@@ -1,5 +1,6 @@
 import { db } from "@/db";
-import { appSettings, bookingLineItems, bookings, expenses, listings, tripBookings, trips } from "@/db/schema";
+import { appSettings, bookingLineItems, bookings, expenses, listings, shooters, tripBookings, trips } from "@/db/schema";
+import { editorCost } from "@/lib/markets";
 import { eq, sql } from "drizzle-orm";
 import { pacificDate, type LedgerBooking, type LedgerExpense, type LedgerInput, type LedgerTrip } from "./math";
 import { DEFAULT_PF_PERCENTS, type ProfitFirstPercents } from "./profitFirst";
@@ -95,9 +96,15 @@ export async function loadLedger(): Promise<Ledger> {
         editingHours: bookings.editingHours,
         logisticsHours: bookings.logisticsHours,
         revenue: sql<number>`coalesce((select sum(${bookingLineItems.amount}) from ${bookingLineItems} where ${bookingLineItems.bookingId} = ${bookings.id}), 0)::int`,
+        shooterId: bookings.shooterId,
+        shooterPay: bookings.shooterPay,
+        shooterExpenseId: bookings.shooterExpenseId,
+        editorCost: bookings.editorCost,
+        shooterStyle: shooters.style,
       })
       .from(bookings)
-      .leftJoin(listings, eq(listings.id, bookings.listingId)),
+      .leftJoin(listings, eq(listings.id, bookings.listingId))
+      .leftJoin(shooters, eq(shooters.id, bookings.shooterId)),
     getFinanceSettings(),
   ]);
 
@@ -145,6 +152,9 @@ export async function loadLedger(): Promise<Ledger> {
         paidDate: b.stage === "completed" ? paidDate(b) : null,
         revenue: Number(b.revenue),
         workHours: (b.shootingHours ?? 0) + (b.editingHours ?? 0) + (b.logisticsHours ?? 0),
+        shooterPay: b.shooterId ? (b.shooterPay ?? 0) : 0,
+        editorCost: b.shooterId ? editorCost(b.shooterStyle, b.editorCost) : 0,
+        shooterExpenseId: b.shooterId ? b.shooterExpenseId : null,
       })
     ),
   };

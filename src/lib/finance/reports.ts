@@ -12,6 +12,7 @@ import {
   jobEconomics,
   monthOf,
   monthlySummary,
+  realRevenue,
   tripCost,
   yearTaxView,
   type JobEconomics,
@@ -133,7 +134,7 @@ export function jobsReport(ledger: Ledger): JobsReport {
     .filter((t) => t.bookingIds.length > 1)
     .map((t): MultiJobDay => {
       const linked = t.bookingIds.map((id) => bookingsById.get(id)).filter((b) => b != null);
-      const revenue = linked.reduce((s, b) => s + b.revenue, 0);
+      const revenue = linked.reduce((s, b) => s + realRevenue(b), 0);
       const expenses = t.bookingIds.reduce((s, id) => s + (costs.get(id)?.expenses ?? 0), 0);
       const gas = tripCost(t, ledger).gas;
       const hours = linked.reduce((s, b) => s + b.workHours, 0) + (t.driveMinutes ?? 0) / 60;
