@@ -213,8 +213,9 @@ struct BookingSection: Identifiable {
     var title: String { stage.label }
 
     /// What the section is worth in revenue (line items, before costs).
+    /// Invoice sent is billed money still owed, so it sums what was billed.
     var total: Int {
-        bookings.reduce(0) { $0 + $1.revenue }
+        bookings.reduce(0) { $0 + (stage == .invoiceSent ? $1.billed : $1.revenue) }
     }
 
     /// Invoice sent reads as money still owed: "$1,250 outstanding".
@@ -242,7 +243,7 @@ struct BookingStatsView: View {
         }
         let recentRevenue = recent.reduce(0) { $0 + $1.revenue }
         let allTime = completed.reduce(0) { $0 + $1.revenue }
-        let owed = outstanding.reduce(0) { $0 + $1.revenue }
+        let owed = outstanding.reduce(0) { $0 + $1.billed }
         return LazyVGrid(
             columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
             spacing: 14

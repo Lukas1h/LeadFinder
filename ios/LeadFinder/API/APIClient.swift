@@ -556,6 +556,21 @@ actor APIClient {
         _ = try await send("PATCH", "api/app/v1/bookings/\(id)", body: Body(shooterName: name, shooterPay: pay), as: OK.self)
     }
 
+    /// Records the photo editor's cost on a contracted job; nil resets it to the
+    /// default ($18 HDR, $0 flambient). Sent as null so the PATCH clears it.
+    func setBookingEditorCost(id: String, cost: Double?) async throws {
+        struct Body: Encodable, Sendable {
+            var editorCost: Double?
+            private enum CodingKeys: String, CodingKey { case editorCost }
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: CodingKeys.self)
+                try c.encode(editorCost, forKey: .editorCost)
+            }
+        }
+        struct OK: Decodable, Sendable { let ok: Bool }
+        _ = try await send("PATCH", "api/app/v1/bookings/\(id)", body: Body(editorCost: cost), as: OK.self)
+    }
+
     /// Marks the shooter paid (or unpaid) on a job.
     func setShooterPaid(bookingId: String, paid: Bool) async throws {
         struct Body: Encodable, Sendable { let paid: Bool }

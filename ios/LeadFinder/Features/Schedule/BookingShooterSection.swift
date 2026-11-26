@@ -12,6 +12,8 @@ struct BookingShooterSection: View {
     @State private var showSheet = false
     @State private var isWorking = false
     @State private var error: String?
+    @State private var editingEditor = false
+    @State private var editorDraft = ""
 
     var body: some View {
         Group {
@@ -23,6 +25,20 @@ struct BookingShooterSection: View {
         }
         .sheet(isPresented: $showSheet) {
             ShooterSheet(booking: booking) { await onChange() }
+        }
+        .alert("Editor cost", isPresented: $editingEditor) {
+            TextField("18", text: $editorDraft)
+                #if os(iOS)
+                .keyboardType(.decimalPad)
+                #endif
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                let trimmed = editorDraft.trimmingCharacters(in: .whitespaces)
+                let cost = trimmed.isEmpty ? nil : Double(trimmed.filter { $0.isNumber || $0 == "." })
+                Task { await run { try await APIClient.shared.setBookingEditorCost(id: booking.id, cost: cost) } }
+            }
+        } message: {
+            Text("What the editor charged for this job. Leave blank for the default.")
         }
     }
 
@@ -72,6 +88,26 @@ struct BookingShooterSection: View {
                 stateChip(shooter, shot: shot)
             }
 
+            if let editor = editorLabel(shooter) {
+                Button {
+                    editorDraft = shooter.editorCostIsDefault == true ? "" : Self.money(shooter.editorCost ?? 0)
+                    editingEditor = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "wand.and.stars")
+                            .font(.caption)
+                        Text(editor)
+                            .font(.subheadline)
+                        Image(systemName: "pencil")
+                            .font(.caption2)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(Theme.secondaryText)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
             if shot && shooter.pay != nil {
                 if shooter.paid {
                     Button {
@@ -116,6 +152,19 @@ struct BookingShooterSection: View {
     private func headline(_ shooter: BookingShooter) -> String {
         if let pay = shooter.pay { return "\(shooter.name) · \(BookingFormat.price(pay))" }
         return shooter.name
+    }
+
+    /// "Editor $18 · default" or "Editor $16"; nil for flambient at its $0 default.
+    private func editorLabel(_ shooter: BookingShooter) -> String? {
+        let cost = shooter.editorCost ?? 0
+        let isDefault = shooter.editorCostIsDefault ?? true
+        if shooter.editorCost == nil && shooter.style == nil { return nil }
+        if shooter.style == "flambient" && isDefault && cost == 0 { return nil }
+        return "Editor $\(Self.money(cost))" + (isDefault ? " · default" : "")
+    }
+
+    private static func money(_ value: Double) -> String {
+        value == value.rounded() ? String(Int(value)) : String(format: "%.2f", value)
     }
 
     @ViewBuilder

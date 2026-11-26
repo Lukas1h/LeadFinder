@@ -240,13 +240,18 @@ pricey to centre outreach on). Newport-area listings are Christian's, Jenny
 is their backup at +$30 (Lukas, 2026-11-26). Backups show on cards but never
 steer sorting. **Real revenue** (Lukas, 2026-11-26; `realRevenue` in
 `src/app/booked/bookingMath.ts`): own shoots = the line-item total;
-contracted = total − the shooter's pay − the HDR editor (e.g. $400 Chris job
-→ 400 − 225 − 18). The Booked page's cards, rows and stats show it (the card
+contracted = total − the shooter's pay − the photo editor (e.g. $400 Chris job
+→ 400 − 225 − 18). The editor cost is per booking, `bookings.editor_cost`
+(whole dollars, usually $15-18, recorded once Lukas sends the shooter's photos
+off; null = the default: `HDR_EDITOR_COST` for an HDR shooter, $0 flambient).
+Set it in the booking's shooter section, the phone API's PATCH `editorCost`
+(null resets), or MCP `update_booking` `editorCost`; clearing the shooter
+clears it. The Booked page's cards, rows and stats show it (the card
 adds "of $N billed"; Outstanding stays the billed total), the booking's Time &
 money lists the unpaid shooter pay and editor, and its profit subtracts them
 (a paid shooter's pay is already a linked expense, never counted twice). The
-phone API's booking has `realRevenue`, and `additionalCosts` includes those
-costs. Putting a shooter on a booking with no pay given defaults the
+phone API's booking has `realRevenue`, `additionalCosts` includes those
+costs, and `shooter` carries `style`, `editorCost`, `editorCostIsDefault`. Putting a shooter on a booking with no pay given defaults the
 pay from their rates and the job's line items (`defaultShooterPay` in
 `src/lib/shooters.ts`); an explicit pay wins. Drive minutes = `startMinutes
 + straight-line miles × minutesPerMile` from the listing's geocode, else its

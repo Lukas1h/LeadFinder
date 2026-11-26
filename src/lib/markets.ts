@@ -40,8 +40,13 @@ export const UNASSIGNED = "unassigned";
 export type ShooterStyle = "hdr" | "flambient";
 /** What Lukas pays an editor per contracted HDR shoot (Lukas, 2026-11-26: $18). Flambient shoots he blends himself. */
 export const HDR_EDITOR_COST = 18;
-/** A contracted job's extra editing cost for a shooter of this style (null = no shooter → 0). */
-export function editorCost(style: string | null | undefined): number {
+/**
+ * A contracted job's editing cost: the amount recorded on the booking
+ * (bookings.editor_cost) if any, else the default for the shooter's style
+ * (HDR_EDITOR_COST for HDR, 0 for flambient or no shooter).
+ */
+export function editorCost(style: string | null | undefined, recorded?: number | null): number {
+  if (recorded != null) return recorded;
   return style === "hdr" ? HDR_EDITOR_COST : 0;
 }
 export const MARKET_STATUSES: MarketStatus[] = ["testing", "active", "paused", "killed"];

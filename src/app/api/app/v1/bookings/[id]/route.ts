@@ -3,7 +3,7 @@ import { requireAppAuth } from "@/lib/appApiAuth";
 import { deleteBooking, getBookingWithDetails, getGalleryActivity, setBookingShowcase, updateBooking } from "@/app/booked/actions";
 import { applyDateTentative, setBookingStage } from "@/lib/bookingStage";
 import { BOOKING_STAGES, isBookingStage } from "@/lib/bookingStages";
-import { setBookingShooter } from "@/lib/shooters";
+import { setBookingEditorCost, setBookingShooter } from "@/lib/shooters";
 import { getMarkets } from "@/lib/marketsData";
 import { bookingJson } from "../../serialize";
 import {
@@ -124,6 +124,13 @@ export const PATCH = withErrors(async (req: Request, { params }: { params: Promi
       body.shooterPay === undefined ? (current.shooter?.pay ?? null) : optionalNumber(body.shooterPay, "shooterPay");
     const shooterResult = await setBookingShooter(id, name ? { name, pay } : null);
     if (shooterResult.error) return badRequest(shooterResult.error);
+  }
+
+  // The photo editor's cost on a contracted job: a number records it, null
+  // goes back to the default for the shooter's style (HDR $18, flambient $0).
+  if (body.editorCost !== undefined) {
+    const editorResult = await setBookingEditorCost(id, optionalNumber(body.editorCost, "editorCost"));
+    if (editorResult.error) return badRequest(editorResult.error);
   }
 
   const fresh = await getBookingWithDetails(id);

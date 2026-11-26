@@ -447,7 +447,8 @@ struct Booking: Codable, Sendable, Identifiable, Hashable {
     var shootingHours: Double?
     var logisticsHours: Double?
     /// Derived on the server: its share of the trips' gas plus its expenses,
-    /// whole dollars, so `total − additionalCosts` is the profit.
+    /// whole dollars, so `total − additionalCosts` is the profit. Since
+    /// 2026-11-26 it also includes unpaid shooter pay and the editor cost.
     var additionalCosts: Int?
     /// The trips and expenses behind those two, for "Time & money". Missing
     /// from a cache written before 2026-10-16.
@@ -457,6 +458,10 @@ struct Booking: Codable, Sendable, Identifiable, Hashable {
     var contactPhone: String?
     var lineItems: [LineItem]
     var total: Int
+    /// Line items minus contractor costs (shooter pay + photo editor) on a
+    /// contracted job; equals `total` on Lukas's own shoots. Nil from an
+    /// older server/cache.
+    var realRevenue: Double?
     var driveTime: String?
     var invoiceNumber: Int?
     var invoicedAt: String?
@@ -493,6 +498,11 @@ struct BookingShooter: Codable, Sendable, Hashable {
     var pay: Int?
     var paid: Bool
     var paidAt: String?
+    /// "hdr" or "flambient". Optional so an older cache decodes.
+    var style: String?
+    /// The editor cost recorded for this job, else the default ($18 HDR, $0 flambient).
+    var editorCost: Double?
+    var editorCostIsDefault: Bool?
 }
 
 /// One shooter to pick from the booking form (GET /shooters).
@@ -514,8 +524,15 @@ extension Booking {
         return .scheduled
     }
 
-    /// What the job brought in, before costs: its line items.
-    var revenue: Int { total }
+    /// What the job really brought in: line items minus contractor costs on a
+    /// contracted job (the server's `realRevenue`), else the line items.
+    var revenue: Int { realRevenue.map { Int($0.rounded()) } ?? total }
+
+    /// What was billed (the invoice): its line items. Use for outstanding money.
+    var billed: Int { total }
+
+    /// True when real revenue differs from what was billed (a contracted job).
+    var isContracted: Bool { revenue != total }
 }
 
 /// A shoot's drone airspace, as checked on the server against the FAA's class

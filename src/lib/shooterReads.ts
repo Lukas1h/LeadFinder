@@ -7,6 +7,7 @@
 import { asc, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { expenses, shooters } from "@/db/schema";
+import { editorCost } from "@/lib/markets";
 
 /** The shooter on one booking, as the Booked page and the app show it. */
 export interface BookingShooter {
@@ -16,6 +17,10 @@ export interface BookingShooter {
   phone: string | null;
   /** "hdr" jobs also cost an editor (HDR_EDITOR_COST); "flambient" don't. */
   style: "hdr" | "flambient";
+  /** The photo editor's cost on this job: the recorded amount, else the style's default. */
+  editorCost: number;
+  /** True while editorCost is the default (nothing recorded on the booking yet). */
+  editorCostIsDefault: boolean;
   /** Whole dollars agreed for this job; null until it's set. */
   pay: number | null;
   /** The linked expense's date ("YYYY-MM-DD") when paid; null while unpaid. */
@@ -39,6 +44,7 @@ export async function shootersByBookingId(
     shooterId: string | null;
     shooterPay: number | null;
     shooterExpenseId: string | null;
+    editorCost?: number | null;
   }[]
 ): Promise<Map<string, BookingShooter | null>> {
   const shooterIds = [...new Set(rows.map((r) => r.shooterId).filter((id): id is string => id != null))];
@@ -73,6 +79,8 @@ export async function shootersByBookingId(
             name: shooter.name,
             phone: shooter.phone,
             style: shooter.style === "flambient" ? "flambient" : "hdr",
+            editorCost: editorCost(shooter.style, row.editorCost),
+            editorCostIsDefault: row.editorCost == null,
             pay: row.shooterPay,
             paidAt: row.shooterExpenseId ? (expenseDateById.get(row.shooterExpenseId) ?? null) : null,
             expenseId: row.shooterExpenseId,

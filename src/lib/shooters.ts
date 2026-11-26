@@ -156,7 +156,7 @@ export async function setBookingShooter(
     if (booking.shooterExpenseId) await db.delete(expenses).where(eq(expenses.id, booking.shooterExpenseId));
     await db
       .update(bookings)
-      .set({ shooterId: null, shooterPay: null, shooterExpenseId: null })
+      .set({ shooterId: null, shooterPay: null, shooterExpenseId: null, editorCost: null })
       .where(eq(bookings.id, bookingId));
     revalidateShooterPaths();
     return {};
@@ -242,6 +242,24 @@ function expenseInput(
  * (one per booking, dated today) and remembers it, or removes it again when
  * un-marking. Paying needs a shooter and a positive amount first.
  */
+/**
+ * Records what the photo editor cost on a contracted job (whole dollars,
+ * usually $15-18). Null goes back to the default: HDR_EDITOR_COST for an HDR
+ * shooter, 0 for flambient. Shows on the booking and comes off its real
+ * revenue (app/booked/bookingMath.ts).
+ */
+export async function setBookingEditorCost(bookingId: string, cost: number | null): Promise<{ error?: string }> {
+  if (cost != null && (!Number.isFinite(cost) || cost < 0)) return { error: "Enter the editor cost as a positive number" };
+  const [row] = await db
+    .update(bookings)
+    .set({ editorCost: cost == null ? null : Math.round(cost) })
+    .where(eq(bookings.id, bookingId))
+    .returning({ id: bookings.id });
+  if (!row) return { error: "No booking with that id" };
+  revalidateShooterPaths();
+  return {};
+}
+
 export async function setShooterPaid(bookingId: string, paid: boolean): Promise<{ error?: string }> {
   const booking = await loadBookingShooterRow(bookingId);
   if (!booking) return { error: "No booking with that id" };

@@ -152,7 +152,7 @@ struct BookingRow: View {
     }
 
     private var subtitle: String {
-        [booking.total > 0 ? booking.total.currencyString : nil, booking.contactName]
+        [booking.revenue > 0 ? booking.revenue.currencyString : nil, booking.contactName]
             .compactMap { $0 }
             .joined(separator: " · ")
     }

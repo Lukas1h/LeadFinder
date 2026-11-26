@@ -167,6 +167,7 @@ export async function loadMarketsOverview(): Promise<MarketsOverview> {
         geocodeSource: sql<string | null>`coalesce(${listings.geocodeSource}, ${bookings.geocodeSource})`,
         shooterPay: sql<number>`coalesce(${bookings.shooterPay}, 0)::int`,
         shooterStyle: shooters.style,
+        editorCost: bookings.editorCost,
       })
       .from(bookings)
       .leftJoin(listings, eq(listings.id, bookings.listingId))
@@ -197,7 +198,7 @@ export async function loadMarketsOverview(): Promise<MarketsOverview> {
     entry.bookings++;
     entry.revenue += revenueByBooking.get(row.id) ?? 0;
     // A contracted HDR shoot also pays an editor; flambient Lukas blends himself.
-    entry.shooterCost += Number(row.shooterPay) + editorCost(row.shooterStyle);
+    entry.shooterCost += Number(row.shooterPay) + (row.shooterStyle ? editorCost(row.shooterStyle, row.editorCost) : 0);
   }
 
   const toPerformance = (

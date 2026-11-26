@@ -250,7 +250,18 @@ export function bookingJson(b: BookingWithDetails & { showcase?: boolean }, mk: 
     // The subcontracted photographer on the job (Portland shoots), what he
     // agreed to pay them, and whether that's been paid — see lib/shooters.
     shooter: b.shooter
-      ? { id: b.shooter.id, name: b.shooter.name, pay: b.shooter.pay, paid: b.shooter.expenseId != null, paidAt: b.shooter.paidAt }
+      ? {
+          id: b.shooter.id,
+          name: b.shooter.name,
+          pay: b.shooter.pay,
+          paid: b.shooter.expenseId != null,
+          paidAt: b.shooter.paidAt,
+          // "hdr" | "flambient"; the photo editor's cost on this job (recorded, else
+          // the style's default) and whether it's still that default.
+          style: b.shooter.style,
+          editorCost: b.shooter.editorCost,
+          editorCostIsDefault: b.shooter.editorCostIsDefault,
+        }
       : null,
   };
 }

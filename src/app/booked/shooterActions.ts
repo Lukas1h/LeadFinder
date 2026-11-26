@@ -6,7 +6,7 @@
  * log a payment exactly the way the web does.
  */
 
-import { listShooters, setBookingShooter, setShooterPaid } from "@/lib/shooters";
+import { listShooters, setBookingEditorCost, setBookingShooter, setShooterPaid } from "@/lib/shooters";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings } from "@/db/schema";
@@ -19,6 +19,11 @@ export async function saveBookingShooter(
   input: { name: string; pay: number | null; phone?: string | null } | null
 ): Promise<{ error?: string }> {
   return setBookingShooter(bookingId, input);
+}
+
+/** The photo editor's cost on this job; null = back to the default for the shooter's style. */
+export async function saveBookingEditorCost(bookingId: string, cost: number | null): Promise<{ error?: string }> {
+  return setBookingEditorCost(bookingId, cost);
 }
 
 /** "Paid <name>": logs (or removes) the pay as a Subcontractors expense on the job. */

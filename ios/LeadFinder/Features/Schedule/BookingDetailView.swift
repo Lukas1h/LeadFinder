@@ -381,6 +381,22 @@ struct BookingDetailView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.primaryText)
             }
+            if booking.isContracted {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text("Real revenue")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.primaryText)
+                    Spacer(minLength: 12)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(BookingFormat.price(booking.revenue))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.emerald)
+                        Text("of \(BookingFormat.price(booking.total)) billed")
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiaryText)
+                    }
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .card()

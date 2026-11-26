@@ -12,7 +12,7 @@ import { after } from "next/server";
 import { text, errorText } from "./shared";
 import { applyDateTentative, initialStage, reopenBookingStage, setBookingStage } from "@/lib/bookingStage";
 import { BOOKING_STAGES } from "@/lib/bookingStages";
-import { setBookingShooter, setShooterPaid } from "@/lib/shooters";
+import { setBookingEditorCost, setBookingShooter, setShooterPaid } from "@/lib/shooters";
 
 async function joinedBooking(bookingId: string) {
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, bookingId));
@@ -241,9 +241,14 @@ export function registerBookingTools(server: McpServer): void {
           .optional()
           .describe("The subcontracted photographer (Portland jobs), by name — one is found or created. Send \"\" to clear the shooter and their pay."),
         shooterPay: z.number().optional().describe("What Lukas agreed to pay that shooter, in whole dollars."),
+        editorCost: z
+          .number()
+          .nullable()
+          .optional()
+          .describe("What the photo editor cost for this contracted job, whole dollars (usually 15-18). null = back to the default ($18 for an HDR shooter, $0 flambient)."),
       },
     },
-    async ({ id, contactName, contactPhone, address, city, state, jobDate, dateTentative, stage, shot, lockboxCode, notes, invoiceNote, lineItems, shooterName, shooterPay }) => {
+    async ({ id, contactName, contactPhone, address, city, state, jobDate, dateTentative, stage, shot, lockboxCode, notes, invoiceNote, lineItems, shooterName, shooterPay, editorCost }) => {
       const [existing] = await db.select().from(bookings).where(eq(bookings.id, id));
       if (!existing) return errorText("No booking with that id");
 
@@ -302,6 +307,11 @@ export function registerBookingTools(server: McpServer): void {
           const saved = await setBookingShooter(id, { name, pay });
           if (saved.error) return errorText(saved.error);
         }
+      }
+
+      if (editorCost !== undefined) {
+        const editorResult = await setBookingEditorCost(id, editorCost);
+        if (editorResult.error) return errorText(editorResult.error);
       }
 
       // A no-op unless the address changed.

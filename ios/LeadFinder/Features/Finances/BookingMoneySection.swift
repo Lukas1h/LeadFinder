@@ -7,7 +7,8 @@ import SwiftUI
 ///
 /// Profit and per hour are the Jobs report's numbers for this booking. Until
 /// the job is in that report (it isn't shot yet), profit is the server's
-/// `total − additionalCosts`, which is the same sum.
+/// `total − additionalCosts`, which is the same sum. `additionalCosts` already
+/// includes unpaid shooter pay and the editor cost, so nothing else is subtracted.
 struct BookingMoneySection: View {
     let booking: Booking
     var onChange: () async -> Void

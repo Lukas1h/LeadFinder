@@ -444,6 +444,10 @@ export const bookings = pgTable("bookings", {
   // onto the shooter's year total for the 1099.
   shooterId: uuid("shooter_id").references((): AnyPgColumn => shooters.id, { onDelete: "set null" }),
   shooterPay: integer("shooter_pay"),
+  // What Lukas paid (or will pay) the photo editor for this contracted job,
+  // whole dollars; null = the default (HDR_EDITOR_COST for an HDR shooter,
+  // 0 for flambient). Usually $15-18, set once the edits are ordered.
+  editorCost: integer("editor_cost"),
   shooterExpenseId: uuid("shooter_expense_id").references((): AnyPgColumn => expenses.id, { onDelete: "set null" }),
   // Internal notes — shown in the app and calendar, never on the invoice.
   notes: text("notes"),

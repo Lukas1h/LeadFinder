@@ -435,7 +435,7 @@ struct HomeView: View {
     private func bookingsSection(_ bookings: BookingsResponse) -> some View {
         let scheduled = bookings.scheduled ?? bookings.upcoming.filter { $0.currentStage == .scheduled }
         let unpaid = bookings.waitingForPayment.filter { $0.currentStage == .invoiceSent }
-        let outstanding = unpaid.reduce(0) { $0 + $1.revenue }
+        let outstanding = unpaid.reduce(0) { $0 + $1.billed }
         let stages: [(String, Int, String)] = [
             ("Tentative", bookings.tentative?.count ?? 0, "date to settle"),
             ("Upcoming", scheduled.count, "to shoot"),

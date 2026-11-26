@@ -1,5 +1,4 @@
 import type { BookingWithDetails } from "./BookedList";
-import { editorCost } from "@/lib/markets";
 
 /** What the client is billed: the line items' total. This is the number the Booked page shows. */
 export function bookingRevenue(booking: Pick<BookingWithDetails, "lineItems">): number {
@@ -10,13 +9,14 @@ type ContractInputs = Pick<BookingWithDetails, "shooter">;
 
 /**
  * What a contracted job costs on top of Lukas's own: the shooter's agreed pay
- * plus, for an HDR shooter, the editor (HDR_EDITOR_COST). 0 with no shooter.
+ * plus the photo editor (the booking's recorded editor cost, else
+ * HDR_EDITOR_COST for an HDR shooter, 0 for flambient). 0 with no shooter.
  */
 export function contractorCost(booking: ContractInputs): { pay: number; editor: number; total: number } {
   const s = booking.shooter;
   if (!s) return { pay: 0, editor: 0, total: 0 };
   const pay = s.pay ?? 0;
-  const editor = editorCost(s.style);
+  const editor = s.editorCost;
   return { pay, editor, total: pay + editor };
 }
 
