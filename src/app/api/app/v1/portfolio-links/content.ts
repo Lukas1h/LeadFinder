@@ -1,6 +1,7 @@
 import type { PortfolioContent, PortfolioListing } from "@/db/schema";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS } from "@/lib/agentPage";
 import { BadBody } from "../helpers";
+import { LUKAS_PHONES, isLukasPhone } from "@/lib/lukasPhones";
 
 /**
  * Reads the builder's `content` from a request body into the PortfolioContent
@@ -64,6 +65,10 @@ export function parseContent(raw: unknown): PortfolioContent {
   const featuredBookingId = text(c.featuredBookingId, "featuredBookingId");
   if (featuredBookingId && !UUID_RE.test(featuredBookingId)) throw new BadBody("featuredBookingId must be a booking id");
 
+  // Lukas's number on the page (lib/lukasPhones.ts); omitted/null = Auto.
+  const myPhone = text(c.myPhone, "myPhone");
+  if (myPhone && !isLukasPhone(myPhone)) throw new BadBody(`myPhone must be one of: ${LUKAS_PHONES.map((p) => p.e164).join(", ")}`);
+
   return {
     area: text(c.area, "area"),
     agentFirstName: text(c.agentFirstName, "agentFirstName"),
@@ -78,6 +83,8 @@ export function parseContent(raw: unknown): PortfolioContent {
     afterSrc,
     listings: listings.map(parseListing),
     ogImage: text(c.ogImage, "ogImage"),
+    // Left out (iPhone builds without the picker) keeps the saved pick.
+    ...(c.myPhone === undefined ? {} : { myPhone }),
     // Left out entirely (an older iPhone build) keeps the saved one; an
     // explicit null removes it (updatePortfolioLinkAction).
     ...(c.featuredBookingId === undefined ? {} : { featuredBookingId }),

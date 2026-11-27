@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import type { PortfolioContent, PortfolioListing } from "@/db/schema";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS } from "@/lib/agentPage";
 import { formatPhone } from "@/lib/format";
+import { LUKAS_PHONES, isLukasPhone, lukasPhoneForAgentPhone } from "@/lib/lukasPhones";
 import { portfolioPreviewUrl } from "@/lib/siteUrls";
 import {
   createPortfolioLinkAction,
@@ -61,6 +62,8 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
   const [showTourOfHomes, setShowTourOfHomes] = useState(c.showTourOfHomes ?? true);
   const [showOffer, setShowOffer] = useState(c.showOffer ?? true);
   const [newStyle, setNewStyle] = useState(c.newStyle ?? true);
+  // "" = Auto: the page picks by the agent's area code, else its market (lib/lukasPhones.ts).
+  const [myPhone, setMyPhone] = useState(isLukasPhone(c.myPhone) ? c.myPhone : "");
   const [beforeSrc, setBeforeSrc] = useState<string | null>(c.beforeAfter ? (c.beforeSrc ?? null) : null);
   const [afterSrc, setAfterSrc] = useState<string | null>(c.beforeAfter ? (c.afterSrc ?? null) : null);
   const [ogImage, setOgImage] = useState<string | null>(c.ogImage ?? null);
@@ -140,6 +143,7 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
         listings,
         ogImage,
         featuredBookingId: featured?.bookingId ?? null,
+        myPhone: myPhone || null,
       };
       const saved = start.linkId
         ? await updatePortfolioLinkAction(start.linkId, agent?.id ?? null, content)
@@ -332,6 +336,32 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
           <input type="checkbox" checked={newStyle} onChange={(e) => setNewStyle(e.target.checked)} />
           New style (listings first, outcome tiles, no hero discount or sound button, pricing last)
         </label>
+      </section>
+
+      <section className="flex flex-col gap-1.5">
+        <Label htmlFor="pl-my-phone">My number on the page</Label>
+        <select
+          id="pl-my-phone"
+          value={myPhone}
+          onChange={(e) => setMyPhone(e.target.value)}
+          className="h-9 max-w-xs rounded-md border bg-transparent px-3 text-sm"
+        >
+          <option value="">
+            Auto
+            {lukasPhoneForAgentPhone(agent?.phone)
+              ? ` — ${formatPhone(lukasPhoneForAgentPhone(agent?.phone)!)}`
+              : " — by the area"}
+          </option>
+          {LUKAS_PHONES.map((p) => (
+            <option key={p.e164} value={p.e164}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          Used for &quot;Save my contact&quot; and &quot;Book a shoot&quot;. Auto: 541 agents get the 541 number, 503/971 get
+          (971) 480-3552, California gets (916) 820-4640; otherwise the area&apos;s market decides.
+        </p>
       </section>
 
       <section className="flex flex-col gap-1.5">

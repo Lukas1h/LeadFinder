@@ -1,8 +1,9 @@
 import { db } from "@/db";
-import { portfolioLinks } from "@/db/schema";
+import { agents, portfolioLinks } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getMarkets } from "@/lib/marketsData";
 import { lukasVcard } from "@/lib/agentVcard";
+import { resolveLukasPhone } from "@/lib/lukasPhones";
 
 /**
  * The agent page's "Save contact": a real file rather than a data: URL,
@@ -13,13 +14,27 @@ import { lukasVcard } from "@/lib/agentVcard";
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [link] = await db.select({ content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.slug, slug));
+  const [link] = await db
+    .select({ content: portfolioLinks.content, agentPhone: agents.phone })
+    .from(portfolioLinks)
+    .leftJoin(agents, eq(agents.id, portfolioLinks.agentId))
+    .where(eq(portfolioLinks.slug, slug));
   const mk = await getMarkets();
-  return new Response(lukasVcard(mk.shooterMarketForArea(link?.content?.area)), {
+  const shooter = mk.shooterMarketForArea(link?.content?.area);
+  // The same number the page shows (its area falls back as the page does).
+  const area = link?.content?.area?.trim() || "Eugene";
+  const market = shooter ?? mk.get(mk.marketFor({ city: area }));
+  const phone = resolveLukasPhone({
+    myPhone: link?.content?.myPhone,
+    agentPhone: link?.agentPhone,
+    marketKey: market?.key,
+    marketState: market?.state,
+  });
+  return new Response(lukasVcard(shooter, phone), {
     headers: {
       "Content-Type": "text/vcard; charset=utf-8",
       "Content-Disposition": 'inline; filename="Lukas Hahn Photographer.vcf"',
-      "Cache-Control": "public, max-age=3600",
+      "Cache-Control": "public, max-age=300",
     },
   });
 }

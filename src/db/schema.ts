@@ -686,6 +686,12 @@ export interface PortfolioContent {
    * saves. Null = the usual page.
    */
   featuredBookingId?: string | null;
+  /**
+   * Which of Lukas's numbers the page, its "Book a shoot" text and its "Save
+   * my contact" card use (E.164, one of LUKAS_PHONES in lib/lukasPhones.ts).
+   * Null/absent = Auto: by the agent's area code, else the page's market.
+   */
+  myPhone?: string | null;
 }
 
 /** What an area template presets in the builder; every field optional = leave the builder's default. */

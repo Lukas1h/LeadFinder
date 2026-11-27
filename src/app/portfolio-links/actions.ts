@@ -416,9 +416,10 @@ export async function updatePortfolioLinkAction(linkId: string, agentId: string 
   // The builder doesn't edit prices, so they survive a save. The featured shoot
   // survives when the field is left out (iPhone builds that don't know it);
   // an explicit null is the builder's Remove and clears it.
-  if (!content.prices || content.featuredBookingId === undefined) {
+  if (!content.prices || content.featuredBookingId === undefined || content.myPhone === undefined) {
     const [existing] = await db.select({ content: portfolioLinks.content }).from(portfolioLinks).where(eq(portfolioLinks.id, linkId));
     if (!content.prices && existing?.content.prices) content = { ...content, prices: existing.content.prices };
+    if (content.myPhone === undefined && existing?.content.myPhone) content = { ...content, myPhone: existing.content.myPhone };
     if (content.featuredBookingId === undefined && existing?.content.featuredBookingId) {
       content = { ...content, featuredBookingId: existing.content.featuredBookingId };
     }

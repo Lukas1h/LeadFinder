@@ -836,6 +836,15 @@ next listing comes up (usually 1–4 weeks after first contact).
   save-contact section. On both styles the footer and the
   vCard (`lukasVcard`) name the shooter market `shooterMarketForArea(content.area)`
   finds (Portland, Oregon Coast), else Eugene & Roseburg.
+- Lukas's number on an agent page (the "Save my contact" vCard, the number
+  under it and the "Book a shoot" text): `content.myPhone`, the **My number
+  on the page** select in the builder (web, quick action, agent profile's
+  Create portfolio; the iPhone API takes `myPhone`, omitted on update = keep).
+  Null = Auto (`resolveLukasPhone`, `src/lib/lukasPhones.ts`), worked out on
+  every view so it applies to old links too: by the linked agent's area code
+  — 541/458 → (541) 430-3372, 503/971 → (971) 480-3552, any California code
+  → (916) 820-4640 — else the page's market (Portland → 971, a CA market →
+  916), else 541.
 - Agent page pricing (both styles, above the last section): a highlighted
   "Most booked" Interior & Exterior Photography $300 box with "Edited by
   hand, not AI" and "Next morning turnaround" as bullets under the name, and

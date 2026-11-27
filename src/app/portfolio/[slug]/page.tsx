@@ -10,7 +10,7 @@ import { Suspense } from "react";
 import { listingCardPhotoNames } from "@/lib/listingCardPhotos";
 import { notifyPortfolioView } from "@/lib/push";
 import { PORTFOLIO_ORIGIN } from "@/lib/siteUrls";
-import { LUKAS_PHONE as PHONE } from "@/lib/agentVcard";
+import { resolveLukasPhone } from "@/lib/lukasPhones";
 import { parseUserAgent } from "@/lib/galleryViews";
 import { AGENT_PAGE_PHOTOS, AGENT_PAGE_VIDEOS, LUKAS_PHOTO, type AgentPagePhoto, type AgentPageVideoKey } from "@/lib/agentPage";
 import { BeforeAfterSlider, ListingCard, LoopVideo, MutableVideo } from "./client";
@@ -169,6 +169,13 @@ export default async function PortfolioPage({
   const featureLast = ba ? null : photos[photos.length - 1];
   const listings = c.listings ?? [];
   const featured = c.featuredBookingId ? await getFeaturedShoot(c.featuredBookingId, slug).catch(() => null) : null;
+
+  // Which of Lukas's numbers this page (and its vCard) shows: the link's own
+  // pick, else by the agent's area code, else the market (lib/lukasPhones.ts).
+  const agentPhone = link.agentId
+    ? ((await db.select({ phone: agents.phone }).from(agents).where(eq(agents.id, link.agentId)))[0]?.phone ?? null)
+    : null;
+  const PHONE = resolveLukasPhone({ myPhone: c.myPhone, agentPhone, marketKey: market?.key, marketState: market?.state });
 
   const who = firstName ? `this is ${firstName}${brokerage ? ` with ${brokerage}` : ""}. ` : "";
   const bookHref = `sms:${PHONE}?&body=` + encodeURIComponent(`Hi Lukas, ${who}I'd like to book a shoot for a listing ${inArea(area)}.`);
@@ -376,7 +383,7 @@ export default async function PortfolioPage({
 
         {pricingSection}
 
-        <SaveContact slug={slug} firstName={firstName} showOffer={showOffer} />
+        <SaveContact slug={slug} firstName={firstName} showOffer={showOffer} phone={PHONE} />
       </main>
       {!preview && <PageTracker slug={slug} />}
 
@@ -653,7 +660,7 @@ function ShooterPhotos({ name, photos }: { name: string; photos: AgentPagePhoto[
  * they'll have ("for when your next listing comes up"), the button, and a
  * preview of the contact card so the outcome is tangible.
  */
-function SaveContact({ slug, firstName, showOffer }: { slug: string; firstName: string | null; showOffer: boolean }) {
+function SaveContact({ slug, firstName, showOffer, phone }: { slug: string; firstName: string | null; showOffer: boolean; phone: string }) {
   return (
     <section id="save" data-section="book" className="px-4 pt-[clamp(64px,9vw,104px)] pb-[clamp(80px,11vw,128px)]">
       <div className="mx-auto flex max-w-[560px] flex-col items-center text-center">
@@ -679,7 +686,7 @@ function SaveContact({ slug, firstName, showOffer }: { slug: string; firstName: 
           <div className="min-w-0">
             <p className="text-lg font-semibold leading-tight">Lukas Hahn</p>
             <p className="mt-0.5 text-sm text-[#181A1C]/70">Hahn Media · Real estate photo &amp; video</p>
-            <p className="mt-0.5 text-sm text-[#181A1C]/70">{formatPhone(PHONE)}</p>
+            <p className="mt-0.5 text-sm text-[#181A1C]/70">{formatPhone(phone)}</p>
           </div>
         </div>
         {showOffer && <p className="mt-4 text-sm font-semibold text-[#995000]">Your first shoot is $50 off.</p>}
