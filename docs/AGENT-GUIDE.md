@@ -209,7 +209,12 @@ when it has listings). Today: `local`, `regional`, `portland` (Multnomah,
 Washington, Clackamas, Yamhill, Columbia counties plus Clark County WA's
 towns; WA listings outside those towns and the 30-mile radius are no longer
 Portland) and `central_coast`, labelled **Coast** (Tillamook and Lincoln
-counties; Clatsop County and Florence stay regional). Salem and the rest of
+counties; Clatsop County and Florence stay regional), and `sacramento`
+(Testing since 2026-11-26: the first out-of-state test, 30 miles around
+Sacramento CA, Portland prices, no shooter yet, jobs target 0, goal ~50 cold
+texts a week at a 10% reply rate; its Zillow alerts are option "upper end":
+Sacramento County $700k+ and Placer County $550k+, because Compass misses
+about half of California listings and each miss costs a Zillapi credit). Salem and the rest of
 Marion County are regional. Status: `testing` / `active` = a Leads tab, a
 texting quota and a funnel row; `paused` / `killed` = listings still land
 there (they don't fall into regional) but no tab or quota, and their
@@ -301,7 +306,9 @@ missing key = the default $300 / $400 / …) is the one source of truth:
   (`src/lib/pricingSheet.ts`, puppeteer, run locally) and puts it on every
   template carrying the regular "Hahn Media Pricing Sheet.pdf", tagged with
   the market (`attachmentsForMarket` swaps it in for that market's agents);
-  a market on default prices gets none and falls back to the regular file.
+  a market on default prices gets none and falls back to the regular file,
+  except outside Oregon: the "Featured in the Eugene Tour of Homes" line is
+  Oregon-only, so an out-of-state market always gets its own sheet without it.
   Re-run it after changing a market's prices.
 Portland: photos $324, video $424 (since 2026-11-14).
 

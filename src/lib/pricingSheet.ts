@@ -7,8 +7,12 @@ const QR_URL =
   "https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=0&data=" +
   encodeURIComponent("https://lukashahn.art/real-estate");
 
-/** Full HTML document for the sheet. Uses prices.photo, prices.drone (add-on), prices.video, prices.socialEdit (add-on), prices.fullPackage. */
-export function pricingSheetHtml(prices: PortfolioPrices): string {
+/**
+ * Full HTML document for the sheet. Uses prices.photo, prices.drone (add-on), prices.video, prices.socialEdit (add-on), prices.fullPackage.
+ * `featured` = the "Featured in the Eugene Tour of Homes" line: Oregon markets only, it means nothing
+ * out of state (Lukas, 2026-11-26).
+ */
+export function pricingSheetHtml(prices: PortfolioPrices, { featured = true }: { featured?: boolean } = {}): string {
   const row = (label: string, price: string, sub = false) => `
     <div class="row${sub ? " sub" : ""}">
       <span class="label">${label}</span><span class="leader"></span><span class="price">${price}</span>
@@ -63,7 +67,7 @@ export function pricingSheetHtml(prices: PortfolioPrices): string {
 <div class="page">
   <div class="wordmark">Hahn Media</div>
   <div class="tagline">REAL ESTATE PHOTO &amp; VIDEO</div>
-  <div class="featured"><i></i>FEATURED IN THE EUGENE TOUR OF HOMES<i></i></div>
+  ${featured ? `<div class="featured"><i></i>FEATURED IN THE EUGENE TOUR OF HOMES<i></i></div>` : ""}
   <div class="section">PRICING</div>
   <div class="group">
     ${row("Interior &amp; Exterior Photography", formatPrice(prices.photo))}

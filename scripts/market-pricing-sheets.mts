@@ -4,7 +4,8 @@
  * regular "Hahn Media Pricing Sheet.pdf", tagged with the market
  * (PresetAttachment.market), so that market's agents get their own prices
  * and nobody gets two sheets (lib/attachments.ts attachmentsForMarket).
- * A market on the default prices gets no sheet of its own (any old one is
+ * A market out of Oregon always gets its own sheet, without the "Featured in
+ * the Eugene Tour of Homes" line. An Oregon market on the default prices gets no sheet of its own (any old one is
  * removed) and falls back to the regular file. Local / regional are the
  * regular file and are never touched.
  *
@@ -43,13 +44,16 @@ const sheets = new Map<string, string | null>(); // market → base64 PDF, null 
 for (const m of mk.shooterMarkets) {
   const prices = mk.prices(m.key);
   const custom = SHEET_KEYS.some((k) => prices[k] !== DEFAULT_PORTFOLIO_PRICES[k]);
-  if (!custom) {
+  // The regular sheet carries the Eugene Tour of Homes line, so an out-of-state
+  // market always gets its own sheet, without it.
+  const featured = m.state === "OR";
+  if (!custom && featured) {
     sheets.set(m.key, null);
     console.log(`${m.label}: default prices, regular sheet`);
     continue;
   }
   const page = await browser.newPage();
-  await page.setContent(pricingSheetHtml(prices), { waitUntil: "load" });
+  await page.setContent(pricingSheetHtml(prices, { featured }), { waitUntil: "load" });
   await page.evaluate(() => document.fonts.ready);
   const pdf = Buffer.from(await page.pdf({ format: "Letter", printBackground: true }));
   await page.close();
@@ -58,7 +62,7 @@ for (const m of mk.shooterMarkets) {
     fs.mkdirSync(pdfDir, { recursive: true });
     fs.writeFileSync(path.join(pdfDir, `${m.key}.pdf`), pdf);
   }
-  console.log(`${m.label}: photo $${prices.photo}, video $${prices.video}, full package $${prices.fullPackage} → own sheet (${Math.round(pdf.length / 1024)} KB)`);
+  console.log(`${m.label}: photo $${prices.photo}, video $${prices.video}, full package $${prices.fullPackage}${featured ? "" : ", no Tour of Homes line"} → own sheet (${Math.round(pdf.length / 1024)} KB)`);
 }
 await browser.close();
 
