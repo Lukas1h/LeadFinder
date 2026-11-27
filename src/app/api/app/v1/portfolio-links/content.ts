@@ -72,7 +72,7 @@ export function parseContent(raw: unknown): PortfolioContent {
     leadPhoto,
     showTourOfHomes: flag(c.showTourOfHomes, "showTourOfHomes") ?? true,
     showOffer: flag(c.showOffer, "showOffer") ?? true,
-    newStyle: flag(c.newStyle, "newStyle") ?? false,
+    newStyle: flag(c.newStyle, "newStyle") ?? true,
     beforeAfter: Boolean(afterSrc),
     beforeSrc,
     afterSrc,

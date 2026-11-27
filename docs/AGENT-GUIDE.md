@@ -822,9 +822,11 @@ next listing comes up (usually 1–4 weeks after first contact).
   across the gallery (`src/lib/listingCardPhotos.ts`); picks no longer in the
   folder are skipped.
 - Agent page styles: `content.newStyle` (the **New style** checkbox in the
-  link builder; off by default). On 2026-11-13 every link that had never
-  been opened (37) was switched to the new style; opened links stay on the
-  original layout. New style: a compact hero (headline, then
+  link builder). Since 2026-11-26 every link is new style (the last 10
+  classic ones were switched) and it's the default everywhere a link is made:
+  the builder (web and the Portfolio link quick action) and the iPhone API
+  (`newStyle` omitted = true). The original layout only shows 4 photos on a
+  phone, so don't make new links in it. New style: a compact hero (headline, then
   "Featured in the Eugene Tour of Homes" under it; no tagline, guarantee or
   discount) → portfolio, where the video is the self-hosted MP4 on Vercel
   Blob (`AGENT_PAGE_VIDEOS[*].mp4`, a bare `<video>`, no YouTube UI) → recent

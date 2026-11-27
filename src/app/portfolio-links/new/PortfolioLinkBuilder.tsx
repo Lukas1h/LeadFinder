@@ -60,7 +60,7 @@ export function PortfolioLinkBuilder({ start }: { start: BuilderStart }) {
   const [leadPhoto, setLeadPhoto] = useState(c.leadPhoto ?? AGENT_PAGE_PHOTOS[0].key);
   const [showTourOfHomes, setShowTourOfHomes] = useState(c.showTourOfHomes ?? true);
   const [showOffer, setShowOffer] = useState(c.showOffer ?? true);
-  const [newStyle, setNewStyle] = useState(c.newStyle ?? false);
+  const [newStyle, setNewStyle] = useState(c.newStyle ?? true);
   const [beforeSrc, setBeforeSrc] = useState<string | null>(c.beforeAfter ? (c.beforeSrc ?? null) : null);
   const [afterSrc, setAfterSrc] = useState<string | null>(c.beforeAfter ? (c.afterSrc ?? null) : null);
   const [ogImage, setOgImage] = useState<string | null>(c.ogImage ?? null);
