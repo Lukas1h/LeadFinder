@@ -241,8 +241,10 @@ shooter is off the card and never owns the listing; null = no limit),
 shooter cost and in a booking's real revenue; flambient he blends himself,
 Lukas 2026-11-26),
 `rates` (what Lukas pays per job: `photo`, `photoDrone`, `video`, `drone`),
-`active`, `w9_on_file`, `portfolio_photos` ({src, alt}[]: the closing photo
-row on that market's agent pages, first main shooter with photos).
+`active`, `w9_on_file`, `portfolio_photos` ({src, alt, credit?}[]: the closing photo
+row on that market's agent pages, first main shooter with photos; each
+photo's corner name is its `credit`, else the shooter's name — Chris's row
+holds two of Lukas's Brentwood photos credited "Lukas").
 Portland = Chris (main, SE Woodstock, free to 60 min, $175 / $225 with
 drone) and Elijah (main, Oregon City, free within 20 min, then $50/h); Coast
 = Jenny Bocko (main, Netarts, HDR, $175 / $225, flat $30 travel fee in every

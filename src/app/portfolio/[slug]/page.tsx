@@ -653,6 +653,7 @@ function shooterPhotoRow(m: ShooterMarket | null): { name: string; photos: Agent
     photos: shooter.portfolioPhotos.map((p) => ({
       src: p.src,
       alt: p.alt,
+      credit: p.credit,
       key: p.src.split("/").pop()?.replace(/\.[a-z0-9]+$/i, "") || p.src,
     })),
   };
@@ -675,7 +676,7 @@ function ShooterPhotos({ name, photos }: { name: string; photos: AgentPagePhoto[
           <span
             className={`pointer-events-none absolute bottom-1 left-1.5 ${serif} text-[10px] font-medium tracking-wide text-white/60 [text-shadow:0_1px_3px_rgba(0,0,0,0.45)]`}
           >
-            {name}
+            {p.credit || name}
           </span>
         </span>
       ))}

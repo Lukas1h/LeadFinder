@@ -25,6 +25,8 @@ export interface AgentPagePhoto {
   key: string;
   src: string;
   alt: string;
+  /** Corner credit on a shooter-row photo; defaults to the row's shooter name. */
+  credit?: string;
 }
 
 // Lukas's re-edited set (2026-11-12), in the order he put them on the main
@@ -36,20 +38,20 @@ export const AGENT_PAGE_PHOTOS: AgentPagePhoto[] = [
   ["pf-02", "Living room with black tile fireplace, white sofa and large windows"],
   ["pf-03", "Kitchen with light oak cabinets, navy island and glass globe pendants"],
   ["pf-04", "Kitchen with black cabinets, black island and sliding door to deck"],
-  ["pf-10", "Empty peach-walled room with arched window and French doors"],
+  ["wendy-twilight-door", "Front door close-up at twilight, 7775 SW Brentwood St"],
   ["pf-06", "Empty room with large windows overlooking autumn trees"],
   ["pf-07", "Kitchen counter detail with light wood cabinets and stainless range hood"],
   ["pf-08", "Kitchen sink with black faucet below window of red autumn leaves"],
   ["pf-09", "Bedroom with peach bedding, brass floor lamp and leaning wood mirror"],
   ["pf-05", "Empty living room with vaulted wood-beam ceiling, arched windows and red rug"],
   ["pf-11", "Bathroom with wood vanity, marble counter and glass walk-in shower"],
-  ["pf-12", "Empty room with light wood floors and window overlooking a covered deck"],
+  ["wendy-kitchen", "Kitchen, 7775 SW Brentwood St"],
   ["pf-13", "Open kitchen and dining space with white cabinets, island and ceiling fan"],
   ["pf-14", "Empty bedroom with wood floors and window framing autumn hillside views"],
   ["pf-19", "Aerial drone view of house in autumn woods with mountains beyond"],
   ["pf-16", "Exterior of sage green ranch house with white garage door and lawn"],
   ["pf-20", "Covered patio with wood pergola roof, stone columns and fenced garden"],
-  ["pf-18", "Exterior of gray-green house with covered porch and leaf-covered yard"],
+  ["wendy-twilight-wide", "House exterior at twilight, 7775 SW Brentwood St"],
   ["pf-15", "Exterior of olive-green house with brick chimney and two-car garage"],
   ["pf-17", "Aerial drone view of house and fenced acreage surrounded by autumn woods"],
 ].map(([key, alt]) => ({ key, src: `${PF}${key}.jpg`, alt }));

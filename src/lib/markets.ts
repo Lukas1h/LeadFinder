@@ -74,7 +74,8 @@ export interface MarketShooter {
   style: ShooterStyle;
   /** What Lukas pays them per job. */
   rates: ShooterRates;
-  portfolioPhotos: { src: string; alt: string }[];
+  /** `credit`: the photo's corner name when it isn't this shooter's (e.g. "Lukas"). */
+  portfolioPhotos: { src: string; alt: string; credit?: string }[];
 }
 
 /** One market, as stored (plain data: safe to pass to a client component). */

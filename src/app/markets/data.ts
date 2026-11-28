@@ -89,7 +89,7 @@ export interface ShooterRow {
   rates: ShooterRates;
   active: boolean;
   w9OnFile: boolean;
-  portfolioPhotos: { src: string; alt: string }[];
+  portfolioPhotos: { src: string; alt: string; credit?: string }[];
   createdAt: string;
 }
 
