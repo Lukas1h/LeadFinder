@@ -1606,6 +1606,12 @@ export const markets = pgTable("markets", {
   jobsPerWeek: real("jobs_per_week").notNull().default(0),
   // What agents here pay (lib/portfolioPrices.ts keys); a missing key = the default.
   prices: jsonb("prices").$type<Partial<PortfolioPrices>>().notNull().default({}),
+  // Agent pages here (Lukas, 2026-11-27, for Sacramento while every job is in
+  // Oregon): "Recent work" with each card naming only its street, no number
+  // or town, so an out-of-state agent doesn't read "Oregon" and pass.
+  listingsStreetOnly: boolean("listings_street_only").notNull().default(false),
+  // The testimonial shows the reviewer's name without their brokerage.
+  testimonialNameOnly: boolean("testimonial_name_only").notNull().default(false),
   launchedAt: timestamp("launched_at", { withTimezone: true }),
   killedAt: timestamp("killed_at", { withTimezone: true }),
   notes: text("notes"),

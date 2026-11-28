@@ -110,6 +110,10 @@ export interface MarketDef {
   jobsPerWeek: number;
   /** Price overrides (a missing key = DEFAULT_PORTFOLIO_PRICES). */
   prices: Partial<PortfolioPrices>;
+  /** Agent pages: "Recent work" cards that name only the street (no number, town or state). */
+  listingsStreetOnly: boolean;
+  /** Agent pages: the testimonial without the reviewer's brokerage. */
+  testimonialNameOnly: boolean;
   launchedAt: string | null;
   killedAt: string | null;
   notes: string | null;

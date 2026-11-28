@@ -187,8 +187,15 @@ on the **Markets** page (`/markets`): `key`, `label`, `kind` (`local` |
 lng]), `point_area` (radius miles around the base, optional lat/lng
 bounds), `area_codes`, `drive` {startMinutes, minutesPerMile},
 `area_phrase` ({{area}}), `portfolio_area`, `page_location`, `vcard_city` /
-`vcard_note`, `jobs_per_week`, `prices`, `launched_at`, `killed_at`,
-`notes`. `src/lib/markets.ts` is the pure logic: `MarketIndex`, built once
+`vcard_note`, `jobs_per_week`, `prices`, `listings_street_only`,
+`testimonial_name_only`, `launched_at`, `killed_at`, `notes`. The two
+booleans (2026-11-27, on for Sacramento while every job is in Oregon) change
+the market's agent pages: `listings_street_only` titles the listing cards
+"Recent work" and shows only each card's street ("McMillan St": no house
+number, unit, town or state; stripped server-side so the full address never
+reaches the HTML), and `testimonial_name_only` drops the reviewer's
+brokerage line. Both are toggles in the Markets page's edit dialog.
+`src/lib/markets.ts` is the pure logic: `MarketIndex`, built once
 per request by `getMarkets()` (`src/lib/marketsData.ts`; scripts use
 `loadMarketDefs()` + `new MarketIndex(defs)`), answers every question:
 `marketFor(place)`, `order` (tabs), `keys` (every key for tallies), `labels`,

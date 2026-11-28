@@ -167,7 +167,10 @@ export default async function PortfolioPage({
   const gridTop = ba ? photos.slice(0, 4) : [];
   const gridBottom = ba ? photos.slice(4, 10) : photos.slice(0, 6);
   const featureLast = ba ? null : photos[photos.length - 1];
-  const listings = c.listings ?? [];
+  // A market can name only each card's street (see markets.listings_street_only):
+  // done here, so the full address never reaches the page's HTML.
+  const streetOnly = market?.listingsStreetOnly ?? false;
+  const listings = (c.listings ?? []).map((l) => (streetOnly ? { ...l, address: streetName(l.address), city: "" } : l));
   const featured = c.featuredBookingId ? await getFeaturedShoot(c.featuredBookingId, slug).catch(() => null) : null;
 
   // Which of Lukas's numbers this page (and its vCard) shows: the link's own
@@ -337,7 +340,7 @@ export default async function PortfolioPage({
           <section data-section="listings" className={`px-4 ${newStyle ? "pt-[clamp(56px,8vw,88px)]" : "pt-[clamp(64px,9vw,104px)]"}`}>
             <div className="mx-auto max-w-[1040px]">
               <h2 className={`${serif} mb-[clamp(32px,5vw,48px)] text-center text-[clamp(30px,4vw,40px)] font-bold tracking-[-0.02em]`}>
-                Recent listings near {area}
+                {streetOnly ? "Recent work" : `Recent listings near ${area}`}
               </h2>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-4">
                 {/* The cards' photos come from Dropbox, so they stream in after the rest of the page. */}
@@ -366,7 +369,9 @@ export default async function PortfolioPage({
             </blockquote>
             <figcaption className="mt-5 flex flex-col items-center gap-1">
               <span className="text-[clamp(20px,2.4vw,22px)] font-bold">Serenity Thompson</span>
-              <span className="text-sm font-semibold uppercase tracking-[0.18em] text-[#995000]">Oregon Live Homes</span>
+              {!market?.testimonialNameOnly && (
+                <span className="text-sm font-semibold uppercase tracking-[0.18em] text-[#995000]">Oregon Live Homes</span>
+              )}
               <a
                 href="https://maps.app.goo.gl/WMhhHxSnYozHLfBP8"
                 target="_blank"
@@ -398,6 +403,20 @@ export default async function PortfolioPage({
 }
 
 /** Each card with its photos (lib/listingCardPhotos.ts), served through the slug-scoped photo route. */
+/**
+ * Just the street of an address: "3460 McMillan St" → "McMillan St",
+ * "1353 Dalton Ct #2" → "Dalton Ct". Drops the house number, any unit and
+ * anything after a comma (town, state, zip).
+ */
+function streetName(address: string): string {
+  const street = address
+    .split(",")[0]
+    .replace(/\s+(#|apt\.?|unit|ste\.?|suite|spc\.?|space)\s*\S+$/i, "")
+    .replace(/^\s*\d+[a-z]?(-\d+)?\s+/i, "")
+    .trim();
+  return street || address.split(",")[0].trim();
+}
+
 async function ListingCards({ slug, listings, prominentStatus }: { slug: string; listings: PortfolioListing[]; prominentStatus: boolean }) {
   const rows = await db
     .select({ id: bookings.id, link: bookings.dropboxFolderLink, highlights: bookings.highlightPhotos })

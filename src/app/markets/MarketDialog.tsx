@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { MarketDef } from "@/lib/markets";
 import { DEFAULT_PORTFOLIO_PRICES, PORTFOLIO_PRICE_ITEMS, type PortfolioPrices } from "@/lib/portfolioPrices";
@@ -59,6 +60,8 @@ export function MarketDialog({ mode, market }: { mode: "create" | "edit"; market
     vcardCity: market?.vcard?.city ?? "",
     vcardNote: market?.vcard?.note ?? "",
     areaCodes: market?.areaCodes.join(", ") ?? "",
+    listingsStreetOnly: market?.listingsStreetOnly ?? false,
+    testimonialNameOnly: market?.testimonialNameOnly ?? false,
     notes: market?.notes ?? "",
   });
   const [f, setF] = useState(init);
@@ -101,6 +104,8 @@ export function MarketDialog({ mode, market }: { mode: "create" | "edit"; market
         input.pageLocation = f.pageLocation;
         input.vcardCity = f.vcardCity;
         input.vcardNote = f.vcardNote;
+        input.listingsStreetOnly = f.listingsStreetOnly;
+        input.testimonialNameOnly = f.testimonialNameOnly;
         input.areaCodes = f.areaCodes
           .split(/[\s,]+/)
           .map((s) => s.trim())
@@ -218,6 +223,23 @@ export function MarketDialog({ mode, market }: { mode: "create" | "edit"; market
           </div>
         )}
 
+        {mode === "edit" && (
+          <div className="grid gap-2">
+            <PageToggle
+              checked={f.listingsStreetOnly}
+              onChange={(v) => set("listingsStreetOnly", v)}
+              title="Recent work: street name only"
+              body="Agent pages here title the cards “Recent work” and show only each listing's street, no number, town or state."
+            />
+            <PageToggle
+              checked={f.testimonialNameOnly}
+              onChange={(v) => set("testimonialNameOnly", v)}
+              title="Testimonial: name only"
+              body="Agent pages here show the reviewer's name without their brokerage."
+            />
+          </div>
+        )}
+
         <Field label="Notes">
           <Textarea rows={3} value={f.notes} onChange={(e) => set("notes", e.target.value)} />
         </Field>
@@ -241,5 +263,17 @@ export function Field({ label, children }: { label: string; children: React.Reac
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
     </div>
+  );
+}
+
+function PageToggle({ checked, onChange, title, body }: { checked: boolean; onChange: (v: boolean) => void; title: string; body: string }) {
+  return (
+    <label className="flex w-full items-start gap-3 rounded-md border px-3 py-2.5">
+      <Switch checked={checked} onCheckedChange={onChange} className="mt-0.5" />
+      <span className="flex flex-col gap-0.5">
+        <span className="text-sm font-medium">{title}</span>
+        <span className="text-xs text-muted-foreground">{body}</span>
+      </span>
+    </label>
   );
 }

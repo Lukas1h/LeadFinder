@@ -62,6 +62,8 @@ function toDef(row: MarketRow, people: (typeof shooters.$inferSelect)[]): Market
     vcard: row.vcardCity ? { city: row.vcardCity, note: row.vcardNote ?? "" } : null,
     jobsPerWeek: row.jobsPerWeek,
     prices: row.prices ?? {},
+    listingsStreetOnly: row.listingsStreetOnly ?? false,
+    testimonialNameOnly: row.testimonialNameOnly ?? false,
     launchedAt: row.launchedAt?.toISOString() ?? null,
     killedAt: row.killedAt?.toISOString() ?? null,
     notes: row.notes,

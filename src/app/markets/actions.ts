@@ -133,6 +133,8 @@ const marketInputSchema = z.object({
   vcardNote: z.string().trim().nullish(),
   jobsPerWeek: z.number().nonnegative("Jobs a week can't be negative").optional(),
   prices: pricesSchema.optional(),
+  listingsStreetOnly: z.boolean().optional(),
+  testimonialNameOnly: z.boolean().optional(),
   notes: z.string().trim().nullish(),
 });
 
@@ -221,6 +223,8 @@ export async function saveMarket(input: MarketInput): Promise<{ error?: string }
       vcardNote: text(m.vcardNote),
       jobsPerWeek: m.jobsPerWeek ?? 0,
       prices: cleanPortfolioPrices(m.prices),
+      listingsStreetOnly: m.listingsStreetOnly ?? false,
+      testimonialNameOnly: m.testimonialNameOnly ?? false,
       launchedAt: new Date(),
       notes: text(m.notes),
     });
@@ -250,6 +254,8 @@ export async function saveMarket(input: MarketInput): Promise<{ error?: string }
         vcardNote: m.vcardNote === undefined ? undefined : text(m.vcardNote),
         jobsPerWeek: m.jobsPerWeek,
         prices: m.prices === undefined ? undefined : cleanPortfolioPrices(m.prices),
+        listingsStreetOnly: m.listingsStreetOnly,
+        testimonialNameOnly: m.testimonialNameOnly,
         notes: m.notes === undefined ? undefined : text(m.notes),
         updatedAt: new Date(),
       })
