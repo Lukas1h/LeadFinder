@@ -25,8 +25,8 @@ export interface AgentPagePhoto {
   key: string;
   src: string;
   alt: string;
-  /** Corner credit on a shooter-row photo; defaults to the row's shooter name. */
-  credit?: string;
+  /** Corner credit on a shooter-row photo: unset = the row's shooter name, null = no name. */
+  credit?: string | null;
 }
 
 // Lukas's re-edited set (2026-11-12), in the order he put them on the main

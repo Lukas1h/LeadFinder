@@ -1561,7 +1561,7 @@ export const shooters = pgTable("shooters", {
   active: boolean("active").notNull().default(true),
   w9OnFile: boolean("w9_on_file").notNull().default(false),
   // Their photos for the portfolio pages of their market (public paths or URLs).
-  portfolioPhotos: jsonb("portfolio_photos").$type<{ src: string; alt: string; credit?: string }[]>().notNull().default([]),
+  portfolioPhotos: jsonb("portfolio_photos").$type<{ src: string; alt: string; credit?: string | null }[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

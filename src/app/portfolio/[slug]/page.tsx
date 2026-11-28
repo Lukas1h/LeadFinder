@@ -673,11 +673,13 @@ function ShooterPhotos({ name, photos }: { name: string; photos: AgentPagePhoto[
         <span key={p.key} className="relative block">
           {/* eslint-disable-next-line @next/next/no-img-element -- static portfolio photo */}
           <img src={p.src} alt={p.alt} loading="lazy" className="aspect-[3/2] w-full bg-[#F9F4F1] object-cover" />
-          <span
-            className={`pointer-events-none absolute bottom-1 left-1.5 ${serif} text-[10px] font-medium tracking-wide text-white/60 [text-shadow:0_1px_3px_rgba(0,0,0,0.45)]`}
-          >
-            {p.credit || name}
-          </span>
+          {p.credit !== null && (
+            <span
+              className={`pointer-events-none absolute bottom-1 left-1.5 ${serif} text-[10px] font-medium tracking-wide text-white/60 [text-shadow:0_1px_3px_rgba(0,0,0,0.45)]`}
+            >
+              {p.credit || name}
+            </span>
+          )}
         </span>
       ))}
     </div>
