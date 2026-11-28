@@ -839,7 +839,9 @@ next listing comes up (usually 1–4 weeks after first contact).
   Blob (`AGENT_PAGE_VIDEOS[*].mp4`, a bare `<video>`, no YouTube UI) → recent
   listings (a Sold badge is a bold dark block) → four tiles (scheduled for
   tomorrow; in and out in as little as 45 minutes, next morning turnaround;
-  real edits; licensed and insured) → testimonial → pricing → the
+  real edits; licensed and insured; since 2026-11-27 a shooter-market page
+  (Portland, Coast, Sacramento) drops the 45-minutes tile and shows three, as
+  other photographers shoot those) → testimonial → pricing → the
   save-contact section. On both styles the footer and the
   vCard (`lukasVcard`) name the shooter market `shooterMarketForArea(content.area)`
   finds (Portland, Oregon Coast), else Eugene & Roseburg.

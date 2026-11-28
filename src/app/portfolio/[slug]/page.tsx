@@ -183,14 +183,21 @@ export default async function PortfolioPage({
   const who = firstName ? `this is ${firstName}${brokerage ? ` with ${brokerage}` : ""}. ` : "";
   const bookHref = `sms:${PHONE}?&body=` + encodeURIComponent(`Hi Lukas, ${who}I'd like to book a shoot for a listing ${inArea(area)}.`);
 
+  const tiles: { title: string; body: React.ReactNode; ownShootsOnly?: boolean }[] = newStyle
+    ? NEW_TILES.filter((t) => !(shooter && t.ownShootsOnly))
+    : CLASSIC_TILES;
   const whySection = (
         <section data-section="why" className="px-4 pt-[clamp(56px,8vw,88px)]">
           <div
             className={`mx-auto grid max-w-[1040px] grid-cols-1 text-center ${
-              newStyle ? "gap-px bg-[#181A1C]/10 md:grid-cols-2 lg:grid-cols-4" : "bg-[#F9F4F1] md:grid-cols-3"
+              !newStyle
+                ? "bg-[#F9F4F1] md:grid-cols-3"
+                : tiles.length === 3
+                  ? "gap-px bg-[#181A1C]/10 md:grid-cols-3"
+                  : "gap-px bg-[#181A1C]/10 md:grid-cols-2 lg:grid-cols-4"
             }`}
           >
-            {(newStyle ? NEW_TILES : CLASSIC_TILES).map((f, i) => (
+            {tiles.map((f, i) => (
               <div
                 key={f.title}
                 className={`px-[clamp(24px,3vw,36px)] py-[30px] ${
@@ -512,6 +519,9 @@ const NEW_TILES = [
     ),
   },
   {
+    // Only on pages for Lukas's own areas (local / regional): shooter-market
+    // shoots are other photographers', so he doesn't promise their pace (2026-11-27).
+    ownShootsOnly: true,
     title: "In and out in as little as 45 minutes",
     body: (
       <>
